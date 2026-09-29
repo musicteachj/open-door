@@ -13,3 +13,14 @@ version (`0.x.y` while the app is being built, `1.0.0` when it is complete).
 ### Added
 
 - The repository: README, license notice, `.gitignore`, and this changelog.
+- **The plan, before any code** (planning). The approved initial plan is kept verbatim and frozen in
+  `docs/plans/`. `docs/ROADMAP.md` is the living plan, with a status table for all ten phases. The
+  design spec in `docs/specs/` records each decision and the reason for it. Also added:
+  - `docs/WHAT-THIS-IS-NOT.md`, which says what the app and its assistant will never do.
+  - Six decision records in `docs/adr/`.
+  - `CLAUDE.md`, the project rules.
+- **The Claude Design brief and handoff format** (planning). `docs/design/BRIEF.md` can be pasted
+  into Claude Design to start the design system and screens. The rest of `docs/design/` defines how
+  designs come back: tokens, a component inventory, and a per-screen `notes.md` with acceptance
+  criteria.
+- The README now states the seven rules the assistant never breaks and links to every document.
