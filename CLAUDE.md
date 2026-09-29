@@ -65,6 +65,18 @@ dev       ●──●──●──●──●──●──●──●─�
 
 - **American English everywhere:** docs, UI copy, code comments, identifiers, and commit and PR
   text. Write "color", "organization", "canceled", "labeled", "behavior".
+- **Commits and pull requests must be human readable.** Someone who never saw the session should
+  understand what changed and why from the message alone.
+  - **Commit subject:** one plain sentence in the imperative, at most 72 characters. Say what
+    changed for the product or the project, not which files moved.
+  - **Commit body:** a few short sentences or bullets covering what changed, why, and anything a
+    reader should know. Explain any acronym or project term the first time it appears. Don't list
+    files one by one; git already records that.
+  - **PR description:** four short sections, "What this does", "Why", "How it was checked", and
+    "What to look at". Lead with plain sentences. Use a table only when it genuinely makes things
+    clearer.
+  - **Avoid jargon a newcomer couldn't follow,** like internal shorthand, bare file paths used as
+    explanations, and walls of technical detail. Put the detail in the docs and link to it.
 - **Update `CHANGELOG.md` in the same edit as the change**, never as a separate pass afterward.
   Group entries under Added, Changed, Fixed, or Security, and note the phase and stage. CI fails a PR
   that changes code without touching the changelog, unless it carries the `skip-changelog` label.

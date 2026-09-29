@@ -24,3 +24,5 @@ version (`0.x.y` while the app is being built, `1.0.0` when it is complete).
   designs come back: tokens, a component inventory, and a per-screen `notes.md` with acceptance
   criteria.
 - The README now states the seven rules the assistant never breaks and links to every document.
+- **A rule that commits and pull requests must be human readable** (planning): plain-language
+  subjects, short explanations of what changed and why, and a standard four-part PR description.
