@@ -1,0 +1,44 @@
+# --- Secrets and local config ---------------------------------------------
+# Real keys live in .env files that never leave the machine. .env.example is
+# the committed contract listing every variable.
+.env
+.env.*
+!.env.example
+
+# --- Python (apps/api) -----------------------------------------------------
+__pycache__/
+*.py[cod]
+.venv/
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+*.egg-info/
+
+# --- Node (apps/web) -------------------------------------------------------
+node_modules/
+dist/
+*.tsbuildinfo
+.vite/
+coverage/
+
+# --- Playwright ------------------------------------------------------------
+playwright-report/
+test-results/
+blob-report/
+playwright/.cache/
+
+# --- Evals -----------------------------------------------------------------
+# Live eval runs write here. Recorded fixtures and the committed scoreboard live
+# elsewhere under evals/ and are tracked.
+evals/runs/
+
+# --- OS and editors --------------------------------------------------------
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/*
+!.vscode/extensions.json
+*.swp
