@@ -26,3 +26,10 @@ version (`0.x.y` while the app is being built, `1.0.0` when it is complete).
 - The README now states the seven rules the assistant never breaks and links to every document.
 - **A rule that commits and pull requests must be human readable** (planning): plain-language
   subjects, short explanations of what changed and why, and a standard four-part PR description.
+- **The API core** (Phase 0, stage 1, in progress). A FastAPI backend with a health check at
+  `/api/v1/health` that says whether the API can reach its database. Settings are checked at
+  startup, so a missing or malformed value stops the server instead of failing later. Every
+  response carries a request ID that also appears in the logs, errors come back in the standard
+  problem-details format without leaking internal details, and logs are one JSON object per
+  line. A development Postgres with pgvector runs in Docker. Review findings deliberately left
+  for later phases are recorded in `docs/BACKLOG.md`.
