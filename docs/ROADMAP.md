@@ -17,7 +17,7 @@ every stage.
 | Phase | Status | Branch | PR | Plan | Updated |
 |---|---|---|---|---|---|
 | Planning (repo, spec, roadmap, design brief) | Done | `docs/initial-planning` | [#1](https://github.com/musicteachj/open-door/pull/1) | [initial plan](plans/2026-09-29-open-door-initial-plan.md) | 2026-09-29 |
-| 0 Foundation | In progress: stage 1 of 3, tasks 1–9 of 14 done. **Next: Task 10 (migrations).** | `feat/phase-0-api-foundation` | — | [phase 0 plan](plans/2026-09-29-phase-0-foundation.md) | 2026-09-30 |
+| 0 Foundation | In progress: stage 1 of 3 (API foundation) done, PR pending. **Next: Stage 2 (web foundation), Task 15.** | `feat/phase-0-api-foundation` | — | [phase 0 plan](plans/2026-09-29-phase-0-foundation.md) | 2026-09-30 |
 | 1 Tenancy, identity, permissions | Not started | — | — | — | — |
 | 2 Design system, shell, sandbox entry | Not started | — | — | — | — |
 | 3 Handbook and retrieval | Not started | — | — | — | — |

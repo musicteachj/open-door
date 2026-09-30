@@ -2582,8 +2582,23 @@ PR changes both apps' tooling, so both the API and Web jobs run.
   The `settings` fixture also pins `log_level`, so an exported `LOG_LEVEL` can't change test
   behavior. `create_app` checks `if settings is None` instead of `settings or get_settings()`.
 - Test counts in later steps: 28 unit tests after Task 8, 32 after Task 9, and 34 after Task 11.
+- Tasks 1–9 were committed as a checkpoint (`840f583`) before Task 10. The rest of Stage 1 goes in
+  a second commit on the same branch, and the Stage 1 changelog entry was edited in place rather
+  than added again.
+- Task 10, `alembic.ini`: ruff post-write hooks (`ruff check --fix`, then `ruff format`) run on
+  every generated migration. Without them, the typed template's `repr()` emits single quotes and
+  always imports `sa` and `op`, so a fresh migration failed `ruff format --check` and F401 until it
+  was fixed by hand. It was verified with a throwaway revision, which was then deleted.
+- Tasks 10–11: until Task 12 adds a file to `scripts/`, a bare `uv run mypy` stops with "no .py
+  files in directory 'scripts'". The interim checks ran `mypy app tests migrations`.
+- Task 12, the OpenAPI export:
+  - It parses its arguments with `argparse`, so a mistyped flag such as `--chek` exits 2 instead
+    of silently rewriting the file.
+  - It pins every `Settings` field, so an exported `LOG_LEVEL` or `APP_ENV` can't change or break
+    the export.
+  - The docstring now says the check compares the file on disk, which is the design.
 
-For Tasks 4–9, the code in the repository is the source of truth; the code blocks above show the original plan.
+For Tasks 4–12, the code in the repository is the source of truth; the code blocks above show the original plan.
 
 **Review process from Task 10 on (owner-approved, 2026-09-30).** Tasks 1–9 each got an
 implementer plus two reviewers (spec compliance, then code quality on the strongest model). That

@@ -10,6 +10,13 @@ should pick it up. When one is done, delete it here and record it in the changel
   example in `app/api/deps.py`), build the Phase 1 `get_session` dependency on it, and keep the
   health check on a bare connection so it stays independent of row-level security.
 - **Exempt `/api/v1/health` from authentication and CSRF.**
+- **Migrate as a separate database role.** `migrations/env.py` reads only `DATABASE_URL`. Once
+  the app connects as a non-owner role, migrations need the owner. Add a setting such as
+  `MIGRATION_DATABASE_URL` that `env.py` prefers, and make sure that role can run
+  `CREATE EXTENSION`.
+- **Don't run Alembic inside an async test.** `env.py` calls `asyncio.run`, which fails inside a
+  running event loop, and `fileConfig` resets the root log handlers. Test setup should run
+  `alembic upgrade head` as a subprocess, or from a synchronous session fixture.
 
 ## Phase 4: assistant core
 
