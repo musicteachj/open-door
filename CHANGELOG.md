@@ -58,6 +58,15 @@ version (`0.x.y` while the app is being built, `1.0.0` when it is complete).
   spelling in American English, links between files, and leftover placeholders. The workflow
   check looks for mistakes and security problems in the workflows themselves. Every action is
   pinned to an exact commit, and Dependabot waits 7 days before proposing a new release.
+- **The Phase 1 spec** (Phase 1, planning). `docs/specs/` now describes how Phase 1 delivers its
+  three pieces: tenancy (every visitor's sandbox company is walled off in the database), identity
+  (signing in as a persona through a session cookie), and permissions (one function decides who
+  can see what). It was checked against OWASP, PostgreSQL, NIST, and California guidance before
+  being written down, and it records two problems that checking found: Postgres can't bulk-load
+  with `COPY` under row-level security, and a cleared tenant setting reads back as an empty
+  string. A new decision record, ADR 0007, explains why sessions last as long as the sandbox.
+  The implementation plan in `docs/plans/` splits the work into four stages, each a pull request.
+  Every code block in it was built and run before it was written down.
 
 ### Changed
 
