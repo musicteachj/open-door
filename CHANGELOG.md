@@ -47,6 +47,17 @@ version (`0.x.y` while the app is being built, `1.0.0` when it is complete).
   the API itself is. It talks to the API through a client generated from the API's own schema, so
   the two can't silently drift apart. `make setup` installs everything, `make dev` runs the API and
   the web app together, and `make check` runs every check CI will run.
+- **Automatic checks on every push and pull request** (Phase 0, stage 3). GitHub now runs the API
+  and web checks, but only for the parts that changed. It scans for leaked secrets and vulnerable
+  dependencies, weekly as well, and requires a changelog entry when code changes. Dependabot opens
+  grouped weekly update pull requests against `dev`, and pre-commit hooks catch the quick problems
+  before a commit is made. `make audit` runs the security scans locally, including a scan of the
+  whole git history for secrets.
+
+  Every pull request, docs-only ones included, also gets two quick checks. The docs check covers
+  spelling in American English, links between files, and leftover placeholders. The workflow
+  check looks for mistakes and security problems in the workflows themselves. Every action is
+  pinned to an exact commit, and Dependabot waits 7 days before proposing a new release.
 
 ### Changed
 

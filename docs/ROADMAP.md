@@ -17,7 +17,7 @@ every stage.
 | Phase | Status | Branch | PR | Plan | Updated |
 |---|---|---|---|---|---|
 | Planning (repo, spec, roadmap, design brief) | Done | `docs/initial-planning` | [#1](https://github.com/musicteachj/open-door/pull/1) | [initial plan](plans/2026-09-29-open-door-initial-plan.md) | 2026-09-29 |
-| 0 Foundation | In progress: stage 2 of 3 (web foundation) done, PR pending. **Next: Stage 3 (CI and guardrails), Task 23.** | `feat/phase-0-web-foundation` | [#2](https://github.com/musicteachj/open-door/pull/2) | [phase 0 plan](plans/2026-09-29-phase-0-foundation.md) | 2026-10-03 |
+| 0 Foundation | Done | `chore/phase-0-ci` | [#2](https://github.com/musicteachj/open-door/pull/2), [#3](https://github.com/musicteachj/open-door/pull/3), [#4](https://github.com/musicteachj/open-door/pull/4) | [phase 0 plan](plans/2026-09-29-phase-0-foundation.md) | 2026-10-03 |
 | 1 Tenancy, identity, permissions | Not started | — | — | — | — |
 | 2 Design system, shell, sandbox entry | Not started | — | — | — | — |
 | 3 Handbook and retrieval | Not started | — | — | — | — |

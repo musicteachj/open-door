@@ -1,0 +1,162 @@
+# Every action is pinned to a full commit SHA, with its version in a comment. Dependabot updates
+# both, and `make check-workflows` (zizmor) fails on an action pinned only to a tag.
+name: CI
+
+on:
+  # dev is where work lands; main is the release branch. A push to either must be checked.
+  push:
+    branches: [main, dev]
+  # No branch filter: every pull request is checked, including feature -> dev.
+  pull_request:
+  workflow_dispatch:
+
+# Runs for a pull request share a group, so a newer push cancels the older run. Each push to dev
+# or main gets its own group, its commit, so no merge's run is ever canceled or left waiting.
+concurrency:
+  group: ci-${{ github.event_name == 'pull_request' && github.ref || github.sha }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  changes:
+    name: Detect what changed
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      api: ${{ steps.filter.outputs.api }}
+      web: ${{ steps.filter.outputs.web }}
+    steps:
+      # Every other checkout drops its credentials. This one keeps them, because on a push
+      # paths-filter fetches the previous commit with them. The job runs no repository code.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: true
+      # Docs-only changes skip the heavy jobs. That saves private-repo Actions minutes.
+      - uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4.0.3
+        id: filter
+        with:
+          # On a push, compare with the commit before the push. Left unset, a push to main would be
+          # compared with dev, the default branch, and a release merge would skip the API and Web jobs.
+          base: ${{ github.event_name == 'push' && github.ref_name || '' }}
+          filters: |
+            api:
+              - 'apps/api/**'
+              - 'apps/web/openapi.json'
+              - 'evals/**'
+              - 'handbook/**'
+              - 'compose.yaml'
+              - '.github/workflows/ci.yml'
+            web:
+              - 'apps/web/**'
+              - '.nvmrc'
+              - '.editorconfig'
+              - '.github/workflows/ci.yml'
+
+  api:
+    name: API
+    needs: changes
+    if: needs.changes.outputs.api == 'true' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: apps/api
+    services:
+      # The same image and credentials as compose.yaml, so CI tests what developers run.
+      postgres:
+        image: pgvector/pgvector:pg17
+        env:
+          POSTGRES_USER: opendoor
+          POSTGRES_PASSWORD: opendoor
+          POSTGRES_DB: opendoor
+        ports:
+          - 5433:5432
+        options: >-
+          --health-cmd "pg_isready -h 127.0.0.1 -U opendoor -d opendoor"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      APP_ENV: test
+      DATABASE_URL: postgresql+asyncpg://opendoor:opendoor@127.0.0.1:5433/opendoor
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+        with:
+          enable-cache: true
+          cache-dependency-glob: apps/api/uv.lock
+      # --locked fails if uv.lock is out of date with pyproject.toml instead of quietly updating it.
+      - run: uv sync --locked
+      - run: uv run ruff check .
+      - run: uv run ruff format --check .
+      - run: uv run mypy
+      - name: Domain code imports no framework
+        run: uv run lint-imports
+      - run: uv run alembic upgrade head
+      - name: Models and migrations agree
+        run: uv run alembic check
+      - run: uv run pytest
+      - name: The committed OpenAPI schema matches the API
+        run: uv run python scripts/export_openapi.py --check
+
+  web:
+    name: Web
+    needs: changes
+    if: needs.changes.outputs.web == 'true' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: apps/web
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+          cache-dependency-path: apps/web/package-lock.json
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run format:check
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
+      - name: The committed API client matches openapi.json
+        run: npm run check:api-client
+
+  # Both are cheap, so they run on every pull request, docs-only ones included.
+  docs:
+    name: Docs
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+      - name: Spelling in American English, links between files, and leftover placeholders
+        run: make check-docs
+
+  workflows:
+    name: Workflows
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+      - name: Workflow mistakes (actionlint) and security problems (zizmor)
+        # The token lets zizmor confirm that each pinned commit really belongs to its action.
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: make check-workflows
