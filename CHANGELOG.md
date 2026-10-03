@@ -61,6 +61,10 @@ version (`0.x.y` while the app is being built, `1.0.0` when it is complete).
 
 ### Changed
 
+- **Quieter dependency updates** (tooling). Dependabot now checks monthly instead of weekly, and
+  proposes only patch and minor updates. A major version, such as TypeScript 7 or the types for a
+  newer Node, is a deliberate decision made by hand in its own pull request.
+
 - **The pre-PR code review covers the whole branch** (project rules). `/code-review medium` now
   reviews everything the pull request will contain, measured against its base branch, not just
   the uncommitted changes. That closes a gap where a commit already on the branch could go
