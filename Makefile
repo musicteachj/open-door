@@ -5,15 +5,24 @@
 API := apps/api
 WEB := apps/web
 
+# Linters and scanners run through uvx or Docker. Dependabot can't see these versions, so bump them
+# by hand. GITLEAKS matches the version the Security workflow downloads.
+TYPOS := typos@1.50.3
+LYCHEE := lycheeverse/lychee:0.24.2
+ACTIONLINT := rhysd/actionlint:1.7.12
+ZIZMOR := zizmor@1.30.1
+GITLEAKS := ghcr.io/gitleaks/gitleaks:v8.30.1
+
 .DEFAULT_GOAL := help
-.PHONY: help setup db db-stop migrate dev dev-api dev-web openapi check check-api check-web
+.PHONY: help setup db db-stop migrate dev dev-api dev-web openapi check check-api check-web check-docs check-workflows audit
 
 help: ## List the available commands
-	@grep -E '^[a-zA-Z_-]+:.*## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*## "}; {printf "  %-12s %s\n", $$1, $$2}'
+	@grep -E '^[a-zA-Z_-]+:.*## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*## "}; {printf "  %-16s %s\n", $$1, $$2}'
 
-setup: ## Install API and web dependencies; create apps/api/.env if it's missing
+setup: ## Install dependencies and git hooks; create apps/api/.env if it's missing
 	cd $(API) && uv sync
 	cd $(WEB) && npm ci
+	uvx pre-commit install
 	@test -f $(API)/.env || (cp $(API)/.env.example $(API)/.env && echo "Created $(API)/.env")
 
 db: ## Start the development Postgres in Docker and wait until it's ready
@@ -38,7 +47,7 @@ openapi: ## Regenerate the OpenAPI schema and the web app's API client
 	cd $(API) && uv run python scripts/export_openapi.py
 	cd $(WEB) && npm run generate:api
 
-check: check-api check-web ## Run everything CI runs (start Postgres first with `make db`)
+check: check-api check-web check-docs check-workflows ## Run everything CI runs (start Postgres first with `make db`)
 
 check-api: ## Lint, type-check, migrate, and test the API; confirm the schema is current
 	cd $(API) && uv run ruff check .
@@ -57,3 +66,19 @@ check-web: ## Lint, format-check, type-check, test, and build the web app; confi
 	cd $(WEB) && npm test
 	cd $(WEB) && npm run build
 	cd $(WEB) && npm run check:api-client
+
+# gitleaks scans every commit; the pre-commit hook scans each commit's staged changes.
+audit: ## Scan for leaked secrets and vulnerable dependencies (what the Security workflow runs)
+	@test -d "$(CURDIR)/.git" || { echo "make audit needs a normal checkout: in a git worktree the container can't read the history."; exit 1; }
+	docker run --rm -v "$(CURDIR):/repo:ro" $(GITLEAKS) git --redact --exit-code 1 /repo
+	cd $(API) && uv run --with pip-audit pip-audit --skip-editable
+	cd $(WEB) && npm audit --audit-level=high
+
+check-docs: ## Check spelling (American English), links between files, and leftover placeholders
+	uvx $(TYPOS)
+	git ls-files --cached --others --exclude-standard -- '*.md' | docker run --rm -i -v "$(CURDIR):/input:ro" -w /input $(LYCHEE) --offline --no-progress --include-fragments --files-from -
+	@if git grep --untracked -n -I -w -E 'T[O]DO|TB[D]|FIXM[E]|XX[X]|[Ll]orem [i]psum' -- '*.md'; then echo "Finish or remove the placeholders above."; exit 1; fi
+
+check-workflows: ## Check the GitHub Actions workflows for mistakes (actionlint) and security (zizmor)
+	docker run --rm -v "$(CURDIR):/repo:ro" -w /repo $(ACTIONLINT) -no-color
+	uvx $(ZIZMOR) .

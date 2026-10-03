@@ -26,7 +26,7 @@ async def ping(engine: AsyncEngine, timeout_seconds: float = PING_TIMEOUT_SECOND
     """Return True if the database answers `SELECT 1` in time, False otherwise.
 
     The time limit covers connecting and the query, so a connection that opens but never answers
-    still lets the health check report "degraded". It is not a hard wall-clock bound: if cancelling
+    still lets the health check report "degraded". It is not a hard wall-clock bound: if canceling
     the query itself stalls on the network, closing the connection can take longer.
     """
     try:

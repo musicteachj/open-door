@@ -183,6 +183,7 @@ make db         start the development Postgres (127.0.0.1:5433)
 make dev        Postgres, migrations, API (:8000) and web app (:5173) together
 make check      everything CI runs; needs `make db` first
 make openapi    after changing an API route: regenerate the schema and the web client
+make audit      scan for leaked secrets and vulnerable dependencies
 ```
 
 Run a single API test: `cd apps/api && uv run pytest tests/test_health.py -q`. Run a single web

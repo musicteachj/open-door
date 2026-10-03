@@ -2853,7 +2853,38 @@ Changelog all pass. This PR changes both apps' tooling, so both the API and Web 
     feeds lychee the markdown files git lists. typos and the placeholder search already respected
     `.gitignore`.
 
-For Tasks 4–21, the code in the repository is the source of truth; the code blocks above show the original plan.
+- **Stage 3 (2026-10-03).**
+  - **Tasks 23–26.** The four files were copied from this plan. actionlint and zizmor were clean,
+    and every action SHA was confirmed against its tag. The commands CI runs match
+    `make check-api` and `make check-web` step for step.
+  - **Task 27, `make audit`.**
+    - The plan ran gitleaks as `uvx pre-commit run gitleaks --all-files`. That hook scans only
+      staged changes, so it passed even with a token in the working tree.
+    - `make audit` now runs gitleaks itself over the whole git history, in Docker, at the version
+      the Security workflow downloads (`GITLEAKS := ghcr.io/gitleaks/gitleaks:v8.30.1`). A
+      committed fake token in a scratch clone made it fail, as it should.
+    - The pre-commit hook still checks each commit's staged changes.
+    - No `.gitleaksignore` was needed: the development password wasn't flagged.
+  - **Task 28.** Everything ran as planned. The one spelling finding, in the `ping` docstring, was
+    fixed. Each check failed on a seeded mistake: typos, the placeholder search, and zizmor's
+    unpinned-action rule.
+  - **Review fixes:**
+    - **Worktree guard.** In a git worktree, `.git` is a file that points outside the Docker
+      mount, so gitleaks scanned nothing and passed. `make audit` now refuses to run there.
+    - **paths-filter `base`.** `ci.yml` now sets it to the pushed branch on a push. Before, a
+      push to `main` was compared with `dev`, the default branch, so a release merge would have
+      skipped the API and Web jobs.
+    - **Concurrency.** Pull request runs share a group, so a newer push cancels the older run.
+      Each push to `dev` or `main` gets its own group, keyed by its commit. GitHub keeps only one
+      waiting run per group, and a newer run cancels the waiting one even with cancel-in-progress
+      off, so a shared push group could still skip testing a merge. `/code-review medium` caught
+      this.
+    - **Checksum.** The Security workflow checks the downloaded gitleaks tarball against the
+      release's checksums before extracting it.
+    - **`.editorconfig`.** It now triggers the web job, because Prettier reads it.
+    - **Deferred.** Smaller findings are in `docs/BACKLOG.md` under Phase 8.
+
+For Tasks 4–28, the code in the repository is the source of truth; the code blocks above show the original plan.
 
 **Review process from Task 10 on (owner-approved, 2026-09-30).** Tasks 1–9 each got an
 implementer plus two reviewers (spec compliance, then code quality on the strongest model). That

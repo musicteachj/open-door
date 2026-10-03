@@ -1,0 +1,34 @@
+name: Changelog
+
+on:
+  # Label events are included so adding or removing skip-changelog re-runs the check.
+  pull_request:
+    types: [opened, synchronize, reopened, labeled, unlabeled]
+
+permissions:
+  contents: read
+
+jobs:
+  changelog:
+    name: Changelog updated
+    if: ${{ !contains(github.event.pull_request.labels.*.name, 'skip-changelog') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - name: Code changes need a CHANGELOG.md entry
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          changed=$(git diff --name-only "$BASE_SHA...$HEAD_SHA")
+          if echo "$changed" | grep -qE '^(apps|evals|handbook)/'; then
+            if ! echo "$changed" | grep -qx 'CHANGELOG.md'; then
+              echo "::error::This pull request changes code but not CHANGELOG.md. Add an entry, or apply the skip-changelog label if it's a pure chore."
+              exit 1
+            fi
+          fi
+          echo "Changelog check passed."
