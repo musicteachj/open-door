@@ -1,5 +1,8 @@
-# Weekly, grouped dependency updates, opened against dev like every other change. They carry
+# Monthly, grouped dependency updates, opened against dev like every other change. They carry
 # skip-changelog: a version bump is a chore, and the lockfile diff is its own record.
+# Only patch and minor updates are proposed. A major version is a decision, made by hand in its
+# own pull request. For example, @types/node moves with the Node version in .nvmrc, and TypeScript
+# moves when the Vite template does.
 # The 7-day cooldown waits for a release to age before proposing it, so a compromised release has
 # time to be caught first. Security updates skip the wait.
 version: 2
@@ -8,10 +11,12 @@ updates:
     directory: /apps/api
     target-branch: dev
     schedule:
-      interval: weekly
-      day: monday
+      interval: monthly
     cooldown:
       default-days: 7
+    ignore:
+      - dependency-name: '*'
+        update-types: [version-update:semver-major]
     groups:
       python:
         patterns: ['*']
@@ -21,10 +26,12 @@ updates:
     directory: /apps/web
     target-branch: dev
     schedule:
-      interval: weekly
-      day: monday
+      interval: monthly
     cooldown:
       default-days: 7
+    ignore:
+      - dependency-name: '*'
+        update-types: [version-update:semver-major]
     groups:
       web:
         patterns: ['*']
@@ -34,10 +41,12 @@ updates:
     directory: /
     target-branch: dev
     schedule:
-      interval: weekly
-      day: monday
+      interval: monthly
     cooldown:
       default-days: 7
+    ignore:
+      - dependency-name: '*'
+        update-types: [version-update:semver-major]
     groups:
       actions:
         patterns: ['*']
