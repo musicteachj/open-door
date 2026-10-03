@@ -48,6 +48,9 @@ dev       ●──●──●──●──●──●──●──●─�
 
 - **Run `/code-review medium` before creating every PR that changes code.** That includes
   application code, tests, evals, migrations, CI workflows, and build or tooling config.
+  - Review the whole branch against the PR's base (`dev`, or `main` for a release PR), with
+    committed and uncommitted work together, because that is exactly what the PR will contain.
+  - Don't review only the working tree. A commit already on the branch would go unreviewed.
 - **Docs-only PRs skip the code review.** `/code-review` hunts for code bugs, and on markdown it
   spends tokens and finds nothing. They get the automated checks (spelling, links, placeholders) and
   the owner's read-through instead.
