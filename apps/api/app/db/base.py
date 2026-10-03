@@ -1,6 +1,9 @@
 """The declarative base every table inherits from."""
 
-from sqlalchemy import MetaData
+from datetime import datetime
+from typing import Any, ClassVar
+
+from sqlalchemy import DateTime, MetaData, Text
 from sqlalchemy.orm import DeclarativeBase
 
 # Named constraints make migrations reviewable and let Alembic drop them by name later. All of a
@@ -16,3 +19,9 @@ NAMING_CONVENTION = {
 
 class Base(DeclarativeBase):
     metadata = MetaData(naming_convention=NAMING_CONVENTION)
+    # Postgres types for plain annotations: `str` is text, not varchar, and every timestamp keeps
+    # its time zone (timestamptz), so it is stored as UTC.
+    type_annotation_map: ClassVar[dict[Any, Any]] = {
+        str: Text(),
+        datetime: DateTime(timezone=True),
+    }

@@ -4,11 +4,15 @@ import asyncio
 from logging.config import fileConfig
 
 from alembic import context
+from alembic.util import CommandError
 from sqlalchemy import pool
 from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import create_async_engine
 
 from app.core.config import get_settings
+
+# Importing the models puts every table on Base.metadata, which `alembic check` compares.
+from app.db import models  # noqa: F401
 from app.db.base import Base
 
 config = context.config
@@ -19,7 +23,15 @@ target_metadata = Base.metadata
 
 
 def database_url() -> str:
-    return str(get_settings().database_url)
+    """The owner. Migrations create roles, tables, and policies, which the API's login can't."""
+    url = get_settings().migration_database_url
+    if url is None:
+        msg = (
+            "MIGRATION_DATABASE_URL is not set. Migrations run as the database owner, not as the "
+            "API's login. Add it to apps/api/.env; see .env.example."
+        )
+        raise CommandError(msg)
+    return str(url)
 
 
 def run_migrations_offline() -> None:

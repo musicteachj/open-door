@@ -3,10 +3,12 @@
 from collections.abc import Awaitable, Callable
 from typing import Annotated, Literal
 
-from fastapi import APIRouter, Depends, Request, Response, status
+from fastapi import APIRouter, Depends, Response, status
 from pydantic import BaseModel
+from sqlalchemy.ext.asyncio import AsyncEngine
 
 from app import __version__
+from app.api.deps import get_engine
 from app.db.engine import ping
 
 router = APIRouter(tags=["health"])
@@ -20,9 +22,12 @@ class HealthResponse(BaseModel):
     version: str
 
 
-def get_database_ping(request: Request) -> DatabasePing:
-    """The database check, as a dependency so tests can replace it."""
-    engine = request.app.state.engine
+def get_database_ping(engine: Annotated[AsyncEngine, Depends(get_engine)]) -> DatabasePing:
+    """The database check, as a dependency so tests can replace it.
+
+    It uses a bare connection, never a tenant session, so it stays independent of row-level
+    security.
+    """
 
     async def check() -> bool:
         return await ping(engine)

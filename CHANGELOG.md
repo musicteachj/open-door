@@ -68,7 +68,35 @@ version (`0.x.y` while the app is being built, `1.0.0` when it is complete).
   The implementation plan in `docs/plans/` splits the work into four stages, each a pull request.
   Every code block in it was built and run before it was written down.
 
+- **Tenant isolation in the database** (Phase 1, stage 1). Each sandbox company's data now lives
+  in tables that Postgres itself keeps apart, with row-level security. The API sees only the rows
+  of the company its transaction belongs to, and a transaction with no company sees nothing, even
+  on a reused database connection. A second rule shows a person's private details only to that
+  person and to HR. Also added:
+  - The eight Phase 1 tables: sandbox companies, locations, departments, people, private details,
+    holidays, sessions, and an audit log that the API can add to but never change. A sandbox can
+    live at most 25 hours, and the database stamps its creation time itself.
+  - Separate database logins. The API connects as its own user, which owns nothing and can't
+    skip the security rules. Migrations run as the database owner, and a cleanup user can delete
+    only expired sandboxes. `make db` now creates the login users after migrating, from the URLs
+    in `apps/api/.env`. The script that creates them refuses any existing user with powers that
+    would skip the rules, and never sends a password to the database in plain text.
+  - Tests against the real database for each guarantee: isolation, the exact privileges of each
+    role, the private-details rule, the append-only audit log, and cleanup. Each was shown to fail
+    when its rule is removed. CI also undoes and reapplies every migration
+    (`make migrations-roundtrip` locally), so a migration that can't be reversed fails the build.
+  - `APP_ORIGIN`, the web app's address, for the same-origin check that stage 3 adds.
+
+  This closes three backlog items: migrations run as a separate role, migrations are tested in
+  reverse, and the health check reaches the database engine through a typed accessor that fails
+  with a clear message.
+
 ### Changed
+
+- **The PR-size guideline counts the code that needs reading** (project rules). The 1,500-line
+  trigger now counts application code, migrations, scripts, and config, not tests, generated
+  files, or docs, and a PR over the guideline gives a short reading guide. Security-heavy work
+  carries many tests, which inflated the old count without adding much to read.
 
 - **Quieter dependency updates** (tooling). Dependabot now checks monthly instead of weekly, and
   proposes only patch and minor updates. A major version, such as TypeScript 7 or the types for a

@@ -27,6 +27,9 @@ def render_schema() -> str:
         app_env="development",
         log_level="INFO",
         database_url=SCHEMA_ONLY_DATABASE_URL,
+        migration_database_url=None,
+        cleanup_database_url=None,
+        app_origin="http://localhost:5173",
     )
     return json.dumps(create_app(settings).openapi(), indent=2) + "\n"
 

@@ -81,9 +81,14 @@ jobs:
           --health-interval 5s
           --health-timeout 5s
           --health-retries 10
+    # The same throwaway credentials as apps/api/.env.example. The tests connect as the API's own
+    # login, which the bootstrap step creates; migrations and the bootstrap run as the owner.
     env:
       APP_ENV: test
-      DATABASE_URL: postgresql+asyncpg://opendoor:opendoor@127.0.0.1:5433/opendoor
+      DATABASE_URL: postgresql+asyncpg://od_app_login:od_app_dev@127.0.0.1:5433/opendoor
+      MIGRATION_DATABASE_URL: postgresql+asyncpg://opendoor:opendoor@127.0.0.1:5433/opendoor
+      CLEANUP_DATABASE_URL: postgresql+asyncpg://od_cleanup_login:od_cleanup_dev@127.0.0.1:5433/opendoor
+      APP_ORIGIN: http://localhost:5173
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -99,10 +104,19 @@ jobs:
       - run: uv run mypy
       - name: Domain code imports no framework
         run: uv run lint-imports
-      - run: uv run alembic upgrade head
+      - name: Migrate as the owner
+        run: uv run alembic upgrade head
+      # The same sequence as `make migrations-roundtrip`, which the bootstrap below completes.
+      - name: Every migration reverses cleanly
+        run: |
+          uv run alembic downgrade base
+          uv run alembic upgrade head
+      - name: Create the login users
+        run: uv run python scripts/bootstrap_db_users.py
       - name: Models and migrations agree
         run: uv run alembic check
-      - run: uv run pytest
+      - name: Tests, connected as the API's own login
+        run: uv run pytest
       - name: The committed OpenAPI schema matches the API
         run: uv run python scripts/export_openapi.py --check
 
