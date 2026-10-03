@@ -23,6 +23,13 @@ should pick it up. When one is done, delete it here and record it in the changel
   only disposed after they finish. Set uvicorn's `--timeout-graceful-shutdown` below the ECS
   `stopTimeout`.
 
+## Phase 5: time off
+
+- **Seed last year's holidays too.** A sandbox stores the holiday calendar for its anchor year and
+  the next. One created in early January therefore lacks the previous December's closures, so a
+  question about leave taken over the holidays just before it would miss them. If the time-off
+  engine answers past-dated questions, seed the prior year as well. (Stage 2 review.)
+
 ## Phase 8: hardening and deploy-readiness
 
 - **Data migrations can't see tenant rows on AWS.** With row-level security forced, a table

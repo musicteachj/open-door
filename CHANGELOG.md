@@ -90,8 +90,31 @@ version (`0.x.y` while the app is being built, `1.0.0` when it is complete).
   This closes three backlog items: migrations run as a separate role, migrations are tested in
   reverse, and the health check reaches the database engine through a typed accessor that fails
   with a clear message.
+- **The seed company** (Phase 1, stage 2). Every sandbox can now be filled with the same
+  fictional company: 120 people in eight departments, 40 at Denver HQ, 45 at the Oakland store,
+  and 35 at the Austin warehouse, with every reporting line leading up to the CEO. The demo's
+  people are in it. Marcus manages the Oakland store: Priya (salaried), Leo, and three department
+  leads report to him, and the leads manage the store's associates. Mateo is an hourly warehouse
+  associate in Austin, and Dana, the HR partner at Denver HQ, is the only HR administrator. Also
+  added:
+  - The company holiday calendar, as pure rules that the time-off engine can reuse in Phase 5.
+    Every location closes on six holidays, moved to the Friday or Monday when one falls on a
+    weekend, and Denver HQ also closes the day after Thanksgiving. Each sandbox stores the
+    calendar for its anchor year and the next.
+  - Private details that are plainly fictional: `example.com` emails, phone numbers in the
+    555-0100 to 555-0199 range set aside for fiction, and made-up street addresses.
+  - Tests that the same inputs always build the same company, that every row gets its own ID,
+    that the personas and reporting lines are right, that Priya and Leo manage no one, that two
+    sandboxes with identical people sit side by side in the database, and that creating a
+    sandbox takes under 2 seconds at the 95th percentile.
 
 ### Changed
+
+- **A whole-phase review at the end of every phase** (project rules). After a phase's last PR
+  merges, `/code-review high` runs on the full phase, to catch problems between stages that
+  per-PR reviews can't see. The phases that guard the invariants (1, 4, and 6) run
+  `/code-review max` and `/security-review` instead. The billed `/code-review ultra` is never
+  used.
 
 - **The PR-size guideline counts the code that needs reading** (project rules). The 1,500-line
   trigger now counts application code, migrations, scripts, and config, not tests, generated

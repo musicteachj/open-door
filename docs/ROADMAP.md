@@ -18,7 +18,7 @@ every stage.
 |---|---|---|---|---|---|
 | Planning (repo, spec, roadmap, design brief) | Done | `docs/initial-planning` | [#1](https://github.com/musicteachj/open-door/pull/1) | [initial plan](plans/2026-09-29-open-door-initial-plan.md) | 2026-09-29 |
 | 0 Foundation | Done | `chore/phase-0-ci` | [#2](https://github.com/musicteachj/open-door/pull/2), [#3](https://github.com/musicteachj/open-door/pull/3), [#4](https://github.com/musicteachj/open-door/pull/4) | [phase 0 plan](plans/2026-09-29-phase-0-foundation.md) | 2026-10-03 |
-| 1 Tenancy, identity, permissions | In progress: stage 1 of 4 (roles and tenancy) done, PR pending. **Next: Stage 2 (the seed company), Task 11.** | `feat/phase-1-tenancy` | — | [phase 1 plan](plans/2026-10-03-phase-1-tenancy-identity-permissions.md) | 2026-10-03 |
+| 1 Tenancy, identity, permissions | In progress: stage 2 of 4 (the seed company) done, PR pending. **Next: Stage 3 (sessions and signing in), Task 15.** | `feat/phase-1-seed` | [#8](https://github.com/musicteachj/open-door/pull/8) | [phase 1 plan](plans/2026-10-03-phase-1-tenancy-identity-permissions.md) | 2026-10-03 |
 | 2 Design system, shell, sandbox entry | Not started | — | — | — | — |
 | 3 Handbook and retrieval | Not started | — | — | — | — |
 | 4 Assistant core (read-only) | Not started | — | — | — | — |
@@ -44,7 +44,7 @@ backend stages do not.
 | Phase | Scope | Done when |
 |---|---|---|
 | **0 Foundation** | Scaffold for `apps/web` and `apps/api`, tooling, Postgres via Docker Compose, Alembic baseline, environment config validated at boot, `/health`, CI (`api`, `web`, `docs`, `workflows`, `security`, `changelog`), Dependabot, pre-commit hooks, `make dev` and `make check`, stubs for DESIGN and WHAT-THIS-IS-NOT | CI is green on a hello-world web app and API in the private repo |
-| **1 Tenancy, identity, permissions** | Data model, row-level security and database roles, sessions, the policy layer, the `seed_tenant` generator, the audit log | Proven by tests: permission matrix, isolation, RLS coverage, seeding under 2 seconds |
+| **1 Tenancy, identity, permissions** | Data model, row-level security and database roles, sessions, the policy layer, the seed company generator, the audit log | Proven by tests: permission matrix, isolation, RLS coverage, seeding under 2 seconds |
 | **2 Design system, shell, sandbox entry** | Design tokens into Tailwind, the component library, a component gallery, the app shell, "Try Open Door" and the persona switcher, assistant home (no AI yet), the directory, an accessibility baseline | Screens meet their `notes.md` acceptance criteria and pass the owner's side-by-side review; axe is clean |
 | **3 Handbook and retrieval** | The handbook (about 20 sections plus 3 state addenda), ingestion, Voyage embeddings, hybrid search with reciprocal-rank fusion, the applicability filter, the handbook browser with deep links | Retrieval eval at least 90% hit rate at 5, with the negative cases passing |
 | **4 Assistant core (read-only)** | Agent loop, guard (with an escalation stub), citation UI, AI disclosure, append-only conversations, budgets, streaming hardening, the fake transport, red-team and Q&A evals, and a local production-like streaming check behind a reverse proxy (no deploy) | Cited, applicability-correct answers stream, including through the proxy; leak attempts are refused |

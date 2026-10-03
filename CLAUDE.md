@@ -55,6 +55,16 @@ dev       ●──●──●──●──●──●──●──●─�
   spends tokens and finds nothing. They get the automated checks (spelling, links, placeholders) and
   the owner's read-through instead.
 - **Release PRs (`dev` → `main`) always get `/code-review medium`**, whatever they contain.
+- **At the end of every phase, review the whole phase.** After its last PR merges, run
+  `/code-review high` on the phase's full diff: `dev` against the commit before the phase began.
+  It catches problems between stages that per-PR reviews can't see. Fix real findings in a small
+  follow-up PR before the phase is released.
+  - **The phases that guard the invariants get `max` and a security review.** Phase 1
+    (permissions and tenant isolation), Phase 4 (the assistant loop, the guard, prompt injection),
+    and Phase 6 (cases, encryption, escalation) run `/code-review max` instead of `high`, plus
+    `/security-review`.
+- **Never run `/code-review ultra`.** It is billed separately, and the reviews above cover what it
+  would.
 - **Open a PR when unmerged work reaches about 1,500 lines, or at a stage boundary, whichever comes
   first.** Size is what breaks reviews, both for tools and for people, so size is the trigger.
   - Count the code a reviewer must read closely: application code, migrations, scripts, and

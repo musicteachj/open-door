@@ -8486,6 +8486,25 @@ says, because of the additions below.
     under Phase 9 instead of being fixed now.
 
   Stage 1 ends with 152 tests, where the plan expects 81.
+
+**Phase 1 closes with a whole-phase review (owner-approved, 2026-10-03).** `CLAUDE.md` now asks
+for a review of every phase's full diff once its last PR merges. Phase 1 guards an invariant, so
+after Stage 4 merges it runs `/code-review max` and `/security-review` on `dev` against `d6b652d`,
+the commit before Phase 1's first stage. Real findings are fixed in a small follow-up PR before the
+`v0.1.0` release.
+
+**Stage 2.** Every pytest total is 71 higher than the plan says, because Stage 1 ended at 152
+where the plan expects 81.
+- **Tasks 11–13** went in exactly as planned, with no adjustments. 20 sandboxes seeded at p50
+  14 ms and p95 17 ms.
+- **From the review:**
+  - **A new unit test checks that every row gets an ID of its own.** `all_ids()` returns a set,
+    so a repeated ID would have shrunk it silently. The test was shown to fail when every person
+    was given the same ID.
+  - **The previous year's holidays go to the backlog (Phase 5).** A sandbox created in early
+    January lacks the previous December's closures.
+
+  Stage 2 ends with 184 tests, where the plan expects 112.
 - **Task 10.**
   - The changelog entry also mentions the bootstrap script's refusals, the plaintext-free
     passwords, and the 25-hour cap.
