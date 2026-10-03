@@ -87,10 +87,11 @@ open-door/
 ├── compose.yaml                        Stage 1  development Postgres 17 + pgvector on 127.0.0.1:5433
 ├── Makefile                            Stage 1, replaced in Stages 2 and 3
 ├── .pre-commit-config.yaml             Stage 3  ruff, gitleaks, and web lint and format hooks
+├── _typos.toml                         Stage 3  spelling rules for the docs check (US English)
 ├── .github/
 │   ├── dependabot.yml                  Stage 3  weekly grouped updates, targeting dev
 │   └── workflows/
-│       ├── ci.yml                      Stage 3  api and web jobs, filtered by what changed
+│       ├── ci.yml                      Stage 3  api and web jobs (filtered), docs and workflows
 │       ├── security.yml                Stage 3  gitleaks, pip-audit, npm audit, weekly
 │       └── changelog.yml               Stage 3  code changes need a CHANGELOG entry
 ├── apps/api/
@@ -2002,8 +2003,8 @@ Run a single API test: `cd apps/api && uv run pytest tests/test_health.py -q`. R
 test: `cd apps/web && npx vitest run src/App.test.tsx`.
 ````
 
-- [ ] **Step 5: Run `/code-review medium`** on the uncommitted diff, and fix anything real it
-      finds. Re-run `make check`.
+- [ ] **Step 5: Run `/code-review medium`** on the whole branch against `dev`, committed and
+      uncommitted work together, and fix anything real it finds. Re-run `make check`.
 
 - [ ] **Step 6: Propose the commit, and wait for the owner's OK.** Message:
 
@@ -2058,6 +2059,8 @@ green.
 - [ ] **Step 1: Create `.github/workflows/ci.yml`**
 
 ```yaml
+# Every action is pinned to a full commit SHA, with its version in a comment. Dependabot updates
+# both, and `make check-workflows` (zizmor) fails on an action pinned only to a tag.
 name: CI
 
 on:
@@ -2088,9 +2091,13 @@ jobs:
       api: ${{ steps.filter.outputs.api }}
       web: ${{ steps.filter.outputs.web }}
     steps:
-      - uses: actions/checkout@v7
+      # Every other checkout drops its credentials. This one keeps them, because on a push
+      # paths-filter fetches the previous commit with them. The job runs no repository code.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: true
       # Docs-only changes skip the heavy jobs. That saves private-repo Actions minutes.
-      - uses: dorny/paths-filter@v4
+      - uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4.0.3
         id: filter
         with:
           filters: |
@@ -2134,8 +2141,10 @@ jobs:
       APP_ENV: test
       DATABASE_URL: postgresql+asyncpg://opendoor:opendoor@127.0.0.1:5433/opendoor
     steps:
-      - uses: actions/checkout@v7
-      - uses: astral-sh/setup-uv@v10
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
         with:
           enable-cache: true
           cache-dependency-glob: apps/api/uv.lock
@@ -2163,8 +2172,10 @@ jobs:
       run:
         working-directory: apps/web
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-node@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version-file: .nvmrc
           cache: npm
@@ -2211,8 +2222,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          persist-credentials: false
           fetch-depth: 0 # scan the whole history, not just the latest commit
       - name: Install gitleaks
         env:
@@ -2230,8 +2242,10 @@ jobs:
       run:
         working-directory: apps/api
     steps:
-      - uses: actions/checkout@v7
-      - uses: astral-sh/setup-uv@v10
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
         with:
           enable-cache: true
           cache-dependency-glob: apps/api/uv.lock
@@ -2247,8 +2261,10 @@ jobs:
       run:
         working-directory: apps/web
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-node@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version-file: .nvmrc
       # npm audit reads package-lock.json, so no install is needed.
@@ -2280,8 +2296,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          persist-credentials: false
           fetch-depth: 0
       - name: Code changes need a CHANGELOG.md entry
         env:
@@ -2313,6 +2330,8 @@ Expected: both labels are created.
 ```yaml
 # Weekly, grouped dependency updates, opened against dev like every other change. They carry
 # skip-changelog: a version bump is a chore, and the lockfile diff is its own record.
+# The 7-day cooldown waits for a release to age before proposing it, so a compromised release has
+# time to be caught first. Security updates skip the wait.
 version: 2
 updates:
   - package-ecosystem: uv
@@ -2321,6 +2340,8 @@ updates:
     schedule:
       interval: weekly
       day: monday
+    cooldown:
+      default-days: 7
     groups:
       python:
         patterns: ['*']
@@ -2332,6 +2353,8 @@ updates:
     schedule:
       interval: weekly
       day: monday
+    cooldown:
+      default-days: 7
     groups:
       web:
         patterns: ['*']
@@ -2343,6 +2366,8 @@ updates:
     schedule:
       interval: weekly
       day: monday
+    cooldown:
+      default-days: 7
     groups:
       actions:
         patterns: ['*']
@@ -2431,7 +2456,160 @@ Expected: gitleaks finds no leaks, and neither `pip-audit` nor `npm audit` repor
 vulnerability. If one does, update that dependency (`uv add <pkg>@latest` or `npm install
 <pkg>@latest`), re-run `make check`, and mention it in the changelog entry.
 
-### Task 28: Close Stage 3 and Phase 0
+### Task 28: Docs and workflow checks
+
+`CLAUDE.md` promises that docs-only pull requests get automated spelling, link, and placeholder
+checks. This task adds them, plus linting for the workflows themselves. CI calls the same `make`
+targets developers run, so the tool versions are pinned in one place.
+
+**Files:**
+- Create: `_typos.toml`
+- Modify: `Makefile` (adds the tool versions and two targets, adds both to `check`, and widens the
+  help column), `.github/workflows/ci.yml` (adds two jobs)
+- Fix: the spelling findings the first run turns up
+
+<!-- spellchecker:off -->
+
+- [ ] **Step 1: Create `_typos.toml`** at the repository root
+
+```toml
+# Spelling checks for `make check-docs` and CI. US English, as CLAUDE.md requires: "colour" fails.
+[default]
+locale = "en-us"
+# Markdown between `spellchecker:off` and `spellchecker:on` HTML comments is skipped, for text
+# that quotes a misspelling on purpose.
+extend-ignore-re = ['(?s)<!--\s*spellchecker:off\s*-->.*?<!--\s*spellchecker:on\s*-->']
+
+[default.extend-words]
+# axe is the accessibility checker (axe-core), not a misspelling of "ax".
+axe = "axe"
+# The US locale accepts both spellings. CLAUDE.md asks for one L.
+cancelled = "canceled"
+cancelling = "canceling"
+
+[files]
+extend-exclude = [
+    # Generated files: their spelling comes from their source.
+    "uv.lock",
+    "package-lock.json",
+    "apps/web/openapi.json",
+    "apps/web/src/api/generated.ts",
+    # Frozen by project rule, so a finding there could never be fixed.
+    "docs/plans/2026-09-29-open-door-initial-plan.md",
+]
+```
+
+<!-- spellchecker:on -->
+
+- [ ] **Step 2: Update `Makefile`.** Recipe lines start with a tab.
+
+After `WEB := apps/web`, add:
+
+```make
+
+# The docs and workflow linters. Dependabot can't see these versions, so bump them by hand.
+TYPOS := typos@1.50.3
+LYCHEE := lycheeverse/lychee:0.24.2
+ACTIONLINT := rhysd/actionlint:1.7.12
+ZIZMOR := zizmor@1.30.1
+```
+
+Then make three edits:
+- Replace the `.PHONY` line with
+  `.PHONY: help setup db db-stop migrate dev dev-api dev-web openapi check check-api check-web check-docs check-workflows audit`.
+- Replace the `check` line with
+  ``check: check-api check-web check-docs check-workflows ## Run everything CI runs (start Postgres first with `make db`)``.
+- In `help`, change `%-12s` to `%-16s`, so `check-workflows` fits its column.
+
+Append:
+
+```make
+
+check-docs: ## Check spelling (American English), links between files, and leftover placeholders
+	uvx $(TYPOS)
+	docker run --rm -v "$(CURDIR):/input:ro" -w /input $(LYCHEE) --offline --no-progress --include-fragments './**/*.md'
+	@if git grep --untracked -n -I -w -E 'T[O]DO|TB[D]|FIXM[E]|XX[X]|[Ll]orem [i]psum' -- '*.md'; then echo "Finish or remove the placeholders above."; exit 1; fi
+
+check-workflows: ## Check the GitHub Actions workflows for mistakes (actionlint) and security (zizmor)
+	docker run --rm -v "$(CURDIR):/repo:ro" -w /repo $(ACTIONLINT) -no-color
+	uvx $(ZIZMOR) .
+```
+
+How the checks behave:
+- `lychee --offline` checks only links inside the repository, including `#heading` anchors. A slow
+  or missing external site can't fail it. It skips git-ignored paths such as `.venv` and
+  `node_modules`.
+- The placeholder pattern is written as `T[O]DO` and so on, so this plan, which documents the
+  check, doesn't match it. `-w` (whole words) is used instead of `\b`, which macOS git's regex
+  doesn't support.
+- The actionlint image includes shellcheck, so the shell in every `run:` block is checked too.
+- Markdown that quotes a misspelling on purpose, as this task does, goes between
+  `<!-- spellchecker:off -->` and `<!-- spellchecker:on -->` comments. They don't show when the
+  markdown is rendered.
+
+- [ ] **Step 3: Append the two jobs to `.github/workflows/ci.yml`**
+
+```yaml
+
+  # Both are cheap, so they run on every pull request, docs-only ones included.
+  docs:
+    name: Docs
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+      - name: Spelling in American English, links between files, and leftover placeholders
+        run: make check-docs
+
+  workflows:
+    name: Workflows
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+      - name: Workflow mistakes (actionlint) and security problems (zizmor)
+        # The token lets zizmor confirm that each pinned commit really belongs to its action.
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: make check-workflows
+```
+
+<!-- spellchecker:off -->
+
+- [ ] **Step 4: Run the docs check and fix what it finds**
+
+Run: `make check-docs`
+Expected:
+- On 2026-10-03, `typos` reported exactly one finding: "cancelling" in the `ping` docstring in
+  `apps/api/app/db/engine.py`. Change it to "canceling", and fix anything written since.
+- Then the re-run passes: `typos` is silent, lychee reports `0 Errors`, and no placeholder is
+  printed.
+
+- [ ] **Step 5: Run the workflow check**
+
+Run: `make check-workflows`
+Expected: actionlint prints nothing, and zizmor ends with `No findings to report`. zizmor's online
+checks run only when a token is set. To match CI, run `GH_TOKEN=$(gh auth token) make
+check-workflows`.
+
+- [ ] **Step 6: Prove both checks can fail, then undo**
+
+Make each of these changes, run the check, and expect a failure:
+- Add a scratch `zz.md` containing "colour" and a to-do marker. Expect `make check-docs` to fail.
+- Change one `uses:` line in `ci.yml` to `actions/checkout@v7`. Expect `make check-workflows` to
+  fail with `unpinned-uses`.
+
+Then delete `zz.md`, restore the `uses:` line, and re-run `make check`.
+
+<!-- spellchecker:on -->
+
+### Task 29: Close Stage 3 and Phase 0
 
 **Files:**
 - Modify: `CHANGELOG.md`, `docs/ROADMAP.md`, `CLAUDE.md`
@@ -2444,6 +2622,11 @@ vulnerability. If one does, update that dependency (`uv add <pkg>@latest` or `np
   dependencies, weekly as well, and requires a changelog entry when code changes. Dependabot opens
   grouped weekly update pull requests against `dev`, and pre-commit hooks catch the quick problems
   before a commit is made. `make audit` runs the security scans locally.
+
+  Every pull request, docs-only ones included, also gets two quick checks. The docs check covers
+  spelling in American English, links between files, and leftover placeholders. The workflow
+  check looks for mistakes and security problems in the workflows themselves. Every action is
+  pinned to an exact commit, and Dependabot waits 7 days before proposing a new release.
 ```
 
 - [ ] **Step 2: Add `make audit` to the Commands block in `CLAUDE.md`**, after the `make openapi`
@@ -2460,8 +2643,9 @@ make audit      scan for leaked secrets and vulnerable dependencies
 | 0 Foundation | Done | `chore/phase-0-ci` | [#<stage 1>](https://github.com/musicteachj/open-door/pull/<stage 1>), [#<stage 2>](https://github.com/musicteachj/open-door/pull/<stage 2>), [#<stage 3>](https://github.com/musicteachj/open-door/pull/<stage 3>) | [phase 0 plan](plans/2026-09-29-phase-0-foundation.md) | <today> |
 ```
 
-- [ ] **Step 4: Run `/code-review medium`** on the uncommitted diff (the workflows count as code),
-      and fix anything real it finds. Re-run `make check`.
+- [ ] **Step 4: Run `/code-review medium`** on the whole branch against `dev`, committed and
+      uncommitted work together (the workflows count as code), and fix anything real it finds.
+      Re-run `make check`.
 
 - [ ] **Step 5: Propose the commit, and wait for the owner's OK.** Message:
 
@@ -2473,8 +2657,14 @@ scans for leaked secrets and vulnerable dependencies on every push and
 once a week. A pull request that changes code needs a changelog entry,
 unless it's labeled as a pure chore.
 
-Dependabot opens grouped weekly updates against dev, and pre-commit
-hooks catch quick problems before a commit is made.
+Every pull request also gets a docs check (spelling in American
+English, links between files, leftover placeholders) and a check of
+the workflows themselves. Actions are pinned to exact commits, so a
+moved tag can't change what runs.
+
+Dependabot opens grouped weekly updates against dev once a release is
+a week old, and pre-commit hooks catch quick problems before a commit
+is made.
 ```
 
 - [ ] **Step 6: With the owner's OK, push and open the PR into `dev`.** Title: "Run the checks
@@ -2484,7 +2674,9 @@ hooks catch quick problems before a commit is made.
 ## What this does
 Adds GitHub Actions workflows for the API and web checks (run only when those parts change),
 security scans (leaked secrets and vulnerable dependencies, also weekly), and a changelog
-requirement for code changes. It also adds Dependabot and pre-commit hooks.
+requirement for code changes. Every pull request, docs-only ones included, gets a docs check
+(spelling in American English, links between files, leftover placeholders) and a check of the
+workflows themselves. It also adds Dependabot and pre-commit hooks.
 
 ## Why
 So nothing reaches `dev` or `main` without passing the same checks developers run locally, and so
@@ -2495,15 +2687,15 @@ new vulnerabilities in dependencies surface on their own.
 are the real test: the CI, Security, and Changelog workflows should all be green below.
 
 ## What to look at
-Which paths trigger which jobs (`ci.yml`, the `changes` job), and the `skip-changelog` label on
-Dependabot's pull requests.
+Which paths trigger which jobs (`ci.yml`, the `changes` job), the one checkout that keeps its
+credentials and why, and the `skip-changelog` label on Dependabot's pull requests.
 ```
 
 - [ ] **Step 7: Confirm the pull request's checks are green**
 
 Run: `gh pr checks <stage 3 PR number> --repo musicteachj/open-door --watch`
-Expected: CI (Detect what changed, API, Web), Security (all three jobs), and Changelog all pass. This
-PR changes both apps' tooling, so both the API and Web jobs run.
+Expected: CI (Detect what changed, API, Web, Docs, Workflows), Security (all three jobs), and
+Changelog all pass. This PR changes both apps' tooling, so both the API and Web jobs run.
 
 ---
 
@@ -2532,6 +2724,8 @@ PR changes both apps' tooling, so both the API and Web jobs run.
   - CI jobs `api`, `web`, `security`, `changelog` (Tasks 23 to 25).
   - Dependabot (Task 26).
   - Pre-commit (Task 27).
+  - The docs checks `CLAUDE.md` promises (spelling, links, placeholders), workflow linting, and
+    actions pinned to commits (Task 28, added 2026-10-03).
   - `make dev` and `make check` (Task 21).
 - **Deliberately later:**
   - Database roles and row-level security (Phase 1).
@@ -2592,11 +2786,31 @@ PR changes both apps' tooling, so both the API and Web jobs run.
 - Tasks 10–11: until Task 12 adds a file to `scripts/`, a bare `uv run mypy` stops with "no .py
   files in directory 'scripts'". The interim checks ran `mypy app tests migrations`.
 - Task 12, the OpenAPI export:
-  - It parses its arguments with `argparse`, so a mistyped flag such as `--chek` exits 2 instead
-    of silently rewriting the file.
+  - It parses its arguments with `argparse`, so a misspelled flag exits 2 instead of silently
+    rewriting the file.
   - It pins every `Settings` field, so an exported `LOG_LEVEL` or `APP_ENV` can't change or break
     the export.
   - The docstring now says the check compares the file on disk, which is the design.
+
+- **Stage 3 additions (owner-approved, 2026-10-03, before Stage 3 started).**
+  - **New Task 28, docs and workflow checks.** It adds `make check-docs` and `make check-workflows`,
+    which CI runs as the Docs and Workflows jobs:
+    - spelling in American English, with `typos`
+    - links between files, with `lychee --offline`
+    - leftover placeholders, with `git grep`
+    - workflow mistakes and security problems, with actionlint and zizmor
+
+    "Close Stage 3" is now Task 29.
+  - **Tasks 23–26 were hardened, all checked against zizmor 1.30.1:**
+    - Every action is pinned to a full commit SHA, with its version in a comment.
+    - Every checkout sets `persist-credentials: false`, except the `changes` job. There, on a
+      push, paths-filter fetches history with those credentials.
+    - Dependabot waits 7 days (`cooldown`) before proposing a release.
+  - **Code review scope.** The Stage 2 and 3 close-out steps review the whole branch against
+    `dev`, following the updated `CLAUDE.md` rule.
+  - **How the new blocks were checked.** They were run in a scratch clone with the Stage 1 Makefile
+    and the planned workflows. actionlint (including shellcheck) and zizmor (including its online
+    checks) were clean. Each check was shown to fail on a seeded mistake.
 
 For Tasks 4–12, the code in the repository is the source of truth; the code blocks above show the original plan.
 

@@ -17,6 +17,9 @@ should pick it up. When one is done, delete it here and record it in the changel
 - **Don't run Alembic inside an async test.** `env.py` calls `asyncio.run`, which fails inside a
   running event loop, and `fileConfig` resets the root log handlers. Test setup should run
   `alembic upgrade head` as a subprocess, or from a synchronous session fixture.
+- **Test that migrations reverse cleanly.** Add a CI step that runs `alembic downgrade base` and
+  then `alembic upgrade head` again. Row-level security policies and roles make downgrades easy to
+  break, and nothing exercises them today.
 
 ## Phase 4: assistant core
 
@@ -28,7 +31,7 @@ should pick it up. When one is done, delete it here and record it in the changel
 
 - **Pin the pgvector image.** Use a specific `0.8.x-pg17` tag in `compose.yaml` and CI, so
   development and CI run the same extension version.
-- **`ping()` has no hard wall-clock bound.** If cancelling the query stalls on the network,
+- **`ping()` has no hard wall-clock bound.** If canceling the query stalls on the network,
   closing the connection can take longer than the timeout, because SQLAlchemy shields the close.
   The orchestrator's own probe timeout covers it; revisit only if health checks need a strict
   bound.

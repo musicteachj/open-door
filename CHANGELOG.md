@@ -42,3 +42,10 @@ version (`0.x.y` while the app is being built, `1.0.0` when it is complete).
     `make openapi`, and `make check-api`, which runs every API check.
 
   Review findings deliberately left for later phases are recorded in `docs/BACKLOG.md`.
+
+### Changed
+
+- **The pre-PR code review covers the whole branch** (project rules). `/code-review medium` now
+  reviews everything the pull request will contain, measured against its base branch, not just
+  the uncommitted changes. That closes a gap where a commit already on the branch could go
+  unreviewed.

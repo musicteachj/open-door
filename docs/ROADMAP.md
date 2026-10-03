@@ -43,7 +43,7 @@ backend stages do not.
 
 | Phase | Scope | Done when |
 |---|---|---|
-| **0 Foundation** | Scaffold for `apps/web` and `apps/api`, tooling, Postgres via Docker Compose, Alembic baseline, environment config validated at boot, `/health`, CI (`api`, `web`, `security`, `changelog`), Dependabot, pre-commit hooks, `make dev` and `make check`, stubs for DESIGN and WHAT-THIS-IS-NOT | CI is green on a hello-world web app and API in the private repo |
+| **0 Foundation** | Scaffold for `apps/web` and `apps/api`, tooling, Postgres via Docker Compose, Alembic baseline, environment config validated at boot, `/health`, CI (`api`, `web`, `docs`, `workflows`, `security`, `changelog`), Dependabot, pre-commit hooks, `make dev` and `make check`, stubs for DESIGN and WHAT-THIS-IS-NOT | CI is green on a hello-world web app and API in the private repo |
 | **1 Tenancy, identity, permissions** | Data model, row-level security and database roles, sessions, the policy layer, the `seed_tenant` generator, the audit log | Proven by tests: permission matrix, isolation, RLS coverage, seeding under 2 seconds |
 | **2 Design system, shell, sandbox entry** | Design tokens into Tailwind, the component library, a component gallery, the app shell, "Try Open Door" and the persona switcher, assistant home (no AI yet), the directory, an accessibility baseline | Screens meet their `notes.md` acceptance criteria and pass the owner's side-by-side review; axe is clean |
 | **3 Handbook and retrieval** | The handbook (about 20 sections plus 3 state addenda), ingestion, Voyage embeddings, hybrid search with reciprocal-rank fusion, the applicability filter, the handbook browser with deep links | Retrieval eval at least 90% hit rate at 5, with the negative cases passing |
@@ -71,6 +71,10 @@ backend stages do not.
   - Frontend: lint, format, types, tests, build, API-client drift.
   - Offline evals.
   - End-to-end tests with the fake transport.
+  - Docs: spelling in American English, links between files, and leftover placeholders. This runs
+    on every PR, docs-only ones included.
+  - Workflows: mistakes and security problems in the workflow files. Every action is pinned to an
+    exact commit.
   - Security scans.
   - The changelog check.
 
