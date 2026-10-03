@@ -2527,7 +2527,7 @@ Append:
 
 check-docs: ## Check spelling (American English), links between files, and leftover placeholders
 	uvx $(TYPOS)
-	docker run --rm -v "$(CURDIR):/input:ro" -w /input $(LYCHEE) --offline --no-progress --include-fragments './**/*.md'
+	git ls-files --cached --others --exclude-standard -- '*.md' | docker run --rm -i -v "$(CURDIR):/input:ro" -w /input $(LYCHEE) --offline --no-progress --include-fragments --files-from -
 	@if git grep --untracked -n -I -w -E 'T[O]DO|TB[D]|FIXM[E]|XX[X]|[Ll]orem [i]psum' -- '*.md'; then echo "Finish or remove the placeholders above."; exit 1; fi
 
 check-workflows: ## Check the GitHub Actions workflows for mistakes (actionlint) and security (zizmor)
@@ -2537,8 +2537,11 @@ check-workflows: ## Check the GitHub Actions workflows for mistakes (actionlint)
 
 How the checks behave:
 - `lychee --offline` checks only links inside the repository, including `#heading` anchors. A slow
-  or missing external site can't fail it. It skips git-ignored paths such as `.venv` and
-  `node_modules`.
+  or missing external site can't fail it.
+- lychee checks the markdown files git lists: tracked files, plus new files that aren't ignored.
+  lychee doesn't apply `.gitignore` when it expands a glob such as `'./**/*.md'`. A glob would
+  sweep in `apps/web/node_modules`, about 500 broken links in third-party READMEs, which was found
+  after Stage 2 installed it.
 - The placeholder pattern is written as `T[O]DO` and so on, so this plan, which documents the
   check, doesn't match it. `-w` (whole words) is used instead of `\b`, which macOS git's regex
   doesn't support.
@@ -2812,7 +2815,45 @@ Changelog all pass. This PR changes both apps' tooling, so both the API and Web 
     and the planned workflows. actionlint (including shellcheck) and zizmor (including its online
     checks) were clean. Each check was shown to fail on a seeded mistake.
 
-For Tasks 4–12, the code in the repository is the source of truth; the code blocks above show the original plan.
+- **Stage 2 (2026-10-03).**
+  - **Task 15, scaffold.**
+    - create-vite 9.2 treats `/tmp/open-door-web` as a path relative to the current directory,
+      so the template landed in `tmp/open-door-web` inside the repo. It was copied from there and
+      the stray folder deleted. To scaffold again, run it from `/tmp`:
+      `(cd /tmp && npm create vite@latest open-door-web -- --template react-ts --no-interactive)`.
+    - The template's `App.tsx` imported the deleted assets, so those imports were trimmed until
+      Task 19 replaced the file.
+    - The template matched the plan otherwise. TypeScript was pinned at 6.0.3, oxlint shipped
+      instead of ESLint, and `tsconfig.app.json` differed only by `strict`.
+  - **Task 16, install scripts.** npm 11.17 warns that `esbuild` and `fsevents` have install
+    scripts not covered by `allowScripts`.
+    - The warning is advisory today: the scripts still run.
+    - The toolchain was also checked with `npm ci --ignore-scripts`: generate, check, lint,
+      typecheck, build and tests all passed. So nothing needs approving now, or if npm starts
+      blocking these scripts.
+  - **Tasks 17–18, review additions.**
+    - `orval.config.ts` warns that `clean` deletes any other file in `src/api/`.
+    - `tsconfig.node.json` type-checks `orval.config.ts` as well as `vite.config.ts`.
+    - Vitest's `unstubGlobals` undoes each test's `fetch` stub. `restoreMocks` doesn't.
+  - **Task 19, responses that aren't a health report.** The generated client returns every HTTP
+    response as data. So when the API was down, Vite's proxy sent an empty 502 and the page
+    showed "API: ". An API error, in problem-details format, has a numeric `status`, so it showed
+    "API: 500".
+    - `App.tsx` now reads the status only from a 200 or a 503, the two responses the schema
+      defines, and shows "unreachable" for anything else.
+    - Two new tests cover the cases. The web suite has 6 tests.
+    - The review found the first case and `/code-review medium` found the second.
+  - **Task 21, the smoke test.**
+    - Headless Chrome's `--dump-dom` rendered "API: ok", but it doesn't exit while Vite's
+      live-reload connection is open. Wrap it in a timeout, or kill it after the dump.
+    - Use a throwaway `--user-data-dir`, so it never touches the owner's Chrome profile.
+    - SIGINT to the two listeners on :8000 and :5173 stops the whole `make dev` tree cleanly.
+  - **Correction to Task 28.** A trial run of the planned docs checks found that lychee's
+    `'./**/*.md'` glob ignores `.gitignore` and swept in `apps/web/node_modules`. Task 28 now
+    feeds lychee the markdown files git lists. typos and the placeholder search already respected
+    `.gitignore`.
+
+For Tasks 4–21, the code in the repository is the source of truth; the code blocks above show the original plan.
 
 **Review process from Task 10 on (owner-approved, 2026-09-30).** Tasks 1–9 each got an
 implementer plus two reviewers (spec compliance, then code quality on the strongest model). That

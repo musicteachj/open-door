@@ -42,6 +42,11 @@ version (`0.x.y` while the app is being built, `1.0.0` when it is complete).
     `make openapi`, and `make check-api`, which runs every API check.
 
   Review findings deliberately left for later phases are recorded in `docs/BACKLOG.md`.
+- **The web app foundation** (Phase 0, stage 2). A React app that shows the product name and
+  whether the API is reachable: "ok", "degraded" when the database is down, or "unreachable" when
+  the API itself is. It talks to the API through a client generated from the API's own schema, so
+  the two can't silently drift apart. `make setup` installs everything, `make dev` runs the API and
+  the web app together, and `make check` runs every check CI will run.
 
 ### Changed
 

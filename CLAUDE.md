@@ -173,6 +173,23 @@ docs/                  roadmap, spec, plans, ADRs, design handoff, governance do
 
 ---
 
+## Commands
+
+Prerequisites: Node 24, uv, and Docker Desktop running.
+
+```
+make setup      install dependencies; create apps/api/.env from .env.example
+make db         start the development Postgres (127.0.0.1:5433)
+make dev        Postgres, migrations, API (:8000) and web app (:5173) together
+make check      everything CI runs; needs `make db` first
+make openapi    after changing an API route: regenerate the schema and the web client
+```
+
+Run a single API test: `cd apps/api && uv run pytest tests/test_health.py -q`. Run a single web
+test: `cd apps/web && npx vitest run src/App.test.tsx`.
+
+---
+
 ## Conventions
 
 - **Units live in the field name:** `amountMinutes`, `durationMs`. Never a bare `amount`.

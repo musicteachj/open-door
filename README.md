@@ -39,6 +39,18 @@ React 19, TypeScript, Vite, Tailwind CSS v4, and shadcn/ui on the frontend. Fast
 and Postgres with pgvector on the backend. Claude through the Anthropic SDK for the assistant, and
 Voyage AI for handbook embeddings.
 
+## Run it locally
+
+You need Node 24, [uv](https://docs.astral.sh/uv/), and Docker Desktop.
+
+```
+make setup   # install dependencies and create apps/api/.env
+make dev     # start Postgres, migrate, and run the API (:8000) and web app (:5173)
+make check   # run everything CI runs
+```
+
+`make` on its own lists every command.
+
 ---
 
 Open Door's company, people, and handbook are fictional. Nothing here is legal advice.
