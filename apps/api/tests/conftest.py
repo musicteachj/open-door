@@ -18,6 +18,9 @@ def settings() -> Settings:
         _env_file=None,
         app_env="test",
         database_url=UNREACHABLE_DATABASE_URL,
+        migration_database_url=None,
+        cleanup_database_url=None,
+        app_origin="http://localhost:5173",
         log_level="INFO",
     )
 

@@ -7,6 +7,11 @@ from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 
+# Imported for its side effect: it registers the hook that scopes every ORM transaction to a
+# tenant. Anything that builds an engine here therefore gets the hook, whether or not it imports
+# app.db.tenancy itself.
+import app.db.tenancy  # noqa: F401
+
 logger = logging.getLogger(__name__)
 
 PING_TIMEOUT_SECONDS = 5.0

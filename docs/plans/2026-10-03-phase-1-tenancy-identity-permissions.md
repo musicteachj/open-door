@@ -8407,6 +8407,96 @@ This PR changes the API and the web app's generated client, so both the API and 
 Record here anything that differs from the plan while it is carried out, with the reason, the way
 the Phase 0 plan does.
 
+**Stage 1 (2026-10-03).** For Tasks 1–9, the code in the repository is the source of truth; the
+code blocks above show the original plan. Every test count after Task 1 is higher than the plan
+says, because of the additions below.
+
+- **Task 1, `APP_ORIGIN`.** The validator also refuses an explicit default port (`:80` with http,
+  `:443` with https) and ports outside 1–65535. Browsers leave the default port out of `Origin`,
+  so such a value would make the same-origin check refuse every request. The error message now
+  says the origin must be lowercase. IPv6 literals stay unsupported. Adds 8 unit tests.
+- **Task 3, `alembic.ini`.** Its comment now names `MIGRATION_DATABASE_URL`.
+- **Tasks 4–6, from the security review.**
+  - **The bootstrap script refuses unsafe logins.** It checks an existing login before changing
+    anything, and refuses one with SUPERUSER, BYPASSRLS, CREATEROLE, CREATEDB, or REPLICATION,
+    or with any membership besides its own role. Before this fix, a pre-created `BYPASSRLS` login
+    was granted `od_app` and could read every tenant.
+  - **The plaintext password never reaches the server.** The script computes a SCRAM-SHA-256
+    verifier and sends that, so plaintext appears in neither the server log nor an error. It
+    accepts only printable-ASCII passwords, which SASLprep leaves unchanged. Its engine hides
+    parameters, and a database error is reported by class name only. It gains a pure
+    `logins_from()`, and `scripts/` becomes a package so the tests can import it.
+  - **Migration 0002 refuses to reuse an unsafe role.** It raises an exception if an existing
+    `od_app` or `od_cleanup` has a dangerous attribute or any membership. The context functions
+    use SQL-standard `RETURN` bodies, so their names are bound when they're created. Only
+    `od_app` gets USAGE on schema `app`, because the cleanup role doesn't need it.
+  - **Migration 0003 caps a sandbox's lifetime.** `ck_tenants_lifetime` refuses an expiry more
+    than 25 hours after creation.
+  - **New and stronger tests:**
+    - the refusals and the verifier, with an RFC 7677 vector
+    - that the password never leaks
+    - each unsafe-role case in the migration
+    - the lifetime cap
+    - each login's memberships
+    - PUBLIC schema grants
+    - materialized and foreign tables in the coverage scan
+    - a check that no permissive policy widens `tenant_isolation`
+
+    The suite grows from 74 to 123 tests at the end of Task 6.
+  - **From the security re-review:**
+    - **A trigger stamps `created_at`.** The lifetime cap was measured from `created_at`, a
+      column the API could write, so a chosen `created_at` could stretch a sandbox's life
+      indefinitely. A `BEFORE INSERT` trigger, `app.stamp_tenant_created_at()`, now always sets
+      it to `now()`. The function pins `search_path` and isn't SECURITY DEFINER.
+    - **Test roles can't log in.** The refusal tests create their roles as `NOLOGIN` with no
+      password, so a killed test run can't leave a usable superuser login behind. An autouse
+      sweep at the start of the session drops any leftover `od_test_*` role.
+    - **No login may hold its role WITH ADMIN OPTION.** The bootstrap script refuses one, and a
+      test checks that nobody holds `od_app` or `od_cleanup` that way.
+
+    The suite is at 129 tests at the end of Task 6, where the plan expects 66.
+- **Task 7, the integration conftest.** The conftest was merged, not replaced: it keeps the
+  `od_test_*` sweep fixture from Tasks 4–6.
+- **Tasks 7–9, from the security review:**
+  - **The hook skips savepoints.** SQLAlchemy fires `after_begin` for a savepoint too, so
+    `begin_nested()` re-ran the hook and cleared `app.is_hr` for the rest of the transaction.
+    HR then saw only their own private row. `apply_tenant_context` now returns early for a
+    nested transaction, because the outer transaction has already set the context. A test runs a
+    savepoint as HR and checks every private row is still visible.
+  - **The hook is registered whenever the database code is imported.** `app/db/engine.py`
+    imports `app.db.tenancy` for that side effect, and a test checks it in a fresh interpreter.
+  - **Each policy rule is pinned by its own test.**
+    - An unfiltered `DELETE FROM tenants` as the cleanup login removes only expired tenants.
+    - The cleanup login's two policies are exactly `cleanup_select` and `cleanup_delete`, each
+      on `expires_at < now()`.
+    - `set_is_hr` lasts only for its transaction on a reused connection.
+
+    Before these tests, loosening `cleanup_delete` alone, or making the HR flag
+    connection-wide, passed every test.
+  - **The test teardown checks the owner first.** It deletes the tenants it created through the
+    owner, so a session fixture fails fast if `MIGRATION_DATABASE_URL` doesn't name a superuser.
+    Otherwise row security would let that delete silently remove nothing.
+
+- **From `/code-review medium`:**
+  - **The bootstrap script also refuses a login that has members.** Any role that belongs to
+    the login would inherit `od_app` once it's granted.
+  - **`APP_ORIGIN` rejects a zero-padded port** such as `:05173`, which a browser never sends.
+  - **A login made for a sibling database could connect to this one.** The review called this
+    plausible. It matters only if environments share a Postgres server, so it's in the backlog
+    under Phase 9 instead of being fixed now.
+
+  Stage 1 ends with 152 tests, where the plan expects 81.
+- **Task 10.**
+  - The changelog entry also mentions the bootstrap script's refusals, the plaintext-free
+    passwords, and the 25-hour cap.
+  - The backlog gains the security reviews' non-blocking findings:
+    - write policies on `person_private` (any phase)
+    - data migrations under forced row security on managed Postgres (Phase 8)
+    - a `SECURITY DEFINER` session lookup (Phase 8)
+    - the Postgres 16 floor (Phase 8)
+  - **Stage 4's backlog task must keep these entries.** Its blocks predate them, so merge them in
+    rather than replacing whole sections.
+
 ## Backlog
 
 Deferred review findings and later-phase items live in [`../BACKLOG.md`](../BACKLOG.md).

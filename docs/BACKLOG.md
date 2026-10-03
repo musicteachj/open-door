@@ -5,21 +5,17 @@ should pick it up. When one is done, delete it here and record it in the changel
 
 ## Phase 1: tenancy, identity, permissions
 
-- **A typed engine accessor.** `request.app.state.engine` is untyped (`Any`), and a missing
-  lifespan gives a 500 instead of a clear error. Add `get_engine(request) -> AsyncEngine` (for
-  example in `app/api/deps.py`), build the Phase 1 `get_session` dependency on it, and keep the
-  health check on a bare connection so it stays independent of row-level security.
 - **Exempt `/api/v1/health` from authentication and CSRF.**
-- **Migrate as a separate database role.** `migrations/env.py` reads only `DATABASE_URL`. Once
-  the app connects as a non-owner role, migrations need the owner. Add a setting such as
-  `MIGRATION_DATABASE_URL` that `env.py` prefers, and make sure that role can run
-  `CREATE EXTENSION`.
 - **Don't run Alembic inside an async test.** `env.py` calls `asyncio.run`, which fails inside a
   running event loop, and `fileConfig` resets the root log handlers. Test setup should run
   `alembic upgrade head` as a subprocess, or from a synchronous session fixture.
-- **Test that migrations reverse cleanly.** Add a CI step that runs `alembic downgrade base` and
-  then `alembic upgrade head` again. Row-level security policies and roles make downgrades easy to
-  break, and nothing exercises them today.
+
+## Any phase
+
+- **Guard writes to private details as well as reads.** The database rule that limits
+  `person_private` to the person and HR covers `SELECT` only, because the API can't yet update or
+  delete those rows. Whichever phase first grants `UPDATE` or `DELETE` on `person_private` must
+  add restrictive policies for them in the same migration. (Stage 1 security review.)
 
 ## Phase 4: assistant core
 
@@ -28,6 +24,18 @@ should pick it up. When one is done, delete it here and record it in the changel
   `stopTimeout`.
 
 ## Phase 8: hardening and deploy-readiness
+
+- **Data migrations can't see tenant rows on AWS.** With row-level security forced, a table
+  owner that isn't a superuser sees no rows. That is the managed-Postgres case, unlike
+  development and CI, where the owner is a superuser. A migration that changes data must set the
+  tenant context for each tenant, or run under a role made for it. (Stage 1 security review.)
+- **Look up sessions without granting the table.** `od_app` can read every tenant's `sessions`
+  rows, because a session is looked up before the tenant is known. The spec accepts this. A
+  `SECURITY DEFINER` function that returns one session by its token hash would let `od_app` drop
+  its `SELECT` on the table. (Stage 1 security review.)
+- **Postgres 16 or later.** The bootstrap script grants roles `WITH INHERIT TRUE`, which needs
+  Postgres 16. Development and CI run 17. The managed Postgres chosen in Phase 9 must be 16 or
+  later.
 
 - **One source for tool versions.** The gitleaks version is written in three places: the Security
   workflow, the `Makefile`, and the pre-commit config. The ruff hook's version separately follows
@@ -56,6 +64,14 @@ should pick it up. When one is done, delete it here and record it in the changel
   and from OpenTelemetry if it's enabled.
 
 ## Phase 9: deploy to AWS
+
+- **Don't share a Postgres server between environments that reuse these role names.** Roles
+  belong to the whole server, and Postgres lets every role connect to every database by default.
+  If staging and production lived on one server, a login made for one could connect to the other,
+  inherit `od_app`, and read any tenant. Both bootstrap runs would also reset the shared login's
+  password. Either give each environment its own server, or revoke `CONNECT` on the database from
+  `PUBLIC` and grant it only to that database's own logins in the bootstrap script.
+  (`/code-review medium` on Phase 1, stage 1.)
 
 - **Separate liveness from readiness.** ECS container health checks must not depend on the
   database, or an RDS failover would restart every task. Add `GET /api/v1/health/live`, which

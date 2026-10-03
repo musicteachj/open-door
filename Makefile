@@ -14,10 +14,10 @@ ZIZMOR := zizmor@1.30.1
 GITLEAKS := ghcr.io/gitleaks/gitleaks:v8.30.1
 
 .DEFAULT_GOAL := help
-.PHONY: help setup db db-stop migrate dev dev-api dev-web openapi check check-api check-web check-docs check-workflows audit
+.PHONY: help setup db db-stop migrate bootstrap-db migrations-roundtrip dev dev-api dev-web openapi check check-api check-web check-docs check-workflows audit
 
 help: ## List the available commands
-	@grep -E '^[a-zA-Z_-]+:.*## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*## "}; {printf "  %-16s %s\n", $$1, $$2}'
+	@grep -E '^[a-zA-Z_-]+:.*## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*## "}; {printf "  %-22s %s\n", $$1, $$2}'
 
 setup: ## Install dependencies and git hooks; create apps/api/.env if it's missing
 	cd $(API) && uv sync
@@ -25,16 +25,27 @@ setup: ## Install dependencies and git hooks; create apps/api/.env if it's missi
 	uvx pre-commit install
 	@test -f $(API)/.env || (cp $(API)/.env.example $(API)/.env && echo "Created $(API)/.env")
 
-db: ## Start the development Postgres in Docker and wait until it's ready
+db: ## Start the development Postgres, apply migrations, then create the login users
 	docker compose up --detach --wait db
+	cd $(API) && uv run alembic upgrade head
+	cd $(API) && uv run python scripts/bootstrap_db_users.py
 
 db-stop: ## Stop the development Postgres (its data is kept)
 	docker compose stop db
 
-migrate: ## Apply database migrations
+migrate: ## Apply new database migrations
 	cd $(API) && uv run alembic upgrade head
 
-dev: db migrate ## Start Postgres, migrate, then run the API (:8000) and the web app (:5173)
+bootstrap-db: ## Create or update the login users named in DATABASE_URL and CLEANUP_DATABASE_URL
+	cd $(API) && uv run python scripts/bootstrap_db_users.py
+
+# Not part of check-api: it deletes every row, including the sandboxes you're working in.
+migrations-roundtrip: ## Undo every migration, apply them again, and recreate the logins (wipes data)
+	cd $(API) && uv run alembic downgrade base
+	cd $(API) && uv run alembic upgrade head
+	cd $(API) && uv run python scripts/bootstrap_db_users.py
+
+dev: db ## Run `make db`, then the API (:8000) and the web app (:5173) together
 	$(MAKE) -j2 dev-api dev-web
 
 dev-api: ## Run only the API, with auto-reload
@@ -55,6 +66,7 @@ check-api: ## Lint, type-check, migrate, and test the API; confirm the schema is
 	cd $(API) && uv run mypy
 	cd $(API) && uv run lint-imports
 	cd $(API) && uv run alembic upgrade head
+	cd $(API) && uv run python scripts/bootstrap_db_users.py
 	cd $(API) && uv run alembic check
 	cd $(API) && uv run pytest
 	cd $(API) && uv run python scripts/export_openapi.py --check

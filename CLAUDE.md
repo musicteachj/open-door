@@ -57,6 +57,11 @@ dev       ●──●──●──●──●──●──●──●─�
 - **Release PRs (`dev` → `main`) always get `/code-review medium`**, whatever they contain.
 - **Open a PR when unmerged work reaches about 1,500 lines, or at a stage boundary, whichever comes
   first.** Size is what breaks reviews, both for tools and for people, so size is the trigger.
+  - Count the code a reviewer must read closely: application code, migrations, scripts, and
+    config. Tests, generated files (the OpenAPI schema, the generated client, lockfiles), and docs
+    don't count toward the 1,500. Tests still go in the same PR as the code they prove.
+  - A PR over the guideline gives a short reading guide in "What to look at": which files to read
+    closely, in what order, and what can be skimmed.
 - Before creating a PR:
   - CI is green (`make check` locally mirrors it).
   - `CHANGELOG.md` is updated.
@@ -179,7 +184,7 @@ Prerequisites: Node 24, uv, and Docker Desktop running.
 
 ```
 make setup      install dependencies; create apps/api/.env from .env.example
-make db         start the development Postgres (127.0.0.1:5433)
+make db         start Postgres (127.0.0.1:5433), migrate, then create the login users
 make dev        Postgres, migrations, API (:8000) and web app (:5173) together
 make check      everything CI runs; needs `make db` first
 make openapi    after changing an API route: regenerate the schema and the web client
@@ -188,6 +193,20 @@ make audit      scan for leaked secrets and vulnerable dependencies
 
 Run a single API test: `cd apps/api && uv run pytest tests/test_health.py -q`. Run a single web
 test: `cd apps/web && npx vitest run src/App.test.tsx`.
+
+**The database has three URLs**, all in `apps/api/.env` (see `.env.example`):
+
+- `DATABASE_URL` is the API's own login, `od_app_login`. It owns nothing, row-level security
+  applies to it, and the tests connect as it.
+- `MIGRATION_DATABASE_URL` is the database owner. Alembic and the bootstrap script connect as it.
+- `CLEANUP_DATABASE_URL` is the cleanup login, `od_cleanup_login`, which can delete only expired
+  sandboxes.
+
+`make db` does three things in order: it starts Postgres, applies the migrations, and runs
+`apps/api/scripts/bootstrap_db_users.py`, which creates the login users from those URLs.
+`make migrate` applies new migrations on their own, and `make bootstrap-db` reruns the script
+after a password changes. `make migrations-roundtrip` undoes and reapplies every migration, which
+wipes the data.
 
 ---
 
