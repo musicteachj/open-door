@@ -10,6 +10,11 @@ version (`0.x.y` while the app is being built, `1.0.0` when it is complete).
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-10-04
+
+The first release: the planning documents, the Phase 0 foundation, and Phase 1's tenancy,
+identity, and permissions, proven by tests and closed out with a whole-phase review.
+
 ### Added
 
 - The repository: README, license notice, `.gitignore`, and this changelog.
