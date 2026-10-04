@@ -56,15 +56,19 @@ dev       ●──●──●──●──●──●──●──●─�
   the owner's read-through instead.
 - **Release PRs (`dev` → `main`) always get `/code-review medium`**, whatever they contain.
 - **At the end of every phase, review the whole phase.** After its last PR merges, run
-  `/code-review high` on the phase's full diff: `dev` against the commit before the phase began.
-  It catches problems between stages that per-PR reviews can't see. Fix real findings in a small
-  follow-up PR before the phase is released.
-  - **The phases that guard the invariants get `max` and a security review.** Phase 1
-    (permissions and tenant isolation), Phase 4 (the assistant loop, the guard, prompt injection),
-    and Phase 6 (cases, encryption, escalation) run `/code-review max` instead of `high`, plus
-    `/security-review`.
-- **Never run `/code-review ultra`.** It is billed separately, and the reviews above cover what it
-  would.
+  `/code-review high` on the phase's application code: `dev` against the commit before the phase
+  began, limited to the paths that count toward the PR-size guideline below (application code,
+  migrations, scripts, and config). Tests, generated files, and docs were already reviewed with
+  their stage's code. The phase review catches problems between stages that per-PR reviews can't
+  see. Fix real findings in a small follow-up PR before the phase is released.
+  - **The phases that guard the invariants also get one security review.** Phase 1 (permissions
+    and tenant isolation), Phase 4 (the assistant loop, the guard, prompt injection), and Phase 6
+    (cases, encryption, escalation) add a single reviewer on the strongest model. It is briefed
+    with the invariants the phase guards and the seams between its stages. It proves each finding
+    with the smallest experiment that shows it, not with exhaustive fuzzing.
+- **Never run `/code-review max` or `/code-review ultra`.** `max` sends many reviewers over the
+  whole diff in parallel. On Phase 1 it used up the session limit before its bug-hunting passes
+  finished. `ultra` is billed separately. The reviews above cover what either would.
 - **Open a PR when unmerged work reaches about 1,500 lines, or at a stage boundary, whichever comes
   first.** Size is what breaks reviews, both for tools and for people, so size is the trigger.
   - Count the code a reviewer must read closely: application code, migrations, scripts, and
