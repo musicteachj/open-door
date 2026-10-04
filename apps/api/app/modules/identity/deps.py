@@ -24,12 +24,11 @@ from app.api.deps import get_engine
 from app.db.tenancy import NO_TENANT, TenantContext, set_is_hr, tenant_session
 from app.modules.identity.actor import load_actor
 from app.modules.identity.cookies import CSRF_HEADER, SESSION_COOKIE
+from app.modules.identity.same_origin import SAFE_METHODS
 from app.modules.identity.security_log import SecurityEvent, log_security_event
 from app.modules.identity.sessions import SessionRecord, find_session
 from app.modules.identity.tokens import hash_token, token_matches
 from app.policy import Action, Actor, PersonResource, can
-
-SAFE_METHODS = frozenset({"GET", "HEAD", "OPTIONS"})
 
 NOT_SIGNED_IN = "There is no current session. Start a sandbox to sign in."
 

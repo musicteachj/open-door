@@ -46,7 +46,7 @@ async def post_sandbox(
 ) -> SandboxCreated:
     # The same-origin check has already run. There is no CSRF token to check: a visitor without a
     # session has none, and this creates the session.
-    persona = body.persona if body is not None else "priya"
+    persona = (body or NewSandboxRequest()).persona
     current = request.cookies.get(SESSION_COOKIE)
     sandbox = await create_sandbox(engine, persona, hash_token(current) if current else None)
     set_session_cookies(response, sandbox.tokens, sandbox.expires_at)

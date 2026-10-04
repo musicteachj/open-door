@@ -1,7 +1,7 @@
 """The same-origin check on requests to the API: every unsafe method, and reads of `/api/`.
 
 Plain ASGI middleware, so every endpoint is covered by default, including sandbox creation, which
-has no session and so no CSRF token yet. The safe methods are GET, HEAD, OPTIONS, and TRACE.
+has no session and so no CSRF token yet. The safe methods are GET, HEAD, and OPTIONS.
 
 **A request that changes data**, meaning any method that isn't safe. The check lists the methods it
 lets through, not the ones it guards, so a method it has never heard of, or a safe one in
@@ -39,8 +39,9 @@ from app.core.api_paths import is_api_request
 from app.core.problems import problem_response
 from app.modules.identity.security_log import SecurityEvent, log_security_event
 
-# Compared exactly, so a lowercase "get" is not safe and gets the check.
-SAFE_METHODS = frozenset({"GET", "HEAD", "OPTIONS", "TRACE"})
+# Compared exactly, so a lowercase "get" is not safe and gets the check. The CSRF check in deps.py
+# uses this same set, so the two can't disagree about what changes data.
+SAFE_METHODS = frozenset({"GET", "HEAD", "OPTIONS"})
 JSON_MEDIA_TYPE = "application/json"
 # What Sec-Fetch-Site says about a request from another site, or from a sibling subdomain.
 OTHER_SITE = frozenset({"cross-site", "same-site"})

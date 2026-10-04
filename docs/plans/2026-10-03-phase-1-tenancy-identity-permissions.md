@@ -8689,6 +8689,30 @@ pytest total is 175 higher than the plan says at the start of Stage 4, because S
   Stage 4 ends with 477 tests, 183 of them against the real database, where the plan expects 260
   and 110.
 
+**Phase close-out (2026-10-04).** The first attempt, `/code-review max` on `d6b652d..dev`, used up
+the session limit without finishing, so the project rules replaced it (PR #12). The close-out ran
+`/code-review high` on the application code, migrations, scripts, and config only (47 files, about
+3,050 lines), then one security reviewer briefed with invariants 1 and 7 and the seams between the
+stages. Neither found anything high or medium.
+
+- **Fixed, test first, each new test mutation-proved:**
+  - Starting a sandbox while holding another sandbox's session ended that session inside the new
+    tenant's transaction, so the old tenant's audit log had no `session.ended`. It now ends in its
+    own transaction, scoped to the old tenant, which records the event.
+  - The same-origin check counted `TRACE` as safe and the CSRF check didn't. They now share one
+    `SAFE_METHODS` in `same_origin.py`. The existing test that let a cross-site `TRACE` outside
+    `/api/` through lost that case.
+  - The default persona was written twice in the sandbox route; it now comes from the request
+    model alone.
+- **Backlogged with their phase:** the HR flag outside the tenant context and the persona switch's
+  stale settings (any phase; the reviewer proved neither is reachable today), the copied Starlette
+  helper (any phase), the anonymous `/me` warning (Phase 2), insert and delete on `sessions`
+  without row-level security, the owner's URL in the API's settings, and two transactions per
+  request (Phase 8), and the migration's one-way role-membership check (Phase 9). The client IP
+  behind the load balancer was already there.
+
+  Phase 1 ends with 480 tests.
+
 ## Backlog
 
 Deferred review findings and later-phase items live in [`../BACKLOG.md`](../BACKLOG.md).
