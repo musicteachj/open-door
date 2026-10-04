@@ -10,6 +10,26 @@ version (`0.x.y` while the app is being built, `1.0.0` when it is complete).
 
 ## [Unreleased]
 
+### Changed
+
+- **The design brief is ready for Claude Design** (Phase 2 planning). Mockups are now desktop
+  only; the build still makes every screen usable on a phone, checked automatically at 390 px.
+  Screens are designed in their final form, and the build hides what isn't ready yet. The brief
+  records the Phase 2 decisions:
+  - The navigation is designed in full, and each item appears once its page exists.
+  - Switching persona needs no confirmation.
+  - A banner warns before the sandbox expires.
+  - The directory is one list, with a "My team" filter for managers.
+  - A profile shows the fields you can't see as locked rows, by name only.
+
+  It also adds guidance on what makes an HR product look professional, with references to borrow
+  ideas from rather than copying an existing design system. The component list is now a living
+  inventory. The handoff loop is now one screen per round:
+  - Claude Code writes each prompt for Claude Design and reviews the result.
+  - The first round settles the look as a design-system project.
+  - Claude Design's HTML export is preferred over screenshots alone.
+  - Claude Code writes each screen's notes.
+
 ## [0.1.0] - 2026-10-04
 
 The first release: the planning documents, the Phase 0 foundation, and Phase 1's tenancy,

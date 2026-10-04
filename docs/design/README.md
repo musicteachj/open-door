@@ -6,15 +6,28 @@ or layout written anywhere else, the design wins.
 
 ## The loop
 
-1. The owner designs in Claude Design, starting from [`BRIEF.md`](BRIEF.md).
-2. The results land here as screenshots plus written guidelines (format below).
-3. The build implements them.
-4. Playwright captures the built screens.
-5. Design and build are compared side by side, and the owner reviews them.
-6. Repeat until they match.
+The owner works with Claude Design and Claude Code side by side, one screen per round, in phase
+order. Each phase's screens are designed shortly before that phase is built, not all up front.
 
-The `/design-sync` command, which the owner starts, can optionally keep the repo's component library
-in sync with a Claude Design design-system project, one component at a time.
+1. **Context, once.** Claude Code condenses [`BRIEF.md`](BRIEF.md) into a short context prompt,
+   which the owner gives Claude Design at the start.
+2. **Foundations first.** The first round designs one screen, the assistant home, to settle the
+   look: colors, type, and core components. The approved look becomes a design-system project in
+   Claude Design, which every later screen inherits.
+3. **One screen per round.** Claude Code writes a focused prompt for the next screen: its purpose,
+   the persona, the content (real names and data from the seed company), the states, and the copy.
+4. **Review.** The owner brings back the result as screenshots or, better, Claude Design's HTML
+   export, which carries the exact colors, type, and spacing. Claude Code reviews it against the
+   brief, the decisions, and accessibility, and writes the follow-up prompt for any changes.
+5. **Hand-off.** When the owner approves a screen, Claude Code saves it here and writes its
+   `notes.md`, including the acceptance criteria. Approved screens are committed in small batches.
+6. **Build and compare.** The build implements the screen, Playwright captures it at 1440 px and
+   390 px, and the owner reviews design and build side by side until they match.
+
+The exported HTML is a reference for the build, not code to ship: the app is built with shadcn/ui
+and Tailwind. Once Phase 2 builds the real component library, the `/design-sync` command, which the
+owner starts, can push it into the Claude Design design-system project. From then on, later phases
+are designed with the components that actually ship.
 
 ## The gate
 
@@ -42,15 +55,19 @@ docs/design/
     01-landing/
       desktop-default.png
       desktop-persona-selected.png
-      mobile-default.png
+      prototype.html      optional: Claude Design's HTML export, as a reference
       notes.md
     02-app-shell/
       …
 ```
 
 - **Screen folders** are numbered in build order: `NN-short-name`.
-- **Screenshots** are named `viewport-state.png`, where the viewport is `desktop` (1440 px wide) or
-  `mobile` (390 px wide) and the state is a short word: `default`, `loading`, `empty`, `error`,
-  `streaming`, `confirmed`, and so on.
-- **Each `notes.md`** follows [`screens/_TEMPLATE.md`](screens/_TEMPLATE.md). Its acceptance
-  criteria become that screen's definition of done in the build.
+- **Screenshots** are desktop only, 1440 px wide, named `desktop-state.png`, where the state is a
+  short word: `default`, `loading`, `empty`, `error`, `streaming`, `confirmed`, and so on. There
+  are no mobile mockups; the build adapts each screen to a phone's width on its own (see
+  [`BRIEF.md`](BRIEF.md)).
+- **Each `notes.md`** follows [`screens/_TEMPLATE.md`](screens/_TEMPLATE.md). Claude Code writes
+  it from the approved design and the review, and the owner checks it. Its acceptance criteria
+  become that screen's definition of done in the build.
+- **`tokens.md`** is filled in from the design-system project's exact values, taken from the HTML
+  export or listed by Claude Design as text, never guessed from a screenshot.

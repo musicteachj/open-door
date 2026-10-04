@@ -30,6 +30,15 @@ every stage.
 
 **Design track (owner, in Claude Design):** not started. The brief is ready at
 [`design/BRIEF.md`](design/BRIEF.md). Phase 2 needs the design system and the Phase 2 screens.
+Decided on 2026-10-04, changing the original plan:
+- **Mockups are desktop only.** The build still adapts every screen to a phone's width, checked
+  automatically at 390 px.
+- **Each screen is designed in its final form.** Navigation items, cards, and the tour button
+  appear as their phases build them.
+- **Our own design system, on shadcn/ui,** not Material or Carbon.
+
+The brief records these, and the Phase 2 decisions on the shell, the assistant home, and the
+directory.
 
 **Releases (`dev` → `main`):** `v0.1.0` (2026-10-04): planning, Phase 0, and Phase 1.
 
