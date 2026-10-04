@@ -184,5 +184,11 @@ version (`0.x.y` while the app is being built, `1.0.0` when it is complete).
   the uncommitted changes. That closes a gap where a commit already on the branch could go
   unreviewed.
 
+- **An effort level for each kind of session** (project rules). `CLAUDE.md` now says which Claude
+  Code effort level suits planning, building, reviewing, and debugging, and asks Claude to name
+  the level at the start of each session. The roadmap's next step names it too. Running every
+  session at `xhigh` made each step, and each agent a session launched, think harder than the work
+  needed.
+
 - **The data inventory stays current** (project rules). `CLAUDE.md` now asks that a new table,
   column, cookie, or log field update `docs/DATA-INVENTORY.md` in the same change.
