@@ -27,7 +27,7 @@ from app.modules.identity.cookies import CSRF_HEADER, SESSION_COOKIE
 from app.modules.identity.security_log import SecurityEvent, log_security_event
 from app.modules.identity.sessions import SessionRecord, find_session
 from app.modules.identity.tokens import hash_token, token_matches
-from app.policy import Actor
+from app.policy import Action, Actor, PersonResource, can
 
 SAFE_METHODS = frozenset({"GET", "HEAD", "OPTIONS"})
 
@@ -96,3 +96,20 @@ async def signed_in(
 # scope="function" ends the dependency, and so commits the transaction, before the response is
 # sent. A failed commit is then a 500, not a success the client was already told about.
 SignedInDep = Annotated[SignedIn, Depends(signed_in, scope="function")]
+
+
+def authorize(
+    request: Request, signed_in: SignedIn, action: Action, target: PersonResource
+) -> None:
+    """Ask the policy layer. A denial is a 403, recorded in the security log."""
+    if can(signed_in.actor, action, target):
+        return
+    log_security_event(
+        SecurityEvent.AUTHZ_DENIED,
+        request,
+        action.value,
+        tenant_id=signed_in.actor.tenant_id,
+        actor_id=signed_in.actor.person_id,
+        target_id=target.person_id,
+    )
+    raise HTTPException(status.HTTP_403_FORBIDDEN, "You don't have permission to see this.")

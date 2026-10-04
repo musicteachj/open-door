@@ -8608,6 +8608,76 @@ below.
   - **Stage 4's backlog task must keep these entries.** Its blocks predate them, so merge them in
     rather than replacing whole sections.
 
+**Stage 4 (2026-10-04).** For Tasks 23–27, the code in the repository is the source of truth. Every
+pytest total is 175 higher than the plan says at the start of Stage 4, because Stage 3 ended at
+392 where the plan expects 217. It is higher still after the review fixes below.
+
+- **Tasks 23–24** went in as planned, with two differences.
+  - **`tests/test_people_schemas.py` was merged, not replaced.** It keeps Stage 3's
+    `test_the_nested_references_have_exactly_their_own_fields` and its `json_fields` signature,
+    so it has 13 tests where the plan expects 12. The suite was at 402 after Task 23 and 435
+    after Task 24.
+  - **The manager-rule experiment in Task 24 Step 7 fails 4 tests, not 3.** Stage 3's review
+    added `test_can_returns_exactly_true_or_false`, which covers the same "manager, for a report"
+    case. The two HTTP failures are as planned: Marcus gets a 404, because the database's
+    private-details rule still hides Leo's row.
+- **From the security review of Tasks 23–24.** Nothing Critical, High, or Medium. Each fix was
+  written test first, and each new test was shown to fail under its mutation.
+  - **A crafted directory cursor got a 500.** A name with a NUL character or a lone surrogate
+    passed `DirectoryCursor.decode`, then failed inside the database driver. `decode` now refuses
+    both, so the client gets a 422.
+  - **Reads of `/api/` from another site are refused.** The cookies are `SameSite=Lax`, so a
+    cross-site link carries the session, and the same-origin check skipped every GET. Another
+    site could make an HR partner's browser perform an audited read of private details, though it
+    couldn't see the response. The check now refuses a safe-method request to `/api/` whose
+    `Sec-Fetch-Site` is `cross-site` or `same-site`. `same-origin`, `none`, a missing header, and
+    paths outside `/api/` pass as before. A differential test of 3,072 request combinations
+    showed the check for requests that change data is unchanged.
+  - **The checks follow the path the router matches.** Behind `uvicorn --root-path`,
+    `scope["path"]` keeps the prefix that the router strips. Then the read check, the no-store
+    middleware, and the error handler's no-store all missed API requests. A new
+    `app/core/api_paths.py` gives all three `is_api_request(scope)`. Nothing sets a root path
+    today, so this was latent.
+  - **New tests pin two decisions that were correct but unguarded.** Either mutation used to pass
+    every test.
+    - Private details are never sent unless their audit row commits. Without
+      `scope="function"` on the private route alone, a failed commit returned a 200 with every
+      private value.
+    - The list asks `can()` about each card, and the cursor continues from the last row read.
+      Taking it from the last card returned stopped paging at a page whose rows were all hidden,
+      and 117 people vanished.
+  - **The backlog gains three items:**
+    - hiding SQL parameters from the error log (any phase)
+    - keeping the cursor from naming a hidden person (any phase)
+    - requiring the CSRF header on audited reads, for browsers that send no Fetch Metadata
+      (Phase 6)
+- **Task 26.**
+  - **The backlog was merged, not replaced.** Two of the plan's items were already there in other
+    words, so they were left out: the OpenAPI error shapes (Phase 2) and the client IP behind the
+    load balancer (Phase 8). The Alembic item joined the existing "Any phase" section, and the
+    Phase 5 items joined the existing Phase 5 section.
+  - **The data inventory's `tenants.created_at` row** says the database stamps it, and that the
+    25-hour cap counts from it.
+  - **The review corrected three slips in the plan's inventory block.**
+    - The `/me` fields include `tenantExpiresAt`.
+    - The audit log's `before` and `after` hold non-private fields. `personaKey` is a `/me` field,
+      not a directory field.
+    - The security log also records its fixed reason phrase.
+
+    Phone numbers are described by their last seven digits, and `sessions` is named as the
+    exception to row-level security.
+  - **The statutes were re-read on 2026-10-04 and are unchanged.** Gov. Code §12946(a) still
+    requires four years. EU AI Act Article 113 still applies Chapter IV, and so Article 50, from
+    2 August 2026. It also now states the 2 December 2027 date for Annex III systems itself, so
+    the Phase 4 backlog item cites the article instead of law-firm summaries.
+- **Task 27.** The roadmap row isn't marked Done yet. Phase 1 closes with the whole-phase review,
+  so the row names that review as the next step, and its follow-up PR marks Phase 1 Done with all
+  the PR numbers. A literal `<stage 4 PR number>` would also fail the placeholder check.
+- **From `/code-review medium`:** no findings.
+
+  Stage 4 ends with 477 tests, 183 of them against the real database, where the plan expects 260
+  and 110.
+
 ## Backlog
 
 Deferred review findings and later-phase items live in [`../BACKLOG.md`](../BACKLOG.md).

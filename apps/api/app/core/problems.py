@@ -10,7 +10,8 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from app.core.cache_control import CACHE_CONTROL_HEADER, NO_STORE, is_api_path
+from app.core.api_paths import is_api_request
+from app.core.cache_control import CACHE_CONTROL_HEADER, NO_STORE
 from app.core.request_id import REQUEST_ID_HEADER
 
 PROBLEM_JSON = "application/problem+json"
@@ -86,7 +87,7 @@ async def _unhandled(request: Request, exc: Exception) -> JSONResponse:
     logger.error("Unhandled error", exc_info=exc, extra={"request_id": request_id})
     # Like the request-ID header, this can't come from a middleware: this response is sent from
     # outside all of them.
-    headers = {CACHE_CONTROL_HEADER: NO_STORE} if is_api_path(request.url.path) else None
+    headers = {CACHE_CONTROL_HEADER: NO_STORE} if is_api_request(request.scope) else None
     return problem_response(
         request, status.HTTP_500_INTERNAL_SERVER_ERROR, "Something went wrong.", headers=headers
     )

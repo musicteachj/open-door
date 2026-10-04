@@ -1,0 +1,95 @@
+"""The directory, and a person's private details.
+
+Each route asks the policy layer before it reads, so a refusal never depends on whether the person
+exists. Row-level security then keeps every query inside the actor's tenant, so a person from
+another sandbox is simply not found: a 404, the same as an ID that doesn't exist.
+"""
+
+from typing import Annotated
+from uuid import UUID
+
+from fastapi import APIRouter, HTTPException, Query, Request, status
+
+from app.modules.audit.service import record_event
+from app.modules.identity.deps import SignedInDep, authorize
+from app.modules.people.queries import (
+    DirectoryCursor,
+    get_card,
+    get_private_details,
+    list_directory,
+)
+from app.modules.people.schemas import DirectoryCard, DirectoryPage, PrivateDetails
+from app.policy import Action, PersonResource, can
+
+router = APIRouter(prefix="/people", tags=["people"])
+
+NOT_FOUND = "No such person in this company."
+
+
+@router.get(
+    "",
+    operation_id="listPeople",
+    summary="The company directory, a page at a time",
+    response_model=DirectoryPage,
+)
+async def list_people(
+    signed_in: SignedInDep,
+    cursor: Annotated[str | None, Query(max_length=512)] = None,
+    limit: Annotated[int, Query(ge=1, le=100)] = 50,
+) -> DirectoryPage:
+    try:
+        after = None if cursor is None else DirectoryCursor.decode(cursor)
+    except ValueError:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_CONTENT, "The cursor is not one this API issued."
+        ) from None
+    page = await list_directory(signed_in.db, limit=limit, after=after)
+    actor = signed_in.actor
+    return DirectoryPage(
+        items=[
+            card
+            for card in page.cards
+            if can(actor, Action.DIRECTORY_READ, PersonResource(card.id))
+        ],
+        next_cursor=None if page.next_cursor is None else page.next_cursor.encode(),
+    )
+
+
+@router.get(
+    "/{person_id}",
+    operation_id="getPerson",
+    summary="One person's directory card",
+    response_model=DirectoryCard,
+)
+async def get_person(person_id: UUID, signed_in: SignedInDep, request: Request) -> DirectoryCard:
+    authorize(request, signed_in, Action.DIRECTORY_READ, PersonResource(person_id))
+    card = await get_card(signed_in.db, person_id)
+    if card is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, NOT_FOUND)
+    return card
+
+
+@router.get(
+    "/{person_id}/private",
+    operation_id="getPersonPrivate",
+    summary="One person's private details, for that person and for HR. Each read is audited.",
+    response_model=PrivateDetails,
+)
+async def get_person_private(
+    person_id: UUID, signed_in: SignedInDep, request: Request
+) -> PrivateDetails:
+    authorize(request, signed_in, Action.PERSON_PRIVATE_READ, PersonResource(person_id))
+    details = await get_private_details(signed_in.db, person_id)
+    if details is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, NOT_FOUND)
+    await record_event(
+        signed_in.db,
+        tenant_id=signed_in.actor.tenant_id,
+        actor_id=signed_in.actor.person_id,
+        action="person_private.read",
+        target_type="person",
+        target_id=person_id,
+        # The names of the fields returned, never their values.
+        after={"fields": sorted(details.model_dump(by_alias=True))},
+    )
+    return details

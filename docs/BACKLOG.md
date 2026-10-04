@@ -3,13 +3,13 @@
 Findings from reviews that were deliberately deferred, each with the reason and the phase that
 should pick it up. When one is done, delete it here and record it in the changelog.
 
-## Phase 1: tenancy, identity, permissions
+## Any phase
 
 - **Don't run Alembic inside an async test.** `env.py` calls `asyncio.run`, which fails inside a
   running event loop, and `fileConfig` resets the root log handlers. Test setup should run
-  `alembic upgrade head` as a subprocess, or from a synchronous session fixture.
-
-## Any phase
+  `alembic upgrade head` as a subprocess, or from a synchronous session fixture. Phase 1's tests
+  never needed to, because CI runs the migration round trip as plain commands, but a later test
+  that runs migrations will.
 
 - **Stop a person from managing themselves, directly or in a loop.** `people.manager_id` has no
   `CHECK (manager_id <> id)` and nothing prevents a reporting loop. Phase 1 is safe: the API can't
@@ -27,6 +27,19 @@ should pick it up. When one is done, delete it here and record it in the changel
   `person_private` to the person and HR covers `SELECT` only, because the API can't yet update or
   delete those rows. Whichever phase first grants `UPDATE` or `DELETE` on `person_private` must
   add restrictive policies for them in the same migration. (Stage 1 security review.)
+
+- **Hide SQL parameters from the error log.** The engine doesn't set `hide_parameters=True`, so a
+  statement that fails is logged at ERROR level with its bound values. No private value is bound
+  in Phase 1: the private-details query binds only an ID, and its audit row binds field names.
+  Whichever phase first binds a private value or user-written text, such as Phase 4's
+  conversations, must set it in `app/db/engine.py`. (Stage 4 security review.)
+
+- **Keep the directory cursor from naming a hidden person.** The next cursor is the sort key of
+  the last row read, so paging continues past cards the policy layer hides. Every card is visible
+  in Phase 1, so it reveals nothing. Whichever phase first makes the `directory.read` rule refuse
+  anyone must encrypt the cursor or move the filter into the query. Taking the cursor from the
+  last card returned instead is wrong: a page whose rows are all hidden would end the directory
+  early. (Stage 4 security review.)
 
 ## Phase 2: design system, shell, sandbox entry
 
@@ -52,8 +65,29 @@ should pick it up. When one is done, delete it here and record it in the changel
   any request outside the client must set `Content-Type: application/json` itself. (Stage 3
   security review.)
 
+## Phase 3: handbook and retrieval
+
+- **Pin each sandbox to a handbook version** with a `tenants.handbook_version_id` column, so an
+  answer cites the handbook the sandbox was created with, even after the handbook changes.
+  Source: [the Phase 1 spec](specs/2026-10-03-phase-1-tenancy-identity-permissions.md#later-phases).
+
 ## Phase 4: assistant core
 
+- **Record why the assistant is not a high-risk AI system.** Annex III of the EU AI Act lists
+  systems used for employment decisions as high-risk. Article 6(3) exempts a system that doesn't
+  profile people or materially influence decisions, and Article 6(4) requires that assessment to
+  be documented. The governance document should record it. The Annex III obligations apply from
+  2027-12-02.
+  Source: EU AI Act Annex III (https://artificialintelligenceact.eu/annex/3/) and Article 6
+  (https://artificialintelligenceact.eu/article/6/), read on 2026-10-03, and Article 113
+  (https://artificialintelligenceact.eu/article/113/), read on 2026-10-04, which sets
+  2 December 2027 "as regards AI systems classified as high-risk pursuant to Article 6(2) and
+  Annex III". These pages are an unofficial consolidation, not EUR-Lex.
+- **The AI disclosure is already required.** Article 50 of the EU AI Act, which requires telling
+  people they are talking to an AI, has applied since 2026-08-02. Invariant 7 covers it; the
+  Phase 4 disclosure should cite the article.
+  Source: EU AI Act Article 113 (https://artificialintelligenceact.eu/article/113/), read on
+  2026-10-04. Article 50 is in Chapter IV, which follows the general date of 2 August 2026.
 - **Graceful shutdown with open streams.** Streaming responses delay shutdown, and the engine is
   only disposed after they finish. Set uvicorn's `--timeout-graceful-shutdown` below the ECS
   `stopTimeout`.
@@ -64,6 +98,26 @@ should pick it up. When one is done, delete it here and record it in the changel
   the next. One created in early January therefore lacks the previous December's closures, so a
   question about leave taken over the holidays just before it would miss them. If the time-off
   engine answers past-dated questions, seed the prior year as well. (Stage 2 review.)
+
+- **Record who confirms a proposal as an audit event of its own,** separate from the action it
+  executes, so the log shows both who proposed and who decided.
+- **Grant `UPDATE` only where requests and approvals need it.** Phase 1 grants the API no
+  `UPDATE` anywhere, and the exact-grants test fails on any grant it doesn't expect.
+
+Source for both: [the Phase 1 spec](specs/2026-10-03-phase-1-tenancy-identity-permissions.md#later-phases).
+
+## Phase 6: cases and escalation
+
+- **Encrypt case narratives.** They are the most sensitive text the app will hold.
+  Source: [the Phase 1 spec](specs/2026-10-03-phase-1-tenancy-identity-permissions.md#later-phases).
+
+- **Require a header no navigation can send on audited reads.** A read of `/api/` whose
+  `Sec-Fetch-Site` says it came from another site is refused, so another site can't make an HR
+  partner's browser perform an audited read. Two cases still pass: a browser too old to send the
+  header (Safari before 16.4, for example), and a navigation the user starts themselves, which
+  sends `none`. Before case reads are audited, require the `X-CSRF-Token` header on audited reads
+  too, since no navigation can send it. Today an attacker would also need a person's random ID.
+  (Stage 4 security review.)
 
 ## Phase 8: hardening and deploy-readiness
 
@@ -125,6 +179,21 @@ should pick it up. When one is done, delete it here and record it in the changel
   health.
 - **Keep probe traffic out of logs and traces.** Filter `/api/v1/health` from `uvicorn.access`,
   and from OpenTelemetry if it's enabled.
+
+From the Phase 1 review ([the spec's Later phases](specs/2026-10-03-phase-1-tenancy-identity-permissions.md#later-phases)):
+
+- **Rate limits and Turnstile on sandbox creation.** `POST /api/v1/sandboxes` needs no session,
+  and each call seeds 120 people.
+- **The scheduled cleanup job.** The `od_cleanup` role can already delete only expired
+  sandboxes. Nothing runs it on a schedule yet.
+- **Re-test `set_config` under RDS Proxy or PgBouncer.** Row-level security depends on settings
+  scoped to one transaction, and a pooler in transaction mode must not carry them between
+  clients. The reused-connection tests are the model. Background: the pgsql-bugs thread on local
+  settings,
+  https://www.postgresql.org/message-id/CA+Q86ij0KDCB0G45G509-8q0DNR611gcKG-sSM83GA1EBL7boA@mail.gmail.com.
+- **Database TLS with certificate checks, and secret rotation** for the three database URLs.
+- **Deletion from backups.** A sandbox deleted from the database still exists in backups until
+  they expire. Document how long, or exclude sandbox data from them.
 
 ## Phase 9: deploy to AWS
 

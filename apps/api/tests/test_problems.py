@@ -85,6 +85,20 @@ def test_an_unhandled_error_under_api_is_marked_no_store(client: TestClient) -> 
     assert "cache-control" not in elsewhere.headers
 
 
+def test_an_unhandled_error_under_api_behind_a_root_path_is_marked_no_store(
+    client: TestClient,
+) -> None:
+    # As `uvicorn --root-path /od` builds it: the request's URL keeps the prefix, and the router
+    # strips it, so the handler must judge the path the router matches.
+    with TestClient(client.app, raise_server_exceptions=False, root_path="/od") as behind_root:
+        under_api = behind_root.get("/od/api/v1/boom")
+        elsewhere = behind_root.get("/od/boom")
+
+    assert (under_api.status_code, elsewhere.status_code) == (500, 500)
+    assert under_api.headers.get_list("cache-control") == ["no-store"]
+    assert "cache-control" not in elsewhere.headers
+
+
 def test_an_unhandled_error_is_logged_with_its_request_id(
     client: TestClient, caplog: pytest.LogCaptureFixture
 ) -> None:

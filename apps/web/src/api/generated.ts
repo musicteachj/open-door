@@ -25,6 +25,34 @@ export interface DepartmentRef {
   name: string
 }
 
+export interface LocationRef {
+  id: string
+  name: string
+  state: string
+}
+
+export interface PersonRef {
+  id: string
+  givenName: string
+  familyName: string
+}
+
+export interface DirectoryCard {
+  id: string
+  givenName: string
+  familyName: string
+  title: string
+  department: DepartmentRef
+  location: LocationRef
+  manager: PersonRef | null
+  workEmail: string
+}
+
+export interface DirectoryPage {
+  items: DirectoryCard[]
+  nextCursor: string | null
+}
+
 export type ValidationErrorCtx = { [key: string]: unknown }
 
 export interface ValidationError {
@@ -60,24 +88,12 @@ export interface HealthResponse {
   version: string
 }
 
-export interface LocationRef {
-  id: string
-  name: string
-  state: string
-}
-
 export type MeEmploymentType = (typeof MeEmploymentType)[keyof typeof MeEmploymentType]
 
 export const MeEmploymentType = {
   salaried: 'salaried',
   hourly: 'hourly',
 } as const
-
-export interface PersonRef {
-  id: string
-  givenName: string
-  familyName: string
-}
 
 export type PersonaKey = (typeof PersonaKey)[keyof typeof PersonaKey]
 
@@ -115,6 +131,13 @@ export interface PersonaChoice {
   persona: PersonaKey
 }
 
+export interface PrivateDetails {
+  personalEmail: string
+  phone: string
+  homeAddress: string
+  dateOfBirth: string
+}
+
 export interface TenantInfo {
   id: string
   expiresAt: string
@@ -123,6 +146,15 @@ export interface TenantInfo {
 export interface SandboxCreated {
   tenant: TenantInfo
   me: Me
+}
+
+export type ListPeopleParams = {
+  cursor?: string | null
+  /**
+   * @minimum 1
+   * @maximum 100
+   */
+  limit?: number
 }
 
 const withQueryKey = <T extends object, K>(query: T, queryKey: K): T & { queryKey: K } => {
@@ -709,4 +741,456 @@ export const useEndSession = <TError = unknown, TContext = unknown>(
   queryClient?: QueryClient,
 ): UseMutationResult<Awaited<ReturnType<typeof endSession>>, TError, void, TContext> => {
   return useMutation(getEndSessionMutationOptions(options), queryClient)
+}
+
+export type listPeopleResponse200 = {
+  data: DirectoryPage
+  status: 200
+}
+
+export type listPeopleResponse422 = {
+  data: HTTPValidationError
+  status: 422
+}
+
+export type listPeopleResponseSuccess = listPeopleResponse200 & {
+  headers: Headers
+}
+export type listPeopleResponseError = listPeopleResponse422 & {
+  headers: Headers
+}
+
+export type listPeopleResponse = listPeopleResponseSuccess | listPeopleResponseError
+
+export const getListPeopleUrl = (params?: ListPeopleParams) => {
+  const normalizedParams = new URLSearchParams()
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  })
+
+  const stringifiedParams = normalizedParams.toString()
+
+  return stringifiedParams.length > 0 ? `/api/v1/people?${stringifiedParams}` : `/api/v1/people`
+}
+
+/**
+ * @summary The company directory, a page at a time
+ */
+export const listPeople = async (
+  params?: ListPeopleParams,
+  options?: RequestInit,
+): Promise<listPeopleResponse> => {
+  const res = await fetch(getListPeopleUrl(params), {
+    ...options,
+    method: 'GET',
+  })
+
+  const body = [204, 205, 304].includes(res.status) ? null : await res.text()
+
+  const data: listPeopleResponse['data'] = body ? JSON.parse(body) : {}
+  return { data, status: res.status, headers: res.headers } as listPeopleResponse
+}
+
+export const getListPeopleQueryKey = (params?: ListPeopleParams) => {
+  return [`/api/v1/people`, ...(params ? [params] : [])] as const
+}
+
+export const getListPeopleQueryOptions = <
+  TData = Awaited<ReturnType<typeof listPeople>>,
+  TError = HTTPValidationError,
+>(
+  params?: ListPeopleParams,
+  options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof listPeople>>, TError, TData>>
+    fetch?: RequestInit
+  },
+) => {
+  const { query: queryOptions, fetch: fetchOptions } = options ?? {}
+
+  const queryKey = queryOptions?.queryKey ?? getListPeopleQueryKey(params)
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof listPeople>>> = ({ signal }) =>
+    listPeople(params, { signal, ...fetchOptions })
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof listPeople>>,
+    TError,
+    TData
+  > & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type ListPeopleQueryResult = NonNullable<Awaited<ReturnType<typeof listPeople>>>
+export type ListPeopleQueryError = HTTPValidationError
+
+export function useListPeople<
+  TData = Awaited<ReturnType<typeof listPeople>>,
+  TError = HTTPValidationError,
+>(
+  params: undefined | ListPeopleParams,
+  options: {
+    query: Partial<UseQueryOptions<Awaited<ReturnType<typeof listPeople>>, TError, TData>> &
+      Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof listPeople>>,
+          TError,
+          Awaited<ReturnType<typeof listPeople>>
+        >,
+        'initialData'
+      >
+    fetch?: RequestInit
+  },
+  queryClient?: QueryClient,
+): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useListPeople<
+  TData = Awaited<ReturnType<typeof listPeople>>,
+  TError = HTTPValidationError,
+>(
+  params?: ListPeopleParams,
+  options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof listPeople>>, TError, TData>> &
+      Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof listPeople>>,
+          TError,
+          Awaited<ReturnType<typeof listPeople>>
+        >,
+        'initialData'
+      >
+    fetch?: RequestInit
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useListPeople<
+  TData = Awaited<ReturnType<typeof listPeople>>,
+  TError = HTTPValidationError,
+>(
+  params?: ListPeopleParams,
+  options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof listPeople>>, TError, TData>>
+    fetch?: RequestInit
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary The company directory, a page at a time
+ */
+
+export function useListPeople<
+  TData = Awaited<ReturnType<typeof listPeople>>,
+  TError = HTTPValidationError,
+>(
+  params?: ListPeopleParams,
+  options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof listPeople>>, TError, TData>>
+    fetch?: RequestInit
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+  const queryOptions = getListPeopleQueryOptions(params, options)
+
+  const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
+    queryKey: DataTag<QueryKey, TData, TError>
+  }
+
+  return withQueryKey(query, queryOptions.queryKey)
+}
+
+export type getPersonResponse200 = {
+  data: DirectoryCard
+  status: 200
+}
+
+export type getPersonResponse422 = {
+  data: HTTPValidationError
+  status: 422
+}
+
+export type getPersonResponseSuccess = getPersonResponse200 & {
+  headers: Headers
+}
+export type getPersonResponseError = getPersonResponse422 & {
+  headers: Headers
+}
+
+export type getPersonResponse = getPersonResponseSuccess | getPersonResponseError
+
+export const getGetPersonUrl = (personId: string) => {
+  return `/api/v1/people/${personId}`
+}
+
+/**
+ * @summary One person's directory card
+ */
+export const getPerson = async (
+  personId: string,
+  options?: RequestInit,
+): Promise<getPersonResponse> => {
+  const res = await fetch(getGetPersonUrl(personId), {
+    ...options,
+    method: 'GET',
+  })
+
+  const body = [204, 205, 304].includes(res.status) ? null : await res.text()
+
+  const data: getPersonResponse['data'] = body ? JSON.parse(body) : {}
+  return { data, status: res.status, headers: res.headers } as getPersonResponse
+}
+
+export const getGetPersonQueryKey = (personId: string) => {
+  return [`/api/v1/people/${personId}`] as const
+}
+
+export const getGetPersonQueryOptions = <
+  TData = Awaited<ReturnType<typeof getPerson>>,
+  TError = HTTPValidationError,
+>(
+  personId: string,
+  options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof getPerson>>, TError, TData>>
+    fetch?: RequestInit
+  },
+) => {
+  const { query: queryOptions, fetch: fetchOptions } = options ?? {}
+
+  const queryKey = queryOptions?.queryKey ?? getGetPersonQueryKey(personId)
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getPerson>>> = ({ signal }) =>
+    getPerson(personId, { signal, ...fetchOptions })
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: personId !== null && personId !== undefined,
+    ...queryOptions,
+  } as UseQueryOptions<Awaited<ReturnType<typeof getPerson>>, TError, TData> & {
+    queryKey: DataTag<QueryKey, TData, TError>
+  }
+}
+
+export type GetPersonQueryResult = NonNullable<Awaited<ReturnType<typeof getPerson>>>
+export type GetPersonQueryError = HTTPValidationError
+
+export function useGetPerson<
+  TData = Awaited<ReturnType<typeof getPerson>>,
+  TError = HTTPValidationError,
+>(
+  personId: string,
+  options: {
+    query: Partial<UseQueryOptions<Awaited<ReturnType<typeof getPerson>>, TError, TData>> &
+      Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getPerson>>,
+          TError,
+          Awaited<ReturnType<typeof getPerson>>
+        >,
+        'initialData'
+      >
+    fetch?: RequestInit
+  },
+  queryClient?: QueryClient,
+): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetPerson<
+  TData = Awaited<ReturnType<typeof getPerson>>,
+  TError = HTTPValidationError,
+>(
+  personId: string,
+  options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof getPerson>>, TError, TData>> &
+      Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getPerson>>,
+          TError,
+          Awaited<ReturnType<typeof getPerson>>
+        >,
+        'initialData'
+      >
+    fetch?: RequestInit
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetPerson<
+  TData = Awaited<ReturnType<typeof getPerson>>,
+  TError = HTTPValidationError,
+>(
+  personId: string,
+  options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof getPerson>>, TError, TData>>
+    fetch?: RequestInit
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary One person's directory card
+ */
+
+export function useGetPerson<
+  TData = Awaited<ReturnType<typeof getPerson>>,
+  TError = HTTPValidationError,
+>(
+  personId: string,
+  options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof getPerson>>, TError, TData>>
+    fetch?: RequestInit
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+  const queryOptions = getGetPersonQueryOptions(personId, options)
+
+  const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
+    queryKey: DataTag<QueryKey, TData, TError>
+  }
+
+  return withQueryKey(query, queryOptions.queryKey)
+}
+
+export type getPersonPrivateResponse200 = {
+  data: PrivateDetails
+  status: 200
+}
+
+export type getPersonPrivateResponse422 = {
+  data: HTTPValidationError
+  status: 422
+}
+
+export type getPersonPrivateResponseSuccess = getPersonPrivateResponse200 & {
+  headers: Headers
+}
+export type getPersonPrivateResponseError = getPersonPrivateResponse422 & {
+  headers: Headers
+}
+
+export type getPersonPrivateResponse =
+  getPersonPrivateResponseSuccess | getPersonPrivateResponseError
+
+export const getGetPersonPrivateUrl = (personId: string) => {
+  return `/api/v1/people/${personId}/private`
+}
+
+/**
+ * @summary One person's private details, for that person and for HR. Each read is audited.
+ */
+export const getPersonPrivate = async (
+  personId: string,
+  options?: RequestInit,
+): Promise<getPersonPrivateResponse> => {
+  const res = await fetch(getGetPersonPrivateUrl(personId), {
+    ...options,
+    method: 'GET',
+  })
+
+  const body = [204, 205, 304].includes(res.status) ? null : await res.text()
+
+  const data: getPersonPrivateResponse['data'] = body ? JSON.parse(body) : {}
+  return { data, status: res.status, headers: res.headers } as getPersonPrivateResponse
+}
+
+export const getGetPersonPrivateQueryKey = (personId: string) => {
+  return [`/api/v1/people/${personId}/private`] as const
+}
+
+export const getGetPersonPrivateQueryOptions = <
+  TData = Awaited<ReturnType<typeof getPersonPrivate>>,
+  TError = HTTPValidationError,
+>(
+  personId: string,
+  options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof getPersonPrivate>>, TError, TData>>
+    fetch?: RequestInit
+  },
+) => {
+  const { query: queryOptions, fetch: fetchOptions } = options ?? {}
+
+  const queryKey = queryOptions?.queryKey ?? getGetPersonPrivateQueryKey(personId)
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getPersonPrivate>>> = ({ signal }) =>
+    getPersonPrivate(personId, { signal, ...fetchOptions })
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: personId !== null && personId !== undefined,
+    ...queryOptions,
+  } as UseQueryOptions<Awaited<ReturnType<typeof getPersonPrivate>>, TError, TData> & {
+    queryKey: DataTag<QueryKey, TData, TError>
+  }
+}
+
+export type GetPersonPrivateQueryResult = NonNullable<Awaited<ReturnType<typeof getPersonPrivate>>>
+export type GetPersonPrivateQueryError = HTTPValidationError
+
+export function useGetPersonPrivate<
+  TData = Awaited<ReturnType<typeof getPersonPrivate>>,
+  TError = HTTPValidationError,
+>(
+  personId: string,
+  options: {
+    query: Partial<UseQueryOptions<Awaited<ReturnType<typeof getPersonPrivate>>, TError, TData>> &
+      Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getPersonPrivate>>,
+          TError,
+          Awaited<ReturnType<typeof getPersonPrivate>>
+        >,
+        'initialData'
+      >
+    fetch?: RequestInit
+  },
+  queryClient?: QueryClient,
+): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetPersonPrivate<
+  TData = Awaited<ReturnType<typeof getPersonPrivate>>,
+  TError = HTTPValidationError,
+>(
+  personId: string,
+  options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof getPersonPrivate>>, TError, TData>> &
+      Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getPersonPrivate>>,
+          TError,
+          Awaited<ReturnType<typeof getPersonPrivate>>
+        >,
+        'initialData'
+      >
+    fetch?: RequestInit
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetPersonPrivate<
+  TData = Awaited<ReturnType<typeof getPersonPrivate>>,
+  TError = HTTPValidationError,
+>(
+  personId: string,
+  options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof getPersonPrivate>>, TError, TData>>
+    fetch?: RequestInit
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary One person's private details, for that person and for HR. Each read is audited.
+ */
+
+export function useGetPersonPrivate<
+  TData = Awaited<ReturnType<typeof getPersonPrivate>>,
+  TError = HTTPValidationError,
+>(
+  personId: string,
+  options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof getPersonPrivate>>, TError, TData>>
+    fetch?: RequestInit
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+  const queryOptions = getGetPersonPrivateQueryOptions(personId, options)
+
+  const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
+    queryKey: DataTag<QueryKey, TData, TError>
+  }
+
+  return withQueryKey(query, queryOptions.queryKey)
 }

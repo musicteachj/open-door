@@ -7,13 +7,10 @@ API but leaves them out of its cache key could otherwise serve one visitor's res
 from starlette.datastructures import MutableHeaders
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
-API_PREFIX = "/api/"
+from app.core.api_paths import is_api_request
+
 CACHE_CONTROL_HEADER = "Cache-Control"
 NO_STORE = "no-store"
-
-
-def is_api_path(path: str) -> bool:
-    return path.startswith(API_PREFIX)
 
 
 class NoStoreMiddleware:
@@ -27,7 +24,7 @@ class NoStoreMiddleware:
         self.app = app
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
-        if scope["type"] != "http" or not is_api_path(scope["path"]):
+        if scope["type"] != "http" or not is_api_request(scope):
             await self.app(scope, receive, send)
             return
 
