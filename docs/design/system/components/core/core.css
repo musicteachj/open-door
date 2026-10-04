@@ -1,0 +1,22 @@
+/* Button, Icon, Logo */
+.od-btn { display: inline-flex; align-items: center; justify-content: center; gap: var(--space-2); height: var(--control-height); padding: 0 var(--space-4); border: 1px solid transparent; border-radius: var(--radius-md); font-family: var(--font-sans); font-size: var(--text-ui); line-height: var(--leading-ui); font-weight: var(--weight-semibold); white-space: nowrap; cursor: pointer; text-decoration: none; transition: background-color var(--duration-fast) var(--ease-standard), border-color var(--duration-fast) var(--ease-standard), color var(--duration-fast) var(--ease-standard); }
+.od-btn:focus-visible, .od-btn[data-state~="focus"] { outline: var(--focus-ring-width) solid var(--focus-ring); outline-offset: var(--focus-ring-offset); }
+.od-btn:disabled { cursor: not-allowed; }
+.od-btn--sm { height: var(--control-height-sm); padding: 0 var(--space-3); gap: 6px; border-radius: var(--radius-sm); font-size: var(--text-small); }
+.od-btn--icon-right { padding-right: 14px; }
+.od-btn--primary { background: var(--primary); color: var(--on-primary); }
+.od-btn--primary:hover:not(:disabled), .od-btn--primary[data-state~="hover"] { background: var(--primary-hover); }
+.od-btn--secondary { background: var(--surface-raised); color: var(--ink); border-color: var(--border-strong); }
+.od-btn--secondary:hover:not(:disabled), .od-btn--secondary[data-state~="hover"] { background: var(--surface-hover); border-color: var(--border-strong-hover); }
+.od-btn--ghost { background: transparent; color: var(--primary); }
+.od-btn--ghost:hover:not(:disabled), .od-btn--ghost[data-state~="hover"] { background: var(--primary-tint); color: var(--primary-hover); }
+.od-btn--destructive { background: var(--danger); color: var(--on-danger); }
+.od-btn--destructive:hover:not(:disabled), .od-btn--destructive[data-state~="hover"] { background: var(--danger-hover); }
+.od-btn--primary:disabled, .od-btn--destructive:disabled { background: var(--disabled-bg); color: var(--disabled-fg); }
+.od-btn--secondary:disabled { background: var(--surface-raised); border-color: var(--disabled-bg); color: var(--disabled-fg); }
+.od-btn--ghost:disabled { background: transparent; color: var(--disabled-fg); }
+.od-logo { display: flex; align-items: center; gap: var(--space-3); }
+.od-logo__text { display: flex; flex-direction: column; gap: 2px; }
+.od-logo__name { font-size: 16px; line-height: 20px; font-weight: var(--weight-semibold); letter-spacing: -0.01em; color: var(--ink); }
+.od-logo__org { font-size: var(--text-caption); line-height: var(--leading-caption); color: var(--ink-muted); }
+.od-truncate { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }

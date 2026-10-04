@@ -1,0 +1,14 @@
+/* GlanceLink, GlanceList, SandboxIndicator */
+.od-glance { display: flex; flex-direction: column; }
+.od-glance__label { margin: 0; padding-bottom: var(--space-3); border-bottom: 1px solid var(--border); font-size: var(--text-small); line-height: var(--leading-small); font-weight: var(--weight-regular); color: var(--ink-muted); }
+.od-glance-link { display: flex; align-items: center; gap: var(--space-3); padding: var(--space-5) var(--space-3); margin: 0 calc(var(--space-3) * -1); border-bottom: 1px solid var(--border-subtle); border-radius: var(--radius-md); color: var(--ink); text-decoration: none; transition: background-color var(--duration-fast) var(--ease-standard); }
+.od-glance-link:hover, .od-glance-link[data-state~="hover"] { background: var(--primary-tint); color: var(--ink); }
+.od-glance-link:hover .od-glance-link__dest, .od-glance-link[data-state~="hover"] .od-glance-link__dest { text-decoration: underline; }
+.od-glance-link:focus-visible, .od-glance-link[data-state~="focus"] { outline: var(--focus-ring-width) solid var(--focus-ring); outline-offset: var(--focus-ring-offset); position: relative; z-index: 1; }
+.od-glance-link__body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.od-glance-link__value-row { display: flex; align-items: center; gap: 10px; }
+.od-glance-link__value { font-size: var(--text-numeric); line-height: var(--leading-numeric); font-weight: var(--weight-semibold); letter-spacing: var(--tracking-numeric); font-variant-numeric: tabular-nums; }
+.od-glance-link__caption { font-size: var(--text-ui); line-height: var(--leading-ui); color: var(--ink-muted); }
+.od-glance-link__dest { display: flex; align-items: center; gap: var(--space-1); font-size: var(--text-small); line-height: var(--leading-small); font-weight: var(--weight-semibold); color: var(--primary); text-underline-offset: 3px; }
+.od-marker { width: 8px; height: 8px; flex: none; border-radius: var(--radius-full); background: var(--marker); }
+.od-sandbox { display: inline-flex; align-items: center; gap: var(--space-2); height: 28px; padding: 0 var(--space-3); border: 1px solid var(--border); border-radius: var(--radius-full); background: var(--surface-raised); font-family: var(--font-sans); font-size: var(--text-caption); line-height: var(--leading-caption); color: var(--ink-muted); font-variant-numeric: tabular-nums; white-space: nowrap; }

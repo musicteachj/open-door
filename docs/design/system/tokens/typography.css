@@ -1,0 +1,35 @@
+/* Open Door type tokens. Instrument Sans throughout; numbers use font-variant-numeric: tabular-nums. */
+:root {
+
+  /* Families */
+  --font-sans: 'Instrument Sans', ui-sans-serif, system-ui, sans-serif; /* All UI and display text */
+  --font-mono: 'Geist Mono', ui-monospace, monospace; /* Code and token values only */
+
+  /* Weights */
+  --weight-regular: 400; /* Body text */
+  --weight-medium: 500; /* Unselected nav labels */
+  --weight-semibold: 600; /* Display, headings, buttons, selected nav, figures */
+
+  /* Scale */
+  --text-display: 48px; /* Greeting */
+  --leading-display: 56px; /* Greeting line height */
+  --tracking-display: -0.025em; /* Greeting tracking */
+  --text-h1: 28px; /* Page titles */
+  --leading-h1: 36px; /* Page title line height */
+  --tracking-h1: -0.01em; /* Page title tracking */
+  --text-h2: 20px; /* Section titles */
+  --leading-h2: 28px; /* Section title line height */
+  --text-body-lg: 18px; /* Composer input */
+  --leading-body-lg: 28px; /* Composer line height */
+  --text-body: 15px; /* Answers, Try asking rows */
+  --leading-body: 24px; /* Body line height */
+  --text-ui: 14px; /* Buttons, nav, captions under figures */
+  --leading-ui: 20px; /* UI line height */
+  --text-small: 13px; /* Disclosure, sources, rail labels, small buttons */
+  --leading-small: 20px; /* Small line height */
+  --text-caption: 12px; /* Persona title, sandbox indicator, tooltips */
+  --leading-caption: 16px; /* Caption line height */
+  --text-numeric: 32px; /* At-a-glance figures; always tabular-nums */
+  --leading-numeric: 40px; /* Figure line height */
+  --tracking-numeric: -0.01em; /* Figure tracking */
+}

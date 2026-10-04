@@ -51,6 +51,8 @@ docs/design/
   README.md           this file
   tokens.md           the design tokens (becomes Tailwind v4 @theme variables)
   components.md       the component inventory, with variants and states
+  system/             the design system's source, exported from Claude Design: tokens,
+                      component sketches, specimen pages, fonts, and the assistant home
   screens/
     01-landing/
       desktop-default.png

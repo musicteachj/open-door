@@ -29,7 +29,9 @@ about two minutes.
 | Marcus | Store manager | Approves requests, checks on his team |
 | Dana | HR partner, Denver HQ | Works confidential cases, reviews how the AI is behaving |
 
-Visitors switch between these personas inside a private sandbox that lasts 24 hours.
+Their employer is **Juniper Row**, a fictional 120-person apparel and home retailer with a Denver
+headquarters, an Oakland store, and an Austin warehouse. Visitors switch between these personas
+inside a private sandbox that lasts 24 hours.
 
 ## How it should feel
 
@@ -38,7 +40,11 @@ excitement. Generous whitespace, clear hierarchy, and nothing that shouts. It sh
 without being cute, and credible without being cold, like good healthcare or banking software
 rather than a social app.
 
-**Starting direction** (a starting point; your design system replaces it):
+**The design system is chosen** (2026-10-04): "aubergine and cinnamon", from Wada Sanzo's
+combination 172, set in Instrument Sans. Its values are in [`tokens.md`](tokens.md) and its source
+in [`system/`](system/). The starting direction below is kept as the record of where it began.
+
+**Starting direction** (a starting point; the design system replaced it):
 
 | Token idea | Value | Use |
 |---|---|---|
@@ -53,12 +59,15 @@ rather than a social app.
 - **Theme:** light-first, with tokens structured so a dark theme can come later.
 
 **Must look distinct from the owner's other apps.** Avoid:
-- indigo with gold
 - magenta
 - forest green on warm paper
 - navy or bright blue
 - black with lime
 - dark safety-orange consoles
+
+"Indigo with gold" was on this list until 2026-10-04. It belonged to the owner's old employee
+management app, which Open Door replaces and which is leaving the portfolio, so a purple lineage
+is welcome.
 
 Don't use these fonts: Plus Jakarta Sans, Inter, IBM Plex, Newsreader, DM Mono, JetBrains Mono.
 

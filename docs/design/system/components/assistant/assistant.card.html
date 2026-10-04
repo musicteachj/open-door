@@ -1,0 +1,30 @@
+<!-- @dsCard group="Components" viewport="700x640" name="Assistant" -->
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><link rel="stylesheet" href="../../styles.css"><script src="https://unpkg.com/react@18.3.1/umd/react.production.min.js"></script><script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.production.min.js"></script><script src="https://unpkg.com/@babel/standalone@7.24.7/babel.min.js"></script><script src="../../preview/loader.js"></script></head><body style="margin:0;background:var(--surface-raised)"><div id="root"></div>
+<script type="text/babel" data-presets="react">
+loadOpenDoor("../../", OD_FILES).then(function (OD) {
+  const { Composer, TryAskingList, TryAskingRow, InlineError } = OD;
+  const Lbl = ({ children }) => <div style={{ font: "400 11px/16px var(--font-sans)", color: "var(--ink-muted)" }}>{children}</div>;
+  function Card() {
+    return (
+      <div style={{ padding: "20px 24px", display: "flex", flexDirection: "column", gap: 10 }}>
+        <Lbl>Composer at rest</Lbl>
+        <Composer rows={2} />
+        <Lbl>Focused with a question, then the inline error after a failed send</Lbl>
+        <Composer rows={2} data-state="focus" defaultValue="How many sick days do I get?" error="Something went wrong sending that." onRetry={() => {}} />
+        <div style={{ marginTop: 14 }}>
+          <div className="od-try">
+            <h2 className="od-try__label">Try asking (second row hovered, third focused)</h2>
+            <div className="od-try__grid">
+              <TryAskingRow question="How many sick days do I get?" />
+              <TryAskingRow question="Book next Friday off" data-state="hover" />
+              <TryAskingRow question="What holidays do we have this year?" data-state="focus" />
+              <TryAskingRow question="Who do I talk to about a concern?" />
+            </div>
+          </div>
+        </div>
+      </div>);
+  }
+  ReactDOM.createRoot(document.getElementById("root")).render(<Card />);
+});
+</script></body></html>

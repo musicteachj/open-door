@@ -10,6 +10,20 @@ version (`0.x.y` while the app is being built, `1.0.0` when it is complete).
 
 ## [Unreleased]
 
+### Added
+
+- **The design system and the assistant home** (Phase 2 design). Designed in Claude Design and
+  approved: the "aubergine and cinnamon" palette, from Wada Sanzo's *A Dictionary of Color
+  Combinations*, set in Instrument Sans.
+  - `docs/design/tokens.md` lists every color, type, spacing, radius, shadow, and motion token,
+    with contrast ratios checked independently. All text meets WCAG 2.2 AA.
+  - `docs/design/system/` holds the design system's source as Claude Design exported it: the
+    tokens as CSS, the component sketches, the specimen pages, and the fonts with their licenses.
+  - `docs/design/screens/03-assistant-home/` has the approved screen, its states, and its notes,
+    including the acceptance criteria.
+  - The component inventory marks what is designed so far.
+  - The fictional employer is now named Juniper Row.
+
 ### Changed
 
 - **The design brief is ready for Claude Design** (Phase 2 planning). Mockups are now desktop
@@ -24,7 +38,8 @@ version (`0.x.y` while the app is being built, `1.0.0` when it is complete).
 
   It also adds guidance on what makes an HR product look professional, with references to borrow
   ideas from rather than copying an existing design system. The component list is now a living
-  inventory. The handoff loop is now one screen per round:
+  inventory. "Indigo with gold" left the list of colors to avoid, because the app that used it is
+  leaving the portfolio and Open Door replaces it. The handoff loop is now one screen per round:
   - Claude Code writes each prompt for Claude Design and reviews the result.
   - The first round settles the look as a design-system project.
   - Claude Design's HTML export is preferred over screenshots alone.
