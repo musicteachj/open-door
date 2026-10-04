@@ -1,7 +1,8 @@
 # Component inventory
 
 **Status: waiting for the design system from Claude Design.** Each component lists its variants and
-the states it must be designed in. A check means the design for it has landed in this folder. The
+the states it must be designed in. This is a living inventory, not a contract: add or drop
+components as each phase's screens need them. A check means the design for it has landed in this folder. The
 build then implements it in the component gallery before any screen uses it.
 
 ## Standard components

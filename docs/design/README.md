@@ -42,15 +42,15 @@ docs/design/
     01-landing/
       desktop-default.png
       desktop-persona-selected.png
-      mobile-default.png
       notes.md
     02-app-shell/
       …
 ```
 
 - **Screen folders** are numbered in build order: `NN-short-name`.
-- **Screenshots** are named `viewport-state.png`, where the viewport is `desktop` (1440 px wide) or
-  `mobile` (390 px wide) and the state is a short word: `default`, `loading`, `empty`, `error`,
-  `streaming`, `confirmed`, and so on.
+- **Screenshots** are desktop only, 1440 px wide, named `desktop-state.png`, where the state is a
+  short word: `default`, `loading`, `empty`, `error`, `streaming`, `confirmed`, and so on. There
+  are no mobile mockups; the build adapts each screen to a phone's width on its own (see
+  [`BRIEF.md`](BRIEF.md)).
 - **Each `notes.md`** follows [`screens/_TEMPLATE.md`](screens/_TEMPLATE.md). Its acceptance
   criteria become that screen's definition of done in the build.

@@ -69,15 +69,56 @@ Don't use these fonts: Plus Jakarta Sans, Inter, IBM Plex, Newsreader, DM Mono, 
 - **Icons: Lucide.**
 - **Design tokens must be semantic** (`surface`, `ink`, `primary`, `accent`, `danger`, `warning`,
   `success`, `border`, `focus`, `muted`) rather than raw colors. They become CSS variables.
-- **Desktop-first for managers and HR. Employee screens also need a mobile layout**, because
-  store and warehouse staff use phones.
+- **Design for desktop only (1440 px).** No mobile mockups are needed. The build still adapts
+  every screen to a phone's width (a single column, a collapsible navigation, a composer that
+  fits), and one automated check at 390 px confirms nothing overflows. Many visitors open a
+  portfolio link on a phone first, so the app must work there, but it doesn't need its own design.
+
+---
+
+## Starting points and genre
+
+**Design our own system; don't adopt Material, Carbon, or another branded system.** Each has a
+strong visual identity of its own: an app built on Material reads as Google's, one built on Carbon
+as IBM's. The build already uses shadcn/ui on Radix, which provides structure and accessibility
+(keyboard use, focus, screen readers) with a deliberately neutral look. The design restyles it.
+
+**Borrow ideas, not visuals:**
+- **GOV.UK Design System:** calm, plain, accessible forms, error messages, and serious content.
+  The closest reference for the escalation and confidential-case tone.
+- **Atlassian and Shopify Polaris:** dense admin tables, queues, and status, for the manager and
+  HR screens.
+- **Radix Colors:** 12-step color scales with steps meant for backgrounds, borders, and text. Pick
+  the brand hues; the scales make accessible contrast easier to get right.
+
+**Look at the genre, and copy none of it:** Rippling, Gusto, BambooHR, HiBob, Lattice, and Deel
+for HR; Mercury and One Medical for "trustworthy" outside HR.
+
+**What makes it read as a professional HR product:**
+- **Restraint.** Neutrals do most of the work. The primary color is for actions; other colors
+  appear only when they mean something. Hierarchy comes from type and spacing, not boxes and
+  color.
+- **Two densities.** Employee screens are roomy and calm. Manager and HR screens are denser:
+  tables and queues.
+- **Status that doesn't alarm.** Red is for errors only. A denied request is a decision, not an
+  error: neutral styling with an icon and a label.
+- **Confidential without being scary.** Case views get a quiet, distinct treatment, such as a lock
+  icon and a slightly tinted surface, never an alert style.
+- **Visible trust cues.** The AI label, citations, and "show your work" are part of the design,
+  not fine print.
+- **Unambiguous data.** Dates like "Fri, Oct 9", tabular figures for balances, and time zones
+  shown where they matter.
+
+**Avoid the genre's clichés:** flat cartoon-people illustrations, confetti or emoji celebrations,
+anything cute near sensitive topics, and imagery or avatars that assume anyone's gender.
 
 ---
 
 ## Design system checklist
 
-- **Color:** semantic tokens with light values, a structure ready for dark mode, and a small
-  data-visualization palette for console charts.
+- **Color:** semantic tokens with light values, built from 12-step scales (see Radix Colors
+  above), a structure ready for dark mode, and a small data-visualization palette for console
+  charts.
 - **Type:** a type scale (display, headings, body, small, caption), weights, line heights, and
   tabular numerals.
 - **Spacing:** a 4 px-based scale.
@@ -91,6 +132,9 @@ Don't use these fonts: Plus Jakarta Sans, Inter, IBM Plex, Newsreader, DM Mono, 
   empty where it applies.
 
 ### Standard components
+
+These lists are a starting inventory, not a contract. Components are added or dropped as each
+phase's screens need them.
 
 Button (primary, secondary, ghost, destructive; sizes), text input, textarea, select, checkbox,
 radio, switch, date picker (for time off), badge or chip, card, table, tabs, dialog, toast, tooltip,
@@ -132,17 +176,30 @@ avatar, skeleton loader, empty state, and page header.
 
 ## Screens, in the order they are needed
 
+Design each screen in its **final** form. Nothing is deployed until the last phase, so the build
+handles the in-between states (pages and data that don't exist yet) as cheaply as possible, and
+the design never needs a temporary version.
+
 **Phase 2** (needed first):
 1. **Landing / "Try Open Door".** The pitch, a persona picker (four cards), a clear AI disclosure,
    a "fictional company, not legal advice, don't enter real personal info" notice, and a "Take the
-   2-minute tour" entry.
-2. **App shell.** Navigation (Ask, Time off, Team, Handbook, Cases for HR, Console for HR, How it's
-   built), the **persona switcher**, and a sandbox-expiry indicator.
-3. **Assistant home (mobile too).** A greeting, the ask box, starter chips for the current persona,
-   and at-a-glance cards ("11.5 days PTO available", "1 approval waiting", "Handbook updated Sep
-   12").
-4. **Directory.** A people list and a profile. The profile shows which fields you can and can't see
-   for your role.
+   2-minute tour" entry. The tour arrives in Phase 7; the build hides its button until then.
+2. **App shell.** Navigation (Ask, Time off, Directory, Handbook, Cases for HR, Console for HR,
+   How it's built), the **persona switcher**, and a sandbox-expiry indicator. Design the full
+   navigation; the build shows each item once its page exists.
+   - **Switching persona** needs no confirmation, since it is the demo's main move. A short notice
+     ("Now viewing as Marcus") confirms it, and the switcher says a switch starts a new
+     conversation.
+   - **Expiry:** a banner when 3 hours remain. When the sandbox expires, a "session expired"
+     screen offers to start a new one.
+3. **Assistant home.** A greeting, the ask box, starter chips for the current persona, and
+   at-a-glance cards ("11.5 days PTO available", "1 approval waiting", "Handbook updated Sep 12").
+   Until the assistant arrives in Phase 4, the build answers with a canned reply, and each card
+   appears when its data does (Phase 3 for the handbook, Phase 5 for balances and approvals).
+4. **Directory.** One people list for everyone, and a profile. Managers also get a "My team"
+   filter, built with approvals in Phase 5. The profile shows the fields your role can't see as
+   **locked rows with a short reason**, such as "Home address · Visible to Leo and HR": the field's
+   name only, never its value.
 5. **Global states.** Empty, loading, error, 404, session expired.
 
 **Phase 3:**
@@ -150,11 +207,11 @@ avatar, skeleton loader, empty state, and page header.
    staff"), and a deep-linked section with a highlighted cited passage.
 
 **Phase 4:**
-7. **Conversation view (mobile too).** Streaming, the status line, inline citations with the source
+7. **Conversation view.** Streaming, the status line, inline citations with the source
    panel, "show your work", feedback, a refusal, the escalation stub, and the budget banner.
 
 **Phase 5:**
-8. **Time off (mobile too).** Balances by type, my requests, and a request form.
+8. **Time off.** Balances by type, my requests, and a request form.
 9. **Manager approvals queue.**
 10. **Confirm cards** in every variant and state (see above).
 
@@ -199,6 +256,6 @@ figures are written and verified against official sources in Phase 3.
 
 ## What to hand back
 
-See [`README.md`](README.md) for the folder format. For each screen: PNG screenshots per state and
-viewport, plus a `notes.md` with its purpose, layout, components used, states, interactions, exact
+See [`README.md`](README.md) for the folder format. For each screen: desktop PNG screenshots per state,
+plus a `notes.md` with its purpose, layout, components used, states, interactions, exact
 copy, and **acceptance criteria**. For the system: `tokens.md` and `components.md`.
