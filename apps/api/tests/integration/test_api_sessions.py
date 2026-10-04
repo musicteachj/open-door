@@ -155,6 +155,37 @@ def test_a_new_sandbox_ends_the_session_the_browser_already_had(browser: Browser
     assert me["id"] == second["me"]["id"] != first["me"]["id"]
 
 
+async def test_a_new_sandbox_audits_the_end_of_the_session_it_replaced(
+    browser: Browser, app_engine: AsyncEngine
+) -> None:
+    first = browser.start_sandbox("marcus")
+    first_token = browser.session_token
+
+    second = browser.start_sandbox()
+
+    first_events = await audit_events(app_engine, UUID(first["tenant"]["id"]))
+    [ended] = [event for event in first_events if event.action == "session.ended"]
+    assert ended.actor_person_id == UUID(first["me"]["id"])
+    assert browser.client.get("/api/v1/me", headers=session_cookie(first_token)).status_code == 401
+    second_events = await audit_events(app_engine, UUID(second["tenant"]["id"]))
+    assert [event.action for event in second_events] == ["sandbox.created"]
+
+
+@pytest.mark.parametrize("body", [None, {}])
+def test_a_sandbox_without_a_persona_signs_in_as_the_default(
+    open_browser: OpenBrowser, body: object
+) -> None:
+    named, unnamed = open_browser(), open_browser()
+    named.start_sandbox("priya")
+
+    response = unnamed.create_sandbox(body)
+
+    assert response.status_code == 201
+    assert (
+        response.json()["me"]["personaKey"] == named.client.get("/api/v1/me").json()["personaKey"]
+    )
+
+
 def test_without_a_session_the_api_answers_401(
     browser: Browser, caplog: pytest.LogCaptureFixture
 ) -> None:

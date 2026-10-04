@@ -41,6 +41,19 @@ should pick it up. When one is done, delete it here and record it in the changel
   last card returned instead is wrong: a page whose rows are all hidden would end the directory
   early. (Stage 4 security review.)
 
+- **Make the HR flag part of the tenant context, and reapply it after a persona switch.**
+  `app.is_hr` isn't in `TenantContext`: the transaction hook clears it, and only `signed_in` turns
+  it back on. A persona switch also keeps the old persona's `app.person_id` and `app.is_hr` for
+  the rest of its request. Neither matters today, since nothing after the switch reads
+  `person_private`, and no other tenant session acts for HR. The security reviewer proved the
+  switch returns the right `/me` both ways. Whichever phase first reads private details outside
+  `signed_in`, or after `rotate_session`, must fold `is_hr` into `TenantContext` and reapply the
+  context for the new actor. (Phase 1 close-out review.)
+- **`route_path` copies a private Starlette helper.** `app/core/api_paths.py` repeats
+  `starlette._utils.get_route_path`, so the no-store and same-origin rules match the path the
+  router routes. On a Starlette upgrade, check that the two still agree. (Phase 1 close-out
+  review.)
+
 ## Phase 2: design system, shell, sandbox entry
 
 - **Send the CSRF token from the web client.** The generated client sends no `X-CSRF-Token`, so
@@ -64,6 +77,11 @@ should pick it up. When one is done, delete it here and record it in the changel
   `fetch(url, { method: "POST", body: JSON.stringify(x) })` sends `text/plain` and gets a 403, so
   any request outside the client must set `Content-Type: application/json` itself. (Stage 3
   security review.)
+- **Don't log a first visit as a security event.** A request with no session cookie is logged as
+  a WARNING-level `security.session_invalid`. Once the web app asks `GET /me` on load, every
+  anonymous visitor writes one, and real refusals get lost. Log a missing cookie at a lower level,
+  or not at all, and keep the warning for a cookie that doesn't match a session. (Phase 1
+  close-out review.)
 
 ## Phase 3: handbook and retrieval
 
@@ -116,7 +134,8 @@ Source for both: [the Phase 1 spec](specs/2026-10-03-phase-1-tenancy-identity-pe
   partner's browser perform an audited read. Two cases still pass: a browser too old to send the
   header (Safari before 16.4, for example), and a navigation the user starts themselves, which
   sends `none`. Before case reads are audited, require the `X-CSRF-Token` header on audited reads
-  too, since no navigation can send it. Today an attacker would also need a person's random ID.
+  too, since no navigation can send it. Today an attacker would also need a person's ID. Seeded
+  IDs are derived from the sandbox's random tenant ID, which is shown only inside that sandbox.
   (Stage 4 security review.)
 
 ## Phase 8: hardening and deploy-readiness
@@ -149,7 +168,21 @@ Source for both: [the Phase 1 spec](specs/2026-10-03-phase-1-tenancy-identity-pe
 - **Look up sessions without granting the table.** `od_app` can read every tenant's `sessions`
   rows, because a session is looked up before the tenant is known. The spec accepts this. A
   `SECURITY DEFINER` function that returns one session by its token hash would let `od_app` drop
-  its `SELECT` on the table. (Stage 1 security review.)
+  its `SELECT` on the table. (Stage 1 security review.) `od_app` can also insert and delete any
+  tenant's sessions, with any expiry: the Phase 1 close-out security review forged an HR session in
+  another tenant from `psql`. No route can do this, since `start_session` builds the row through a
+  tenant-scoped select, but SQL access as `od_app` would become a working login anywhere. Enable
+  row-level security on `sessions`, with an insert policy that requires the current tenant and
+  person, keep the expiry within the tenant's, and test that an insert for another tenant fails.
+- **Keep the owner's database URL out of the API.** The API's settings load
+  `MIGRATION_DATABASE_URL` and `CLEANUP_DATABASE_URL` though it uses neither, so the API process
+  holds the owner's credentials, which bypass row-level security. Give Alembic and the bootstrap
+  script their own settings class, and give the API task only `DATABASE_URL` in the AWS secrets
+  contract. (Phase 1 close-out review.)
+- **One transaction per signed-in request.** `signed_in` looks the session up in one transaction
+  and does the tenant's work in a second, so each request pays two round trips and two pool
+  checkouts, and a session can end between them. Set the tenant context in the lookup's own
+  transaction. (Phase 1 close-out review.)
 - **Postgres 16 or later.** The bootstrap script grants roles `WITH INHERIT TRUE`, which needs
   Postgres 16. Development and CI run 17. The managed Postgres chosen in Phase 9 must be 16 or
   later.
@@ -203,7 +236,10 @@ From the Phase 1 review ([the spec's Later phases](specs/2026-10-03-phase-1-tena
   inherit `od_app`, and read any tenant. Both bootstrap runs would also reset the shared login's
   password. Either give each environment its own server, or revoke `CONNECT` on the database from
   `PUBLIC` and grant it only to that database's own logins in the bootstrap script.
-  (`/code-review medium` on Phase 1, stage 1.)
+  (`/code-review medium` on Phase 1, stage 1.) Migration 0002 also reuses an existing `od_app` or
+  `od_cleanup` after checking what that role is a member of, but not which roles are members of
+  it, so another database's login granted `od_app` would inherit Open Door's access. Check
+  `pg_auth_members` in both directions. (Phase 1 close-out review.)
 
 - **Separate liveness from readiness.** ECS container health checks must not depend on the
   database, or an RDS failover would restart every task. Add `GET /api/v1/health/live`, which

@@ -253,10 +253,22 @@ def test_a_refusal_is_logged_as_a_security_event(
     assert "a-raw-session-token" not in json.dumps(fields)
 
 
-@pytest.mark.parametrize("method", ["GET", "HEAD", "OPTIONS", "TRACE"])
+@pytest.mark.parametrize("method", ["GET", "HEAD", "OPTIONS"])
 def test_outside_the_api_the_safe_methods_skip_the_check(client: TestClient, method: str) -> None:
     # The route may answer 405 for a method it doesn't serve, but the check never refuses it.
     assert client.request(method, "/things", headers=CROSS_SITE).status_code != 403
+
+
+def test_trace_is_not_a_safe_method_so_a_cross_site_one_is_refused_like_a_post(
+    client: TestClient,
+) -> None:
+    # The CSRF check in deps.py treats TRACE as a change too, from the same SAFE_METHODS set.
+    post = client.post("/things", json={}, headers=CROSS_SITE)
+    trace = client.request("TRACE", "/things", headers=CROSS_SITE)
+
+    assert (post.status_code, trace.status_code) == (403, 403)
+    assert trace.json()["detail"] == post.json()["detail"]
+    assert client.request("TRACE", "/things", headers=SAME_ORIGIN).status_code != 403
 
 
 def test_a_custom_method_gets_the_full_check(client: TestClient) -> None:

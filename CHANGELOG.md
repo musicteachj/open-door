@@ -192,3 +192,24 @@ version (`0.x.y` while the app is being built, `1.0.0` when it is complete).
 
 - **The data inventory stays current** (project rules). `CLAUDE.md` now asks that a new table,
   column, cookie, or log field update `docs/DATA-INVENTORY.md` in the same change.
+
+### Fixed
+
+- **One list of safe methods** (Phase 1 close-out). The same-origin check treated `TRACE`
+  as a method that changes nothing, while the CSRF check didn't. No route accepts `TRACE`, so
+  nothing could exploit it, but the two checks now share one list (`GET`, `HEAD`, `OPTIONS`) and
+  can't drift apart. The default persona for a new sandbox is also defined in one place.
+
+### Security
+
+- **Starting a new sandbox audits the end of the old session** (Phase 1 close-out). A visitor who
+  starts a second sandbox has their first session ended, but that happened inside the new
+  sandbox's transaction, so the first sandbox's audit log never recorded it. The old session now
+  ends in its own transaction, scoped to its own sandbox, which writes `session.ended` there
+  (invariant 7: every action is audited).
+- **The whole-phase review of Phase 1.** `/code-review high` on the phase's application code and
+  one security reviewer, briefed with tenant isolation and the audit log, checked the seams
+  between the four stages: the database roles with sessions, the transaction-scoped tenant
+  settings, seeding, persona switching with private reads, the same-origin and CSRF checks, the
+  audit log, and the cleanup role. They found nothing high or medium. The fixes above came from
+  it, and the other findings are in `docs/BACKLOG.md` under the phase that needs them.
