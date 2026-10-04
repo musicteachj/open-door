@@ -1,0 +1,21 @@
+/* PersonaCard */
+.od-persona-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: var(--space-4); }
+.od-persona-card { display: flex; flex-direction: column; align-items: stretch; text-align: left; width: 100%; padding: var(--space-6); background: var(--surface-raised); border: 1px solid var(--border); border-radius: var(--radius-lg); font-family: var(--font-sans); color: var(--ink); cursor: pointer; transition: border-color var(--duration-fast) var(--ease-standard), box-shadow var(--duration-fast) var(--ease-standard); }
+.od-persona-card:hover:not(:disabled), .od-persona-card[data-state~="hover"] { border-color: var(--input-border-hover); }
+.od-persona-card:focus-visible, .od-persona-card[data-state~="focus"] { outline: var(--focus-ring-width) solid var(--focus-ring); outline-offset: var(--focus-ring-offset); }
+.od-persona-card__avatar { width: 40px; height: 40px; border-radius: var(--radius-full); background: var(--primary-tint); color: var(--ink); display: flex; align-items: center; justify-content: center; font-size: var(--text-ui); font-weight: var(--weight-semibold); }
+.od-persona-card__name { margin-top: var(--space-4); font-size: var(--text-body-lg); line-height: var(--leading-body-lg); font-weight: var(--weight-semibold); }
+.od-persona-card__role { font-size: var(--text-ui); line-height: var(--leading-ui); }
+.od-persona-card__loc { margin-top: var(--space-1); display: flex; align-items: center; gap: 6px; font-size: var(--text-small); line-height: var(--leading-small); color: var(--ink-muted); }
+.od-persona-card__rule { height: 1px; background: var(--border-subtle); margin: var(--space-5) 0; }
+.od-persona-card__prompt { flex: 1; font-size: var(--text-body); line-height: var(--leading-body); }
+.od-persona-card__cta { margin-top: var(--space-5); min-height: 20px; display: flex; align-items: center; gap: var(--space-2); font-size: var(--text-small); line-height: var(--leading-small); font-weight: var(--weight-semibold); color: var(--primary); }
+.od-persona-card__starting { color: var(--ink); }
+.od-persona-card--starting, .od-persona-card--starting:disabled { border-color: var(--primary); box-shadow: 0 0 0 1px var(--primary); cursor: progress; }
+.od-persona-card:disabled:not(.od-persona-card--starting) { cursor: not-allowed; border-color: var(--border-subtle); color: var(--disabled-fg); }
+.od-persona-card:disabled:not(.od-persona-card--starting) .od-persona-card__loc,
+.od-persona-card:disabled:not(.od-persona-card--starting) .od-persona-card__cta { color: var(--disabled-fg); }
+.od-persona-card:disabled:not(.od-persona-card--starting) .od-persona-card__avatar { background: var(--disabled-bg); color: var(--disabled-fg); }
+.od-spin { animation: od-spin 0.9s linear infinite; }
+@keyframes od-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .od-spin { animation: none; } }

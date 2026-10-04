@@ -11,3 +11,6 @@
 @import "./components/navigation/navigation.css";
 @import "./components/assistant/assistant.css";
 @import "./components/status/status.css";
+@import "./components/landing/landing.css";
+@import "./components/forms/forms.css";
+@import "./components/directory/directory.css";

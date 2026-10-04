@@ -1,0 +1,34 @@
+/* DirectoryTable, DirectoryRow, SkeletonRow, DetailList, DetailRow */
+.od-dir-cols { display: grid; grid-template-columns: minmax(0, 2.4fr) minmax(0, 1.8fr) minmax(0, 1.4fr) minmax(0, 1.2fr) 16px; column-gap: var(--space-6); align-items: center; padding: 0 var(--space-3); }
+.od-dir-head { height: 40px; border-bottom: 1px solid var(--border); font-size: var(--text-small); line-height: var(--leading-small); color: var(--ink-muted); }
+.od-dir-row { height: 60px; border-bottom: 1px solid var(--border-subtle); color: var(--ink); text-decoration: none; transition: background-color var(--duration-fast) var(--ease-standard); }
+.od-dir-row:hover, .od-dir-row[data-state~="hover"] { background: var(--primary-tint); color: var(--ink); }
+.od-dir-row:focus-visible, .od-dir-row[data-state~="focus"] { outline: var(--focus-ring-width) solid var(--focus-ring); outline-offset: -2px; }
+.od-dir-row__name { display: flex; align-items: center; gap: var(--space-3); min-width: 0; }
+.od-dir-avatar { width: 32px; height: 32px; flex: none; border-radius: var(--radius-full); background: var(--primary-tint); display: flex; align-items: center; justify-content: center; font-size: var(--text-caption); font-weight: var(--weight-semibold); color: var(--ink); }
+.od-dir-row__person { font-size: var(--text-body); line-height: var(--leading-body); font-weight: var(--weight-semibold); }
+.od-dir-row__cell { font-size: var(--text-ui); line-height: var(--leading-ui); }
+.od-dir-row__cell--muted { color: var(--ink-muted); }
+.od-dir-row__chev { color: var(--ink-muted); }
+.od-you { flex: none; height: 20px; padding: 0 6px; border: 1px solid var(--border-strong); border-radius: var(--radius-xs); display: inline-flex; align-items: center; font-size: var(--text-caption); line-height: var(--leading-caption); color: var(--ink-muted); }
+.od-skel-row { height: 60px; border-bottom: 1px solid var(--border-subtle); }
+.od-skel { display: block; height: 12px; border-radius: 6px; background: var(--surface-hover); }
+.od-skel--avatar { width: 32px; height: 32px; flex: none; border-radius: var(--radius-full); }
+.od-dir-empty { display: flex; flex-direction: column; align-items: center; gap: var(--space-4); padding: 72px 0; text-align: center; }
+.od-dir-empty__text { margin: 0; font-size: var(--text-body-lg); line-height: var(--leading-body-lg); }
+.od-dir-more { display: flex; flex-direction: column; align-items: center; gap: var(--space-3); padding: 28px 0 var(--space-2); font-size: var(--text-small); line-height: var(--leading-small); color: var(--ink-muted); font-variant-numeric: tabular-nums; }
+.od-details { margin: 0; padding: 0 var(--space-5); border: 1px solid var(--border); border-radius: var(--radius-lg); }
+.od-detail { display: grid; grid-template-columns: 136px minmax(0, 1fr); gap: var(--space-4); align-items: baseline; padding: 14px 0; border-bottom: 1px solid var(--border-subtle); }
+.od-detail:last-child { border-bottom: 0; }
+.od-detail__label { font-size: var(--text-ui); line-height: var(--leading-ui); color: var(--ink-muted); }
+.od-detail__value { margin: 0; font-size: var(--text-body); line-height: var(--leading-body); min-width: 0; overflow-wrap: anywhere; }
+.od-detail__value a { text-decoration: underline; text-decoration-thickness: 1px; text-underline-offset: 3px; }
+.od-detail__locked { display: inline-flex; align-items: center; gap: 6px; font-size: var(--text-ui); line-height: var(--leading-ui); color: var(--ink-muted); }
+.od-audit-note { display: flex; align-items: center; gap: var(--space-2); margin: 0 0 var(--space-3); padding: 10px var(--space-3); background: var(--surface-sunken); border: 1px solid var(--border-subtle); border-radius: var(--radius-md); font-size: var(--text-small); line-height: var(--leading-small); color: var(--ink-muted); }
+@media (max-width: 760px) {
+  .od-dir-head { display: none; }
+  .od-dir-cols.od-dir-row { grid-template-columns: minmax(0, 1fr) 16px; height: auto; padding: var(--space-3); row-gap: 2px; }
+  .od-dir-row .od-dir-row__cell { grid-column: 1; padding-left: 44px; }
+  .od-dir-row .od-dir-row__chev { grid-column: 2; grid-row: 1; }
+  .od-detail { grid-template-columns: minmax(0, 1fr); gap: 2px; }
+}

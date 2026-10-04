@@ -15,7 +15,16 @@ window.OD_FILES = [
   'components/assistant/TryAskingList.jsx',
   'components/status/GlanceLink.jsx',
   'components/status/GlanceList.jsx',
-  'components/status/SandboxIndicator.jsx'
+  'components/status/SandboxIndicator.jsx',
+  'components/landing/PersonaCard.jsx',
+  'components/forms/SearchField.jsx',
+  'components/forms/FilterSelect.jsx',
+  'components/forms/FilterToggle.jsx',
+  'components/directory/DirectoryRow.jsx',
+  'components/directory/SkeletonRow.jsx',
+  'components/directory/DirectoryTable.jsx',
+  'components/directory/DetailRow.jsx',
+  'components/directory/DetailList.jsx'
 ];
 window.loadOpenDoor = async function (root, files) {
   var mods = {};

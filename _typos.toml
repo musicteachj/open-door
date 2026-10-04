@@ -11,6 +11,8 @@ axe = "axe"
 # The US locale accepts both spellings. CLAUDE.md asks for one L.
 cancelled = "canceled"
 cancelling = "canceling"
+# A first name in the directory mockup's sample data.
+ines = "ines"
 
 [files]
 extend-exclude = [
