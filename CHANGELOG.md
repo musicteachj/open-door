@@ -162,10 +162,13 @@ version (`0.x.y` while the app is being built, `1.0.0` when it is complete).
 ### Changed
 
 - **A whole-phase review at the end of every phase** (project rules). After a phase's last PR
-  merges, `/code-review high` runs on the full phase, to catch problems between stages that
-  per-PR reviews can't see. The phases that guard the invariants (1, 4, and 6) run
-  `/code-review max` and `/security-review` instead. The billed `/code-review ultra` is never
-  used.
+  merges, `/code-review high` runs on the phase's application code, to catch problems between
+  stages that per-PR reviews can't see. Tests, generated files, and docs are left out, because
+  they were reviewed with their stage's code. The phases that guard the invariants (1, 4, and 6)
+  also get one security reviewer, briefed with those invariants and told to prove findings with
+  small experiments. `/code-review max` was the first choice for those phases. It was dropped
+  after its run on Phase 1 used up the session limit before finishing, and it is never used now,
+  like the billed `/code-review ultra`.
 
 - **The PR-size guideline counts the code that needs reading** (project rules). The 1,500-line
   trigger now counts application code, migrations, scripts, and config, not tests, generated

@@ -8493,6 +8493,17 @@ after Stage 4 merges it runs `/code-review max` and `/security-review` on `dev` 
 the commit before Phase 1's first stage. Real findings are fixed in a small follow-up PR before the
 `v0.1.0` release.
 
+**The close-out review changed (owner-approved, 2026-10-04).** The `/code-review max` run on
+`d6b652d..dev` launched 11 parallel reviewers on the strongest model. Each one read the whole
+10,000-line diff, most of it tests, the generated client, and docs. The run used up the session
+limit before any of its bug-hunting passes finished, so it produced no findings. `CLAUDE.md` now
+never uses `max`. Phase 1 closes instead with two reviews:
+
+- `/code-review high` on the phase's application code, migrations, scripts, and config, about
+  3,000 lines.
+- One security reviewer on the strongest model, briefed with the invariants Phase 1 guards and
+  the seams between its four stages, proving findings with small experiments.
+
 **Stage 2.** Every pytest total is 71 higher than the plan says, because Stage 1 ended at 152
 where the plan expects 81.
 - **Tasks 11–13** went in exactly as planned, with no adjustments. 20 sandboxes seeded at p50
