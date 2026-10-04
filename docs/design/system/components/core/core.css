@@ -20,3 +20,4 @@
 .od-logo__name { font-size: 16px; line-height: 20px; font-weight: var(--weight-semibold); letter-spacing: -0.01em; color: var(--ink); }
 .od-logo__org { font-size: var(--text-caption); line-height: var(--leading-caption); color: var(--ink-muted); }
 .od-truncate { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.od-sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }

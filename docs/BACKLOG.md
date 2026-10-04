@@ -56,6 +56,14 @@ should pick it up. When one is done, delete it here and record it in the changel
 
 ## Phase 2: design system, shell, sandbox entry
 
+- **Search, filters, and counts in the directory API.** The approved directory (see
+  [`design/screens/04-directory/notes.md`](design/screens/04-directory/notes.md)) searches by name,
+  title, or work email, filters by location, department, and "My team" (everyone under the
+  signed-in manager, directly or through a lead), and shows counts for the header and for each
+  filter option. `GET /api/v1/people` only pages through everyone today. (Directory design.)
+- **Work emails on the employer's domain.** The seed writes `first.last@opendoor.example`, the
+  product's name. They should be `@juniperrow.example`, as the designs show. (Directory design.)
+
 - **Send the CSRF token from the web client.** The generated client sends no `X-CSRF-Token`, so
   every state-changing call would get a 403. Add an Orval `override.mutator`: a custom fetch that
   reads `__Host-od_csrf` from `document.cookie` on every unsafe request. Read it fresh each time,

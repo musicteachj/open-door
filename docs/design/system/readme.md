@@ -18,7 +18,12 @@ Sources: everything here was designed in this project. The decision record is `A
 - `components/navigation/`: NavItem, PersonaSwitcher, Tooltip.
 - `components/assistant/`: Composer, InlineError, TryAskingRow, TryAskingList.
 - `components/status/`: GlanceLink, GlanceList, SandboxIndicator.
+- `components/landing/`: PersonaCard (and the od-persona-grid layout class).
+- `components/forms/`: SearchField, FilterSelect, FilterToggle.
+- `components/directory/`: DirectoryTable, DirectoryRow, SkeletonRow, DetailList, DetailRow.
 - `ui_kits/assistant/`: app shell and assistant home for Priya.
+- `Directory.dc.html`: screen 04, Directory list and profile pages with their states.
+- `Landing.dc.html`: screen 01, Try Open Door (landing page with persona picker and its states).
 - `guidelines/`: foundation specimen cards (colors, type, spacing, radius, shadows, focus, logo, icons).
 - `assets/`: `logo-mark.svg`, `fonts/` (Instrument Sans, Geist Mono, self-hosted woff2).
 - `preview/loader.js`: preview-only helper so cards and kits render without a build.
@@ -59,6 +64,8 @@ Each component has `Name.jsx`, `Name.d.ts` (props contract) and `Name.prompt.md`
 - Press: no shrink or bounce. Color and border transitions only, 150 ms, standard easing; disabled under prefers-reduced-motion.
 - Disabled: #E7EBED fill with #87939A text. The Ask button stays enabled when the box is empty and moves focus to the box instead.
 - No gradients, textures, illustrations, cartoon people, confetti, or blur. Imagery is not part of the product UI.
+- Privacy: private fields the viewer can't see render as calm locked rows (muted lock plus who can see it), never blurred or redacted values, and never in warning colors.
+- Loading: static skeleton bars in surface-hover, no shimmer.
 - Color is never the only signal: the pending marker sits beside "request pending", errors pair an icon with text, links name their destination.
 
 ## Iconography
@@ -66,7 +73,7 @@ Each component has `Name.jsx`, `Name.d.ts` (props contract) and `Name.prompt.md`
 - Lucide (lucide.dev), outline style, 1.75 stroke, round caps and joins. In production use lucide-react; `components/core/Icon.jsx` holds the same geometry for specimens.
 - Sizes: 18 px in nav, 16 px in buttons and rows, 14 px beside 13 px text, 13 px in the sandbox pill.
 - Icons inherit text color (ink, ink-nav, or ink-muted); the destination chevron on glance links is primary.
-- In use: message-circle (Ask), calendar (Time off), users (Directory), book-open (Handbook), code (How it's built), info (AI disclosure), clock (sandbox), circle-alert (errors), rotate-ccw (Retry), chevrons-up-down (persona switcher), chevron-right (glance links), arrow-right (Ask, Try asking rows), trash-2 (destructive).
+- In use: message-circle (Ask), calendar (Time off), users (Directory), book-open (Handbook), code (How it's built), info (AI disclosure), clock (sandbox), circle-alert (errors), rotate-ccw (Retry), chevrons-up-down (persona switcher), chevron-right (glance links), arrow-right (Ask, Try asking rows), trash-2 (destructive), map-pin (persona location), loader-circle (starting spinner), circle-play (tour), search, x (clear), chevron-down (filters), check (selected option, pressed toggle), lock (private details), arrow-left (back), eye (audit note).
 - No emoji, no unicode symbols as icons, no icon font.
 - Logo: `assets/logo-mark.svg`, an open doorway in a 32 px aubergine tile with a 9 px radius, set beside "Open Door" (16 px, 600) and the customer name.
 

@@ -18,21 +18,21 @@ build then implements it in the component gallery before any screen uses it.
 | Component | Variants | States | Designed |
 |---|---|---|---|
 | Button | primary, secondary, ghost, destructive; 40 px and 32 px | default, hover, focus, active, disabled, loading | partly: no loading state yet |
-| Text input / textarea | with label, helper, error | default, focus, disabled, error | [ ] |
-| Select | | default, open, focus, disabled, error | [ ] |
+| Text input / textarea | with label, helper, error | default, focus, disabled, error | partly: the search field (see Forms below); labeled form fields come with Phase 5 |
+| Select | | default, open, focus, disabled, error | partly: the filter select (see Forms below) |
 | Checkbox / radio / switch | | default, checked, focus, disabled | [ ] |
 | Date picker | single date, range, half-day option | default, open, disabled days (weekends, holidays) | [ ] |
-| Badge / chip | neutral, status, applicability | default | [ ] |
+| Badge / chip | neutral, status, applicability | default | partly: the neutral "You" tag; status and applicability badges come with Phases 3 and 5 |
 | Card | plain, interactive | default, hover, focus | [ ] |
-| Table | dense, comfortable | default, empty, loading | [ ] |
+| Table | dense, comfortable | default, empty, loading | partly: the directory list (see Directory below) |
 | Tabs | | default, active, focus | [ ] |
 | Dialog | | open | [ ] |
 | Toast | success, error, info | | [ ] |
 | Tooltip | | default | [x] |
-| Avatar | image, initials | | [ ] |
-| Skeleton loader | | | [ ] |
-| Empty state | | | [ ] |
-| Page header | with actions | | [ ] |
+| Avatar | initials | default | [x] |
+| Skeleton loader | directory row | default | [x] |
+| Empty state | no search results, no filter results | default | partly: the directory's; other pages come with their screens |
+| Page header | title with a count, or a back link | default | [x] |
 
 ## Assistant components
 
@@ -66,3 +66,16 @@ Added by the design system for the assistant home.
 | At-a-glance link and list | figure, label, and named destination | default, hover, focus | [x] |
 | Sandbox indicator | pill | default | [x] |
 | Inline error | under the composer, with Retry | default | [x] |
+
+## Landing, forms, and directory components
+
+Added by the design system for the landing page and the directory.
+
+| Component | Variants | States | Designed |
+|---|---|---|---|
+| Persona card | | default, hover, focus, starting, disabled | [x] |
+| Search field | | empty, typed (with clear button), focus | [x] |
+| Filter select | location, department; options with counts | default, open, active, focus | [x] |
+| Filter toggle | "My team" with a count | off, on, focus | [x] |
+| Directory list and row | | default, hover, focus, your own row ("You") | [x] |
+| Detail list and row | value, link, locked (lock and reason) | default | [x] |

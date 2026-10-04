@@ -1,0 +1,23 @@
+<!-- @dsCard group="Components" viewport="700x420" name="Landing" -->
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><link rel="stylesheet" href="../../styles.css"><script src="https://unpkg.com/react@18.3.1/umd/react.production.min.js"></script><script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.production.min.js"></script><script src="https://unpkg.com/@babel/standalone@7.24.7/babel.min.js"></script><script src="../../preview/loader.js"></script></head><body style="margin:0;background:var(--surface)"><div id="root"></div>
+<script type="text/babel" data-presets="react">
+loadOpenDoor("../../", OD_FILES).then(function (OD) {
+  const { PersonaCard } = OD;
+  const Lbl = ({ children }) => <div style={{ font: "400 11px/16px var(--font-sans)", color: "var(--ink-muted)", marginBottom: 6 }}>{children}</div>;
+  const p = { name: "Priya Raman", role: "Visual Merchandiser", location: "Oakland store", prompt: "Ask about California sick leave and book a day off." };
+  const m = { name: "Mateo Alvarez", role: "Warehouse Associate", location: "Austin warehouse", prompt: "Ask the same questions and get Texas answers." };
+  function Card() {
+    return (
+      <div style={{ padding: "20px 24px", display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: "20px 16px" }}>
+        <div><Lbl>Default</Lbl><PersonaCard {...p} /></div>
+        <div><Lbl>Hover</Lbl><PersonaCard {...p} data-state="hover" /></div>
+        <div><Lbl>Focus</Lbl><PersonaCard {...p} data-state="focus" /></div>
+        <div><Lbl>Starting</Lbl><PersonaCard {...p} status="starting" /></div>
+        <div><Lbl>Disabled, while another starts</Lbl><PersonaCard {...m} disabled /></div>
+      </div>
+    );
+  }
+  ReactDOM.createRoot(document.getElementById("root")).render(<Card />);
+});
+</script></body></html>

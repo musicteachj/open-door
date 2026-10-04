@@ -1,0 +1,33 @@
+<!-- @dsCard group="Components" viewport="700x400" name="Forms" -->
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><link rel="stylesheet" href="../../styles.css"><script src="https://unpkg.com/react@18.3.1/umd/react.production.min.js"></script><script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.production.min.js"></script><script src="https://unpkg.com/@babel/standalone@7.24.7/babel.min.js"></script><script src="../../preview/loader.js"></script></head><body style="margin:0;background:var(--surface-raised)"><div id="root"></div>
+<script type="text/babel" data-presets="react">
+loadOpenDoor("../../", OD_FILES).then(function (OD) {
+  const { SearchField, FilterSelect, FilterToggle } = OD;
+  const Lbl = ({ children }) => <div style={{ font: "400 11px/16px var(--font-sans)", color: "var(--ink-muted)", marginBottom: 6 }}>{children}</div>;
+  function Card() {
+    return (
+      <div style={{ padding: "20px 24px", display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px 24px" }}>
+        <div><Lbl>Search, empty</Lbl><SearchField value="" /></div>
+        <div><Lbl>Search, focused with text</Lbl><SearchField value="Leo" data-state="focus" /></div>
+        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+          <Lbl>Filters: default, hover, focus, active</Lbl>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            <FilterSelect label="Location" options={[]} />
+            <FilterSelect label="Department" options={[]} data-state="hover" />
+            <FilterSelect label="Location" options={[]} data-state="focus" />
+            <FilterSelect label="Location" value="Oakland store" options={[{ value: "Oakland store", label: "Oakland store" }]} />
+          </div>
+          <Lbl>My team toggle: off, on</Lbl>
+          <div style={{ display: "flex", gap: 8 }}><FilterToggle label="My team" count={44} /><FilterToggle label="My team" count={44} pressed /></div>
+        </div>
+        <div style={{ minHeight: 210 }}>
+          <Lbl>Menu open</Lbl>
+          <FilterSelect label="Location" allLabel="All locations" value="Oakland store" defaultOpen
+            options={[{ value: "Denver HQ", label: "Denver HQ", count: 40 }, { value: "Oakland store", label: "Oakland store", count: 24 }, { value: "Austin warehouse", label: "Austin warehouse", count: 56 }]} />
+        </div>
+      </div>);
+  }
+  ReactDOM.createRoot(document.getElementById("root")).render(<Card />);
+});
+</script></body></html>

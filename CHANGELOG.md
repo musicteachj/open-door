@@ -23,6 +23,15 @@ version (`0.x.y` while the app is being built, `1.0.0` when it is complete).
     including the acceptance criteria.
   - The component inventory marks what is designed so far.
   - The fictional employer is now named Juniper Row.
+- **The landing page and the directory** (Phase 2 design). Both approved in Claude Design, with
+  their states and notes in `docs/design/screens/`.
+  - The landing page explains the product and starts a sandbox with one click on a persona card.
+  - The directory lists everyone with search and filters, and profiles show private details only
+    to the person and HR. Everyone else sees which fields are private and who can see them.
+  - The design system gains the persona card, search, filters, the directory list, and profile
+    detail rows.
+  - The backlog notes what the directory needs from the API in Phase 2: search, filters, and
+    counts, and work emails on the employer's domain.
 
 ### Changed
 
