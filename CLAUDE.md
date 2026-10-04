@@ -83,6 +83,28 @@ dev       ●──●──●──●──●──●──●──●─�
 
 ---
 
+## Effort level
+
+Claude Code's effort setting (`/effort`) controls how much the model thinks on every step. The
+agents a session launches run at the session's level unless their own definition sets one. Higher
+effort costs more on every step, so match it to the work:
+
+| Session | Effort |
+|---|---|
+| Planning a phase: the spec, the plan, design decisions | `high`, or `xhigh` for a genuinely hard design problem |
+| Carrying out a stage: implementers, reviews, the close | `medium` |
+| A phase's close-out review | `medium` |
+| A stubborn bug | `high` until it's found, then back to `medium` |
+| Quick questions, doc edits, PR text | `low` or `medium` |
+
+- **Say the level at the start of every session,** in one line, then get on with the work. Claude
+  can't see the current setting, so the owner changes it with `/effort` if needed.
+- **The roadmap's "Next" note names the level** for the next session.
+- **Avoid `xhigh` and `max` in a session that launches many agents.** Each agent inherits the
+  level, so the cost multiplies.
+
+---
+
 ## Writing
 
 - **American English everywhere:** docs, UI copy, code comments, identifiers, and commit and PR
