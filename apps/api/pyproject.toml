@@ -59,10 +59,12 @@ root_package = "app"
 include_external_packages = true
 
 [[tool.importlinter.contracts]]
-name = "Domain code imports no framework"
+name = "Domain and policy code import no framework"
 type = "forbidden"
-source_modules = ["app.domain"]
-# Every framework and I/O dependency the domain must never touch. Add each new one here.
+# The pure layers: the domain rules (the time-off engine, the holiday calendar) and the policy layer
+# that decides who can see what.
+source_modules = ["app.domain", "app.policy"]
+# Every framework and I/O dependency they must never touch. Add each new one here.
 forbidden_modules = [
     "fastapi",
     "starlette",
@@ -78,4 +80,5 @@ forbidden_modules = [
     "app.api",
     "app.core",
     "app.db",
+    "app.modules",
 ]

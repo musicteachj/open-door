@@ -8505,6 +8505,98 @@ where the plan expects 81.
     January lacks the previous December's closures.
 
   Stage 2 ends with 184 tests, where the plan expects 112.
+
+**Stage 3.** For Tasks 15–22, the code in the repository is the source of truth. Every pytest total
+is 72 higher than the plan says at the start of Stage 3, and higher still after the review fixes
+below.
+
+- **Tasks 15–17** went in exactly as planned.
+- **From the security review of Tasks 15–17:**
+  - **The same-origin check lists the methods it lets through.** It now skips only `GET`,
+    `HEAD`, `OPTIONS`, and `TRACE`, and checks everything else. It used to check only the four
+    methods it named. A route declared with `PURGE`, or a lowercase `post` reaching a mounted
+    app, then skipped the check entirely: the reviewer showed a cross-site request getting a
+    200. Browsers can't send those cross-site without a preflight, which we refuse, so it wasn't
+    exploitable, but the check now fails closed. The docstring now describes the JSON rule as
+    defense in depth.
+  - **`can()` returns a strict bool, and `Actor` checks its types.** A rule result like the
+    string `"false"` was truthy, so it granted access. `can()` now returns `rule(...) is True`.
+    `Actor` and `PersonResource` refuse wrong types: UUID IDs, a real `bool` for
+    `is_hr_admin`, and a `frozenset` for `report_ids`.
+  - **New tests for three gaps the reviewer found by mutation:**
+    - a chunked non-JSON body
+    - an `Origin` that differs only in case
+    - that `RULES` can't be modified
+
+    Each was shown to fail under its mutation. The suite is at 292 at the end of Task 17.
+  - **The backlog gains the reviewer's notes:**
+    - JSON content type for hand-written requests (Phase 2)
+    - an `Origin` check on any future WebSocket (any phase)
+    - requiring `APP_ORIGIN` in production (Phase 8)
+    - trusting forwarded IPs only from the load balancer (Phase 8)
+- **Tasks 18–19** went in exactly as planned.
+- **From the security review of Tasks 18–19:**
+  - **Rotation refuses a session that is already gone.** `end_session` now returns whether it
+    deleted a live session. `rotate_session` raises `SessionGoneError` when it didn't, and
+    inserts nothing. Before this, signing out in one tab and switching persona in another
+    signed the browser back in. Two simultaneous switches also left two live sessions. A test
+    runs two rotations of one session at once, and only one wins.
+  - **A new session is tied to the transaction's tenant and its expiry.**
+    - `start_session(session, tenant_id, person_id)` no longer takes `expires_at`. It inserts
+      with `INSERT … SELECT` from `people` joined to `tenants`, so row-level security limits it
+      to the current tenant, and the expiry comes from the tenant row.
+    - It raises `PersonNotInTenantError` otherwise.
+    - Before this, a session could be started for another tenant's person, or with any expiry.
+  - **`load_actor` takes the tenant from the person's own row.** A person can't count as their
+    own report, even in a reporting loop.
+  - **`record_event` checks keys at every level.** It looks inside nested mappings and lists, in
+    any letter case, for private field names. A top-level-only check let
+    `{"x": {"phone": …}}`, `{"Phone": …}`, and a list of pairs through.
+  - **New tests:**
+    - cross-tenant audit writes
+    - the exact fields of the nested reference models
+    - ending a session twice
+
+    The suite is at 350 at the end of Task 19.
+  - **Task 20 adapts to these changes:**
+    - `create_sandbox` calls `start_session(db, tenant_id, person_id)`.
+    - A session test for an expired tenant uses `make_tenant(expired=True)`, because the expiry
+      now comes from the tenant.
+    - `switch_persona` maps `SessionGoneError` to 401.
+    - `sign_out` ignores a session that was already gone.
+  - **A caution for Stage 4.** After a persona switch, the rest of that request's transaction
+    still runs as the old persona: `app.person_id` and `app.is_hr` aren't updated. Nothing may
+    read private details after a switch within the same request.
+- **Tasks 20–21** went in as planned, with the Task 20 adaptations listed above.
+  - `switch_persona` also logs `security.session_invalid` when the session it rotates is
+    already gone.
+  - Two extra tests pin the race adaptations: a persona switch on a session another tab just
+    ended gets a 401, and a second sign-out writes no second audit event.
+- **From the security review of Tasks 20–21:**
+  - **Every `/api/` response is marked `Cache-Control: no-store`.** A pure-ASGI middleware,
+    `app/core/cache_control.py`, is the outermost user middleware. The unhandled-error handler
+    also sets the header, because Starlette sends a 500 from outside every user middleware.
+    Without it, a CDN that forwards cookies but leaves them out of its cache key could serve one
+    visitor's `/me` to another.
+  - **Two tests pin behavior that was correct but unguarded.** Removing either guard used to pass
+    every test.
+    - A commit that fails during a persona switch returns a 500 with no new cookies, and the old
+      session still works. This pins `scope="function"`.
+    - A CSRF token from another session is refused, even when sent as both the cookie and the
+      header. This pins the stored-hash check.
+  - **The "sandbox is gone" security event now logs the tenant and actor,** which it knows from
+    the session.
+  - **The backlog gains:**
+    - Phase 2: the web client's CSRF mutator, resetting caches when the identity changes, the
+      real error shapes in the OpenAPI schema, and checking `__Host-` cookies in each browser.
+    - Phase 8: a request body size cap.
+
+- **From `/code-review medium`:** one low-severity race, recorded in the backlog under Phase 8
+  rather than fixed. A sign-out that runs while another tab switches persona finds the session
+  already replaced. It answers 204, and the new session stays valid until the sandbox expires.
+  The fix, a session `family_id` that sign-out deletes as a whole, needs a migration.
+
+  Stage 3 ends with 392 tests, where the plan expects 217.
 - **Task 10.**
   - The changelog entry also mentions the bootstrap script's refusals, the plaintext-free
     passwords, and the 25-hour cap.

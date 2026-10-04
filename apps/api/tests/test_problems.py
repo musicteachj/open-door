@@ -22,6 +22,10 @@ def client() -> Iterator[TestClient]:
     async def boom() -> None:
         raise RuntimeError("database password is hunter2")
 
+    @app.get("/api/v1/boom")
+    async def api_boom() -> None:
+        raise RuntimeError("database password is hunter2")
+
     @app.get("/managers-only")
     async def managers_only() -> None:
         raise HTTPException(403, detail="Managers only.")
@@ -68,6 +72,17 @@ def test_an_unhandled_error_hides_its_cause_and_keeps_the_request_id(client: Tes
     assert body["detail"] == "Something went wrong."
     assert "hunter2" not in response.text
     assert body["requestId"] == response.headers["X-Request-ID"]
+
+
+def test_an_unhandled_error_under_api_is_marked_no_store(client: TestClient) -> None:
+    # Unhandled errors are answered outside every middleware, so the handler sets the header
+    # itself. This app has no no-store middleware, so the header can only come from the handler.
+    under_api = client.get("/api/v1/boom")
+    elsewhere = client.get("/boom")
+
+    assert (under_api.status_code, elsewhere.status_code) == (500, 500)
+    assert under_api.headers.get_list("cache-control") == ["no-store"]
+    assert "cache-control" not in elsewhere.headers
 
 
 def test_an_unhandled_error_is_logged_with_its_request_id(

@@ -20,9 +20,13 @@ class JsonFormatter(logging.Formatter):
         request_id = getattr(record, "request_id", None) or request_id_var.get()
         if request_id is not None:
             entry["requestId"] = request_id
+        # Structured fields passed as `extra={"fields": {...}}`. They can't replace the keys above.
+        fields = getattr(record, "fields", None)
+        if isinstance(fields, dict):
+            entry.update({key: value for key, value in fields.items() if key not in entry})
         if record.exc_info:
             entry["exception"] = self.formatException(record.exc_info)
-        return json.dumps(entry)
+        return json.dumps(entry, default=str)
 
 
 def configure_logging(level: str) -> None:

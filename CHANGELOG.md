@@ -107,6 +107,30 @@ version (`0.x.y` while the app is being built, `1.0.0` when it is complete).
     that the personas and reporting lines are right, that Priya and Leo manage no one, that two
     sandboxes with identical people sit side by side in the database, and that creating a
     sandbox takes under 2 seconds at the 95th percentile.
+- **Signing in** (Phase 1, stage 3). A visitor can now start a sandbox company and sign in to it
+  as one of four personas: Priya, Mateo, Marcus, or Dana. The session lives in a cookie the page's
+  scripts can't read, and it ends when the sandbox does, 24 hours after it was created. Every
+  request that changes something must come from the app itself, and a signed-in one must also
+  carry a CSRF token (a second secret that another website can't read), so no other site can act
+  on a visitor's behalf. Also added:
+  - Four endpoints. `POST /api/v1/sandboxes` creates and seeds a sandbox and signs the visitor
+    in. `GET /api/v1/me` says who is signed in. `PUT /api/v1/session/persona` switches persona and
+    replaces both tokens, so the old ones stop working at once. `DELETE /api/v1/session` signs
+    out. Signing out in one tab while switching in another can't leave a session behind.
+  - The policy layer: one pure function, `can()`, that decides who may see what, refuses
+    anything it has no rule for, and answers only a strict yes or no. Like the domain rules, it
+    may not import any framework or database code, which the import check enforces.
+  - An audit log entry for each sandbox created, persona switched, and session ended. Every
+    refused request goes to a security log instead: a missing or expired session, a request from
+    another site, or a wrong CSRF token. No log ever holds a raw token, and the audit log refuses
+    private fields at any depth.
+  - Every API response is marked `Cache-Control: no-store`, so no cache can hand one visitor's
+    data to another.
+  - The web app's generated API client now includes these endpoints. The screens start using them
+    in Phase 2.
+
+  This closes the backlog item to keep the health check open: it reads no session, and the
+  same-origin and CSRF checks apply only to requests that change something.
 
 ### Changed
 

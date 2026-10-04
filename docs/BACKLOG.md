@@ -5,17 +5,52 @@ should pick it up. When one is done, delete it here and record it in the changel
 
 ## Phase 1: tenancy, identity, permissions
 
-- **Exempt `/api/v1/health` from authentication and CSRF.**
 - **Don't run Alembic inside an async test.** `env.py` calls `asyncio.run`, which fails inside a
   running event loop, and `fileConfig` resets the root log handlers. Test setup should run
   `alembic upgrade head` as a subprocess, or from a synchronous session fixture.
 
 ## Any phase
 
+- **Stop a person from managing themselves, directly or in a loop.** `people.manager_id` has no
+  `CHECK (manager_id <> id)` and nothing prevents a reporting loop. Phase 1 is safe: the API can't
+  update people, the seed has no loops, and `load_actor` drops the actor from their own reports.
+  Whichever phase first grants `UPDATE` on `people` must add the check, and refuse an update that
+  would create a loop. Otherwise approval rules could let someone approve their own request.
+  (Stage 3 security review.)
+
+- **Check `Origin` on any WebSocket endpoint.** The same-origin middleware passes WebSocket
+  connections through untouched, because none exist. Whichever phase adds one must refuse a
+  cross-site `Origin` on the handshake, against cross-site WebSocket hijacking. (Stage 3 security
+  review.)
+
 - **Guard writes to private details as well as reads.** The database rule that limits
   `person_private` to the person and HR covers `SELECT` only, because the API can't yet update or
   delete those rows. Whichever phase first grants `UPDATE` or `DELETE` on `person_private` must
   add restrictive policies for them in the same migration. (Stage 1 security review.)
+
+## Phase 2: design system, shell, sandbox entry
+
+- **Send the CSRF token from the web client.** The generated client sends no `X-CSRF-Token`, so
+  every state-changing call would get a 403. Add an Orval `override.mutator`: a custom fetch that
+  reads `__Host-od_csrf` from `document.cookie` on every unsafe request. Read it fresh each time,
+  because it changes when a sandbox is created and when a persona switches. Keep
+  `Content-Type: application/json`. (Stage 3 security review.)
+- **Reset client state when the identity changes.** Clear every TanStack Query cache on a persona
+  switch or sign-out. Treat any 401 as "go to sandbox entry", and never auto-retry a
+  state-changing request after a 403. (Stage 3 security review.)
+- **Describe the real error shapes in the OpenAPI schema.** The schema shows FastAPI's default
+  422 body (`detail`), but the API returns problem details (`errors`), and it doesn't list the
+  401, 403, and 404 responses at all. Declare `responses=` with a `Problem` model on each route,
+  so the generated client's error types are right. (Stage 3 security review.)
+- **Check the `__Host-` cookies in each target browser.** They are `Secure`. Chrome and Firefox
+  accept them on `http://localhost`, but Safari has historically refused them. Keep `/api` on the
+  same origin through the Vite proxy, and test sign-in in each browser the demo supports.
+
+- **Send JSON as JSON.** The same-origin check refuses a state-changing request whose body isn't
+  `application/json`. Orval's generated client sets the header. A hand-written
+  `fetch(url, { method: "POST", body: JSON.stringify(x) })` sends `text/plain` and gets a 403, so
+  any request outside the client must set `Content-Type: application/json` itself. (Stage 3
+  security review.)
 
 ## Phase 4: assistant core
 
@@ -31,6 +66,27 @@ should pick it up. When one is done, delete it here and record it in the changel
   engine answers past-dated questions, seed the prior year as well. (Stage 2 review.)
 
 ## Phase 8: hardening and deploy-readiness
+
+- **Make sign-out end a session's replacements too.** If one tab switches persona while another
+  signs out, the switch replaces the session first. The sign-out then finds nothing to end and
+  answers 204, but the new persona's session stays valid until the sandbox expires. Give each
+  session a `family_id` that rotation carries over, and have sign-out delete the whole family.
+  The race needs two tabs acting within milliseconds, in a 24-hour sandbox, and exposes nothing
+  across users. (`/code-review medium` on Phase 1, stage 3.)
+
+- **Cap request body size.** Nothing limits it: a 40 MiB JSON body to `POST /sandboxes` was read
+  and parsed in full, using about 120 MiB of memory. Phase 1 already reads the body before any
+  session check. Cap bodies at about 64 KiB in the ASGI layer or at the proxy, so a few large
+  requests can't exhaust a task's memory. (Stage 3 security review.)
+
+- **Require `APP_ORIGIN` in production.** It defaults to `http://localhost:5173`, so a production
+  deploy that forgets it refuses every state-changing request. That fails closed, but silently.
+  Make settings refuse to start when `APP_ENV=production` and `APP_ORIGIN` is still the default.
+  (Stage 3 security review.)
+- **Trust forwarded client IPs only from the load balancer.** Security events log the client IP
+  that uvicorn reports. Behind the load balancer that depends on `--forwarded-allow-ips`. Setting it
+  to `*` would let a client spoof the logged IP, so list only the load balancer's addresses.
+  (Stage 3 security review.)
 
 - **Data migrations can't see tenant rows on AWS.** With row-level security forced, a table
   owner that isn't a superuser sees no rows. That is the managed-Postgres case, unlike
