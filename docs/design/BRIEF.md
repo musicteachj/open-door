@@ -1,7 +1,8 @@
 # Open Door: design brief for Claude Design
 
-This brief is self-contained. Paste it, or the sections you need, into Claude Design to start the
-design system and screens. Hand the results back as described in [`README.md`](README.md).
+This brief is the full reference for the design. Claude Design gets it in pieces rather than all at
+once: a short context prompt first, then one focused prompt per screen, as described in
+[`README.md`](README.md).
 
 ---
 
@@ -256,6 +257,6 @@ figures are written and verified against official sources in Phase 3.
 
 ## What to hand back
 
-See [`README.md`](README.md) for the folder format. For each screen: desktop PNG screenshots per state,
-plus a `notes.md` with its purpose, layout, components used, states, interactions, exact
-copy, and **acceptance criteria**. For the system: `tokens.md` and `components.md`.
+See [`README.md`](README.md) for the loop and the folder format. For each screen: desktop
+screenshots per state, ideally with Claude Design's HTML export. Claude Code writes each screen's
+`notes.md` and fills in `tokens.md` and `components.md` from the approved designs.

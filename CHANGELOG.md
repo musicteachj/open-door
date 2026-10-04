@@ -24,7 +24,11 @@ version (`0.x.y` while the app is being built, `1.0.0` when it is complete).
 
   It also adds guidance on what makes an HR product look professional, with references to borrow
   ideas from rather than copying an existing design system. The component list is now a living
-  inventory.
+  inventory. The handoff loop is now one screen per round:
+  - Claude Code writes each prompt for Claude Design and reviews the result.
+  - The first round settles the look as a design-system project.
+  - Claude Design's HTML export is preferred over screenshots alone.
+  - Claude Code writes each screen's notes.
 
 ## [0.1.0] - 2026-10-04
 
