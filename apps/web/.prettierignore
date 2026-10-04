@@ -1,0 +1,4 @@
+openapi.json
+package-lock.json
+dist
+coverage

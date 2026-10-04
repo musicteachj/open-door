@@ -1,0 +1,26 @@
+# The development database only. It binds to 127.0.0.1, so nothing outside this machine can reach
+# it, and its password is a throwaway used nowhere else. Port 5433 avoids colliding with a Postgres
+# that may already be installed on 5432.
+# A fixed project name, so every checkout (including git worktrees) shares one database.
+name: open-door
+services:
+  db:
+    image: pgvector/pgvector:pg17
+    environment:
+      POSTGRES_USER: opendoor
+      POSTGRES_PASSWORD: opendoor
+      POSTGRES_DB: opendoor
+    ports:
+      - "127.0.0.1:5433:5432"
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    # Probe over TCP: on a fresh volume, Postgres first runs a socket-only setup server, which
+    # would pass a socket probe before the real server is up.
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U opendoor -d opendoor"]
+      interval: 2s
+      timeout: 5s
+      retries: 30
+
+volumes:
+  db-data:

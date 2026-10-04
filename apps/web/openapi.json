@@ -1,0 +1,727 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Open Door API",
+    "version": "0.0.0"
+  },
+  "paths": {
+    "/api/v1/health": {
+      "get": {
+        "tags": [
+          "health"
+        ],
+        "summary": "Report whether the API and its database are up",
+        "operationId": "getHealth",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HealthResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Service Unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HealthResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/sandboxes": {
+      "post": {
+        "tags": [
+          "sandboxes"
+        ],
+        "summary": "Start a new sandbox company and sign in to it as one of its personas",
+        "operationId": "createSandbox",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/NewSandboxRequest"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Body"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SandboxCreated"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/me": {
+      "get": {
+        "tags": [
+          "session"
+        ],
+        "summary": "The signed-in person's own card, and when their sandbox expires",
+        "operationId": "getMe",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Me"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/session/persona": {
+      "put": {
+        "tags": [
+          "session"
+        ],
+        "summary": "Sign in as another persona in the same sandbox, with new session and CSRF tokens",
+        "operationId": "switchPersona",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PersonaChoice"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Me"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/session": {
+      "delete": {
+        "tags": [
+          "session"
+        ],
+        "summary": "Sign out: end the session and clear its cookies",
+        "operationId": "endSession",
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          }
+        }
+      }
+    },
+    "/api/v1/people": {
+      "get": {
+        "tags": [
+          "people"
+        ],
+        "summary": "The company directory, a page at a time",
+        "operationId": "listPeople",
+        "parameters": [
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 512
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "default": 50,
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DirectoryPage"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/people/{person_id}": {
+      "get": {
+        "tags": [
+          "people"
+        ],
+        "summary": "One person's directory card",
+        "operationId": "getPerson",
+        "parameters": [
+          {
+            "name": "person_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Person Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DirectoryCard"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/people/{person_id}/private": {
+      "get": {
+        "tags": [
+          "people"
+        ],
+        "summary": "One person's private details, for that person and for HR. Each read is audited.",
+        "operationId": "getPersonPrivate",
+        "parameters": [
+          {
+            "name": "person_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Person Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PrivateDetails"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "DepartmentRef": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "name"
+        ],
+        "title": "DepartmentRef"
+      },
+      "DirectoryCard": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "givenName": {
+            "type": "string",
+            "title": "Givenname"
+          },
+          "familyName": {
+            "type": "string",
+            "title": "Familyname"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "department": {
+            "$ref": "#/components/schemas/DepartmentRef"
+          },
+          "location": {
+            "$ref": "#/components/schemas/LocationRef"
+          },
+          "manager": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PersonRef"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "workEmail": {
+            "type": "string",
+            "title": "Workemail"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "givenName",
+          "familyName",
+          "title",
+          "department",
+          "location",
+          "manager",
+          "workEmail"
+        ],
+        "title": "DirectoryCard"
+      },
+      "DirectoryPage": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/DirectoryCard"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "nextCursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Nextcursor"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items",
+          "nextCursor"
+        ],
+        "title": "DirectoryPage"
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "type": "array",
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "title": "HTTPValidationError"
+      },
+      "HealthResponse": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "ok",
+              "degraded"
+            ],
+            "title": "Status"
+          },
+          "database": {
+            "type": "string",
+            "enum": [
+              "ok",
+              "unavailable"
+            ],
+            "title": "Database"
+          },
+          "version": {
+            "type": "string",
+            "title": "Version"
+          }
+        },
+        "type": "object",
+        "required": [
+          "status",
+          "database",
+          "version"
+        ],
+        "title": "HealthResponse"
+      },
+      "LocationRef": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "state": {
+            "type": "string",
+            "title": "State"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "state"
+        ],
+        "title": "LocationRef"
+      },
+      "Me": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "givenName": {
+            "type": "string",
+            "title": "Givenname"
+          },
+          "familyName": {
+            "type": "string",
+            "title": "Familyname"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "department": {
+            "$ref": "#/components/schemas/DepartmentRef"
+          },
+          "location": {
+            "$ref": "#/components/schemas/LocationRef"
+          },
+          "manager": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PersonRef"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "workEmail": {
+            "type": "string",
+            "title": "Workemail"
+          },
+          "employmentType": {
+            "type": "string",
+            "enum": [
+              "salaried",
+              "hourly"
+            ],
+            "title": "Employmenttype"
+          },
+          "isManager": {
+            "type": "boolean",
+            "title": "Ismanager"
+          },
+          "isHrAdmin": {
+            "type": "boolean",
+            "title": "Ishradmin"
+          },
+          "personaKey": {
+            "$ref": "#/components/schemas/PersonaKey"
+          },
+          "tenantExpiresAt": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Tenantexpiresat"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "givenName",
+          "familyName",
+          "title",
+          "department",
+          "location",
+          "manager",
+          "workEmail",
+          "employmentType",
+          "isManager",
+          "isHrAdmin",
+          "personaKey",
+          "tenantExpiresAt"
+        ],
+        "title": "Me",
+        "description": "The signed-in person's own card, with the fields only they see."
+      },
+      "NewSandboxRequest": {
+        "properties": {
+          "persona": {
+            "$ref": "#/components/schemas/PersonaKey",
+            "default": "priya"
+          }
+        },
+        "type": "object",
+        "title": "NewSandboxRequest"
+      },
+      "PersonRef": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "givenName": {
+            "type": "string",
+            "title": "Givenname"
+          },
+          "familyName": {
+            "type": "string",
+            "title": "Familyname"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "givenName",
+          "familyName"
+        ],
+        "title": "PersonRef"
+      },
+      "PersonaChoice": {
+        "properties": {
+          "persona": {
+            "$ref": "#/components/schemas/PersonaKey"
+          }
+        },
+        "type": "object",
+        "required": [
+          "persona"
+        ],
+        "title": "PersonaChoice"
+      },
+      "PersonaKey": {
+        "type": "string",
+        "enum": [
+          "priya",
+          "mateo",
+          "marcus",
+          "dana"
+        ]
+      },
+      "PrivateDetails": {
+        "properties": {
+          "personalEmail": {
+            "type": "string",
+            "title": "Personalemail"
+          },
+          "phone": {
+            "type": "string",
+            "title": "Phone"
+          },
+          "homeAddress": {
+            "type": "string",
+            "title": "Homeaddress"
+          },
+          "dateOfBirth": {
+            "type": "string",
+            "format": "date",
+            "title": "Dateofbirth"
+          }
+        },
+        "type": "object",
+        "required": [
+          "personalEmail",
+          "phone",
+          "homeAddress",
+          "dateOfBirth"
+        ],
+        "title": "PrivateDetails"
+      },
+      "SandboxCreated": {
+        "properties": {
+          "tenant": {
+            "$ref": "#/components/schemas/TenantInfo"
+          },
+          "me": {
+            "$ref": "#/components/schemas/Me"
+          }
+        },
+        "type": "object",
+        "required": [
+          "tenant",
+          "me"
+        ],
+        "title": "SandboxCreated"
+      },
+      "TenantInfo": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "expiresAt": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Expiresat"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "expiresAt"
+        ],
+        "title": "TenantInfo"
+      },
+      "ValidationError": {
+        "properties": {
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "type": "array",
+            "title": "Location"
+          },
+          "msg": {
+            "type": "string",
+            "title": "Message"
+          },
+          "type": {
+            "type": "string",
+            "title": "Error Type"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "ctx": {
+            "type": "object",
+            "title": "Context"
+          }
+        },
+        "type": "object",
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError"
+      }
+    }
+  }
+}
