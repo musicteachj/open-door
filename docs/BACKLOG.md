@@ -116,6 +116,14 @@ should pick it up. When one is done, delete it here and record it in the changel
   the next. One created in early January therefore lacks the previous December's closures, so a
   question about leave taken over the holidays just before it would miss them. If the time-off
   engine answers past-dated questions, seed the prior year as well. (Stage 2 review.)
+- **Never treat the anchor date as today.** `create_sandbox` sets `tenants.anchor_date` to
+  today's date in UTC, not in any location's timezone. Every seeded location is in the US, so a
+  sandbox created in the US evening is anchored to the location's tomorrow. Seed dates are only
+  shifted by a day, which is harmless, but invariant 2 needs today's date in the location's
+  timezone. The time-off engine and the per-turn context must compute today from the location's
+  `timezone`, never from `anchor_date`. A test should create a sandbox at, say, 03:00 UTC and
+  check that a Pacific-time employee's "tomorrow" is the right date. (`/code-review medium` on
+  the `v0.1.0` release.)
 
 - **Record who confirms a proposal as an audit event of its own,** separate from the action it
   executes, so the log shows both who proposed and who decided.
