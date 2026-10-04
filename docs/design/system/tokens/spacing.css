@@ -1,0 +1,30 @@
+/* Open Door spacing and layout tokens. */
+:root {
+
+  /* Scale, 4 px base */
+  --space-0-5: 2px; /* Nav item gap */
+  --space-1: 4px; /* Icon-to-text in tight labels */
+  --space-2: 8px; /* Icon-to-text, chip gaps */
+  --space-3: 12px; /* Nav padding, row padding */
+  --space-4: 16px; /* Composer footer gap */
+  --space-5: 20px; /* Glance row padding */
+  --space-6: 24px; /* Composer side padding */
+  --space-7: 28px; /* Rail top padding */
+  --space-8: 32px; /* Rail side padding, Try asking column gap */
+  --space-9: 36px; /* Greeting to composer */
+  --space-10: 40px; /* Large gaps */
+  --space-12: 48px; /* Composer to Try asking */
+  --space-16: 64px; /* Rail top to At a glance */
+  --space-18: 72px; /* Content right padding */
+  --space-20: 80px; /* Content left padding */
+  --space-30: 120px; /* Content top padding */
+
+  /* Layout */
+  --sidebar-width: 248px; /* Left navigation */
+  --rail-width: 340px; /* Right rail on the assistant home */
+  --content-max: 760px; /* Composer and Try asking measure */
+  --sheet-inset: 12px; /* Gap between the window edge and the content sheet */
+  --control-height: 40px; /* Buttons and nav items */
+  --control-height-sm: 32px; /* Small buttons such as Retry */
+  --row-height: 52px; /* Try asking rows */
+}

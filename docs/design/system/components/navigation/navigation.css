@@ -1,0 +1,17 @@
+/* NavItem, PersonaSwitcher, Tooltip */
+.od-nav { display: flex; flex-direction: column; gap: var(--space-0-5); }
+.od-nav-item { display: flex; align-items: center; gap: var(--space-3); height: var(--control-height); padding: 0 var(--space-3); border-radius: var(--radius-md); color: var(--ink-nav); font-family: var(--font-sans); font-size: var(--text-ui); line-height: var(--leading-ui); font-weight: var(--weight-medium); text-decoration: none; transition: background-color var(--duration-fast) var(--ease-standard); }
+.od-nav-item:hover, .od-nav-item[data-state~="hover"] { background: var(--neutral-hover); color: var(--ink); }
+.od-nav-item[aria-current="page"] { background: var(--primary-tint); color: var(--ink); font-weight: var(--weight-semibold); }
+.od-nav-item:focus-visible, .od-nav-item[data-state~="focus"] { outline: var(--focus-ring-width) solid var(--focus-ring); outline-offset: var(--focus-ring-offset); }
+.od-tooltip-anchor { position: relative; display: inline-flex; }
+.od-tooltip { position: absolute; z-index: 50; left: 50%; bottom: calc(100% + 6px); transform: translateX(-50%); padding: 6px 10px; border-radius: var(--radius-xs); background: var(--tooltip-bg); color: var(--tooltip-fg); font-family: var(--font-sans); font-size: var(--text-caption); line-height: var(--leading-caption); font-weight: var(--weight-regular); white-space: nowrap; box-shadow: var(--shadow-md); }
+.od-persona { display: block; }
+.od-persona .od-tooltip { left: 60px; bottom: calc(100% - 2px); transform: none; }
+.od-persona__btn { display: flex; align-items: center; gap: var(--space-3); width: 100%; padding: var(--space-3) var(--space-2); border: 0; border-top: 1px solid var(--border); border-radius: 0; background: transparent; font-family: var(--font-sans); text-align: left; cursor: pointer; color: var(--ink); transition: background-color var(--duration-fast) var(--ease-standard); }
+.od-persona__btn:hover, .od-persona__btn[data-state~="hover"] { background: var(--neutral-hover); }
+.od-persona__btn:focus-visible, .od-persona__btn[data-state~="focus"] { outline: var(--focus-ring-width) solid var(--focus-ring); outline-offset: var(--focus-ring-offset); }
+.od-avatar { width: 36px; height: 36px; flex: none; border-radius: var(--radius-full); background: var(--primary-tint); color: var(--ink); display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: var(--weight-semibold); }
+.od-persona__text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.od-persona__name { font-size: var(--text-ui); line-height: 18px; font-weight: var(--weight-semibold); }
+.od-persona__title { font-size: var(--text-caption); line-height: var(--leading-caption); color: var(--ink-muted); }

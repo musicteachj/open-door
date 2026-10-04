@@ -1,0 +1,5 @@
+/* Open Door motion. Color and border transitions only; nothing moves or bounces. */
+:root {
+  --duration-fast: 150ms; /* Hover, focus, and border-color transitions */
+  --ease-standard: cubic-bezier(0.2, 0, 0, 1); /* Default easing */
+}

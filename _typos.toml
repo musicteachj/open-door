@@ -21,4 +21,6 @@ extend-exclude = [
     "apps/web/src/api/generated.ts",
     # Frozen by project rule, so a finding there could never be fixed.
     "docs/plans/2026-09-29-open-door-initial-plan.md",
+    # Unicode ranges in @font-face rules, such as U+02BA, are code, not words.
+    "docs/design/system/tokens/fonts.css",
 ]

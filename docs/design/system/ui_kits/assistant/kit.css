@@ -1,0 +1,29 @@
+.kit-app { display: flex; min-height: 100vh; background: var(--surface); color: var(--ink); font-family: var(--font-sans); }
+.kit-sidebar { width: var(--sidebar-width); flex: none; display: flex; flex-direction: column; padding: 28px 16px 20px 20px; position: sticky; top: 0; height: 100vh; }
+.kit-logo { padding: 0 8px 32px; }
+.kit-spacer { flex: 1; }
+.kit-built { display: flex; flex-direction: column; margin-bottom: 12px; }
+.kit-main { flex: 1; min-width: 0; padding: var(--sheet-inset) var(--sheet-inset) var(--sheet-inset) 0; }
+.kit-sheet { min-height: calc(100vh - 24px); background: var(--surface-raised); border: 1px solid var(--border); border-radius: var(--radius-xl); display: grid; grid-template-columns: minmax(0, 1fr) var(--rail-width); overflow: hidden; }
+.kit-content { padding: 120px 72px 48px 80px; display: flex; flex-direction: column; min-width: 0; }
+.kit-greeting { margin: 0 0 36px; font-size: var(--text-display); line-height: var(--leading-display); font-weight: var(--weight-semibold); letter-spacing: var(--tracking-display); text-wrap: pretty; }
+.kit-try { margin-top: 48px; }
+.kit-rail { border-left: 1px solid var(--border-subtle); background: var(--surface-sunken); padding: 28px 32px 32px; display: flex; flex-direction: column; }
+.kit-rail__top { display: flex; justify-content: flex-end; }
+.kit-rail__glance { margin-top: 64px; }
+@media (max-width: 1100px) {
+  .kit-sheet { grid-template-columns: minmax(0, 1fr); }
+  .kit-content { padding: 72px 48px 40px; }
+  .kit-rail { border-left: 0; border-top: 1px solid var(--border-subtle); }
+  .kit-rail__glance { margin-top: 24px; }
+}
+@media (max-width: 760px) {
+  .kit-app { flex-direction: column; }
+  .kit-sidebar { position: static; width: auto; height: auto; padding: 16px 16px 8px; }
+  .kit-logo { padding: 0 0 12px; }
+  .kit-sidebar .od-nav { flex-direction: row; overflow-x: auto; }
+  .kit-spacer, .kit-built { display: none; }
+  .kit-main { padding: 0 8px 8px; }
+  .kit-content { padding: 40px 20px 32px; }
+  .kit-greeting { font-size: 32px; line-height: 40px; }
+}

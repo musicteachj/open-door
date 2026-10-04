@@ -1,0 +1,49 @@
+/* Open Door color tokens, light theme. Names are semantic so a dark theme can override them under [data-theme="dark"]. Ratios are WCAG 2.x contrast. */
+:root {
+
+  /* Surfaces */
+  --surface: #F5F7F8; /* App background behind the content sheet */
+  --surface-raised: #FFFFFF; /* Content sheet, composer, cards, popovers */
+  --surface-sunken: #F9FAFB; /* Right rail and other recessed panels */
+  --surface-hover: #F0F3F5; /* Hover fill for secondary buttons */
+  --neutral-hover: #ECEFF1; /* Hover fill for nav items and the persona switcher; never means selected */
+
+  /* Text */
+  --ink: #14212A; /* Primary text and icons; 16.4:1 on white, 15.3:1 on surface */
+  --ink-nav: #3A4A54; /* Unselected nav labels; 8.5:1 on surface */
+  --ink-muted: #55646E; /* Secondary text, captions, AI disclosure; 6.1:1 on white, 5.7:1 on surface */
+  --ink-placeholder: #66737B; /* Placeholder text in inputs; 4.9:1 on white */
+  --on-primary: #FFFFFF; /* Text and icons on primary fills; 11.1:1 */
+  --on-danger: #FFFFFF; /* Text and icons on danger fills; 6.6:1 */
+
+  /* Brand */
+  --primary: #59256A; /* Aubergine. Actions, links, selection, focus; 11.1:1 on white */
+  --primary-hover: #461B54; /* Hovered primary fills and ghost text; 13.6:1 with white */
+  --primary-tint: #ECE2F0; /* Selected nav item, hovered rows and links, avatar; text on it is always ink (13.0:1) */
+  --marker: #C27544; /* Cinnamon accent. Small markers only (pending dot), never text, always beside a label; 3.5:1 */
+
+  /* Lines */
+  --border: #DDE3E6; /* Content sheet and card edges, sidebar dividers (decorative) */
+  --border-subtle: #E8ECEE; /* Row dividers, composer footer rule (decorative) */
+  --border-strong: #C9D2D7; /* Secondary button edge; label text identifies the control */
+  --border-strong-hover: #B9C5CB; /* Hovered secondary button edge */
+  --input-border: #7F8C93; /* Composer and every text field at rest; 3.5:1 on white, 3.2:1 on surface (WCAG 1.4.11) */
+  --input-border-hover: #5E6B73; /* Hovered text field; 5.5:1 on white */
+
+  /* Focus */
+  --focus-ring: var(--primary); /* Keyboard focus ring on every control, including destructive ones */
+
+  /* Status */
+  --success: #2E6B4E; /* Approved, saved; 6.3:1 on white */
+  --warning: #8A5300; /* Needs attention; 6.3:1 on white */
+  --danger: #B42318; /* Errors only, never a denied request; 6.6:1 on white */
+  --danger-hover: #931C13; /* Hovered destructive button; 8.7:1 with white */
+
+  /* Disabled */
+  --disabled-bg: #E7EBED; /* Disabled fills */
+  --disabled-fg: #87939A; /* Disabled text; exempt from 4.5:1, 2.6:1 on disabled-bg */
+
+  /* Overlays */
+  --tooltip-bg: var(--ink); /* Tooltip background */
+  --tooltip-fg: #FFFFFF; /* Tooltip text; 16.4:1 */
+}

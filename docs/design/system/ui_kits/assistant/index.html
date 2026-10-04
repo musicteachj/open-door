@@ -1,0 +1,15 @@
+<!-- @dsCard group="Open Door app" viewport="1440x900" name="Assistant home" subtitle="Priya Raman, salaried employee" --><!-- @startingPoint section="Screens" subtitle="App shell and assistant home" viewport="1440x900" -->
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><link rel="stylesheet" href="../../styles.css"><link rel="stylesheet" href="kit.css"><script src="https://unpkg.com/react@18.3.1/umd/react.production.min.js"></script><script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.production.min.js"></script><script src="https://unpkg.com/@babel/standalone@7.24.7/babel.min.js"></script><script src="../../preview/loader.js"></script></head><body><div id="root"></div>
+<script type="text/babel" data-presets="react">
+loadOpenDoor("../../", OD_FILES.concat(["ui_kits/assistant/AppShell.jsx", "ui_kits/assistant/AssistantHome.jsx"])).then(function (OD) {
+  const { AppShell, AssistantHome } = OD;
+  const params = new URLSearchParams(location.search);
+  const title = params.get("title") || "Visual Merchandiser";
+  ReactDOM.createRoot(document.getElementById("root")).render(
+    <AppShell current="ask" persona={{ name: "Priya Raman", title: title }}>
+      <AssistantHome firstName="Priya" sandboxHours={21} />
+    </AppShell>
+  );
+});
+</script></body></html>
