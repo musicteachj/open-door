@@ -226,6 +226,9 @@ wipes the data.
 - **Server state lives in TanStack Query. The chat session lives in a Zustand store.** Shareable UI
   state lives in the URL. There is no Redux.
 - **Timestamps are UTC.** Leave dates are calendar dates in the location's timezone.
+- **Keep [`docs/DATA-INVENTORY.md`](docs/DATA-INVENTORY.md) current.** A new table, column,
+  cookie, or log field updates it in the same change: what it holds, why, who can see it, and how
+  long it's kept.
 
 ---
 

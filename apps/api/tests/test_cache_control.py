@@ -69,6 +69,18 @@ def test_a_response_under_api_is_marked_no_store(client: TestClient) -> None:
     assert response.headers.get_list("cache-control") == ["no-store"]
 
 
+def test_a_response_under_api_behind_a_root_path_is_marked_no_store(client: TestClient) -> None:
+    # As `uvicorn --root-path /od` builds it: scope["path"] keeps the prefix, and the router
+    # strips it, so the middleware must judge the path the router matches.
+    with TestClient(client.app, root_path="/od") as behind_root:
+        under_api = behind_root.get("/od/api/v1/thing")
+        elsewhere = behind_root.get("/od/health")
+
+    assert (under_api.status_code, elsewhere.status_code) == (200, 200)
+    assert under_api.headers.get_list("cache-control") == ["no-store"]
+    assert "cache-control" not in elsewhere.headers
+
+
 def test_a_404_under_api_is_marked_no_store_too(client: TestClient) -> None:
     response = client.get("/api/v1/nothing-here")
 

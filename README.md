@@ -28,6 +28,7 @@ model.
 | [Design spec](docs/specs/2026-09-29-open-door-design.md) | The product and system design, with the reasoning behind each decision |
 | [What this is not](docs/WHAT-THIS-IS-NOT.md) | Scope limits, what the assistant will never do, and what the evidence does not prove |
 | [Decision records](docs/adr/README.md) | The big architecture decisions and what was rejected |
+| [Data inventory](docs/DATA-INVENTORY.md) | Every piece of data stored, why, who can see it, and how long it's kept |
 | [Design handoff](docs/design/README.md) | How designs from Claude Design become screens |
 | [Initial plan](docs/plans/2026-09-29-open-door-initial-plan.md) | The frozen record of the original planning decisions |
 | [Project rules](CLAUDE.md) | How work is done in this repository |

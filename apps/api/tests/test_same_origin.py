@@ -57,8 +57,7 @@ async def send_raw(app: ASGIApp, method: str, path: str, headers: dict[str, str]
     return statuses[0]
 
 
-@pytest.fixture
-def client() -> Iterator[TestClient]:
+def build_app() -> FastAPI:
     app = FastAPI()
     # As in create_app: the request-ID middleware is added last, so it wraps this check.
     app.add_middleware(SameOriginMiddleware, app_origin=APP_ORIGIN)
@@ -67,6 +66,10 @@ def client() -> Iterator[TestClient]:
 
     @app.get("/things")
     async def list_things() -> list[str]:
+        return []
+
+    @app.get("/api/things")
+    async def list_api_things() -> list[str]:
         return []
 
     @app.post("/things")
@@ -82,8 +85,12 @@ def client() -> Iterator[TestClient]:
         return None
 
     app.mount("/mounted", mounted_asgi_app)
+    return app
 
-    with TestClient(app, base_url="https://testserver") as test_client:
+
+@pytest.fixture
+def client() -> Iterator[TestClient]:
+    with TestClient(build_app(), base_url="https://testserver") as test_client:
         yield test_client
 
 
@@ -161,6 +168,70 @@ def test_reads_need_no_origin_headers(client: TestClient) -> None:
     assert client.get("/things").status_code == 200
 
 
+@pytest.mark.parametrize("site", ["cross-site", "same-site"])
+@pytest.mark.parametrize("method", ["GET", "HEAD", "OPTIONS", "TRACE"])
+def test_a_read_of_the_api_from_another_site_is_refused(
+    client: TestClient, method: str, site: str
+) -> None:
+    response = client.request(method, "/api/things", headers={"Sec-Fetch-Site": site})
+
+    assert response.status_code == 403
+    assert response.headers["content-type"] == "application/problem+json"
+
+
+def test_a_read_of_the_api_behind_a_root_path_from_another_site_is_refused() -> None:
+    # As `uvicorn --root-path /od` builds it: scope["path"] keeps the prefix, and the router
+    # strips it, so the check must judge the path the router matches.
+    with TestClient(build_app(), base_url="https://testserver", root_path="/od") as behind_root:
+        routed = behind_root.get("/od/api/things", headers=SAME_ORIGIN)
+        refused = behind_root.get("/od/api/things", headers=CROSS_SITE)
+
+    assert routed.status_code == 200
+    assert refused.status_code == 403
+
+
+def test_a_refused_read_says_the_api_is_for_the_app(client: TestClient) -> None:
+    response = client.get("/api/things", headers=CROSS_SITE)
+
+    assert response.json() == {
+        "type": "about:blank",
+        "title": "Forbidden",
+        "status": 403,
+        "instance": "/api/things",
+        "detail": "Requests to the API must come from the Open Door app.",
+        "requestId": response.headers["X-Request-ID"],
+    }
+
+
+def test_a_refused_read_is_logged_as_a_security_event(
+    client: TestClient, caplog: pytest.LogCaptureFixture
+) -> None:
+    caplog.set_level(logging.WARNING, logger="app.security")
+
+    response = client.get("/api/things", headers={"Sec-Fetch-Site": "same-site"})
+
+    [record] = [record for record in caplog.records if record.name == "app.security"]
+    assert record.getMessage() == "security.origin_rejected"
+    assert record.__dict__["request_id"] == response.headers["X-Request-ID"]
+    assert record.__dict__["fields"]["reason"] == "a read from another site"
+
+
+@pytest.mark.parametrize(
+    "headers",
+    [
+        SAME_ORIGIN,
+        # A URL typed in the address bar, or a bookmark.
+        {"Sec-Fetch-Site": "none"},
+        # A script or an old browser sends no Fetch Metadata.
+        {},
+    ],
+)
+def test_a_read_of_the_api_from_the_app_a_typed_url_or_a_script_passes(
+    client: TestClient, headers: dict[str, str]
+) -> None:
+    assert client.get("/api/things", headers=headers).status_code == 200
+
+
 def test_a_refusal_is_logged_as_a_security_event(
     client: TestClient, caplog: pytest.LogCaptureFixture
 ) -> None:
@@ -183,7 +254,7 @@ def test_a_refusal_is_logged_as_a_security_event(
 
 
 @pytest.mark.parametrize("method", ["GET", "HEAD", "OPTIONS", "TRACE"])
-def test_only_the_safe_methods_skip_the_check(client: TestClient, method: str) -> None:
+def test_outside_the_api_the_safe_methods_skip_the_check(client: TestClient, method: str) -> None:
     # The route may answer 405 for a method it doesn't serve, but the check never refuses it.
     assert client.request(method, "/things", headers=CROSS_SITE).status_code != 403
 

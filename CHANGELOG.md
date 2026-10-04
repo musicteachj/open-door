@@ -131,6 +131,33 @@ version (`0.x.y` while the app is being built, `1.0.0` when it is complete).
 
   This closes the backlog item to keep the health check open: it reads no session, and the
   same-origin and CSRF checks apply only to requests that change something.
+- **The directory and private details** (Phase 1, stage 4). A signed-in persona can now read the
+  company directory and, where allowed, a person's private details. The policy layer decides:
+  everyone in the company sees the directory, and only the person themselves and HR see private
+  details. A manager gets no special view of their reports' private details. Each read of private
+  details goes into the audit log, which records the names of the fields returned, never their
+  values, and the details are never sent unless that audit entry is saved. Also added:
+  - Three endpoints. `GET /api/v1/people` lists the directory a page at a time, 50 by default
+    and up to 100. `GET /api/v1/people/{id}` returns one person's directory card, and
+    `GET /api/v1/people/{id}/private` their private details. A page cursor the API didn't issue
+    is refused.
+  - Reads of the API from another website are now refused as well, not only requests that change
+    something. Reading private details writes an audit entry, so without this another site could
+    make an HR partner's browser perform a read in their name. Links into the web app, the health
+    check, and scripts are unaffected.
+  - Tests over HTTP of every persona against themselves, Leo, and Dana, for both the directory
+    and private details. They also show that a person from another sandbox is never found, and
+    that a directory card carries none of the private or `/me`-only fields.
+  - `docs/DATA-INVENTORY.md`, which lists every table and column: what it holds, why, who can
+    see it, and how long it's kept. It notes that a real deployment would keep audit records for
+    4 years, as California requires, instead of deleting them with the sandbox.
+  - The backlog now holds the later-phase findings from the Phase 1 review, each with its source.
+  - The web app's generated API client includes the three endpoints.
+
+  The API now recognizes its own requests by the path its router matches, so the no-store and
+  same-origin rules still hold if it is ever served under a path prefix. With this stage, all of
+  Phase 1 is built: tenancy, identity, and permissions are proven by tests, over HTTP and in the
+  database. A review of the whole phase comes before its release.
 
 ### Changed
 
@@ -153,3 +180,6 @@ version (`0.x.y` while the app is being built, `1.0.0` when it is complete).
   reviews everything the pull request will contain, measured against its base branch, not just
   the uncommitted changes. That closes a gap where a commit already on the branch could go
   unreviewed.
+
+- **The data inventory stays current** (project rules). `CLAUDE.md` now asks that a new table,
+  column, cookie, or log field update `docs/DATA-INVENTORY.md` in the same change.

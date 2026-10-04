@@ -159,6 +159,154 @@
           }
         }
       }
+    },
+    "/api/v1/people": {
+      "get": {
+        "tags": [
+          "people"
+        ],
+        "summary": "The company directory, a page at a time",
+        "operationId": "listPeople",
+        "parameters": [
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 512
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "default": 50,
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DirectoryPage"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/people/{person_id}": {
+      "get": {
+        "tags": [
+          "people"
+        ],
+        "summary": "One person's directory card",
+        "operationId": "getPerson",
+        "parameters": [
+          {
+            "name": "person_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Person Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DirectoryCard"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/people/{person_id}/private": {
+      "get": {
+        "tags": [
+          "people"
+        ],
+        "summary": "One person's private details, for that person and for HR. Each read is audited.",
+        "operationId": "getPersonPrivate",
+        "parameters": [
+          {
+            "name": "person_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Person Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PrivateDetails"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -181,6 +329,87 @@
           "name"
         ],
         "title": "DepartmentRef"
+      },
+      "DirectoryCard": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "givenName": {
+            "type": "string",
+            "title": "Givenname"
+          },
+          "familyName": {
+            "type": "string",
+            "title": "Familyname"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "department": {
+            "$ref": "#/components/schemas/DepartmentRef"
+          },
+          "location": {
+            "$ref": "#/components/schemas/LocationRef"
+          },
+          "manager": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PersonRef"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "workEmail": {
+            "type": "string",
+            "title": "Workemail"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "givenName",
+          "familyName",
+          "title",
+          "department",
+          "location",
+          "manager",
+          "workEmail"
+        ],
+        "title": "DirectoryCard"
+      },
+      "DirectoryPage": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/DirectoryCard"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "nextCursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Nextcursor"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items",
+          "nextCursor"
+        ],
+        "title": "DirectoryPage"
       },
       "HTTPValidationError": {
         "properties": {
@@ -387,6 +616,35 @@
           "marcus",
           "dana"
         ]
+      },
+      "PrivateDetails": {
+        "properties": {
+          "personalEmail": {
+            "type": "string",
+            "title": "Personalemail"
+          },
+          "phone": {
+            "type": "string",
+            "title": "Phone"
+          },
+          "homeAddress": {
+            "type": "string",
+            "title": "Homeaddress"
+          },
+          "dateOfBirth": {
+            "type": "string",
+            "format": "date",
+            "title": "Dateofbirth"
+          }
+        },
+        "type": "object",
+        "required": [
+          "personalEmail",
+          "phone",
+          "homeAddress",
+          "dateOfBirth"
+        ],
+        "title": "PrivateDetails"
       },
       "SandboxCreated": {
         "properties": {
