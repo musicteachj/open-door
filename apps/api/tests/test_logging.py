@@ -99,3 +99,13 @@ def test_log_level_governs_uvicorn_loggers_too() -> None:
     configure_logging("WARNING")
 
     assert logging.getLogger("uvicorn.access").getEffectiveLevel() == logging.WARNING
+
+
+def test_structured_fields_are_added_but_never_replace_the_standard_keys() -> None:
+    record = make_record("security.csrf_rejected")
+    record.__dict__["fields"] = {"tenantId": "t-1", "message": "replaced", "level": "DEBUG"}
+
+    entry = json.loads(JsonFormatter().format(record))
+
+    assert entry["tenantId"] == "t-1"
+    assert (entry["message"], entry["level"]) == ("security.csrf_rejected", "INFO")

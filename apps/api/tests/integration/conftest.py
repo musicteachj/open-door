@@ -8,22 +8,27 @@ skipping:
 - `cleanup_engine` connects as CLEANUP_DATABASE_URL, the cleanup login (a member of od_cleanup).
 
 `make_tenant` creates a small sandbox company as the API's login, with a row in every table, and
-returns a `SampleTenant`. Every tenant it creates is deleted when the test session ends.
+returns a `SampleTenant`. `browser` and `open_browser` give the HTTP tests a client that behaves
+like the web app in a browser. Every tenant either one creates is deleted when the test session
+ends.
 """
 
 import asyncio
 import hashlib
 import secrets
 from collections.abc import AsyncIterator, Iterator
+from contextlib import ExitStack
 from dataclasses import dataclass
 from datetime import UTC, date, datetime, timedelta
-from typing import Protocol
+from typing import Any, Protocol
 from uuid import UUID, uuid4
 
+import httpx2 as httpx
 import pytest
 import pytest_asyncio
+from fastapi.testclient import TestClient
 from pydantic import PostgresDsn
-from sqlalchemy import delete, text
+from sqlalchemy import delete, select, text
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 from app.core.config import Settings
@@ -39,6 +44,8 @@ from app.db.models import (
     UserSession,
 )
 from app.db.tenancy import TenantContext, tenant_session
+from app.main import create_app
+from app.modules.identity.cookies import CSRF_COOKIE, CSRF_HEADER, SESSION_COOKIE
 
 
 @pytest.fixture(scope="session")
@@ -270,3 +277,89 @@ def make_tenant(app_engine: AsyncEngine, created_tenant_ids: list[UUID]) -> Make
         return SampleTenant(tenant_id, employee.id, colleague.id, hr.id)
 
     return make
+
+
+class Browser:
+    """The web app in a browser, as the API sees it.
+
+    It uses HTTPS, because a client never sends a Secure cookie over plain HTTP, and sends
+    `Sec-Fetch-Site: same-origin`, as a browser does on the app's own requests. Each browser has its
+    own app, database engine, and cookie jar.
+    """
+
+    def __init__(self, client: TestClient, created_tenant_ids: list[UUID]) -> None:
+        self.client = client
+        self._created_tenant_ids = created_tenant_ids
+
+    def create_sandbox(self, body: object = None, **kwargs: Any) -> httpx.Response:
+        """POST /sandboxes. A sandbox it creates is deleted when the test session ends."""
+        response = self.client.post("/api/v1/sandboxes", json=body, **kwargs)
+        if response.status_code == 201:
+            self._created_tenant_ids.append(UUID(response.json()["tenant"]["id"]))
+        return response
+
+    def start_sandbox(self, persona: str | None = None) -> dict[str, Any]:
+        """Create a sandbox as `persona`, or the default, and return the response body."""
+        response = self.create_sandbox(None if persona is None else {"persona": persona})
+        assert response.status_code == 201, response.text
+        sandbox: dict[str, Any] = response.json()
+        return sandbox
+
+    @property
+    def session_token(self) -> str:
+        return self.client.cookies[SESSION_COOKIE]
+
+    @property
+    def csrf_token(self) -> str:
+        return self.client.cookies[CSRF_COOKIE]
+
+    @property
+    def csrf(self) -> dict[str, str]:
+        """The header the web app adds to every request that changes something."""
+        return {CSRF_HEADER: self.csrf_token}
+
+
+def session_cookie(token: str) -> dict[str, str]:
+    """A Cookie header carrying `token`. It replaces the browser's own cookies for one request."""
+    return {"Cookie": f"{SESSION_COOKIE}={token}"}
+
+
+class OpenBrowser(Protocol):
+    def __call__(
+        self, *, same_origin_header: bool = True, raise_server_exceptions: bool = True
+    ) -> Browser: ...
+
+
+@pytest.fixture
+def open_browser(
+    database_settings: Settings, created_tenant_ids: list[UUID]
+) -> Iterator[OpenBrowser]:
+    """Open as many browsers as a test needs. Pass `same_origin_header=False` for one that sends
+    no Sec-Fetch-Site, as an old browser or a script would. Pass `raise_server_exceptions=False`
+    to see a crash as the 500 response a real client gets, instead of as a raised exception."""
+    with ExitStack() as stack:
+
+        def open_one(
+            *, same_origin_header: bool = True, raise_server_exceptions: bool = True
+        ) -> Browser:
+            client = TestClient(
+                create_app(database_settings),
+                base_url="https://testserver",
+                raise_server_exceptions=raise_server_exceptions,
+                headers={"Sec-Fetch-Site": "same-origin"} if same_origin_header else None,
+            )
+            return Browser(stack.enter_context(client), created_tenant_ids)
+
+        yield open_one
+
+
+@pytest.fixture
+def browser(open_browser: OpenBrowser) -> Browser:
+    return open_browser()
+
+
+async def audit_events(engine: AsyncEngine, tenant_id: UUID) -> list[AuditEvent]:
+    """Every audit event in the tenant, oldest first, read as the API's login."""
+    async with tenant_session(engine, TenantContext(tenant_id, None)) as session:
+        query = select(AuditEvent).order_by(AuditEvent.occurred_at)
+        return list((await session.execute(query)).scalars())

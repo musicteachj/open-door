@@ -18,7 +18,7 @@ every stage.
 |---|---|---|---|---|---|
 | Planning (repo, spec, roadmap, design brief) | Done | `docs/initial-planning` | [#1](https://github.com/musicteachj/open-door/pull/1) | [initial plan](plans/2026-09-29-open-door-initial-plan.md) | 2026-09-29 |
 | 0 Foundation | Done | `chore/phase-0-ci` | [#2](https://github.com/musicteachj/open-door/pull/2), [#3](https://github.com/musicteachj/open-door/pull/3), [#4](https://github.com/musicteachj/open-door/pull/4) | [phase 0 plan](plans/2026-09-29-phase-0-foundation.md) | 2026-10-03 |
-| 1 Tenancy, identity, permissions | In progress: stage 2 of 4 (the seed company) done, PR pending. **Next: Stage 3 (sessions and signing in), Task 15.** | `feat/phase-1-seed` | [#8](https://github.com/musicteachj/open-door/pull/8) | [phase 1 plan](plans/2026-10-03-phase-1-tenancy-identity-permissions.md) | 2026-10-03 |
+| 1 Tenancy, identity, permissions | In progress: stage 3 of 4 (sessions and signing in) done, PR pending. **Next: Stage 4 (the directory API), Task 23.** | `feat/phase-1-sessions` | [#8](https://github.com/musicteachj/open-door/pull/8), [#9](https://github.com/musicteachj/open-door/pull/9) | [phase 1 plan](plans/2026-10-03-phase-1-tenancy-identity-permissions.md) | 2026-10-04 |
 | 2 Design system, shell, sandbox entry | Not started | — | — | — | — |
 | 3 Handbook and retrieval | Not started | — | — | — | — |
 | 4 Assistant core (read-only) | Not started | — | — | — | — |

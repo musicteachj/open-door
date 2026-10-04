@@ -4,18 +4,40 @@
  * Open Door API
  * OpenAPI spec version: 0.0.0
  */
-import { useQuery } from '@tanstack/react-query'
+import { useMutation, useQuery } from '@tanstack/react-query'
 import type {
   DataTag,
   DefinedInitialDataOptions,
   DefinedUseQueryResult,
+  MutationFunction,
   QueryClient,
   QueryFunction,
   QueryKey,
   UndefinedInitialDataOptions,
+  UseMutationOptions,
+  UseMutationResult,
   UseQueryOptions,
   UseQueryResult,
 } from '@tanstack/react-query'
+
+export interface DepartmentRef {
+  id: string
+  name: string
+}
+
+export type ValidationErrorCtx = { [key: string]: unknown }
+
+export interface ValidationError {
+  loc: (string | number)[]
+  msg: string
+  type: string
+  input?: unknown
+  ctx?: ValidationErrorCtx
+}
+
+export interface HTTPValidationError {
+  detail?: ValidationError[]
+}
 
 export type HealthResponseStatus = (typeof HealthResponseStatus)[keyof typeof HealthResponseStatus]
 
@@ -36,6 +58,71 @@ export interface HealthResponse {
   status: HealthResponseStatus
   database: HealthResponseDatabase
   version: string
+}
+
+export interface LocationRef {
+  id: string
+  name: string
+  state: string
+}
+
+export type MeEmploymentType = (typeof MeEmploymentType)[keyof typeof MeEmploymentType]
+
+export const MeEmploymentType = {
+  salaried: 'salaried',
+  hourly: 'hourly',
+} as const
+
+export interface PersonRef {
+  id: string
+  givenName: string
+  familyName: string
+}
+
+export type PersonaKey = (typeof PersonaKey)[keyof typeof PersonaKey]
+
+export const PersonaKey = {
+  priya: 'priya',
+  mateo: 'mateo',
+  marcus: 'marcus',
+  dana: 'dana',
+} as const
+
+/**
+ * The signed-in person's own card, with the fields only they see.
+ */
+export interface Me {
+  id: string
+  givenName: string
+  familyName: string
+  title: string
+  department: DepartmentRef
+  location: LocationRef
+  manager: PersonRef | null
+  workEmail: string
+  employmentType: MeEmploymentType
+  isManager: boolean
+  isHrAdmin: boolean
+  personaKey: PersonaKey
+  tenantExpiresAt: string
+}
+
+export interface NewSandboxRequest {
+  persona?: PersonaKey
+}
+
+export interface PersonaChoice {
+  persona: PersonaKey
+}
+
+export interface TenantInfo {
+  id: string
+  expiresAt: string
+}
+
+export interface SandboxCreated {
+  tenant: TenantInfo
+  me: Me
 }
 
 const withQueryKey = <T extends object, K>(query: T, queryKey: K): T & { queryKey: K } => {
@@ -186,4 +273,440 @@ export function useGetHealth<
   }
 
   return withQueryKey(query, queryOptions.queryKey)
+}
+
+export type createSandboxResponse201 = {
+  data: SandboxCreated
+  status: 201
+}
+
+export type createSandboxResponse422 = {
+  data: HTTPValidationError
+  status: 422
+}
+
+export type createSandboxResponseSuccess = createSandboxResponse201 & {
+  headers: Headers
+}
+export type createSandboxResponseError = createSandboxResponse422 & {
+  headers: Headers
+}
+
+export type createSandboxResponse = createSandboxResponseSuccess | createSandboxResponseError
+
+export const getCreateSandboxUrl = () => {
+  return `/api/v1/sandboxes`
+}
+
+/**
+ * @summary Start a new sandbox company and sign in to it as one of its personas
+ */
+export const createSandbox = async (
+  newSandboxRequestNull?: NewSandboxRequest | null,
+  options?: RequestInit,
+): Promise<createSandboxResponse> => {
+  const getHeaders = (
+    h?: NonNullable<RequestInit['headers']>,
+  ): Record<string, string | readonly string[]> => {
+    if (!h) return {}
+    if (h instanceof Headers) return Object.fromEntries(h.entries())
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(
+          h as Iterable<Iterable<string>>,
+          (entry) => Array.from(entry) as [string, string],
+        ),
+      )
+    }
+    const headers: Record<string, string | readonly string[]> = {}
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value
+    }
+    return headers
+  }
+  const res = await fetch(getCreateSandboxUrl(), {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(newSandboxRequestNull),
+  })
+
+  const body = [204, 205, 304].includes(res.status) ? null : await res.text()
+
+  const data: createSandboxResponse['data'] = body ? JSON.parse(body) : {}
+  return { data, status: res.status, headers: res.headers } as createSandboxResponse
+}
+
+export const getCreateSandboxMutationKey = () => ['createSandbox'] as const
+
+export const getCreateSandboxMutationOptions = <
+  TError = HTTPValidationError,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createSandbox>>,
+    TError,
+    CreateSandboxMutationVariables,
+    TContext
+  >
+  fetch?: RequestInit
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof createSandbox>>,
+  TError,
+  CreateSandboxMutationVariables,
+  TContext
+> => {
+  const mutationKey = getCreateSandboxMutationKey()
+  const { mutation: mutationOptions, fetch: fetchOptions } = options
+    ? options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, fetch: undefined }
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof createSandbox>>,
+    CreateSandboxMutationVariables
+  > = (props) => {
+    const { data } = props ?? {}
+
+    return createSandbox(data, fetchOptions)
+  }
+
+  return { mutationFn, ...mutationOptions }
+}
+
+export type CreateSandboxMutationResult = NonNullable<Awaited<ReturnType<typeof createSandbox>>>
+export type CreateSandboxMutationBody = NewSandboxRequest | null | undefined
+export type CreateSandboxMutationError = HTTPValidationError
+export type CreateSandboxMutationVariables = { data?: NewSandboxRequest | null }
+
+/**
+ * @summary Start a new sandbox company and sign in to it as one of its personas
+ */
+export const useCreateSandbox = <TError = HTTPValidationError, TContext = unknown>(
+  options?: {
+    mutation?: UseMutationOptions<
+      Awaited<ReturnType<typeof createSandbox>>,
+      TError,
+      CreateSandboxMutationVariables,
+      TContext
+    >
+    fetch?: RequestInit
+  },
+  queryClient?: QueryClient,
+): UseMutationResult<
+  Awaited<ReturnType<typeof createSandbox>>,
+  TError,
+  CreateSandboxMutationVariables,
+  TContext
+> => {
+  return useMutation(getCreateSandboxMutationOptions(options), queryClient)
+}
+
+export type getMeResponse200 = {
+  data: Me
+  status: 200
+}
+
+export type getMeResponseSuccess = getMeResponse200 & {
+  headers: Headers
+}
+export type getMeResponse = getMeResponseSuccess
+
+export const getGetMeUrl = () => {
+  return `/api/v1/me`
+}
+
+/**
+ * @summary The signed-in person's own card, and when their sandbox expires
+ */
+export const getMe = async (options?: RequestInit): Promise<getMeResponse> => {
+  const res = await fetch(getGetMeUrl(), {
+    ...options,
+    method: 'GET',
+  })
+
+  const body = [204, 205, 304].includes(res.status) ? null : await res.text()
+
+  const data: getMeResponse['data'] = body ? JSON.parse(body) : {}
+  return { data, status: res.status, headers: res.headers } as getMeResponse
+}
+
+export const getGetMeQueryKey = () => {
+  return [`/api/v1/me`] as const
+}
+
+export const getGetMeQueryOptions = <
+  TData = Awaited<ReturnType<typeof getMe>>,
+  TError = unknown,
+>(options?: {
+  query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof getMe>>, TError, TData>>
+  fetch?: RequestInit
+}) => {
+  const { query: queryOptions, fetch: fetchOptions } = options ?? {}
+
+  const queryKey = queryOptions?.queryKey ?? getGetMeQueryKey()
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getMe>>> = ({ signal }) =>
+    getMe({ signal, ...fetchOptions })
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getMe>>,
+    TError,
+    TData
+  > & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type GetMeQueryResult = NonNullable<Awaited<ReturnType<typeof getMe>>>
+export type GetMeQueryError = unknown
+
+export function useGetMe<TData = Awaited<ReturnType<typeof getMe>>, TError = unknown>(
+  options: {
+    query: Partial<UseQueryOptions<Awaited<ReturnType<typeof getMe>>, TError, TData>> &
+      Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getMe>>,
+          TError,
+          Awaited<ReturnType<typeof getMe>>
+        >,
+        'initialData'
+      >
+    fetch?: RequestInit
+  },
+  queryClient?: QueryClient,
+): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetMe<TData = Awaited<ReturnType<typeof getMe>>, TError = unknown>(
+  options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof getMe>>, TError, TData>> &
+      Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getMe>>,
+          TError,
+          Awaited<ReturnType<typeof getMe>>
+        >,
+        'initialData'
+      >
+    fetch?: RequestInit
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetMe<TData = Awaited<ReturnType<typeof getMe>>, TError = unknown>(
+  options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof getMe>>, TError, TData>>
+    fetch?: RequestInit
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary The signed-in person's own card, and when their sandbox expires
+ */
+
+export function useGetMe<TData = Awaited<ReturnType<typeof getMe>>, TError = unknown>(
+  options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof getMe>>, TError, TData>>
+    fetch?: RequestInit
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+  const queryOptions = getGetMeQueryOptions(options)
+
+  const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
+    queryKey: DataTag<QueryKey, TData, TError>
+  }
+
+  return withQueryKey(query, queryOptions.queryKey)
+}
+
+export type switchPersonaResponse200 = {
+  data: Me
+  status: 200
+}
+
+export type switchPersonaResponse422 = {
+  data: HTTPValidationError
+  status: 422
+}
+
+export type switchPersonaResponseSuccess = switchPersonaResponse200 & {
+  headers: Headers
+}
+export type switchPersonaResponseError = switchPersonaResponse422 & {
+  headers: Headers
+}
+
+export type switchPersonaResponse = switchPersonaResponseSuccess | switchPersonaResponseError
+
+export const getSwitchPersonaUrl = () => {
+  return `/api/v1/session/persona`
+}
+
+/**
+ * @summary Sign in as another persona in the same sandbox, with new session and CSRF tokens
+ */
+export const switchPersona = async (
+  personaChoice: PersonaChoice,
+  options?: RequestInit,
+): Promise<switchPersonaResponse> => {
+  const getHeaders = (
+    h?: NonNullable<RequestInit['headers']>,
+  ): Record<string, string | readonly string[]> => {
+    if (!h) return {}
+    if (h instanceof Headers) return Object.fromEntries(h.entries())
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(
+          h as Iterable<Iterable<string>>,
+          (entry) => Array.from(entry) as [string, string],
+        ),
+      )
+    }
+    const headers: Record<string, string | readonly string[]> = {}
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value
+    }
+    return headers
+  }
+  const res = await fetch(getSwitchPersonaUrl(), {
+    ...options,
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(personaChoice),
+  })
+
+  const body = [204, 205, 304].includes(res.status) ? null : await res.text()
+
+  const data: switchPersonaResponse['data'] = body ? JSON.parse(body) : {}
+  return { data, status: res.status, headers: res.headers } as switchPersonaResponse
+}
+
+export const getSwitchPersonaMutationKey = () => ['switchPersona'] as const
+
+export const getSwitchPersonaMutationOptions = <
+  TError = HTTPValidationError,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof switchPersona>>,
+    TError,
+    SwitchPersonaMutationVariables,
+    TContext
+  >
+  fetch?: RequestInit
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof switchPersona>>,
+  TError,
+  SwitchPersonaMutationVariables,
+  TContext
+> => {
+  const mutationKey = getSwitchPersonaMutationKey()
+  const { mutation: mutationOptions, fetch: fetchOptions } = options
+    ? options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, fetch: undefined }
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof switchPersona>>,
+    SwitchPersonaMutationVariables
+  > = (props) => {
+    const { data } = props ?? {}
+
+    return switchPersona(data, fetchOptions)
+  }
+
+  return { mutationFn, ...mutationOptions }
+}
+
+export type SwitchPersonaMutationResult = NonNullable<Awaited<ReturnType<typeof switchPersona>>>
+export type SwitchPersonaMutationBody = PersonaChoice
+export type SwitchPersonaMutationError = HTTPValidationError
+export type SwitchPersonaMutationVariables = { data: PersonaChoice }
+
+/**
+ * @summary Sign in as another persona in the same sandbox, with new session and CSRF tokens
+ */
+export const useSwitchPersona = <TError = HTTPValidationError, TContext = unknown>(
+  options?: {
+    mutation?: UseMutationOptions<
+      Awaited<ReturnType<typeof switchPersona>>,
+      TError,
+      SwitchPersonaMutationVariables,
+      TContext
+    >
+    fetch?: RequestInit
+  },
+  queryClient?: QueryClient,
+): UseMutationResult<
+  Awaited<ReturnType<typeof switchPersona>>,
+  TError,
+  SwitchPersonaMutationVariables,
+  TContext
+> => {
+  return useMutation(getSwitchPersonaMutationOptions(options), queryClient)
+}
+
+export type endSessionResponse204 = {
+  data: void
+  status: 204
+}
+
+export type endSessionResponseSuccess = endSessionResponse204 & {
+  headers: Headers
+}
+export type endSessionResponse = endSessionResponseSuccess
+
+export const getEndSessionUrl = () => {
+  return `/api/v1/session`
+}
+
+/**
+ * @summary Sign out: end the session and clear its cookies
+ */
+export const endSession = async (options?: RequestInit): Promise<endSessionResponse> => {
+  const res = await fetch(getEndSessionUrl(), {
+    ...options,
+    method: 'DELETE',
+  })
+
+  const body = [204, 205, 304].includes(res.status) ? null : await res.text()
+
+  const data: endSessionResponse['data'] = body ? JSON.parse(body) : undefined
+  return { data, status: res.status, headers: res.headers } as endSessionResponse
+}
+
+export const getEndSessionMutationKey = () => ['endSession'] as const
+
+export const getEndSessionMutationOptions = <TError = unknown, TContext = unknown>(options?: {
+  mutation?: UseMutationOptions<Awaited<ReturnType<typeof endSession>>, TError, void, TContext>
+  fetch?: RequestInit
+}): UseMutationOptions<Awaited<ReturnType<typeof endSession>>, TError, void, TContext> => {
+  const mutationKey = getEndSessionMutationKey()
+  const { mutation: mutationOptions, fetch: fetchOptions } = options
+    ? options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, fetch: undefined }
+
+  const mutationFn: MutationFunction<Awaited<ReturnType<typeof endSession>>, void> = () => {
+    return endSession(fetchOptions)
+  }
+
+  return { mutationFn, ...mutationOptions }
+}
+
+export type EndSessionMutationResult = NonNullable<Awaited<ReturnType<typeof endSession>>>
+
+export type EndSessionMutationError = unknown
+
+/**
+ * @summary Sign out: end the session and clear its cookies
+ */
+export const useEndSession = <TError = unknown, TContext = unknown>(
+  options?: {
+    mutation?: UseMutationOptions<Awaited<ReturnType<typeof endSession>>, TError, void, TContext>
+    fetch?: RequestInit
+  },
+  queryClient?: QueryClient,
+): UseMutationResult<Awaited<ReturnType<typeof endSession>>, TError, void, TContext> => {
+  return useMutation(getEndSessionMutationOptions(options), queryClient)
 }

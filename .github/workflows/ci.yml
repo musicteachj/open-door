@@ -102,7 +102,7 @@ jobs:
       - run: uv run ruff check .
       - run: uv run ruff format --check .
       - run: uv run mypy
-      - name: Domain code imports no framework
+      - name: Domain and policy code import no framework
         run: uv run lint-imports
       - name: Migrate as the owner
         run: uv run alembic upgrade head
