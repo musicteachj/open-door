@@ -7,5 +7,9 @@ export interface PersonaSwitcherProps extends React.ButtonHTMLAttributes<HTMLBut
   onClick?: () => void;
   /** Specimens only: force the tooltip open (it still only shows when the title is truncated). */
   forceTooltip?: boolean;
+  /** True while PersonaMenu is open; sets aria-expanded and the hover fill. */
+  expanded?: boolean;
+  /** While switching, e.g. "Switching to Marcus Bell…". Shows a spinner in place of the avatar and sets aria-busy. */
+  busyLabel?: string;
 }
 export declare function PersonaSwitcher(props: PersonaSwitcherProps): JSX.Element;

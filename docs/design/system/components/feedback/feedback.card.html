@@ -1,0 +1,23 @@
+<!-- @dsCard group="Components" viewport="700x560" name="Feedback" -->
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><link rel="stylesheet" href="../../styles.css"><script src="https://unpkg.com/react@18.3.1/umd/react.production.min.js"></script><script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.production.min.js"></script><script src="https://unpkg.com/@babel/standalone@7.24.7/babel.min.js"></script><script src="../../preview/loader.js"></script></head><body style="margin:0;background:var(--surface-raised)"><div id="root"></div>
+<script type="text/babel" data-presets="react">
+loadOpenDoor("../../", OD_FILES).then(function (OD) {
+  const { Toast, Banner, FullPageMessage, Button } = OD;
+  const Lbl = ({ children }) => <div style={{ font: "400 11px/16px var(--font-sans)", color: "var(--ink-muted)", marginBottom: 6 }}>{children}</div>;
+  function Card() {
+    return (
+      <div style={{ padding: "20px 24px", display: "flex", flexDirection: "column", gap: 12 }}>
+        <Lbl>Banner: expiry warning, dismissible</Lbl>
+        <div style={{ border: "1px solid var(--border)", borderRadius: 12, overflow: "hidden" }}><Banner message="This sandbox resets in 2 h 50 min. Everything you've done here will be cleared." onDismiss={() => {}} /></div>
+        <Lbl>Toast</Lbl>
+        <div style={{ display: "flex", gap: 12 }}><Toast message="Now viewing as Marcus Bell." duration={0} onDismiss={() => {}} /></div>
+        <Lbl>Full-page message</Lbl>
+        <div style={{ height: 260, border: "1px solid var(--border)", borderRadius: 16 }}>
+          <FullPageMessage title="Something went wrong on our side." body="Try again in a moment. If it keeps happening, this reference helps us find it:" reference="7f3a9c2e"><Button icon="rotate-ccw">Retry</Button></FullPageMessage>
+        </div>
+      </div>);
+  }
+  ReactDOM.createRoot(document.getElementById("root")).render(<Card />);
+});
+</script></body></html>

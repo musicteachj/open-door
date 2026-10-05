@@ -32,6 +32,14 @@ version (`0.x.y` while the app is being built, `1.0.0` when it is complete).
     detail rows.
   - The backlog notes what the directory needs from the API in Phase 2: search, filters, and
     counts, and work emails on the employer's domain.
+- **The app shell and the global states** (Phase 2 design). The last two Phase 2 screens,
+  approved in Claude Design, so every Phase 2 screen is now designed.
+  - The shell adds the persona menu, switching with a confirming toast, the navigation for each
+    persona (Approvals for managers, Cases and Console for HR), and a banner when the sandbox
+    has 3 hours or less left.
+  - The global states are a session that has expired, a page that doesn't exist, and an
+    unexpected error that shows the request's reference for support.
+  - The notes also settle the "Try asking" questions for each persona.
 
 ### Changed
 

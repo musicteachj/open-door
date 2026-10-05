@@ -7,5 +7,9 @@ export interface NavItemProps extends React.AnchorHTMLAttributes<HTMLAnchorEleme
   href?: string;
   /** Marks the current page (aria-current="page"). */
   current?: boolean;
+  /** Waiting items, e.g. requests for Approvals. Hidden when 0. */
+  count?: number;
+  /** Read after the count by screen readers. Default "waiting". */
+  countLabel?: string;
 }
 export declare function NavItem(props: NavItemProps): JSX.Element;

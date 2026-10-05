@@ -1,28 +1,37 @@
-<!-- @dsCard group="Components" viewport="700x330" name="Navigation" -->
+<!-- @dsCard group="Components" viewport="700x540" name="Navigation" -->
 <!doctype html>
-<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><link rel="stylesheet" href="../../styles.css"><script src="https://unpkg.com/react@18.3.1/umd/react.production.min.js"></script><script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.production.min.js"></script><script src="https://unpkg.com/@babel/standalone@7.24.7/babel.min.js"></script><script src="../../preview/loader.js"></script></head><body style="margin:0;background:var(--surface-raised)"><div id="root"></div>
+<html lang="en"><head><meta charset="utf-8"><link rel="stylesheet" href="../../styles.css"><script src="https://unpkg.com/react@18.3.1/umd/react.production.min.js"></script><script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.production.min.js"></script><script src="https://unpkg.com/@babel/standalone@7.24.7/babel.min.js"></script><script src="../../preview/loader.js"></script></head><body style="margin:0;background:var(--surface-raised)"><div id="root"></div>
 <script type="text/babel" data-presets="react">
 loadOpenDoor("../../", OD_FILES).then(function (OD) {
-  const { NavItem, PersonaSwitcher } = OD;
-  const Lbl = ({ children }) => <div style={{ font: "400 11px/16px var(--font-sans)", color: "var(--ink-muted)" }}>{children}</div>;
+  const { NavItem, PersonaSwitcher, PersonaMenu } = OD;
+  const Lbl = ({ children }) => <div style={{ font: "400 11px/16px var(--font-sans)", color: "var(--ink-muted)", marginBottom: 6 }}>{children}</div>;
   function Card() {
     return (
       <div style={{ display: "grid", gridTemplateColumns: "248px 1fr", gap: 32, padding: "20px 24px" }}>
         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-          <Lbl>Current, default, hovered, focused</Lbl>
+          <Lbl>Current, default, hovered, focused, with count</Lbl>
           <nav className="od-nav" aria-label="Main" style={{ background: "var(--surface)", padding: 8, borderRadius: 12 }}>
             <NavItem icon="message-circle" label="Ask" current />
             <NavItem icon="calendar" label="Time off" />
             <NavItem icon="users" label="Directory" data-state="hover" />
             <NavItem icon="book-open" label="Handbook" data-state="focus" />
+            <NavItem icon="clipboard-check" label="Approvals" count={1} />
+            <NavItem icon="folder-lock" label="Cases" />
+            <NavItem icon="layout-dashboard" label="Console" />
           </nav>
+          <Lbl>Switcher: busy while switching</Lbl>
+          <div style={{ background: "var(--surface)", borderRadius: 12, padding: "4px 0" }}><PersonaSwitcher name="Priya Raman" title="Visual Merchandiser" busyLabel="Switching to Marcus Bell…" /></div>
         </div>
         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-          <Lbl>Persona switcher, short title and truncated title with tooltip</Lbl>
-          <div style={{ width: 212, background: "var(--surface)", borderRadius: 12, padding: "4px 0" }}>
-            <PersonaSwitcher name="Priya Raman" title="Visual Merchandiser" />
+          <Lbl>Persona menu open above the switcher</Lbl>
+          <div style={{ width: 212, background: "var(--surface)", borderRadius: 12, padding: "4px 0", marginTop: 330 }}>
+            <div className="od-persona-menu-anchor">
+              <PersonaMenu currentId="priya" personas={[{ id: "priya", name: "Priya Raman", title: "Visual Merchandiser" }, { id: "mateo", name: "Mateo Alvarez", title: "Warehouse Associate" }, { id: "marcus", name: "Marcus Bell", title: "Store Manager" }, { id: "dana", name: "Dana Whitfield", title: "HR Business Partner" }]} />
+              <PersonaSwitcher name="Priya Raman" title="Visual Merchandiser" expanded />
+            </div>
           </div>
-          <div style={{ width: 212, background: "var(--surface)", borderRadius: 12, padding: "4px 0", marginTop: 36 }}>
+          <Lbl>Truncated title with tooltip</Lbl>
+          <div style={{ width: 212, background: "var(--surface)", borderRadius: 12, padding: "4px 0", marginTop: 30 }}>
             <PersonaSwitcher name="Priya Raman" title="Department Lead, Apparel" forceTooltip data-state="hover" />
           </div>
         </div>

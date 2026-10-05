@@ -9,6 +9,7 @@ window.OD_FILES = [
   'components/navigation/Tooltip.jsx',
   'components/navigation/NavItem.jsx',
   'components/navigation/PersonaSwitcher.jsx',
+  'components/navigation/PersonaMenu.jsx',
   'components/assistant/InlineError.jsx',
   'components/assistant/Composer.jsx',
   'components/assistant/TryAskingRow.jsx',
@@ -24,7 +25,10 @@ window.OD_FILES = [
   'components/directory/SkeletonRow.jsx',
   'components/directory/DirectoryTable.jsx',
   'components/directory/DetailRow.jsx',
-  'components/directory/DetailList.jsx'
+  'components/directory/DetailList.jsx',
+  'components/feedback/Toast.jsx',
+  'components/feedback/Banner.jsx',
+  'components/feedback/FullPageMessage.jsx'
 ];
 window.loadOpenDoor = async function (root, files) {
   var mods = {};
