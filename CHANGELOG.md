@@ -12,6 +12,18 @@ version (`0.x.y` while the app is being built, `1.0.0` when it is complete).
 
 ### Added
 
+- **The restyled components, the gallery, and browser tests** (Phase 2, stage 2b).
+  - **Nine primitives** built by hand from the design's sketches and tokens: the button, input,
+    textarea, select, dropdown menu, tooltip, toast, avatar, and skeleton. A loading button keeps
+    its label and stays focusable, toasts are for confirmations only, and every control shows a
+    visible keyboard focus ring.
+  - **A component gallery** at `/gallery` shows each one in every state. It exists only in
+    development and in the browser-test build, and a check fails if it ever reaches a production
+    build.
+  - **Browser tests** with Playwright drive the built app against the real API: axe finds no
+    WCAG 2.2 AA problems in the gallery, with each overlay open too; a visitor can start, switch
+    persona, and sign out; nothing scrolls sideways at 390 px; and the focus ring and color
+    transitions match the design. They run in `make check` and in a new CI job.
 - **The web app's foundation** (Phase 2, stage 2a). The plumbing the Phase 2 screens are built on:
   - **The design's theme.** The approved tokens are the Tailwind theme, and Tailwind's own
     colors, type sizes, radii, and shadows are removed, so components can use only the design's

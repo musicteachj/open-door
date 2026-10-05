@@ -30,6 +30,7 @@ jobs:
     outputs:
       api: ${{ steps.filter.outputs.api }}
       web: ${{ steps.filter.outputs.web }}
+      e2e: ${{ steps.filter.outputs.e2e }}
     steps:
       # Every other checkout drops its credentials. This one keeps them, because on a push
       # paths-filter fetches the previous commit with them. The job runs no repository code.
@@ -55,6 +56,11 @@ jobs:
               - 'apps/web/**'
               - '.nvmrc'
               - '.editorconfig'
+              - '.github/workflows/ci.yml'
+            e2e:
+              - 'apps/web/**'
+              - 'apps/api/**'
+              - '.nvmrc'
               - '.github/workflows/ci.yml'
 
   api:
@@ -144,8 +150,86 @@ jobs:
       - run: npm run typecheck
       - run: npm test
       - run: npm run build
+      - name: The production build leaves out the component gallery
+        run: npm run check:no-gallery
       - name: The committed API client matches openapi.json
         run: npm run check:api-client
+
+  # The browser tests: Chromium against the real API and the real database, and the web app built
+  # with the component gallery (VITE_GALLERY) into dist-e2e/. No paid AI calls.
+  e2e:
+    name: E2E
+    needs: changes
+    if: needs.changes.outputs.e2e == 'true' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      # The same service as the API job.
+      postgres:
+        image: pgvector/pgvector:pg17
+        env:
+          POSTGRES_USER: opendoor
+          POSTGRES_PASSWORD: opendoor
+          POSTGRES_DB: opendoor
+        ports:
+          - 5433:5432
+        options: >-
+          --health-cmd "pg_isready -h 127.0.0.1 -U opendoor -d opendoor"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    # The API's settings, as in the API job. Playwright starts the API on :8100 and sets its
+    # APP_ORIGIN to the preview server's, so none is set here.
+    env:
+      APP_ENV: test
+      DATABASE_URL: postgresql+asyncpg://od_app_login:od_app_dev@127.0.0.1:5433/opendoor
+      MIGRATION_DATABASE_URL: postgresql+asyncpg://opendoor:opendoor@127.0.0.1:5433/opendoor
+      CLEANUP_DATABASE_URL: postgresql+asyncpg://od_cleanup_login:od_cleanup_dev@127.0.0.1:5433/opendoor
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+        with:
+          enable-cache: true
+          cache-dependency-glob: apps/api/uv.lock
+      - run: uv sync --locked
+        working-directory: apps/api
+      - name: Migrate as the owner
+        run: uv run alembic upgrade head
+        working-directory: apps/api
+      - name: Create the login users
+        run: uv run python scripts/bootstrap_db_users.py
+        working-directory: apps/api
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+          cache-dependency-path: apps/web/package-lock.json
+      - run: npm ci
+        working-directory: apps/web
+      # The cache key names the installed Playwright version, so a new version downloads fresh
+      # browsers. The system libraries are installed on every run, because they are not cached.
+      - name: Read the Playwright version
+        id: playwright
+        run: echo "version=$(npx playwright --version | cut -d' ' -f2)" >> "$GITHUB_OUTPUT"
+        working-directory: apps/web
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ steps.playwright.outputs.version }}
+      - name: Install Chromium and its system libraries
+        run: npx playwright install --with-deps chromium
+        working-directory: apps/web
+      - name: Browser tests
+        run: npm run e2e
+        working-directory: apps/web
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: failure()
+        with:
+          name: playwright-report
+          path: apps/web/playwright-report/
+          retention-days: 7
 
   # Both are cheap, so they run on every pull request, docs-only ones included.
   docs:

@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
+    "build:e2e": "VITE_GALLERY=true vite build --outDir dist-e2e --emptyOutDir",
     "lint": "oxlint --deny-warnings",
     "preview": "vite preview",
     "typecheck": "tsc -b",
@@ -13,7 +14,9 @@
     "format:check": "prettier --check .",
     "test": "vitest run",
     "generate:api": "orval --config orval.config.ts && prettier --write src/api",
-    "check:api-client": "node scripts/check-api-client.mjs"
+    "check:api-client": "node scripts/check-api-client.mjs",
+    "check:no-gallery": "node scripts/check-no-gallery.mjs",
+    "e2e": "playwright test"
   },
   "dependencies": {
     "@tanstack/react-query": "^5.104.1",
