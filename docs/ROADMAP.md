@@ -29,10 +29,11 @@ every stage.
 | 9 Deploy to AWS | **Held** until the owner deploys all portfolio apps together | — | — | — | — |
 
 **Design track (owner, in Claude Design):** in progress. The design system ("aubergine and
-cinnamon", Instrument Sans), the landing page, the assistant home, and the directory were
-approved on 2026-10-04; see [`design/tokens.md`](design/tokens.md) and
-[`design/screens/`](design/screens/). Phase 2 still needs the app shell's persona menu and the
-global states.
+cinnamon", Instrument Sans) and all five Phase 2 screens (the landing page, the app shell, the
+assistant home, the directory, and the global states) were approved on 2026-10-04; see
+[`design/tokens.md`](design/tokens.md) and [`design/screens/`](design/screens/). **Phase 2's UI
+stage is unblocked. Next: plan Phase 2, at effort `high`.** Later phases' screens are designed
+shortly before each phase.
 Decided on 2026-10-04, changing the original plan:
 - **Mockups are desktop only.** The build still adapts every screen to a phone's width, checked
   automatically at 390 px.

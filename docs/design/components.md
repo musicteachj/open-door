@@ -27,7 +27,7 @@ build then implements it in the component gallery before any screen uses it.
 | Table | dense, comfortable | default, empty, loading | partly: the directory list (see Directory below) |
 | Tabs | | default, active, focus | [ ] |
 | Dialog | | open | [ ] |
-| Toast | success, error, info | | [ ] |
+| Toast | success; errors go inline, not in a toast | default, closing | [x] |
 | Tooltip | | default | [x] |
 | Avatar | initials | default | [x] |
 | Skeleton loader | directory row | default | [x] |
@@ -51,8 +51,8 @@ build then implements it in the component gallery before any screen uses it.
 | Escalation panel | sensitive topic | default, case offered, case opened | [ ] |
 | Crisis panel | | default (fixed text) | [ ] |
 | Feedback control | | default, up selected, down selected (reason form) | [ ] |
-| Banner | budget reached (replay mode), sandbox expiring, session expired | | [ ] |
-| Persona switcher | | closed, hover, focus, truncated title with tooltip, open, switching | partly: the closed states; the open menu and switching come with the app shell |
+| Banner | budget reached (replay mode), sandbox expiring | default, dismissed | partly: sandbox expiring; the budget banner comes with Phase 4. A session that has expired gets a full page instead (see Feedback below) |
+| Persona switcher | | closed, hover, focus, truncated title with tooltip, open, switching | [x] |
 
 ## Shell and status components
 
@@ -62,7 +62,7 @@ Added by the design system for the assistant home.
 |---|---|---|---|
 | Logo | mark with the product and customer names | default | [x] |
 | Icon | the Lucide icons in use | default | [x] |
-| Nav item | | current, default, hover (neutral), focus | [x] |
+| Nav item | with or without a count badge | current, default, hover (neutral), focus | [x] |
 | At-a-glance link and list | figure, label, and named destination | default, hover, focus | [x] |
 | Sandbox indicator | pill | default | [x] |
 | Inline error | under the composer, with Retry | default | [x] |
@@ -79,3 +79,12 @@ Added by the design system for the landing page and the directory.
 | Filter toggle | "My team" with a count | off, on, focus | [x] |
 | Directory list and row | | default, hover, focus, your own row ("You") | [x] |
 | Detail list and row | value, link, locked (lock and reason) | default | [x] |
+
+## Shell and feedback components
+
+Added by the design system for the app shell and the global states.
+
+| Component | Variants | States | Designed |
+|---|---|---|---|
+| Persona menu | | open, current checked, item hover and focus | [x] |
+| Full-page message | inside the shell, outside it; with an optional reference | default | [x] |

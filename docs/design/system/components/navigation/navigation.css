@@ -15,3 +15,23 @@
 .od-persona__text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
 .od-persona__name { font-size: var(--text-ui); line-height: 18px; font-weight: var(--weight-semibold); }
 .od-persona__title { font-size: var(--text-caption); line-height: var(--leading-caption); color: var(--ink-muted); }
+.od-nav-count { min-width: 20px; height: 20px; padding: 0 6px; border-radius: var(--radius-full); background: var(--primary); color: var(--on-primary); display: inline-flex; align-items: center; justify-content: center; font-size: var(--text-caption); line-height: var(--leading-caption); font-weight: var(--weight-semibold); font-variant-numeric: tabular-nums; }
+.od-persona__btn { min-height: 61px; }
+.od-persona__btn[data-open="true"] { background: var(--neutral-hover); }
+.od-persona__spin { width: 36px; height: 36px; flex: none; display: flex; align-items: center; justify-content: center; }
+.od-persona__busy { flex: 1; min-width: 0; font-size: var(--text-small); line-height: 18px; color: var(--ink-muted); }
+.od-persona-menu-anchor { position: relative; }
+.od-menu { width: 244px; padding: var(--space-1); background: var(--surface-raised); border: 1px solid var(--border); border-radius: var(--radius-md); box-shadow: var(--shadow-md); display: flex; flex-direction: column; gap: 2px; font-family: var(--font-sans); }
+.od-persona-menu-anchor .od-persona-menu { position: absolute; left: 0; bottom: calc(100% + 6px); z-index: 50; }
+.od-menu__label { padding: 8px 10px 4px; font-size: var(--text-caption); line-height: var(--leading-caption); color: var(--ink-muted); }
+.od-menu__item { display: flex; align-items: center; gap: 10px; width: 100%; min-height: 36px; padding: 0 10px; border: 0; border-radius: var(--radius-xs); background: transparent; font-family: var(--font-sans); font-size: var(--text-ui); font-weight: var(--weight-medium); color: var(--ink); text-align: left; text-decoration: none; cursor: pointer; }
+.od-menu__item:hover, .od-menu__item[data-state~="hover"] { background: var(--neutral-hover); color: var(--ink); }
+.od-menu__item:focus-visible, .od-menu__item[data-state~="focus"] { outline: var(--focus-ring-width) solid var(--focus-ring); outline-offset: -2px; }
+.od-menu__item--persona { padding: 8px 10px 8px 8px; }
+.od-menu__item[aria-checked="true"] { background: var(--primary-tint); }
+.od-menu__avatar { width: 28px; height: 28px; flex: none; border-radius: var(--radius-full); background: var(--primary-tint); display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: var(--weight-semibold); }
+.od-menu__text { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.od-menu__name { font-size: var(--text-ui); line-height: 18px; font-weight: var(--weight-semibold); }
+.od-menu__role { font-size: var(--text-caption); line-height: var(--leading-caption); color: var(--ink-muted); }
+.od-menu__note { margin: 0; padding: 6px 10px 8px; font-size: var(--text-caption); line-height: var(--leading-caption); color: var(--ink-muted); }
+.od-menu__sep { height: 1px; background: var(--border-subtle); margin: 0 calc(var(--space-1) * -1) 2px; }
