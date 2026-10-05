@@ -11,6 +11,8 @@ axe = "axe"
 # The US locale accepts both spellings. CLAUDE.md asks for one L.
 cancelled = "canceled"
 cancelling = "canceling"
+# FastAPI's own spelling of its route attribute `route.dependant`.
+dependant = "dependant"
 # A first name in the directory mockup's sample data.
 ines = "ines"
 

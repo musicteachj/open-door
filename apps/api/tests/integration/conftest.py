@@ -8,9 +8,9 @@ skipping:
 - `cleanup_engine` connects as CLEANUP_DATABASE_URL, the cleanup login (a member of od_cleanup).
 
 `make_tenant` creates a small sandbox company as the API's login, with a row in every table, and
-returns a `SampleTenant`. `browser` and `open_browser` give the HTTP tests a client that behaves
-like the web app in a browser. Every tenant either one creates is deleted when the test session
-ends.
+returns a `SampleTenant`. `seeded_sandbox` creates the full 120-person seed company the same way.
+`browser` and `open_browser` give the HTTP tests a client that behaves
+like the web app in a browser. Every tenant these create is deleted when the test session ends.
 """
 
 import asyncio
@@ -46,6 +46,7 @@ from app.db.models import (
 from app.db.tenancy import TenantContext, tenant_session
 from app.main import create_app
 from app.modules.identity.cookies import CSRF_COOKIE, CSRF_HEADER, SESSION_COOKIE
+from app.modules.sandbox.seed import SeedCompany, build_company, insert_company
 
 
 @pytest.fixture(scope="session")
@@ -212,7 +213,7 @@ def make_tenant(app_engine: AsyncEngine, created_tenant_ids: list[UUID]) -> Make
                 department_id=department.id,
                 location_id=location.id,
                 manager_id=manager_id,
-                work_email=f"{given.lower()}@opendoor.example",
+                work_email=f"{given.lower()}@juniperrow.example",
                 employment_type="salaried",
                 hire_date=date(2024, 3, 4),
                 **extra,
@@ -277,6 +278,26 @@ def make_tenant(app_engine: AsyncEngine, created_tenant_ids: list[UUID]) -> Make
         return SampleTenant(tenant_id, employee.id, colleague.id, hr.id)
 
     return make
+
+
+@pytest.fixture
+async def seeded_sandbox(app_engine: AsyncEngine, created_tenant_ids: list[UUID]) -> SeedCompany:
+    """A new tenant with the full seed company (120 people), created as the API's login.
+
+    Read it back with `tenant_session(app_engine, TenantContext(company.tenant_id, None))`. The
+    tenant is deleted when the test session ends, like every tenant `make_tenant` creates.
+    """
+    tenant_id = uuid4()
+    created_tenant_ids.append(tenant_id)
+    anchor = date(2026, 10, 5)
+    company = build_company(tenant_id, anchor)
+    expires_at = datetime.now(UTC) + timedelta(hours=24)
+    async with tenant_session(app_engine, TenantContext(tenant_id, None)) as session:
+        session.add(Tenant(id=tenant_id, expires_at=expires_at, anchor_date=anchor))
+        # The tenant row goes first: every seeded row refers to it.
+        await session.flush()
+        await insert_company(session, company)
+    return company
 
 
 class Browser:

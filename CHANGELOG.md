@@ -12,6 +12,15 @@ version (`0.x.y` while the app is being built, `1.0.0` when it is complete).
 
 ### Added
 
+- **Directory search, filters, and counts** (Phase 2, stage 1). `GET /api/v1/people` now searches
+  by name, title, or work email, and filters by location, department, and "My team" (everyone who
+  reports to a manager, directly or through a lead). A new `GET /api/v1/people/facets` returns the
+  counts the directory shows: everyone, the people matching, and beside every filter option how
+  many the list would show if it were picked. Searches can't use `%` or `_` as wildcards, and a
+  search containing a NUL character is refused rather than failing. Other sandboxes' locations and
+  departments match no one, and a person with no reports gets an empty team, never an error.
+- **Each card's location carries its timezone** (Phase 2, stage 1), such as `America/Denver`, so
+  the web app can greet people at the right time of day. A location's timezone isn't personal data.
 - **The Phase 2 spec and plan** (Phase 2 planning). The spec says how the build meets the approved
   designs: the directory API's search, filters, and counts; the theme and its token tests; the web
   client's CSRF handling and error rules; the screens and their routes; accessibility; and testing,
@@ -48,6 +57,16 @@ version (`0.x.y` while the app is being built, `1.0.0` when it is complete).
 
 ### Changed
 
+- **The API's schema describes the errors it really sends** (Phase 2, stage 1). Every route
+  declares its 401, 403, 404, and 422 responses as the problem-details body the API returns, filed
+  as `application/problem+json`, in place of FastAPI's default validation error. The generated
+  web client now types its errors correctly, and gains the directory's filters and counts. A test
+  keeps the schema in step with the real error bodies.
+- **Work emails are on the employer's domain** (Phase 2, stage 1): `first.last@juniperrow.example`,
+  as the designs show, instead of the product's name.
+- **A first visit is no longer a security event** (Phase 2, stage 1). A request with no session
+  cookie is logged at debug level, so the security log holds only real refusals. A cookie that
+  doesn't match a session is still a warning.
 - **The design brief is ready for Claude Design** (Phase 2 planning). Mockups are now desktop
   only; the build still makes every screen usable on a phone, checked automatically at 390 px.
   Screens are designed in their final form, and the build hides what isn't ready yet. The brief
