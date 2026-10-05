@@ -228,7 +228,7 @@ make audit      scan for leaked secrets and vulnerable dependencies
 ```
 
 Run a single API test: `cd apps/api && uv run pytest tests/test_health.py -q`. Run a single web
-test: `cd apps/web && npx vitest run src/App.test.tsx`.
+test: `cd apps/web && npx vitest run src/lib/api-fetch.test.ts`.
 
 **The database has three URLs**, all in `apps/api/.env` (see `.env.example`):
 

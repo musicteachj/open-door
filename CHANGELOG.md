@@ -12,6 +12,24 @@ version (`0.x.y` while the app is being built, `1.0.0` when it is complete).
 
 ### Added
 
+- **The web app's foundation** (Phase 2, stage 2a). The plumbing the Phase 2 screens are built on:
+  - **The design's theme.** The approved tokens are the Tailwind theme, and Tailwind's own
+    colors, type sizes, radii, and shadows are removed, so components can use only the design's
+    names. The fonts are self-hosted. Tests fail if the theme drifts from the design export, or if
+    a component uses a raw color.
+  - **One way to the network.** Every API call goes through `apiFetch`. It sends the CSRF token on
+    writes, only to the app's own origin, reading it fresh each time, and sends JSON as JSON. A
+    failure throws an error carrying the status, the problem details, and the request ID.
+  - **Query rules.** Reads never retry a client error, and retry a server or network failure once.
+    Writes never retry. A test forbids overriding these anywhere else.
+  - **A clean slate on every identity change.** Switching persona or signing out clears all
+    cached data and remounts everything signed-in, so the previous person never appears. The same
+    happens when another tab changes who is signed in. A test holds a component on screen across a
+    switch to prove it.
+  - **The router and session guard,** with placeholder pages. A visitor without a session goes to
+    the start, a signed-in visitor goes to `/ask`, and a session that ends shows "This sandbox has
+    reset." A late refusal from before a switch, or from a signed-out visit, doesn't show it to
+    someone who is signed in.
 - **Directory search, filters, and counts** (Phase 2, stage 1). `GET /api/v1/people` now searches
   by name, title, or work email, and filters by location, department, and "My team" (everyone who
   reports to a manager, directly or through a lead). A new `GET /api/v1/people/facets` returns the
