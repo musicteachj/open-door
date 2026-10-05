@@ -1112,6 +1112,81 @@ Prerequisites.
   planning trial had ended at 549, with 246 against the database. This build wrote its own tests,
   so the counts differ.
 
+**Stage 2 is two pull requests.** The owner chose smaller PRs, so Stage 2 splits after Task 14, as
+the plan allowed:
+- **2a, the plumbing (Tasks 10–14),** on `feat/phase-2-web-foundation`, branched from `dev` at
+  `fb9c91c`, after Stage 1 merged as PR #23. It gets its own close: the changelog, the roadmap, and
+  the backlog items it finishes (CSRF, the identity reset, and JSON as JSON). It also gets
+  `CLAUDE.md`'s single-web-test example, because Task 12 deletes `App.test.tsx`.
+- **2b, the primitives (Tasks 15–17, then Task 18's close),** on `feat/phase-2-web-primitives`,
+  branched after 2a merges. It holds `make e2e`, the gallery, and the WebKit cookie note.
+
+**Stage 2:**
+- **Task 11:**
+  - **The layout sizes are `--spacing-*` variables.** One namespace gives `w-`, `h-`, `max-w-`, and
+    `inset-` utilities.
+  - **Type weights come from `tokens.md`.** `ui` is 500, the unselected-nav weight, so buttons and
+    selected nav add `font-semibold` themselves.
+  - **More of Tailwind's defaults are reset than the plan listed:** fonts, inset and drop shadows,
+    leading, and tracking. A test checks every reset line, because removing one failed nothing.
+  - `base.css` keeps the export's link colors, which the plan's list had left out.
+  - `tokens.test.ts` reads the export with `node:fs`, because Vite's raw glob won't read outside
+    the project. That adds `node` to `tsconfig.app.json`'s types.
+  - It checks 109 exported custom properties, and each type token's weight against `tokens.md`.
+- **Task 12:**
+  - **`App.tsx` stays until Task 14,** because `main.tsx` renders it until the router replaces it.
+    The Orval change needed a small fix to its health check.
+  - `apiFetch` keeps a caller's own `Content-Type`. An empty 2xx, including a 204, returns
+    `undefined`, and a 2xx that isn't JSON throws `ApiError` with no problem.
+  - **The security review proved the token would go to another origin** if a call ever passed an
+    absolute URL, which no generated call does. The token is now sent only to the app's own
+    origin, and `credentials` is pinned to `same-origin`.
+- **Task 13:**
+  - **Retry rules live only in `query-client.ts`.** The review proved that a per-call `retry: true`
+    would swallow a 401 and that `retry: 1` on a write would resend it after a 403. A test now fails
+    on any `retry` or `retryDelay` option elsewhere in `src/`.
+  - **A write still in flight when the identity resets can set the old person's data in the new
+    cache.** Nothing writes to the cache yet, so it went to the backlog under Phase 5.
+- **For Task 14, from the same review:**
+  - A mounted component keeps showing the old person after `queryClient.clear()`. The remount must
+    cover everything signed-in, the shell included, and a test must prove the old person's data
+    never renders after a switch.
+- **For Task 43:** the generated `getPerson` URL doesn't encode its ID, so the profile route should
+  check that the ID is a UUID before calling it.
+- **For Task 41, from Stage 2a's code review:** the generated client sends a `null` parameter as the
+  string `"null"` (`locationId=null`). The directory's URL state must leave an unset filter out,
+  never pass it as `null`.
+- **For any later upload:** `apiFetch` labels every body as JSON unless the caller sets a type, so
+  a `FormData` body would need that rule changed first.
+- **Task 14:**
+  - **`App.tsx` and its test are deleted here,** not in Task 12.
+  - **`signInAs(queryClient, me)`** runs `resetIdentity` and then seeds `/me` from the start or
+    switch response, which is the full `Me`. Without the seed, the guard's loading state unmounted
+    everything, so the old-person test passed even with the reset `key` removed. With it, only
+    the key stops a mounted component from showing the old person. A memoized header proves it.
+  - `router.tsx` exports `routes` and a `createAppRouter()`, so tests can import the routes
+    without building a browser router. The test setup stubs `window.scrollTo`, which jsdom lacks.
+  - **The security re-review confirmed the remount:** no component under the guard showed the old
+    person after a switch or a sign-out, including one with a request still in flight.
+  - **Two paths showed "This sandbox has reset." to someone signed in, now fixed:**
+    - A late 401 from a write that started before the reset, such as the losing one of two quick
+      switches. A 401 from a request submitted before the last reset is now ignored.
+    - An anonymous 401 on `/`, followed by signing in from another tab. The flag is now a time,
+      and it counts only if it is newer than the last successful `/me`.
+- **For Stage 5, from Task 14's reviews:**
+  - Disable the persona buttons while a switch or sign-out is pending.
+  - Show an error when starting, switching, or signing out fails. The placeholders show none.
+  - Any identity-scoped content on the landing page or the outside-the-shell pages must sit under
+    the reset key, or read only fresh queries, because those routes aren't remounted.
+  - Not found's link to `/ask` should be a router `Link`, not a plain `<a>`.
+- **Stage 2a's code review found one more gap, now fixed:** when another tab switched persona or
+  started a sandbox, this tab's next `/me` named the new person without a reset, so the old
+  person's cached data stayed. The session guard now remembers who the identity started as, and
+  when `/me` names someone else it resets and remounts, just as a switch does.
+- **Stage 2a ended at 207 web tests** (1 before it) and 517 API tests. The trial's 222 web tests
+  covered all of Stage 2, so the counts aren't comparable. `CLAUDE.md`'s single-web-test example
+  now names `src/lib/api-fetch.test.ts`, because `App.test.tsx` is gone.
+
 ## Backlog
 
 New items from planning, added in the tasks named:

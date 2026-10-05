@@ -57,23 +57,9 @@ should pick it up. When one is done, delete it here and record it in the changel
 
 ## Phase 2: design system, shell, sandbox entry
 
-- **Send the CSRF token from the web client.** The generated client sends no `X-CSRF-Token`, so
-  every state-changing call would get a 403. Add an Orval `override.mutator`: a custom fetch that
-  reads `__Host-od_csrf` from `document.cookie` on every unsafe request. Read it fresh each time,
-  because it changes when a sandbox is created and when a persona switches. Keep
-  `Content-Type: application/json`. (Stage 3 security review.)
-- **Reset client state when the identity changes.** Clear every TanStack Query cache on a persona
-  switch or sign-out. Treat any 401 as "go to sandbox entry", and never auto-retry a
-  state-changing request after a 403. (Stage 3 security review.)
 - **Check the `__Host-` cookies in each target browser.** They are `Secure`. Chrome and Firefox
   accept them on `http://localhost`, but Safari has historically refused them. Keep `/api` on the
   same origin through the Vite proxy, and test sign-in in each browser the demo supports.
-
-- **Send JSON as JSON.** The same-origin check refuses a state-changing request whose body isn't
-  `application/json`. Orval's generated client sets the header. A hand-written
-  `fetch(url, { method: "POST", body: JSON.stringify(x) })` sends `text/plain` and gets a 403, so
-  any request outside the client must set `Content-Type: application/json` itself. (Stage 3
-  security review.)
 
 ## Phase 3: handbook and retrieval
 
@@ -104,6 +90,12 @@ should pick it up. When one is done, delete it here and record it in the changel
 
 ## Phase 5: time off
 
+- **Keep a write from the old identity out of the new cache.** `resetIdentity` clears the query
+  cache, but a mutation already in flight still runs its callbacks when it finishes. If its
+  `onSuccess` calls `setQueryData`, the old person's data lands in the new person's cache. Phase
+  2's only writes start or end a session, so nothing does this yet. Write hooks should invalidate
+  queries rather than set their data. Where one must set data, `resetIdentity` should count
+  identities and the write should check the count first. (Phase 2 stage 2 security review.)
 - **Seed last year's holidays too.** A sandbox stores the holiday calendar for its anchor year and
   the next. One created in early January therefore lacks the previous December's closures, so a
   question about leave taken over the holidays just before it would miss them. If the time-off

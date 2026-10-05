@@ -27,4 +27,5 @@ extend-exclude = [
     "docs/plans/2026-09-29-open-door-initial-plan.md",
     # Unicode ranges in @font-face rules, such as U+02BA, are code, not words.
     "docs/design/system/tokens/fonts.css",
+    "apps/web/src/styles/fonts.css",
 ]

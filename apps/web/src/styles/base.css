@@ -1,0 +1,36 @@
+/* Base element styles. Everything reads the theme's variables (theme.css). */
+@layer base {
+  body {
+    font-family: var(--font-sans);
+    font-size: var(--text-body);
+    line-height: var(--text-body--line-height);
+    color: var(--color-ink);
+    background: var(--color-surface);
+    /* Every number uses tabular figures. */
+    font-variant-numeric: tabular-nums;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  a {
+    color: var(--color-primary);
+    text-underline-offset: 3px;
+  }
+
+  a:hover {
+    color: var(--color-primary-hover);
+  }
+
+  :focus-visible {
+    outline: var(--focus-ring-width) solid var(--color-focus-ring);
+    outline-offset: var(--focus-ring-offset);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      transition: none !important;
+      animation: none !important;
+    }
+  }
+}
