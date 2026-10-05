@@ -12,6 +12,11 @@ version (`0.x.y` while the app is being built, `1.0.0` when it is complete).
 
 ### Added
 
+- **The Phase 2 spec and plan** (Phase 2 planning). The spec says how the build meets the approved
+  designs: the directory API's search, filters, and counts; the theme and its token tests; the web
+  client's CSRF handling and error rules; the screens and their routes; accessibility; and testing,
+  with Playwright and axe in a new CI job and a local side-by-side capture report. The plan builds
+  it in six stages, each a pull request, with test-first task outlines rather than pre-run code.
 - **The design system and the assistant home** (Phase 2 design). Designed in Claude Design and
   approved: the "aubergine and cinnamon" palette, from Wada Sanzo's *A Dictionary of Color
   Combinations*, set in Instrument Sans.
