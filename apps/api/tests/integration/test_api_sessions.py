@@ -199,7 +199,32 @@ def test_without_a_session_the_api_answers_401(
     assert [response.status_code for response in responses] == [401] * 4
     assert all(r.headers["content-type"] == "application/problem+json" for r in responses)
     reasons = [record.__dict__["fields"]["reason"] for record in security_events(caplog)]
-    assert reasons == ["no session cookie"] * 3 + ["unknown or expired session"]
+    # A first visit has no cookie and isn't a security event. Only the unknown token is logged.
+    assert reasons == ["unknown or expired session"]
+
+
+def test_a_request_with_no_session_cookie_is_not_a_security_event(
+    browser: Browser, caplog: pytest.LogCaptureFixture
+) -> None:
+    caplog.set_level(logging.DEBUG)
+
+    response = browser.client.get("/api/v1/me")
+
+    assert response.status_code == 401
+    assert security_events(caplog) == []
+    [record] = [r for r in caplog.records if r.name == identity_deps.__name__]
+    assert record.levelno == logging.DEBUG
+
+
+def test_an_unknown_session_cookie_is_still_a_warning(
+    browser: Browser, caplog: pytest.LogCaptureFixture
+) -> None:
+    response = browser.client.get("/api/v1/me", headers=session_cookie("not-a-real-session-token"))
+
+    assert response.status_code == 401
+    [record] = security_events(caplog)
+    assert record.levelno == logging.WARNING
+    assert record.getMessage() == "security.session_invalid"
 
 
 async def test_an_expired_session_is_refused(

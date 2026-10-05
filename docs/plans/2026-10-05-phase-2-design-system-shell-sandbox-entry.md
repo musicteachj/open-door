@@ -1067,6 +1067,51 @@ phase closed.
 Record here anything that differs from this plan, with the reason, and each stage's final test
 counts.
 
+**The phase's base commit is `de75e53`.** `dev` was there when Stage 1 branched, after the plan
+itself merged (PR #22). Task 45's phase review diffs against it, not the `58fdfa0` named under
+Prerequisites.
+
+**Stage 1:**
+- **Task 1** needed no new test. `test_seed.py`'s `WORK_EMAIL` pattern already pinned the domain,
+  so changing it to `juniperrow.example` made `test_names_and_work_emails_are_unique` fail first.
+- **Task 2** extended the existing field-set tests rather than adding new ones. The new `/me` test
+  is `test_priyas_card_carries_her_locations_timezone` in `test_api_people.py`. Changing
+  `LocationRef` leaves `openapi.json` stale until Task 8.
+- **Task 3:**
+  - The conftest doesn't import `DirectoryFilters`, so the first failure was the new test module's
+    own import error, not the conftest's.
+  - `list_directory` defaults to a module constant, `NO_FILTERS`, because ruff (B008) rejects a
+    call in a default argument.
+  - The wildcard test plants its `%`, `_`, and `\` titles through the owner's engine, since the
+    API login can't update `people`.
+- **Task 4:** `myTeam` counts the list with the team filter on and the search, location, and
+  department kept, by the same rule as every other option. The planted bug, a location menu
+  filtered by its own location, failed the rule test (`assert 0 == 35`), and the checksum matched
+  after the restore.
+- **Task 5:**
+  - Both routes parse their filters through one dependency, `directory_filters`.
+  - **The security review found no leak** across tenants, of private fields through the search, of
+    the reporting tree, or through the counts.
+  - **It did find a 500:** a `q` containing NUL reached Postgres, which can't store it. That is now
+    a 422, as the cursor already was, proved by a mutation with the checksum restored.
+  - The compliance review's two weak assertions were tightened.
+- **Task 6:**
+  - The schema test decides which routes need a session from each route's dependency tree, not
+    from a list. It checks 403 and 404 by rule: every write declares 403, and every path parameter
+    declares 404.
+  - A second test proves that real error bodies match `Problem`. It lives in
+    `tests/integration/test_problem_schema.py`, since it needs the database.
+  - `detail`, `requestId`, and `errors` are optional, because the handlers send them only
+    sometimes. The health route's 503 stays its own `HealthResponse`, not a `Problem`.
+  - The word added to `_typos.toml` is `dependant`. The spelling check also caught a Task 3
+    docstring that wrote "AND" as a verb, which was reworded.
+- **Task 7:** the missing-cookie DEBUG line logs only the method and path. `docs/DATA-INVENTORY.md`
+  now says a request with no cookie writes nothing to the security log.
+- **Task 8:** `make openapi` and `make check-web` passed with no changes to the web app's own code.
+- **Stage 1 ended at 517 API tests** (480 before it), 214 of them against the database. The
+  planning trial had ended at 549, with 246 against the database. This build wrote its own tests,
+  so the counts differ.
+
 ## Backlog
 
 New items from planning, added in the tasks named:

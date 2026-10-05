@@ -20,6 +20,12 @@ import type {
   UseQueryResult,
 } from '@tanstack/react-query'
 
+export interface DepartmentCount {
+  id: string
+  name: string
+  count: number
+}
+
 export interface DepartmentRef {
   id: string
   name: string
@@ -29,6 +35,7 @@ export interface LocationRef {
   id: string
   name: string
   state: string
+  timezone: string
 }
 
 export interface PersonRef {
@@ -48,23 +55,39 @@ export interface DirectoryCard {
   workEmail: string
 }
 
+export interface LocationCount {
+  id: string
+  name: string
+  state: string
+  count: number
+}
+
+/**
+ * The counts behind the directory's header and filter menus.
+ *
+ * An option's count is how many people the list would show if that option were chosen, with
+ * every other active filter kept. Every location and department is listed, even at zero.
+ */
+export interface DirectoryFacets {
+  total: number
+  matching: number
+  locations: LocationCount[]
+  departments: DepartmentCount[]
+  myTeam: number | null
+}
+
 export interface DirectoryPage {
   items: DirectoryCard[]
   nextCursor: string | null
 }
 
-export type ValidationErrorCtx = { [key: string]: unknown }
-
-export interface ValidationError {
+/**
+ * One failed field on a 422: where it was, what was wrong, and the error's kind.
+ */
+export interface FieldError {
   loc: (string | number)[]
   msg: string
   type: string
-  input?: unknown
-  ctx?: ValidationErrorCtx
-}
-
-export interface HTTPValidationError {
-  detail?: ValidationError[]
 }
 
 export type HealthResponseStatus = (typeof HealthResponseStatus)[keyof typeof HealthResponseStatus]
@@ -138,6 +161,19 @@ export interface PrivateDetails {
   dateOfBirth: string
 }
 
+/**
+ * The body of every error response. Only a 422 has `errors`.
+ */
+export interface Problem {
+  type: string
+  title: string
+  status: number
+  instance: string
+  detail?: string | null
+  requestId?: string | null
+  errors?: FieldError[] | null
+}
+
 export interface TenantInfo {
   id: string
   expiresAt: string
@@ -155,6 +191,17 @@ export type ListPeopleParams = {
    * @maximum 100
    */
   limit?: number
+  q?: string | null
+  locationId?: string | null
+  departmentId?: string | null
+  team?: 'mine' | null
+}
+
+export type GetDirectoryFacetsParams = {
+  q?: string | null
+  locationId?: string | null
+  departmentId?: string | null
+  team?: 'mine' | null
 }
 
 const withQueryKey = <T extends object, K>(query: T, queryKey: K): T & { queryKey: K } => {
@@ -312,15 +359,20 @@ export type createSandboxResponse201 = {
   status: 201
 }
 
+export type createSandboxResponse403 = {
+  data: Problem
+  status: 403
+}
+
 export type createSandboxResponse422 = {
-  data: HTTPValidationError
+  data: Problem
   status: 422
 }
 
 export type createSandboxResponseSuccess = createSandboxResponse201 & {
   headers: Headers
 }
-export type createSandboxResponseError = createSandboxResponse422 & {
+export type createSandboxResponseError = (createSandboxResponse403 | createSandboxResponse422) & {
   headers: Headers
 }
 
@@ -371,10 +423,7 @@ export const createSandbox = async (
 
 export const getCreateSandboxMutationKey = () => ['createSandbox'] as const
 
-export const getCreateSandboxMutationOptions = <
-  TError = HTTPValidationError,
-  TContext = unknown,
->(options?: {
+export const getCreateSandboxMutationOptions = <TError = Problem, TContext = unknown>(options?: {
   mutation?: UseMutationOptions<
     Awaited<ReturnType<typeof createSandbox>>,
     TError,
@@ -409,13 +458,13 @@ export const getCreateSandboxMutationOptions = <
 
 export type CreateSandboxMutationResult = NonNullable<Awaited<ReturnType<typeof createSandbox>>>
 export type CreateSandboxMutationBody = NewSandboxRequest | null | undefined
-export type CreateSandboxMutationError = HTTPValidationError
+export type CreateSandboxMutationError = Problem
 export type CreateSandboxMutationVariables = { data?: NewSandboxRequest | null }
 
 /**
  * @summary Start a new sandbox company and sign in to it as one of its personas
  */
-export const useCreateSandbox = <TError = HTTPValidationError, TContext = unknown>(
+export const useCreateSandbox = <TError = Problem, TContext = unknown>(
   options?: {
     mutation?: UseMutationOptions<
       Awaited<ReturnType<typeof createSandbox>>,
@@ -440,10 +489,19 @@ export type getMeResponse200 = {
   status: 200
 }
 
+export type getMeResponse401 = {
+  data: Problem
+  status: 401
+}
+
 export type getMeResponseSuccess = getMeResponse200 & {
   headers: Headers
 }
-export type getMeResponse = getMeResponseSuccess
+export type getMeResponseError = getMeResponse401 & {
+  headers: Headers
+}
+
+export type getMeResponse = getMeResponseSuccess | getMeResponseError
 
 export const getGetMeUrl = () => {
   return `/api/v1/me`
@@ -470,7 +528,7 @@ export const getGetMeQueryKey = () => {
 
 export const getGetMeQueryOptions = <
   TData = Awaited<ReturnType<typeof getMe>>,
-  TError = unknown,
+  TError = Problem,
 >(options?: {
   query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof getMe>>, TError, TData>>
   fetch?: RequestInit
@@ -490,9 +548,9 @@ export const getGetMeQueryOptions = <
 }
 
 export type GetMeQueryResult = NonNullable<Awaited<ReturnType<typeof getMe>>>
-export type GetMeQueryError = unknown
+export type GetMeQueryError = Problem
 
-export function useGetMe<TData = Awaited<ReturnType<typeof getMe>>, TError = unknown>(
+export function useGetMe<TData = Awaited<ReturnType<typeof getMe>>, TError = Problem>(
   options: {
     query: Partial<UseQueryOptions<Awaited<ReturnType<typeof getMe>>, TError, TData>> &
       Pick<
@@ -507,7 +565,7 @@ export function useGetMe<TData = Awaited<ReturnType<typeof getMe>>, TError = unk
   },
   queryClient?: QueryClient,
 ): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function useGetMe<TData = Awaited<ReturnType<typeof getMe>>, TError = unknown>(
+export function useGetMe<TData = Awaited<ReturnType<typeof getMe>>, TError = Problem>(
   options?: {
     query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof getMe>>, TError, TData>> &
       Pick<
@@ -522,7 +580,7 @@ export function useGetMe<TData = Awaited<ReturnType<typeof getMe>>, TError = unk
   },
   queryClient?: QueryClient,
 ): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function useGetMe<TData = Awaited<ReturnType<typeof getMe>>, TError = unknown>(
+export function useGetMe<TData = Awaited<ReturnType<typeof getMe>>, TError = Problem>(
   options?: {
     query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof getMe>>, TError, TData>>
     fetch?: RequestInit
@@ -533,7 +591,7 @@ export function useGetMe<TData = Awaited<ReturnType<typeof getMe>>, TError = unk
  * @summary The signed-in person's own card, and when their sandbox expires
  */
 
-export function useGetMe<TData = Awaited<ReturnType<typeof getMe>>, TError = unknown>(
+export function useGetMe<TData = Awaited<ReturnType<typeof getMe>>, TError = Problem>(
   options?: {
     query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof getMe>>, TError, TData>>
     fetch?: RequestInit
@@ -554,15 +612,35 @@ export type switchPersonaResponse200 = {
   status: 200
 }
 
+export type switchPersonaResponse401 = {
+  data: Problem
+  status: 401
+}
+
+export type switchPersonaResponse403 = {
+  data: Problem
+  status: 403
+}
+
+export type switchPersonaResponse404 = {
+  data: Problem
+  status: 404
+}
+
 export type switchPersonaResponse422 = {
-  data: HTTPValidationError
+  data: Problem
   status: 422
 }
 
 export type switchPersonaResponseSuccess = switchPersonaResponse200 & {
   headers: Headers
 }
-export type switchPersonaResponseError = switchPersonaResponse422 & {
+export type switchPersonaResponseError = (
+  | switchPersonaResponse401
+  | switchPersonaResponse403
+  | switchPersonaResponse404
+  | switchPersonaResponse422
+) & {
   headers: Headers
 }
 
@@ -613,10 +691,7 @@ export const switchPersona = async (
 
 export const getSwitchPersonaMutationKey = () => ['switchPersona'] as const
 
-export const getSwitchPersonaMutationOptions = <
-  TError = HTTPValidationError,
-  TContext = unknown,
->(options?: {
+export const getSwitchPersonaMutationOptions = <TError = Problem, TContext = unknown>(options?: {
   mutation?: UseMutationOptions<
     Awaited<ReturnType<typeof switchPersona>>,
     TError,
@@ -651,13 +726,13 @@ export const getSwitchPersonaMutationOptions = <
 
 export type SwitchPersonaMutationResult = NonNullable<Awaited<ReturnType<typeof switchPersona>>>
 export type SwitchPersonaMutationBody = PersonaChoice
-export type SwitchPersonaMutationError = HTTPValidationError
+export type SwitchPersonaMutationError = Problem
 export type SwitchPersonaMutationVariables = { data: PersonaChoice }
 
 /**
  * @summary Sign in as another persona in the same sandbox, with new session and CSRF tokens
  */
-export const useSwitchPersona = <TError = HTTPValidationError, TContext = unknown>(
+export const useSwitchPersona = <TError = Problem, TContext = unknown>(
   options?: {
     mutation?: UseMutationOptions<
       Awaited<ReturnType<typeof switchPersona>>,
@@ -682,10 +757,24 @@ export type endSessionResponse204 = {
   status: 204
 }
 
+export type endSessionResponse401 = {
+  data: Problem
+  status: 401
+}
+
+export type endSessionResponse403 = {
+  data: Problem
+  status: 403
+}
+
 export type endSessionResponseSuccess = endSessionResponse204 & {
   headers: Headers
 }
-export type endSessionResponse = endSessionResponseSuccess
+export type endSessionResponseError = (endSessionResponse401 | endSessionResponse403) & {
+  headers: Headers
+}
+
+export type endSessionResponse = endSessionResponseSuccess | endSessionResponseError
 
 export const getEndSessionUrl = () => {
   return `/api/v1/session`
@@ -708,7 +797,7 @@ export const endSession = async (options?: RequestInit): Promise<endSessionRespo
 
 export const getEndSessionMutationKey = () => ['endSession'] as const
 
-export const getEndSessionMutationOptions = <TError = unknown, TContext = unknown>(options?: {
+export const getEndSessionMutationOptions = <TError = Problem, TContext = unknown>(options?: {
   mutation?: UseMutationOptions<Awaited<ReturnType<typeof endSession>>, TError, void, TContext>
   fetch?: RequestInit
 }): UseMutationOptions<Awaited<ReturnType<typeof endSession>>, TError, void, TContext> => {
@@ -728,12 +817,12 @@ export const getEndSessionMutationOptions = <TError = unknown, TContext = unknow
 
 export type EndSessionMutationResult = NonNullable<Awaited<ReturnType<typeof endSession>>>
 
-export type EndSessionMutationError = unknown
+export type EndSessionMutationError = Problem
 
 /**
  * @summary Sign out: end the session and clear its cookies
  */
-export const useEndSession = <TError = unknown, TContext = unknown>(
+export const useEndSession = <TError = Problem, TContext = unknown>(
   options?: {
     mutation?: UseMutationOptions<Awaited<ReturnType<typeof endSession>>, TError, void, TContext>
     fetch?: RequestInit
@@ -748,15 +837,20 @@ export type listPeopleResponse200 = {
   status: 200
 }
 
+export type listPeopleResponse401 = {
+  data: Problem
+  status: 401
+}
+
 export type listPeopleResponse422 = {
-  data: HTTPValidationError
+  data: Problem
   status: 422
 }
 
 export type listPeopleResponseSuccess = listPeopleResponse200 & {
   headers: Headers
 }
-export type listPeopleResponseError = listPeopleResponse422 & {
+export type listPeopleResponseError = (listPeopleResponse401 | listPeopleResponse422) & {
   headers: Headers
 }
 
@@ -800,7 +894,7 @@ export const getListPeopleQueryKey = (params?: ListPeopleParams) => {
 
 export const getListPeopleQueryOptions = <
   TData = Awaited<ReturnType<typeof listPeople>>,
-  TError = HTTPValidationError,
+  TError = Problem,
 >(
   params?: ListPeopleParams,
   options?: {
@@ -823,12 +917,9 @@ export const getListPeopleQueryOptions = <
 }
 
 export type ListPeopleQueryResult = NonNullable<Awaited<ReturnType<typeof listPeople>>>
-export type ListPeopleQueryError = HTTPValidationError
+export type ListPeopleQueryError = Problem
 
-export function useListPeople<
-  TData = Awaited<ReturnType<typeof listPeople>>,
-  TError = HTTPValidationError,
->(
+export function useListPeople<TData = Awaited<ReturnType<typeof listPeople>>, TError = Problem>(
   params: undefined | ListPeopleParams,
   options: {
     query: Partial<UseQueryOptions<Awaited<ReturnType<typeof listPeople>>, TError, TData>> &
@@ -844,10 +935,7 @@ export function useListPeople<
   },
   queryClient?: QueryClient,
 ): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function useListPeople<
-  TData = Awaited<ReturnType<typeof listPeople>>,
-  TError = HTTPValidationError,
->(
+export function useListPeople<TData = Awaited<ReturnType<typeof listPeople>>, TError = Problem>(
   params?: ListPeopleParams,
   options?: {
     query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof listPeople>>, TError, TData>> &
@@ -863,10 +951,7 @@ export function useListPeople<
   },
   queryClient?: QueryClient,
 ): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function useListPeople<
-  TData = Awaited<ReturnType<typeof listPeople>>,
-  TError = HTTPValidationError,
->(
+export function useListPeople<TData = Awaited<ReturnType<typeof listPeople>>, TError = Problem>(
   params?: ListPeopleParams,
   options?: {
     query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof listPeople>>, TError, TData>>
@@ -878,10 +963,7 @@ export function useListPeople<
  * @summary The company directory, a page at a time
  */
 
-export function useListPeople<
-  TData = Awaited<ReturnType<typeof listPeople>>,
-  TError = HTTPValidationError,
->(
+export function useListPeople<TData = Awaited<ReturnType<typeof listPeople>>, TError = Problem>(
   params?: ListPeopleParams,
   options?: {
     query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof listPeople>>, TError, TData>>
@@ -898,20 +980,206 @@ export function useListPeople<
   return withQueryKey(query, queryOptions.queryKey)
 }
 
+export type getDirectoryFacetsResponse200 = {
+  data: DirectoryFacets
+  status: 200
+}
+
+export type getDirectoryFacetsResponse401 = {
+  data: Problem
+  status: 401
+}
+
+export type getDirectoryFacetsResponse422 = {
+  data: Problem
+  status: 422
+}
+
+export type getDirectoryFacetsResponseSuccess = getDirectoryFacetsResponse200 & {
+  headers: Headers
+}
+export type getDirectoryFacetsResponseError = (
+  getDirectoryFacetsResponse401 | getDirectoryFacetsResponse422
+) & {
+  headers: Headers
+}
+
+export type getDirectoryFacetsResponse =
+  getDirectoryFacetsResponseSuccess | getDirectoryFacetsResponseError
+
+export const getGetDirectoryFacetsUrl = (params?: GetDirectoryFacetsParams) => {
+  const normalizedParams = new URLSearchParams()
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  })
+
+  const stringifiedParams = normalizedParams.toString()
+
+  return stringifiedParams.length > 0
+    ? `/api/v1/people/facets?${stringifiedParams}`
+    : `/api/v1/people/facets`
+}
+
+/**
+ * @summary The directory's counts: the header's, and each filter option's
+ */
+export const getDirectoryFacets = async (
+  params?: GetDirectoryFacetsParams,
+  options?: RequestInit,
+): Promise<getDirectoryFacetsResponse> => {
+  const res = await fetch(getGetDirectoryFacetsUrl(params), {
+    ...options,
+    method: 'GET',
+  })
+
+  const body = [204, 205, 304].includes(res.status) ? null : await res.text()
+
+  const data: getDirectoryFacetsResponse['data'] = body ? JSON.parse(body) : {}
+  return { data, status: res.status, headers: res.headers } as getDirectoryFacetsResponse
+}
+
+export const getGetDirectoryFacetsQueryKey = (params?: GetDirectoryFacetsParams) => {
+  return [`/api/v1/people/facets`, ...(params ? [params] : [])] as const
+}
+
+export const getGetDirectoryFacetsQueryOptions = <
+  TData = Awaited<ReturnType<typeof getDirectoryFacets>>,
+  TError = Problem,
+>(
+  params?: GetDirectoryFacetsParams,
+  options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof getDirectoryFacets>>, TError, TData>>
+    fetch?: RequestInit
+  },
+) => {
+  const { query: queryOptions, fetch: fetchOptions } = options ?? {}
+
+  const queryKey = queryOptions?.queryKey ?? getGetDirectoryFacetsQueryKey(params)
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getDirectoryFacets>>> = ({ signal }) =>
+    getDirectoryFacets(params, { signal, ...fetchOptions })
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getDirectoryFacets>>,
+    TError,
+    TData
+  > & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type GetDirectoryFacetsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getDirectoryFacets>>
+>
+export type GetDirectoryFacetsQueryError = Problem
+
+export function useGetDirectoryFacets<
+  TData = Awaited<ReturnType<typeof getDirectoryFacets>>,
+  TError = Problem,
+>(
+  params: undefined | GetDirectoryFacetsParams,
+  options: {
+    query: Partial<UseQueryOptions<Awaited<ReturnType<typeof getDirectoryFacets>>, TError, TData>> &
+      Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getDirectoryFacets>>,
+          TError,
+          Awaited<ReturnType<typeof getDirectoryFacets>>
+        >,
+        'initialData'
+      >
+    fetch?: RequestInit
+  },
+  queryClient?: QueryClient,
+): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetDirectoryFacets<
+  TData = Awaited<ReturnType<typeof getDirectoryFacets>>,
+  TError = Problem,
+>(
+  params?: GetDirectoryFacetsParams,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof getDirectoryFacets>>, TError, TData>
+    > &
+      Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getDirectoryFacets>>,
+          TError,
+          Awaited<ReturnType<typeof getDirectoryFacets>>
+        >,
+        'initialData'
+      >
+    fetch?: RequestInit
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetDirectoryFacets<
+  TData = Awaited<ReturnType<typeof getDirectoryFacets>>,
+  TError = Problem,
+>(
+  params?: GetDirectoryFacetsParams,
+  options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof getDirectoryFacets>>, TError, TData>>
+    fetch?: RequestInit
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary The directory's counts: the header's, and each filter option's
+ */
+
+export function useGetDirectoryFacets<
+  TData = Awaited<ReturnType<typeof getDirectoryFacets>>,
+  TError = Problem,
+>(
+  params?: GetDirectoryFacetsParams,
+  options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof getDirectoryFacets>>, TError, TData>>
+    fetch?: RequestInit
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+  const queryOptions = getGetDirectoryFacetsQueryOptions(params, options)
+
+  const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
+    queryKey: DataTag<QueryKey, TData, TError>
+  }
+
+  return withQueryKey(query, queryOptions.queryKey)
+}
+
 export type getPersonResponse200 = {
   data: DirectoryCard
   status: 200
 }
 
+export type getPersonResponse401 = {
+  data: Problem
+  status: 401
+}
+
+export type getPersonResponse403 = {
+  data: Problem
+  status: 403
+}
+
+export type getPersonResponse404 = {
+  data: Problem
+  status: 404
+}
+
 export type getPersonResponse422 = {
-  data: HTTPValidationError
+  data: Problem
   status: 422
 }
 
 export type getPersonResponseSuccess = getPersonResponse200 & {
   headers: Headers
 }
-export type getPersonResponseError = getPersonResponse422 & {
+export type getPersonResponseError = (
+  getPersonResponse401 | getPersonResponse403 | getPersonResponse404 | getPersonResponse422
+) & {
   headers: Headers
 }
 
@@ -945,7 +1213,7 @@ export const getGetPersonQueryKey = (personId: string) => {
 
 export const getGetPersonQueryOptions = <
   TData = Awaited<ReturnType<typeof getPerson>>,
-  TError = HTTPValidationError,
+  TError = Problem,
 >(
   personId: string,
   options?: {
@@ -971,12 +1239,9 @@ export const getGetPersonQueryOptions = <
 }
 
 export type GetPersonQueryResult = NonNullable<Awaited<ReturnType<typeof getPerson>>>
-export type GetPersonQueryError = HTTPValidationError
+export type GetPersonQueryError = Problem
 
-export function useGetPerson<
-  TData = Awaited<ReturnType<typeof getPerson>>,
-  TError = HTTPValidationError,
->(
+export function useGetPerson<TData = Awaited<ReturnType<typeof getPerson>>, TError = Problem>(
   personId: string,
   options: {
     query: Partial<UseQueryOptions<Awaited<ReturnType<typeof getPerson>>, TError, TData>> &
@@ -992,10 +1257,7 @@ export function useGetPerson<
   },
   queryClient?: QueryClient,
 ): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function useGetPerson<
-  TData = Awaited<ReturnType<typeof getPerson>>,
-  TError = HTTPValidationError,
->(
+export function useGetPerson<TData = Awaited<ReturnType<typeof getPerson>>, TError = Problem>(
   personId: string,
   options?: {
     query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof getPerson>>, TError, TData>> &
@@ -1011,10 +1273,7 @@ export function useGetPerson<
   },
   queryClient?: QueryClient,
 ): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function useGetPerson<
-  TData = Awaited<ReturnType<typeof getPerson>>,
-  TError = HTTPValidationError,
->(
+export function useGetPerson<TData = Awaited<ReturnType<typeof getPerson>>, TError = Problem>(
   personId: string,
   options?: {
     query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof getPerson>>, TError, TData>>
@@ -1026,10 +1285,7 @@ export function useGetPerson<
  * @summary One person's directory card
  */
 
-export function useGetPerson<
-  TData = Awaited<ReturnType<typeof getPerson>>,
-  TError = HTTPValidationError,
->(
+export function useGetPerson<TData = Awaited<ReturnType<typeof getPerson>>, TError = Problem>(
   personId: string,
   options?: {
     query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof getPerson>>, TError, TData>>
@@ -1051,15 +1307,35 @@ export type getPersonPrivateResponse200 = {
   status: 200
 }
 
+export type getPersonPrivateResponse401 = {
+  data: Problem
+  status: 401
+}
+
+export type getPersonPrivateResponse403 = {
+  data: Problem
+  status: 403
+}
+
+export type getPersonPrivateResponse404 = {
+  data: Problem
+  status: 404
+}
+
 export type getPersonPrivateResponse422 = {
-  data: HTTPValidationError
+  data: Problem
   status: 422
 }
 
 export type getPersonPrivateResponseSuccess = getPersonPrivateResponse200 & {
   headers: Headers
 }
-export type getPersonPrivateResponseError = getPersonPrivateResponse422 & {
+export type getPersonPrivateResponseError = (
+  | getPersonPrivateResponse401
+  | getPersonPrivateResponse403
+  | getPersonPrivateResponse404
+  | getPersonPrivateResponse422
+) & {
   headers: Headers
 }
 
@@ -1094,7 +1370,7 @@ export const getGetPersonPrivateQueryKey = (personId: string) => {
 
 export const getGetPersonPrivateQueryOptions = <
   TData = Awaited<ReturnType<typeof getPersonPrivate>>,
-  TError = HTTPValidationError,
+  TError = Problem,
 >(
   personId: string,
   options?: {
@@ -1120,11 +1396,11 @@ export const getGetPersonPrivateQueryOptions = <
 }
 
 export type GetPersonPrivateQueryResult = NonNullable<Awaited<ReturnType<typeof getPersonPrivate>>>
-export type GetPersonPrivateQueryError = HTTPValidationError
+export type GetPersonPrivateQueryError = Problem
 
 export function useGetPersonPrivate<
   TData = Awaited<ReturnType<typeof getPersonPrivate>>,
-  TError = HTTPValidationError,
+  TError = Problem,
 >(
   personId: string,
   options: {
@@ -1143,7 +1419,7 @@ export function useGetPersonPrivate<
 ): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
 export function useGetPersonPrivate<
   TData = Awaited<ReturnType<typeof getPersonPrivate>>,
-  TError = HTTPValidationError,
+  TError = Problem,
 >(
   personId: string,
   options?: {
@@ -1162,7 +1438,7 @@ export function useGetPersonPrivate<
 ): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
 export function useGetPersonPrivate<
   TData = Awaited<ReturnType<typeof getPersonPrivate>>,
-  TError = HTTPValidationError,
+  TError = Problem,
 >(
   personId: string,
   options?: {
@@ -1177,7 +1453,7 @@ export function useGetPersonPrivate<
 
 export function useGetPersonPrivate<
   TData = Awaited<ReturnType<typeof getPersonPrivate>>,
-  TError = HTTPValidationError,
+  TError = Problem,
 >(
   personId: string,
   options?: {

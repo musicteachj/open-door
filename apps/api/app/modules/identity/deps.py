@@ -3,7 +3,7 @@
 For each request:
 
 1. The `__Host-od_session` cookie is hashed and looked up. A missing, unknown, or expired session
-   is a 401.
+   is a 401. Only an unknown or expired one is logged as a security event.
 2. A request that changes state must also echo the CSRF token in X-CSRF-Token, matching the
    session's hash in constant time, or it gets a 403. Every session-bound route gets this check,
    with nothing to remember.
@@ -13,6 +13,7 @@ For each request:
    route succeeded.
 """
 
+import logging
 from collections.abc import AsyncIterator
 from dataclasses import dataclass
 from typing import Annotated
@@ -29,6 +30,8 @@ from app.modules.identity.security_log import SecurityEvent, log_security_event
 from app.modules.identity.sessions import SessionRecord, find_session
 from app.modules.identity.tokens import hash_token, token_matches
 from app.policy import Action, Actor, PersonResource, can
+
+logger = logging.getLogger(__name__)
 
 NOT_SIGNED_IN = "There is no current session. Start a sandbox to sign in."
 
@@ -48,7 +51,9 @@ async def current_session(
     """The request's live session, after the CSRF check if the request changes state."""
     token = request.cookies.get(SESSION_COOKIE)
     if not token:
-        log_security_event(SecurityEvent.SESSION_INVALID, request, "no session cookie")
+        # A first visit, or a signed-out browser, has no cookie. That is not a refusal worth
+        # the security log, which holds only refused requests.
+        logger.debug("No session cookie on %s %s", request.method, request.url.path)
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, NOT_SIGNED_IN)
     # The sessions table has no row-level security, so the lookup needs no tenant.
     async with tenant_session(engine, NO_TENANT) as db:

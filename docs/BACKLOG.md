@@ -34,12 +34,13 @@ should pick it up. When one is done, delete it here and record it in the changel
   Whichever phase first binds a private value or user-written text, such as Phase 4's
   conversations, must set it in `app/db/engine.py`. (Stage 4 security review.)
 
-- **Keep the directory cursor from naming a hidden person.** The next cursor is the sort key of
-  the last row read, so paging continues past cards the policy layer hides. Every card is visible
-  in Phase 1, so it reveals nothing. Whichever phase first makes the `directory.read` rule refuse
-  anyone must encrypt the cursor or move the filter into the query. Taking the cursor from the
-  last card returned instead is wrong: a page whose rows are all hidden would end the directory
-  early. (Stage 4 security review.)
+- **Keep the directory cursor and the facet counts from naming a hidden person.** The next cursor is
+  the sort key of the last row read, so paging continues past cards the policy layer hides. The
+  directory's facet counts (Phase 2) skip the per-card check altogether. Every card is visible in
+  Phase 1, so it reveals nothing. Whichever phase first makes the `directory.read` rule refuse
+  anyone must encrypt the cursor, or move the filter into the query, and count only the cards it
+  shows. Taking the cursor from the last card returned instead is wrong: a page whose rows are all
+  hidden would end the directory early. (Stage 4 security review.)
 
 - **Make the HR flag part of the tenant context, and reapply it after a persona switch.**
   `app.is_hr` isn't in `TenantContext`: the transaction hook clears it, and only `signed_in` turns
@@ -56,14 +57,6 @@ should pick it up. When one is done, delete it here and record it in the changel
 
 ## Phase 2: design system, shell, sandbox entry
 
-- **Search, filters, and counts in the directory API.** The approved directory (see
-  [`design/screens/04-directory/notes.md`](design/screens/04-directory/notes.md)) searches by name,
-  title, or work email, filters by location, department, and "My team" (everyone under the
-  signed-in manager, directly or through a lead), and shows counts for the header and for each
-  filter option. `GET /api/v1/people` only pages through everyone today. (Directory design.)
-- **Work emails on the employer's domain.** The seed writes `first.last@opendoor.example`, the
-  product's name. They should be `@juniperrow.example`, as the designs show. (Directory design.)
-
 - **Send the CSRF token from the web client.** The generated client sends no `X-CSRF-Token`, so
   every state-changing call would get a 403. Add an Orval `override.mutator`: a custom fetch that
   reads `__Host-od_csrf` from `document.cookie` on every unsafe request. Read it fresh each time,
@@ -72,10 +65,6 @@ should pick it up. When one is done, delete it here and record it in the changel
 - **Reset client state when the identity changes.** Clear every TanStack Query cache on a persona
   switch or sign-out. Treat any 401 as "go to sandbox entry", and never auto-retry a
   state-changing request after a 403. (Stage 3 security review.)
-- **Describe the real error shapes in the OpenAPI schema.** The schema shows FastAPI's default
-  422 body (`detail`), but the API returns problem details (`errors`), and it doesn't list the
-  401, 403, and 404 responses at all. Declare `responses=` with a `Problem` model on each route,
-  so the generated client's error types are right. (Stage 3 security review.)
 - **Check the `__Host-` cookies in each target browser.** They are `Secure`. Chrome and Firefox
   accept them on `http://localhost`, but Safari has historically refused them. Keep `/api` on the
   same origin through the Vite proxy, and test sign-in in each browser the demo supports.
@@ -85,11 +74,6 @@ should pick it up. When one is done, delete it here and record it in the changel
   `fetch(url, { method: "POST", body: JSON.stringify(x) })` sends `text/plain` and gets a 403, so
   any request outside the client must set `Content-Type: application/json` itself. (Stage 3
   security review.)
-- **Don't log a first visit as a security event.** A request with no session cookie is logged as
-  a WARNING-level `security.session_invalid`. Once the web app asks `GET /me` on load, every
-  anonymous visitor writes one, and real refusals get lost. Log a missing cookie at a lower level,
-  or not at all, and keep the warning for a cookie that doesn't match a session. (Phase 1
-  close-out review.)
 
 ## Phase 3: handbook and retrieval
 

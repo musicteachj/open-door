@@ -9,19 +9,22 @@ import base64
 import binascii
 import json
 from collections.abc import Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime
 from typing import Any
 from uuid import UUID
 
-from sqlalchemy import Row, Select, select, tuple_
+from sqlalchemy import ColumnElement, Row, Select, and_, func, or_, select, tuple_
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import aliased
 
 from app.db.models import Department, Location, Person, PersonPrivate
 from app.modules.people.schemas import (
+    DepartmentCount,
     DepartmentRef,
     DirectoryCard,
+    DirectoryFacets,
+    LocationCount,
     LocationRef,
     Me,
     PersonRef,
@@ -84,6 +87,48 @@ class DirectoryResult:
     next_cursor: DirectoryCursor | None
 
 
+@dataclass(frozen=True, slots=True)
+class DirectoryFilters:
+    """What narrows the directory. Every field that is set must match."""
+
+    # Matches the full name ("given family"), the title, or the work email, anywhere in the text.
+    q: str | None = None
+    location_id: UUID | None = None
+    department_id: UUID | None = None
+    # None means no team filter. An empty set matches no one.
+    team: frozenset[UUID] | None = None
+
+
+# Frozen, so it is safe as a default argument.
+NO_FILTERS = DirectoryFilters()
+
+
+def _escape_like(text: str) -> str:
+    """`text` as a LIKE pattern that matches itself, with `\\`, `%`, and `_` escaped."""
+    return text.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+
+
+def _matches(filters: DirectoryFilters) -> list[ColumnElement[bool]]:
+    """The conditions on a person's own row. Every one must hold."""
+    conditions: list[ColumnElement[bool]] = []
+    if filters.q is not None:
+        pattern = f"%{_escape_like(filters.q)}%"
+        conditions.append(
+            or_(
+                (Person.given_name + " " + Person.family_name).ilike(pattern, escape="\\"),
+                Person.title.ilike(pattern, escape="\\"),
+                Person.work_email.ilike(pattern, escape="\\"),
+            )
+        )
+    if filters.location_id is not None:
+        conditions.append(Person.location_id == filters.location_id)
+    if filters.department_id is not None:
+        conditions.append(Person.department_id == filters.department_id)
+    if filters.team is not None:
+        conditions.append(Person.id.in_(filters.team))
+    return conditions
+
+
 def _cards() -> Select[*tuple[Any, ...]]:
     """Exactly the columns a directory card shows, and nothing else of the person's."""
     return (
@@ -98,6 +143,7 @@ def _cards() -> Select[*tuple[Any, ...]]:
             Location.id.label("location_id"),
             Location.name.label("location_name"),
             Location.state.label("location_state"),
+            Location.timezone.label("location_timezone"),
             _Manager.id.label("manager_id"),
             _Manager.given_name.label("manager_given_name"),
             _Manager.family_name.label("manager_family_name"),
@@ -124,7 +170,10 @@ def _card_fields(row: Row[Any]) -> dict[str, Any]:
         "title": row.title,
         "department": DepartmentRef(id=row.department_id, name=row.department_name),
         "location": LocationRef(
-            id=row.location_id, name=row.location_name, state=row.location_state
+            id=row.location_id,
+            name=row.location_name,
+            state=row.location_state,
+            timezone=row.location_timezone,
         ),
         "manager": manager,
         "work_email": row.work_email,
@@ -132,10 +181,14 @@ def _card_fields(row: Row[Any]) -> dict[str, Any]:
 
 
 async def list_directory(
-    session: AsyncSession, *, limit: int, after: DirectoryCursor | None
+    session: AsyncSession,
+    *,
+    limit: int,
+    after: DirectoryCursor | None,
+    filters: DirectoryFilters = NO_FILTERS,
 ) -> DirectoryResult:
-    """One page of the directory, ordered by family name, given name, then ID."""
-    query = _cards().order_by(*_DIRECTORY_ORDER).limit(limit + 1)
+    """One page of the people the filters match, ordered by family name, given name, then ID."""
+    query = _cards().where(*_matches(filters)).order_by(*_DIRECTORY_ORDER).limit(limit + 1)
     if after is not None:
         query = query.where(
             tuple_(*_DIRECTORY_ORDER) > tuple_(after.family_name, after.given_name, after.person_id)
@@ -147,6 +200,48 @@ async def list_directory(
         last = page[-1]
         next_cursor = DirectoryCursor(last.family_name, last.given_name, last.id)
     return DirectoryResult([DirectoryCard(**_card_fields(row)) for row in page], next_cursor)
+
+
+async def directory_facets(
+    session: AsyncSession, *, filters: DirectoryFilters, team_ids: frozenset[UUID]
+) -> DirectoryFacets:
+    """The header's counts and each filter menu's counts, by the faceted-search rule.
+
+    An option's count is how many people the list would show if that option were chosen, keeping
+    every other active filter. So a menu's own filter is dropped from its counts, and the option
+    takes its place. `my_team` follows the same rule: the list's length with `team_ids` as the team
+    filter and the search, location, and department kept. It is None when `team_ids` is empty.
+    """
+    total = await session.scalar(select(func.count(Person.id)))
+    matching = await session.scalar(select(func.count(Person.id)).where(*_matches(filters)))
+    # Each menu starts from its options, not from people, and outer-joins the people who match the
+    # other filters, so an option nobody matches still appears, with a count of zero.
+    other_than_location = _matches(replace(filters, location_id=None))
+    locations = await session.execute(
+        select(Location.id, Location.name, Location.state, func.count(Person.id).label("count"))
+        .outerjoin(Person, and_(Person.location_id == Location.id, *other_than_location))
+        .group_by(Location.id)
+        .order_by(Location.name, Location.id)
+    )
+    other_than_department = _matches(replace(filters, department_id=None))
+    departments = await session.execute(
+        select(Department.id, Department.name, func.count(Person.id).label("count"))
+        .outerjoin(Person, and_(Person.department_id == Department.id, *other_than_department))
+        .group_by(Department.id)
+        .order_by(Department.name, Department.id)
+    )
+    my_team = None
+    if team_ids:
+        my_team = await session.scalar(
+            select(func.count(Person.id)).where(*_matches(replace(filters, team=team_ids)))
+        )
+    return DirectoryFacets(
+        total=total or 0,
+        matching=matching or 0,
+        locations=[LocationCount(**row._mapping) for row in locations],
+        departments=[DepartmentCount(**row._mapping) for row in departments],
+        my_team=my_team,
+    )
 
 
 async def get_card(session: AsyncSession, person_id: UUID) -> DirectoryCard | None:

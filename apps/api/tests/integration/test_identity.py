@@ -316,7 +316,7 @@ async def test_a_person_who_manages_themself_is_not_their_own_report(
                 department_id=template.department_id,
                 location_id=template.location_id,
                 manager_id=loner,
-                work_email="sam@opendoor.example",
+                work_email="sam@juniperrow.example",
                 employment_type="salaried",
                 hire_date=date(2024, 3, 4),
             )

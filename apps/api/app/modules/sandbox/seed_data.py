@@ -13,7 +13,7 @@ SEED = 20261003
 
 # .example and example.com are reserved for documentation (RFC 2606), so no message sent to these
 # addresses can reach anyone.
-WORK_EMAIL_DOMAIN = "opendoor.example"
+WORK_EMAIL_DOMAIN = "juniperrow.example"
 PERSONAL_EMAIL_DOMAIN = "example.com"
 
 

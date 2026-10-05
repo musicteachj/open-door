@@ -6,6 +6,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 
 from app import __version__
+from app.api.problems import document_problems_as_problem_json
 from app.api.v1.router import api_router
 from app.core.cache_control import NoStoreMiddleware
 from app.core.config import Settings, get_settings
@@ -39,5 +40,6 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.add_middleware(RequestIdMiddleware)
     app.add_middleware(NoStoreMiddleware)
     install_problem_handlers(app)
+    document_problems_as_problem_json(app)
     app.include_router(api_router)
     return app
