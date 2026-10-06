@@ -12,6 +12,16 @@ version (`0.x.y` while the app is being built, `1.0.0` when it is complete).
 
 ### Added
 
+- **The core, navigation, and feedback components** (Phase 2, stage 3). The pieces the shell and
+  every page frame are built from, each in the gallery in every state:
+  - **Core and status:** the logo, the page header, the empty state, the sandbox indicator, and the
+    at-a-glance link and list.
+  - **Navigation:** the nav item, and the persona switcher and its menu. The menu starts focus on
+    the current persona, and won't open while a switch or sign-out is under way.
+  - **Feedback:** the banner, the inline error, and the full-page message, whose heading takes focus
+    when it appears. Errors appear beside what failed, never in a toast.
+  - **One tested module holds the accessible names,** such as "Approvals, 1 waiting".
+  - **The whole gallery fits a 390 px screen,** checked in a real browser.
 - **The restyled components, the gallery, and browser tests** (Phase 2, stage 2b).
   - **Nine primitives** built by hand from the design's sketches and tokens: the button, input,
     textarea, select, dropdown menu, tooltip, toast, avatar, and skeleton. A loading button keeps
