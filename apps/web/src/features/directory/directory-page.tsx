@@ -1,4 +1,3 @@
-import { useLocation } from 'react-router'
 import { useState } from 'react'
 import { useMe } from '@/app/useMe'
 import { DirectoryTable, type DirectoryItem } from '@/components/directory/directory-table'
@@ -10,10 +9,14 @@ import { FilterToggle } from '@/components/forms/filter-toggle'
 import { SearchField } from '@/components/forms/search-field'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
-import { useDirectoryFacets, useDirectoryList } from './use-directory-data'
+import { PAGE_SIZE, useDirectoryFacets, useDirectoryList } from './use-directory-data'
 import { PageSandboxIndicator } from '@/features/shell/page-sandbox-indicator'
 import { fromDirectory } from './directory-origin'
-import { MAX_SEARCH_LENGTH, useDirectoryParams } from './use-directory-params'
+import {
+  MAX_SEARCH_LENGTH,
+  useDirectoryParams,
+  type DirectoryApiParams,
+} from './use-directory-params'
 
 // The directory at /directory, from docs/design/screens/04-directory. The shell supplies the
 // sandbox indicator and the page's one <main>. State lives in the URL (use-directory-params); the
@@ -27,16 +30,50 @@ function useLastDefined<T>(value: T | undefined): T | undefined {
   return value ?? kept
 }
 
+/** The IDs of the options the facets listed. Each sandbox has its own, so a link from another one carries IDs that match nothing here. */
+type OptionIds = { locations: ReadonlySet<string>; departments: ReadonlySet<string> }
+
+/** The filters with any location or department that isn't a known option left out. */
+function withKnownFilters(api: DirectoryApiParams, known: OptionIds | undefined) {
+  const { locationId, departmentId, ...rest } = api
+  return {
+    ...rest,
+    ...(locationId && known?.locations.has(locationId) ? { locationId } : {}),
+    ...(departmentId && known?.departments.has(departmentId) ? { departmentId } : {}),
+  }
+}
+
 export function DirectoryPage() {
-  const location = useLocation()
   const { data: me } = useMe()
   const params = useDirectoryParams()
-  const list = useDirectoryList(params.apiParams)
-  const facetsQuery = useDirectoryFacets(params.apiParams)
+  // A location or department in the URL counts only once the facets have said it is one of the
+  // options (the URL itself is left alone). Until then the facets are asked without them, and the
+  // list waits, so no screen shows "All" menus over a list filtered by a stranger's ID.
+  const [known, setKnown] = useState<OptionIds>()
+  const unverified = known === undefined && (params.location !== null || params.department !== null)
+  const facetParams = withKnownFilters(params.apiParams, known)
+  const facetsQuery = useDirectoryFacets(facetParams)
+  if (!known && facetsQuery.data) {
+    setKnown({
+      locations: new Set(facetsQuery.data.locations.map((option) => option.id)),
+      departments: new Set(facetsQuery.data.departments.map((option) => option.id)),
+    })
+  }
+  // If the facets cannot say, the URL's location and department are not applied either: the list
+  // is by search and team only, as the page says, until Retry succeeds.
+  const list = useDirectoryList(facetParams, {
+    enabled: !unverified || facetsQuery.isError,
+  })
   // A failed update has no data under its new key, so the last good results stand in for it.
   const pages = useLastDefined(list.data?.pages)
   const facets = useLastDefined(facetsQuery.data)
-  const updateFailed = (list.isError && !list.isFetchNextPageError) || facetsQuery.isError
+  // The counts failed on the first visit: nothing to show for them, and the list itself is fine.
+  const facetsMissing = facetsQuery.isError && !facets
+  const updateFailed =
+    (list.isError && !list.isFetchNextPageError) || (facetsQuery.isError && !facetsMissing)
+  const location = known?.locations.has(params.location ?? '') ? params.location : null
+  const department = known?.departments.has(params.department ?? '') ? params.department : null
+  const hasFilters = location !== null || department !== null || params.myTeam
 
   const items: DirectoryItem[] = (pages ?? []).flatMap((page) =>
     page.items.map((person) => ({
@@ -46,14 +83,15 @@ export function DirectoryPage() {
       department: person.department.name,
       location: person.location.name,
       to: `/directory/${encodeURIComponent(person.id)}`,
-      linkState: fromDirectory(location.search),
+      linkState: fromDirectory(params.listSearch),
+      onFollow: params.flushSearch,
     })),
   )
 
   const searching = params.q !== ''
   // Counts kept from before a failed update describe the old filters, so they only give the total.
-  const narrowed = (searching || params.hasFilters) && !facetsQuery.isError
-  const count = facets ? (
+  const narrowed = (searching || hasFilters) && !facetsQuery.isError
+  const count = facetsMissing ? undefined : facets ? (
     narrowed ? (
       `${facets.matching} of ${facets.total} people`
     ) : (
@@ -73,27 +111,38 @@ export function DirectoryPage() {
           onChange={params.setSearchText}
           maxLength={MAX_SEARCH_LENGTH}
         />
-        <FilterSelect
-          label="Location"
-          value={params.location}
-          options={facets?.locations ?? []}
-          onChange={params.setLocation}
-        />
-        <FilterSelect
-          label="Department"
-          value={params.department}
-          options={facets?.departments ?? []}
-          onChange={params.setDepartment}
-        />
+        {!facetsMissing && (
+          <>
+            <FilterSelect
+              label="Location"
+              value={location}
+              options={facets?.locations ?? []}
+              onChange={params.setLocation}
+            />
+            <FilterSelect
+              label="Department"
+              value={department}
+              options={facets?.departments ?? []}
+              onChange={params.setDepartment}
+            />
+          </>
+        )}
         {facets?.myTeam != null && (
           <FilterToggle count={facets.myTeam} pressed={params.myTeam} onChange={params.setMyTeam} />
         )}
-        {params.hasFilters && (
+        {hasFilters && (
           <Button variant="ghost" onClick={params.clearFilters}>
             Clear filters
           </Button>
         )}
       </div>
+
+      {facetsMissing && (
+        <InlineError
+          message="We couldn't load the filters."
+          onRetry={() => void facetsQuery.refetch()}
+        />
+      )}
 
       {updateFailed && (
         <InlineError
@@ -140,7 +189,7 @@ export function DirectoryPage() {
               </Button>
             </>
           ) : (
-            items.length > 50 && (
+            items.length > PAGE_SIZE && (
               <p className="m-0 text-small text-ink-muted tabular-nums">
                 Showing all {items.length}
               </p>

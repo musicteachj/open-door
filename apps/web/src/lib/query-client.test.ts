@@ -1,5 +1,6 @@
 import { QueryObserver } from '@tanstack/react-query'
 import { describe, expect, it, vi } from 'vitest'
+import { getGetMeQueryKey } from '@/api/generated'
 import { ApiError } from './api-fetch'
 import { createQueryClient } from './query-client'
 
@@ -14,11 +15,15 @@ const apiError = (status: number) => new ApiError(status, null, null)
 let runs = 0
 
 /** Runs a read until it settles, and returns how many times its function was called. */
-async function runRead(client: ReturnType<typeof setup>['client'], fail: () => Error) {
+async function runRead(
+  client: ReturnType<typeof setup>['client'],
+  fail: () => Error,
+  key?: readonly unknown[],
+) {
   const queryFn = vi.fn<() => Promise<never>>(async () => {
     throw fail()
   })
-  const observer = new QueryObserver(client, { queryKey: ['read', (runs += 1)], queryFn })
+  const observer = new QueryObserver(client, { queryKey: key ?? ['read', (runs += 1)], queryFn })
   await new Promise<void>((resolve) => {
     const unsubscribe = observer.subscribe((result) => {
       if (result.status === 'error') {
@@ -79,9 +84,9 @@ describe('createQueryClient writes', () => {
 })
 
 describe('createQueryClient unauthorized', () => {
-  it('calls onUnauthorized once when a read gets a 401', async () => {
+  it('calls onUnauthorized once when /me gets a 401', async () => {
     const { client, onUnauthorized } = setup()
-    await runRead(client, () => apiError(401))
+    await runRead(client, () => apiError(401), getGetMeQueryKey())
     expect(onUnauthorized).toHaveBeenCalledTimes(1)
   })
 

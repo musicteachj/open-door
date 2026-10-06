@@ -196,6 +196,23 @@ describe('search', () => {
   })
 })
 
+describe('following a row before the search pause ends', () => {
+  it('keeps the typed search in the box and the URL when the visitor comes back', async () => {
+    const r = await openDirectory()
+    await r.user.type(screen.getByRole('searchbox'), 'jo')
+    // The 250 ms pause has not passed, so "jo" is not in the URL yet.
+    expect(location(r)).toBe('')
+    await r.user.click(
+      within(screen.getByRole('list', { name: 'People' })).getAllByRole('link')[0]!,
+    )
+    await screen.findByRole('link', { name: 'Back to Directory' })
+    await r.user.click(screen.getByRole('link', { name: 'Back to Directory' }))
+    await screen.findByRole('list', { name: 'People' })
+    expect(screen.getByRole('searchbox')).toHaveValue('jo')
+    expect(location(r)).toBe('?q=jo')
+  })
+})
+
 describe('loading', () => {
   it('shows eight skeleton rows and announces it, only on the first load', async () => {
     installFakeApi('priya')
@@ -260,7 +277,7 @@ describe('when one of the two first requests fails', () => {
     api.delayFacets(80) // the list is on screen before the facets give up
     renderApp({ at: '/directory' })
     await screen.findByRole('list', { name: 'People' })
-    expect(await screen.findByRole('alert')).toHaveTextContent("We couldn't update the list.")
+    expect(await screen.findByRole('alert')).toHaveTextContent("We couldn't load the filters.")
     expect(rows()).toHaveLength(50)
     expect(screen.getByRole('heading', { level: 1, name: 'Directory' })).toBeInTheDocument()
   })
@@ -398,6 +415,88 @@ describe('a filter the API would refuse', () => {
     expect(api.listParams()[0]).toMatchObject({
       locationId: '00000000-0000-4000-9000-000000000002',
     })
+  })
+})
+
+describe('a filter that matches no option', () => {
+  // Each sandbox has its own IDs, so a link from another sandbox is a well-formed UUID that this
+  // one has never heard of.
+  const UNKNOWN_LOCATION = '00000000-0000-4000-9000-0000000000ff'
+  const UNKNOWN_DEPARTMENT = '00000000-0000-4000-a000-0000000000ff'
+
+  it.each([
+    `?location=${UNKNOWN_LOCATION}`,
+    `?department=${UNKNOWN_DEPARTMENT}`,
+    `?location=${UNKNOWN_LOCATION}&department=${UNKNOWN_DEPARTMENT}`,
+  ])('is no filter for %s: everyone is listed, and no request carries it', async (query) => {
+    installFakeApi('priya')
+    const api = installFakeDirectory('priya')
+    renderApp({ at: `/directory${query}` })
+    await screen.findByRole('list', { name: 'People' })
+    await waitFor(() => expect(countText()).toBe('Directory120 people'))
+    expect(rows()).toHaveLength(50)
+    expect(screen.queryByRole('button', { name: 'Clear filters' })).not.toBeInTheDocument()
+    for (const u of [...api.listRequests, ...api.facetRequests]) {
+      expect(u.searchParams.has('locationId')).toBe(false)
+      expect(u.searchParams.has('departmentId')).toBe(false)
+    }
+  })
+
+  it('still filters by a known option in the same link as an unknown one', async () => {
+    installFakeApi('priya')
+    const api = installFakeDirectory('priya')
+    renderApp({
+      at: `/directory?location=00000000-0000-4000-9000-000000000002&department=${UNKNOWN_DEPARTMENT}`,
+    })
+    await screen.findByRole('list', { name: 'People' })
+    await waitFor(() => expect(countText()).toBe('Directory40 of 120 people'))
+    expect(api.listParams().at(-1)).toMatchObject({
+      locationId: '00000000-0000-4000-9000-000000000002',
+    })
+    expect(api.listParams().at(-1)).not.toHaveProperty('departmentId')
+  })
+})
+
+describe('when the filters cannot load on the first visit', () => {
+  it('shows the list, hides the count and the menus, and offers Retry for the filters', async () => {
+    installFakeApi('priya')
+    const api = installFakeDirectory('priya')
+    api.failFacets(500)
+    const { user } = renderApp({ at: '/directory' })
+    await screen.findByRole('list', { name: 'People' })
+    const alert = await screen.findByRole('alert')
+    expect(alert).toHaveTextContent("We couldn't load the filters.")
+    expect(screen.queryByText("We couldn't update the list.")).not.toBeInTheDocument()
+    expect(rows()).toHaveLength(50)
+    expect(countText()).toBe('Directory')
+    expect(document.querySelector('[data-slot="skeleton"]')).toBeNull()
+    expect(screen.queryByRole('combobox')).not.toBeInTheDocument()
+
+    api.failFacets(null)
+    await user.click(within(alert).getByRole('button', { name: 'Retry' }))
+    await waitFor(() => expect(countText()).toBe('Directory120 people'))
+    expect(screen.getAllByRole('combobox')).toHaveLength(2)
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  })
+})
+
+describe('when the filters cannot load on a link that carries a location', () => {
+  it('lists without the location, and applies it once Retry succeeds', async () => {
+    installFakeApi('priya')
+    const api = installFakeDirectory('priya')
+    api.failFacets(500)
+    const denver = '00000000-0000-4000-9000-000000000002'
+    const { user } = renderApp({ at: `/directory?location=${denver}` })
+    await screen.findByRole('list', { name: 'People' })
+    const alert = await screen.findByRole('alert')
+    expect(alert).toHaveTextContent("We couldn't load the filters.")
+    expect(rows()).toHaveLength(50)
+    expect(api.listParams().every((p) => !('locationId' in p))).toBe(true)
+
+    api.failFacets(null)
+    await user.click(within(alert).getByRole('button', { name: 'Retry' }))
+    await waitFor(() => expect(rows()).toHaveLength(40))
+    expect(api.listParams().at(-1)).toMatchObject({ locationId: denver })
   })
 })
 

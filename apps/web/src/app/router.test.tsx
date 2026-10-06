@@ -7,6 +7,7 @@ import { getGetMeQueryKey, useSwitchPersona } from '@/api/generated'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { meFor } from '@/test/fixtures'
 import { installFakeApi } from '@/test/fake-api'
+import { apiFetch } from '@/lib/api-fetch'
 import { server } from '@/test/msw'
 import { signOutViaMenu, switchViaMenu } from '@/test/persona-menu'
 import { renderApp } from '@/test/render-app'
@@ -73,6 +74,73 @@ describe('the router', () => {
     expect(
       screen.queryByRole('heading', { level: 1, name: /^Good (morning|afternoon|evening),/ }),
     ).not.toBeInTheDocument()
+  })
+
+  it('does not call a sandbox reset when a read is 401 because another tab switched person', async () => {
+    const api = installFakeApi('priya')
+    const { queryClient } = renderApp({ at: '/ask' })
+    await signedInAs('Priya Raman')
+    // Another tab switched to Marcus, which rotated the cookie, so this tab's next read is a 401
+    // while /me (with the new cookie) names Marcus.
+    api.signIn('marcus')
+    server.use(
+      http.get(`${window.location.origin}/api/v1/other-read`, () =>
+        HttpResponse.json(
+          { type: 'about:blank', title: 'Not signed in', status: 401, instance: '/x' },
+          { status: 401 },
+        ),
+      ),
+    )
+    await act(() =>
+      queryClient
+        .fetchQuery({ queryKey: ['other-read'], queryFn: () => apiFetch('/api/v1/other-read') })
+        .catch(() => undefined),
+    )
+    await signedInAs('Marcus Bell')
+    expect(screen.queryByText('This sandbox has reset.')).not.toBeInTheDocument()
+  })
+
+  it('shows the reset page when a read is 401 and /me is 401 too, as after a sign-out elsewhere', async () => {
+    const api = installFakeApi('priya')
+    const { queryClient } = renderApp({ at: '/ask' })
+    await signedInAs('Priya Raman')
+    api.expire()
+    server.use(
+      http.get(`${window.location.origin}/api/v1/other-read`, () =>
+        HttpResponse.json(
+          { type: 'about:blank', title: 'Not signed in', status: 401, instance: '/x' },
+          { status: 401 },
+        ),
+      ),
+    )
+    await act(() =>
+      queryClient
+        .fetchQuery({ queryKey: ['other-read'], queryFn: () => apiFetch('/api/v1/other-read') })
+        .catch(() => undefined),
+    )
+    expect(await heading('This sandbox has reset.')).toBeInTheDocument()
+  })
+
+  it('does not call a sandbox reset when a read is 401 but /me still names the same person', async () => {
+    installFakeApi('priya')
+    const { queryClient } = renderApp({ at: '/ask' })
+    await signedInAs('Priya Raman')
+    server.use(
+      http.get(`${window.location.origin}/api/v1/other-read`, () =>
+        HttpResponse.json(
+          { type: 'about:blank', title: 'Not signed in', status: 401, instance: '/x' },
+          { status: 401 },
+        ),
+      ),
+    )
+    await act(() =>
+      queryClient
+        .fetchQuery({ queryKey: ['other-read'], queryFn: () => apiFetch('/api/v1/other-read') })
+        .catch(() => undefined),
+    )
+    await act(() => new Promise((resolve) => setTimeout(resolve, 50)))
+    expect(screen.queryByText('This sandbox has reset.')).not.toBeInTheDocument()
+    await signedInAs('Priya Raman')
   })
 
   it('sends the reset page button to a landing page that does not find the old person', async () => {

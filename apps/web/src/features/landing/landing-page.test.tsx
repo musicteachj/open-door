@@ -36,6 +36,26 @@ function failStarts(status = 500) {
   )
 }
 
+describe('the landing page after the sandbox expired', () => {
+  it('stays on the landing page instead of bouncing to /ask when the cached /me failed with a 401', async () => {
+    const api = installFakeApi('priya')
+    const { queryClient, router } = renderApp({ at: '/ask' })
+    await screen.findByRole('heading', { level: 1, name: /^Good (morning|afternoon|evening),/ })
+    api.expire()
+    await act(() => queryClient.invalidateQueries())
+    await screen.findByRole('heading', { level: 1, name: 'This sandbox has reset.' })
+    // Back to "/": the cached person is still there, but the last fetch said nobody is signed in.
+    await act(() => router.navigate('/'))
+    expect(
+      await screen.findByRole('heading', {
+        level: 1,
+        name: 'Your open-door policy, now always open.',
+      }),
+    ).toBeInTheDocument()
+    expect(router.state.location.pathname).toBe('/')
+  })
+})
+
 describe('the landing page', () => {
   it('shows the pitch, the picker, the sandbox note, and the footer', async () => {
     installFakeApi()

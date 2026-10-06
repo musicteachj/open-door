@@ -15,6 +15,8 @@ type DirectoryRowProps = {
   to: string
   /** Router state the profile reads, such as where the visitor came from. */
   linkState?: unknown
+  /** Runs when the link is followed, before the router navigates. */
+  onFollow?: () => void
   initials?: string
   /** This is the signed-in person's own row. */
   isYou?: boolean
@@ -33,6 +35,7 @@ function DirectoryRow({
   location,
   to,
   linkState,
+  onFollow,
   initials,
   isYou = false,
   className,
@@ -41,6 +44,7 @@ function DirectoryRow({
     <Link
       to={to}
       state={linkState}
+      onClick={onFollow}
       data-slot="directory-row"
       aria-label={directoryRowLabel({ name, title, department, location, isYou })}
       className={cn(

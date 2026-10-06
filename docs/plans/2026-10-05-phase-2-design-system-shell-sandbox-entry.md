@@ -1599,6 +1599,42 @@ PR #28. #28 was merged before its CI finished; `dev`'s run on the merge commit c
   development, not a task, so it moved to "Any phase" rather than being deleted.
 - **Stage 6 ended at 758 web unit tests and 108 browser tests** (517 API tests).
 - The owner reviewed the capture report (76 rows, none missing) and approved it on 2026-10-06.
+
+**The Phase 2 review,** `/code-review high` on `de75e53..dev`, limited to application code (about
+6,300 lines in 111 files; tests and generated files out of scope), found 10 issues, none high.
+Eight are fixed in `fix/phase-2-review`, each test first and mutation-proved:
+- **A filter id from another sandbox,** a valid UUID matching no option, filtered the list to
+  nobody under menus showing "All". An id now counts only once the facets list it.
+- **A read's 401 always showed "This sandbox has reset."** Now it refetches `/me` first:
+  - a different person takes the other-tab path;
+  - the same person means the read was stale, and nothing changes;
+  - only `/me`'s own 401 marks the session expired.
+- **Back to `/` after an expiry** no longer bounces to `/ask` on the cached person.
+- **If the facets fail on the first load,** the count and menus hide behind "We couldn't load the
+  filters." with Retry, instead of a skeleton that never resolves. The list then ignores the URL's
+  location and department too, so it is never filtered with no way to clear the filter. The
+  follow-up review caught that case.
+- **A search typed within the 250 ms pause before a row click** is written before the click, so
+  Back keeps it.
+- **The schema hook rewrites every default 422 to `Problem`,** so a route that forgets to declare
+  one can't leave a reference to a removed schema.
+- **The gallery check reads its marker from `gallery-marker.json`,** which `Gallery.tsx` also
+  renders, so renaming the heading can't disable it.
+- The footer uses `PAGE_SIZE`.
+
+Two went to the backlog: the facets' five serial queries (Phase 8), and local test runs reusing a
+stale server (any phase).
+
+**The new logo,** designed with Claude Design after the brainstorm, ships in the same PR at the
+owner's request:
+- **The browser's icons live in `apps/web/public/`,** which Vite serves at the root: `favicon.svg`,
+  the 16 and 32 px PNG fallbacks, `apple-touch-icon.png`, `icon-512.png`, and a `site.webmanifest`.
+- **The design's mark** (`docs/design/system/assets/logo-mark.svg`) is the new 32 px mark. The
+  version hand-tuned for 16 px is kept beside it as `logo-mark-16.svg`, its source, rather than
+  served.
+- The SVGs keep their Content Credentials metadata, which records that Claude made them.
+- **The Logo component draws the same three shapes in theme colors.** A test pins them, and another
+  fails if `index.html` or the manifest names an icon missing from `public/`.
 - **The close's code review found one bug, now fixed:** a malformed `location` or `department` in
   the URL went to the API, which refused it, so the page showed "Something went wrong". A value
   that isn't a UUID now counts as no filter. One `isUuid` in `lib/uuid.ts` serves the filters and

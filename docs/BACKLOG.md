@@ -5,6 +5,10 @@ should pick it up. When one is done, delete it here and record it in the changel
 
 ## Any phase
 
+- **Locally, the browser tests can reuse a stale server.** `playwright.config.ts` sets
+  `reuseExistingServer` off CI, so a preview already on 4173, or an older API on 8100, is tested
+  without a rebuild, and `make check` can pass or fail against old code. CI always starts fresh
+  servers. Stop old servers before `make e2e`, or run with `CI=1`. (Phase 2 close-out review.)
 - **Local development in Safari-family browsers.** WebKit drops every `Secure` cookie on
   `http://localhost`, so the `__Host-` session cookies never stick and sign-in ends at "This
   sandbox has reset." Chromium and Firefox keep them: the session round trip passed in both. Every
@@ -162,6 +166,10 @@ Source for both: [the Phase 1 spec](specs/2026-10-03-phase-1-tenancy-identity-pe
 
 ## Phase 8: hardening and deploy-readiness
 
+- **Make the directory's counts cheaper.** `GET /people/facets` runs up to five queries one after
+  another (total, matching, the location and department menus, and "My team") on every debounced
+  search. Total and matching can be one `count(*) FILTER (WHERE …)`, and the total doesn't change
+  with the filters. Measure in the load test first. (Phase 2 close-out review.)
 - **Keyboard shortcuts.** Add `/` to focus the composer (never while typing in a field) and ⌘K to
   jump to a page. Both need screen-reader and conflict checks. (2026-10-06 design brainstorm.)
 - **Notice another tab's session change at once.** If another tab switches persona or signs out,

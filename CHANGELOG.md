@@ -141,6 +141,10 @@ version (`0.x.y` while the app is being built, `1.0.0` when it is complete).
 
 ### Changed
 
+- **A new logo: the door ajar** (Phase 2 close, with Claude Design). The mark is an aubergine tile
+  with a doorway and its open door. The app's logo draws it in theme colors, and the browser now
+  gets real icons: an SVG favicon, 16 and 32 px fallbacks, an Apple touch icon, and a web app
+  manifest with a 512 px icon. The design's mark is updated to match.
 - **The design plan for the phases ahead** (design track, 2026-10-06). After the Phase 2 screens,
   Claude Design proposed enhancements. The brief now records what was settled:
   - the order of design work, which follows the build order: a logo round first, then the handbook
@@ -184,6 +188,20 @@ version (`0.x.y` while the app is being built, `1.0.0` when it is complete).
   stacked.
 - **"Show more" keeps keyboard focus while it loads** (Phase 2, stage 6). It was disabled while
   loading, which dropped focus.
+- **Phase 2 close-out review fixes.**
+  - **Directory links from another sandbox:** a location or department that isn't one of this
+    sandbox's options is no filter, instead of "0 of 120 people" under menus that say "All".
+  - **Directory filters that fail to load:** the list still shows, the count and the menus are
+    hidden, and a "We couldn't load the filters." message offers Retry.
+  - **Opening a row quickly after typing a search** no longer loses the search when you come back.
+  - **A read that gets a 401 asks who is signed in before deciding.** Another tab's switch or
+    sign-out no longer shows "This sandbox has reset." while the sandbox is alive, and an expired
+    sandbox no longer bounces from the landing page to the assistant and back.
+  - **The schema hook** rewrites any default 422 to the problem-details body, so a route that
+    forgets to declare it can't leave a dangling reference.
+  - **The production-build check for the component gallery** now shares its marker with the
+    gallery's heading and fails if the two drift apart.
+  - **A profile test** no longer depends on the time of day.
 
 ### Security
 
