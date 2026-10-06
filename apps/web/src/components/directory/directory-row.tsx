@@ -13,6 +13,8 @@ type DirectoryRowProps = {
   location: string
   /** The person's profile. */
   to: string
+  /** Router state the profile reads, such as where the visitor came from. */
+  linkState?: unknown
   initials?: string
   /** This is the signed-in person's own row. */
   isYou?: boolean
@@ -30,6 +32,7 @@ function DirectoryRow({
   department,
   location,
   to,
+  linkState,
   initials,
   isYou = false,
   className,
@@ -37,6 +40,7 @@ function DirectoryRow({
   return (
     <Link
       to={to}
+      state={linkState}
       data-slot="directory-row"
       aria-label={directoryRowLabel({ name, title, department, location, isYou })}
       className={cn(

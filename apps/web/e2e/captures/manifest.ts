@@ -153,11 +153,12 @@ export const COMPONENT_ROWS: ComponentRow[] = [
 ]
 
 /** The screen folders the report compares, in docs/design/screens/. The other folders belong to
- * later stages (04 and 06 onward). manifest.test.ts checks that every PNG in these has a row. */
+ * later phases (06 onward). manifest.test.ts checks that every PNG in these has a row. */
 export const SCREEN_FOLDERS = [
   '01-landing',
   '02-app-shell',
   '03-assistant-home',
+  '04-directory',
   '05-global-states',
 ] as const
 
@@ -175,6 +176,14 @@ export type ScreenSetup =
   | 'expiry-banner'
   | 'composer-states'
   | 'nav-states'
+  | 'directory'
+  | 'directory-loading'
+  | 'directory-my-team'
+  | 'directory-empty'
+  | 'directory-show-more'
+  | 'profile-locked'
+  | 'profile-hr'
+  | 'profile-self'
   | 'session-expired'
   | 'not-found'
   | 'server-error'
@@ -203,6 +212,8 @@ export type ScreenRow = {
 }
 
 const SCREENS = 'docs/design/screens'
+const DIRECTORY_NAV =
+  'Phase 3 and Phase 5: the Time off and Handbook items in the sidebar, and "How it\'s built" in Phase 7'
 const PHASE_5_HOME =
   'Phase 3 and Phase 5: the Time off and Handbook items and the at-a-glance figures'
 
@@ -363,6 +374,75 @@ export const SCREEN_ROWS: ScreenRow[] = [
   },
 
   {
+    title: "04 Directory: default (Priya's list)",
+    designImage: `${SCREENS}/04-directory/desktop-default.png`,
+    route: '/directory',
+    persona: 'Priya',
+    setup: 'directory',
+    differsUntil: DIRECTORY_NAV,
+    note: 'Only the first eight people are the seed company in the design; the rest are illustrative',
+  },
+  {
+    title: '04 Directory: loading',
+    designImage: `${SCREENS}/04-directory/desktop-loading.png`,
+    route: '/directory',
+    persona: 'Priya',
+    setup: 'directory-loading',
+    note: 'The list request is held, so the eight skeleton rows stay. The count already reads "120 people", because the counts load apart from the list; the design draws a bar there',
+    differsUntil: DIRECTORY_NAV,
+  },
+  {
+    title: '04 Directory: My team',
+    designImage: `${SCREENS}/04-directory/desktop-my-team.png`,
+    route: '/directory',
+    persona: 'Marcus',
+    setup: 'directory-my-team',
+    differsUntil: `Phase 5: the Approvals item with its count. ${DIRECTORY_NAV}`,
+  },
+  {
+    title: '04 Directory: no results',
+    designImage: `${SCREENS}/04-directory/desktop-empty-search.png`,
+    route: '/directory',
+    persona: 'Priya',
+    setup: 'directory-empty',
+    note: 'Searched for "Jordn"',
+    differsUntil: DIRECTORY_NAV,
+  },
+  {
+    title: '04 Directory: Show more',
+    designImage: `${SCREENS}/04-directory/desktop-show-more.png`,
+    route: '/directory',
+    persona: 'Priya',
+    setup: 'directory-show-more',
+    note: 'Scrolled to the end of the first 50. The design shows illustrative rows past the first eight',
+    differsUntil: DIRECTORY_NAV,
+  },
+  {
+    title: "04 Directory: profile, locked (Priya on Leo's)",
+    designImage: `${SCREENS}/04-directory/desktop-profile-locked.png`,
+    route: '/directory',
+    persona: 'Priya',
+    setup: 'profile-locked',
+    differsUntil: DIRECTORY_NAV,
+  },
+  {
+    title: "04 Directory: profile, HR view (Dana on Leo's)",
+    designImage: `${SCREENS}/04-directory/desktop-profile-hr.png`,
+    route: '/directory',
+    persona: 'Dana',
+    setup: 'profile-hr',
+    differsUntil: `Phase 6: the Cases and Console items. ${DIRECTORY_NAV}`,
+  },
+  {
+    title: '04 Directory: profile, own (Priya)',
+    designImage: `${SCREENS}/04-directory/desktop-profile-self.png`,
+    route: '/directory',
+    persona: 'Priya',
+    setup: 'profile-self',
+    differsUntil: DIRECTORY_NAV,
+  },
+
+  {
     title: '05 Global states: session expired',
     designImage: `${SCREENS}/05-global-states/desktop-session-expired.png`,
     route: '/ask',
@@ -381,12 +461,12 @@ export const SCREEN_ROWS: ScreenRow[] = [
   {
     title: '05 Global states: something went wrong',
     designImage: `${SCREENS}/05-global-states/desktop-error.png`,
-    route: '/ask',
+    route: '/directory',
     persona: 'Priya',
     setup: 'server-error',
-    note: 'The first /me is answered with a 500, so the page shows outside the shell',
+    note: "The directory's list request is answered with a 500 and a request ID, so the error shows inside the shell",
     differsUntil:
-      "Phase 2's stage 6: the in-shell error, which needs a page that loads data (the directory's profile). Its reference is the full 32 characters, where the design draws 8",
+      'Phase 3 and Phase 5: the Time off and Handbook items, and "How it\'s built" in Phase 7. The build\'s reference is the full 32 characters, where the design draws 8',
   },
 ]
 

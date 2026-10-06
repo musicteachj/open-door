@@ -1520,6 +1520,120 @@ PR #28. #28 was merged before its CI finished; `dev`'s run on the merge commit c
 - **Task 40:** the owner reviewed the capture report (68 rows: 48 components and 20 screens, none
   missing) and approved it, with the fixed reply's wording, on 2026-10-06.
 - **Stage 5 ended at 646 web unit tests and 78 browser tests** (517 API tests).
+
+**Stage 6,** on `feat/phase-2-directory`, branched from `dev` at the merge of Stage 5's PR #29:
+- **Task 41:**
+  - **The URL holds `q`, `location`, `department`, and `team`.** An unset filter is absent, never
+    `null`, and the hook maps them to the API's names.
+  - **History, the owner's choice on 2026-10-06:** a search and "Clear search" replace the history
+    entry, as the spec says. A filter change and "Clear filters" add one, so Back undoes a filter.
+  - The search field takes at most 100 characters and drops NUL, so a URL can't send the API a
+    query it refuses.
+- **Task 42:**
+  - **The list is a TanStack infinite query** over `getListPeople`, keyed by its filters, plus the
+    facets query. A later search or filter keeps the previous results on screen; only the first
+    load shows the skeleton and its announcement.
+  - **A failed first load throws to the route boundary,** the in-shell "something went wrong". A
+    failed "Show more" keeps the loaded pages and shows "We couldn't load more people." with
+    Retry, wording the owner approved on 2026-10-06.
+  - **When a search and the filters both match no one,** the search's empty state wins. Its "Clear
+    search" then leads to the filters' empty state if that also matches no one.
+  - The header count reads "N of T people" whenever anything is on. "Showing all N" comes from
+    `Directory.dc.html`.
+  - **`fake-directory.ts` reproduces the API's search, filters, cursor, and facet counts,** and
+    refuses what the API refuses.
+  - **Scroll is restored by `app/use-scroll-restoration.ts`,** which replaces React Router's
+    `<ScrollRestoration>` in `Root.tsx`, because that one jumped to the top on every change,
+    including a search's in-place replace. It saves the window's position per history entry:
+    - a new page starts at the top;
+    - a replace on the same page keeps its position;
+    - Back restores the saved position, waiting up to 2 s for the page to grow tall enough.
+  - A failed "Show more" is tested with a fake that fails only the requests that carry a cursor.
+- **Task 43:**
+  - **The profile is `features/directory/profile-page.tsx`.** The id must be a UUID before any
+    request is made; anything else shows not found. An API 404 also shows not found, and any other
+    error goes to the route boundary.
+  - **Private details are a structural guard:** the only component that requests them mounts for
+    the person or HR, decided from `/me` alone. Everyone else gets four locked rows from a
+    component with no request in it.
+  - **A scoped Opus check found no leak.** It ruled out, with experiments against the real API:
+    - a private request for someone else, through any navigation, reload, or focus;
+    - anything private left in the page, the cache, or history after HR switches persona, even
+      mid-request;
+    - a URL, forged history state, or rewritten response unlocking the section;
+    - a crafted id reaching another endpoint.
+
+    One limitation went to the backlog under Phase 8: another tab's session change shows only
+    once this tab refetches `/me`.
+  - **"← Directory" walks back through history** using the steps carried in history state
+    (`directory-origin.ts`), so the list's search, filters, and scroll return. A direct visit or a
+    modified click uses a link to `/directory` with the carried search.
+  - **Copy:** "None listed", for no manager, is from `Directory.dc.html`. "We couldn't load the
+    private details.", with Retry, was approved by the owner on 2026-10-06.
+  - The date of birth reads "June 22, 2000", at UTC. The phone and address show as stored.
+  - The persona ids in the test fixture are now real UUIDs.
+- **A Stage 5 layout bug, fixed here:** the shell showed the right rail on every page, but only the
+  assistant home's design has one. On the directory it narrowed the list to about 726 px, against
+  about 1064 px in the design, so the toolbar wrapped and the profile's panels stacked. The rail
+  is now on `/ask` only. The directory and profile show the sandbox indicator in their page
+  header, as `Directory.dc.html` does, and a browser check pins both layouts at 1440 px.
+- The profile's loading states are announced through an always-mounted status.
+- **Task 44:**
+  - **`directory.spec.ts` and `profile.spec.ts` name a test after each 04 criterion.** Layout and
+    scroll stay in `directory-layout.spec.ts` and `directory-scroll.spec.ts`.
+  - **Priya on Leo's profile:** the test searches the DOM and every API response for Leo's real
+    private values, read from an HR session in another sandbox of the same seed. It normalizes
+    case, and compares digits-only forms of the phone and the date.
+  - **Dana on Leo's profile:** the test reads the audit event from the database through
+    `apps/api/scripts/read_audit_events.py`. The script is a parameterized, read-only `SELECT` as
+    the owner; nothing in the API imports it, and the CI job already has the owner's URL. The test
+    checks the actor, the target, the action, and that the event holds field names, never values.
+  - **The in-shell "something went wrong" is reached by failing the list request,** and its capture
+    row now photographs that, not the outside variant.
+  - **A real bug the browser tests found:** "Show more" set `disabled` while loading, which dropped
+    a keyboard user's focus. It now uses the button's `loading` state.
+  - The nav fade at 390 px still can't be shown with Phase 2's two items; it stays proved by
+    `home.spec`'s narrow case.
+  - Eight 04 capture rows, all marked "differs by design" for the later phases' nav items.
+- **Task 45:** the last Phase 2 backlog item, the WebKit note, is a standing caveat for local
+  development, not a task, so it moved to "Any phase" rather than being deleted.
+- **Stage 6 ended at 758 web unit tests and 108 browser tests** (517 API tests).
+- The owner reviewed the capture report (76 rows, none missing) and approved it on 2026-10-06.
+- **The close's code review found one bug, now fixed:** a malformed `location` or `department` in
+  the URL went to the API, which refused it, so the page showed "Something went wrong". A value
+  that isn't a UUID now counts as no filter. One `isUuid` in `lib/uuid.ts` serves the filters and
+  the profile, and the test fake refuses a non-UUID filter, as the API does.
+- **The close's code reviews found three more problems, fixed:**
+  - A failed search or filter change replaced the whole directory with "Something went wrong". Now
+    only the very first load throws to the boundary; after that, the rows stay with "We couldn't
+    update the list." and Retry, wording the owner approved on 2026-10-06.
+  - Scroll positions were lost on reload. They now persist in `sessionStorage` under
+    `od.scrollPositions`, capped at 50 entries, as React Router's version did, and
+    `DATA-INVENTORY.md` lists the key.
+  - With the rail only on `/ask`, not found and the in-shell error show no countdown at desktop
+    width. Their designs draw none, so the owner chose on 2026-10-06 to follow the design.
+  - **A reload now restores the scroll position too.** The first render restores a saved position
+    for a Back or a reload. It ignores the `'default'` key every first visit to a tab has, so a
+    position from another page is never applied.
+  - **The list throws to the boundary only if no list has ever loaded;** the counts never do. A
+    failed counts request keeps the rows, with the inline alert. Counts with no list yet still
+    show "Something went wrong", because the list is the page.
+  - **A Back whose rows load slowly no longer overwrites the saved position** with a cut-short one.
+    Saving pauses while a restore is short of its target, until it arrives, times out, or the
+    visitor scrolls.
+  - **With failed counts, the footer reads "Showing 50"** with no total, since the matching count is
+    unknown.
+  - **A search still waiting to be written is dropped by any navigation the hook didn't cause,**
+    such as Back, Forward, or a link, and the box follows the URL. Before, it could overwrite the
+    page the visitor had just gone to. The hook marks its own writes, and watches the history key.
+  - **While an update has failed, the footer is hidden:** no "Showing" count, no "Showing all", and
+    no Show more, which would append people for the new filters to rows from the old ones. It
+    returns after a successful Retry.
+- **The tooltip flake, found:** a full run caught it with the tooltip never opening. Radix closes a
+  tooltip when the page scrolls, and Tab scrolled the trigger into view just after the tooltip
+  opened. A `keyboardFocus` helper in `e2e/helpers.ts` now centers the trigger and lets the scroll
+  settle before arriving by keyboard. The failure had appeared by the second full run; with the
+  helper, 12 full runs in a row passed.
 - **For Stage 6:**
   - add the browser test for the in-shell "something went wrong", reached through a directory
     request that fails;

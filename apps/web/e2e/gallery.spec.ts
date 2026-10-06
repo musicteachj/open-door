@@ -1,6 +1,7 @@
 import AxeBuilder from '@axe-core/playwright'
 import { expect, test, type Page } from '@playwright/test'
 import { GALLERY_STATE_IDS } from './gallery-ids'
+import { keyboardFocus } from './helpers'
 
 const TAGS = ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa']
 
@@ -65,10 +66,7 @@ test('an open menu has no violations, and focus stays inside it', async ({ page 
 
 test('an open tooltip has no violations', async ({ page }) => {
   // Radix opens a tooltip on keyboard focus but not on locator.focus(), so arrive by keyboard.
-  await page.locator('#tooltip-trigger').focus()
-  await page.keyboard.press('Shift+Tab')
-  await page.keyboard.press('Tab')
-  await expect(page.locator('#tooltip-trigger')).toBeFocused()
+  await keyboardFocus(page, page.locator('#tooltip-trigger'))
   await expect(page.getByRole('tooltip')).toBeVisible()
   expect((await scan(page)).violations).toEqual([])
 })
@@ -112,17 +110,11 @@ test('a truncated persona title shows its tooltip in a real browser', async ({ p
   // Truncation is measured after layout and again once the web font loads. Under a busy run the
   // focus could land first, so wait for the switcher's own measurement.
   await expect(button).toHaveAttribute('data-truncated', 'true')
-  await button.focus()
-  await page.keyboard.press('Shift+Tab')
-  await page.keyboard.press('Tab')
-  await expect(button).toBeFocused()
+  await keyboardFocus(page, button)
   await expect(page.getByRole('tooltip')).toContainText('Senior Department Lead')
 
   // A title that fits shows none.
-  await page.locator('[aria-labelledby="persona-switcher-closed"] button').focus()
-  await page.keyboard.press('Shift+Tab')
-  await page.keyboard.press('Tab')
-  await expect(page.locator('[aria-labelledby="persona-switcher-closed"] button')).toBeFocused()
+  await keyboardFocus(page, page.locator('[aria-labelledby="persona-switcher-closed"] button'))
   await expect(page.getByRole('tooltip')).toBeHidden()
 })
 

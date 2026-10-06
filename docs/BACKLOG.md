@@ -5,6 +5,11 @@ should pick it up. When one is done, delete it here and record it in the changel
 
 ## Any phase
 
+- **Local development in Safari-family browsers.** WebKit drops every `Secure` cookie on
+  `http://localhost`, so the `__Host-` session cookies never stick and sign-in ends at "This
+  sandbox has reset." Chromium and Firefox keep them: the session round trip passed in both. Every
+  deployed origin is HTTPS, so this is a note for local development, not a defect. Develop and run
+  the browser tests in Chromium or Firefox. (Phase 2 stage 2b, checked in WebKit.)
 - **Decide whether loading skeletons animate.** The design draws them static, with no shimmer or
   pulse, and the build matches (the skeleton and skeleton-row tests assert it). The owner noticed
   the stillness in the Stage 4a gallery review and may want motion. That's a design change first,
@@ -59,14 +64,6 @@ should pick it up. When one is done, delete it here and record it in the changel
   `starlette._utils.get_route_path`, so the no-store and same-origin rules match the path the
   router routes. On a Starlette upgrade, check that the two still agree. (Phase 1 close-out
   review.)
-
-## Phase 2: design system, shell, sandbox entry
-
-- **Local development in Safari-family browsers.** WebKit drops every `Secure` cookie on
-  `http://localhost`, so the `__Host-` session cookies never stick and sign-in ends at "This
-  sandbox has reset." Chromium and Firefox keep them: the session round trip passed in both. Every
-  deployed origin is HTTPS, so this is a note for local development, not a defect. Develop and run
-  the browser tests in Chromium or Firefox. (Phase 2 stage 2b, checked in WebKit.)
 
 ## Phase 3: handbook and retrieval
 
@@ -144,6 +141,12 @@ Source for both: [the Phase 1 spec](specs/2026-10-03-phase-1-tenancy-identity-pe
 
 ## Phase 8: hardening and deploy-readiness
 
+- **Notice another tab's session change at once.** If another tab switches persona or signs out,
+  this tab keeps showing what it had loaded, such as HR's view of someone's private details, until
+  it next refetches `/me`: on focus, on navigation, or after a 401. It's the same visitor, and every
+  new read goes out with the new cookie and is refused, so nothing new leaks. Listen for the
+  change and refetch `/me` straight away, for example with a `BroadcastChannel` message from the
+  tab that changed it. (Phase 2 stage 6 security check.)
 - **Make sign-out end a session's replacements too.** If one tab switches persona while another
   signs out, the switch replaces the session first. The sign-out then finds nothing to end and
   answers 204, but the new persona's session stays valid until the sandbox expires. Give each

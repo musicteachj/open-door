@@ -17,6 +17,7 @@ import {
   type ScreenRow,
 } from './manifest'
 import { holdRequests, problem, setSandboxLeft, startAs } from '../helpers'
+import { holdList, isListRequest, openProfileBySearch } from '../directory-helpers'
 import { renderReport, type ReportRow } from './report'
 
 // `make captures`. Photographs each gallery state at 1440 px, after the interaction the manifest
@@ -95,8 +96,21 @@ async function reachScreen(page: Page, row: ScreenRow) {
     if (row.persona) {
       await startAs(page, row.persona)
       if (row.setup === 'expiry-banner') await setSandboxLeft(page, 2 * HOUR_MS + 50 * MINUTE_MS)
-      else if (row.setup !== 'session-expired' && row.setup !== 'server-error') {
+      else if (row.setup !== 'session-expired') {
         await setSandboxLeft(page, 21 * HOUR_MS + 30 * MINUTE_MS)
+      }
+      // Held before the page opens, so the list's first request is the one that waits.
+      if (row.setup === 'directory-loading') await holdList(page)
+      // The in-shell error: the directory's list request fails with a request ID.
+      if (row.setup === 'server-error') {
+        await page.route(isListRequest, (route) =>
+          route.fulfill({
+            status: 500,
+            contentType: 'application/problem+json',
+            headers: { 'X-Request-ID': '7f3a9c2e5b1d4a60918c2e4f6a8b0d13' },
+            body: problem(500, 'Internal Server Error'),
+          }),
+        )
       }
       if (row.route !== '/ask') await page.goto(row.route)
     } else {
@@ -159,6 +173,41 @@ async function reachScreen(page: Page, row: ScreenRow) {
       await rows.nth(2).focus()
       break
     }
+    case 'directory':
+      await expect(page.getByText('120 people', { exact: true })).toBeVisible()
+      await expect(page.getByRole('list', { name: 'People' }).getByRole('listitem')).toHaveCount(50)
+      break
+    case 'directory-loading':
+      await expect(page.getByText('Loading the directory')).toBeAttached()
+      await expect(page.locator('[aria-busy="true"]')).toBeVisible()
+      break
+    case 'directory-my-team':
+      await page.getByRole('button', { name: /^My team/ }).click()
+      await expect(page.getByText('44 of 120 people', { exact: true })).toBeVisible()
+      break
+    case 'directory-empty':
+      await page.getByRole('searchbox').fill('Jordn')
+      await expect(page.getByText('No one matches “Jordn”.')).toBeVisible()
+      break
+    case 'directory-show-more': {
+      await expect(page.getByText('Showing 50 of 120')).toBeVisible()
+      await page.getByRole('button', { name: 'Show more' }).evaluate((el) => el.scrollIntoView({ block: 'end' }))
+      break
+    }
+    case 'profile-locked':
+    case 'profile-hr':
+      await openProfileBySearch(page, 'Nakamura', /^Leo Nakamura/)
+      await expect(page.getByRole('heading', { level: 1, name: 'Leo Nakamura' })).toBeVisible()
+      if (row.setup === 'profile-hr') {
+        await expect(page.getByText('Viewing private details is recorded in the audit log.')).toBeVisible()
+      } else {
+        await expect(page.getByText('Visible to Leo and HR')).toHaveCount(4)
+      }
+      break
+    case 'profile-self':
+      await openProfileBySearch(page, 'Raman', /^Priya Raman/)
+      await expect(page.getByText('Only you and HR can see these.')).toBeVisible()
+      break
     case 'nav-states':
       await page.getByRole('link', { name: 'Directory' }).hover()
       break
@@ -177,16 +226,10 @@ async function reachScreen(page: Page, row: ScreenRow) {
       }).toPass()
       break
     case 'server-error':
-      await page.route('**/api/v1/me', (route) =>
-        route.fulfill({
-          status: 500,
-          contentType: 'application/problem+json',
-          headers: { 'X-Request-ID': '7f3a9c2e5b1d4a60918c2e4f6a8b0d13' },
-          body: problem(500, 'Internal Server Error'),
-        }),
-      )
-      await page.goto('/ask')
-      await expect(page.getByRole('heading', { level: 1, name: 'Something went wrong on our side.' })).toBeVisible()
+      await expect(
+        page.getByRole('heading', { level: 1, name: 'Something went wrong on our side.' }),
+      ).toBeVisible({ timeout: 15_000 })
+      await expect(page.getByRole('navigation', { name: 'Main' })).toBeVisible()
       break
     case 'home':
     case 'expiry-banner':

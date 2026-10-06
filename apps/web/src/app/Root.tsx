@@ -1,11 +1,8 @@
-import { Outlet, ScrollRestoration } from 'react-router'
+import { Outlet } from 'react-router'
+import { useScrollRestoration } from './use-scroll-restoration'
 
-/** The top of every route. ScrollRestoration returns a list to where the visitor left it. */
+/** The top of every route. Scroll is kept by `useScrollRestoration`: Back returns to the list's place. */
 export function Root() {
-  return (
-    <>
-      <Outlet />
-      <ScrollRestoration />
-    </>
-  )
+  useScrollRestoration()
+  return <Outlet />
 }

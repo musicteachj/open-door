@@ -6,7 +6,8 @@ import { RootError, RouteError } from '@/features/global-states/route-error'
 import { LandingPage } from '@/features/landing/landing-page'
 import { AppShell } from '@/features/shell/app-shell'
 import { HomePage } from '@/features/home/home-page'
-import { Directory, Profile } from './placeholders'
+import { DirectoryPage } from '@/features/directory/directory-page'
+import { ProfilePage } from '@/features/directory/profile-page'
 
 // The component gallery is compiled in for development and for the e2e build, which sets
 // VITE_GALLERY. In a production build both conditions are constants Vite folds to false, so the
@@ -42,8 +43,8 @@ export const routes: RouteObject[] = [
                 errorElement: <RouteError />,
                 children: [
                   { path: '/ask', element: <HomePage /> },
-                  { path: '/directory', element: <Directory /> },
-                  { path: '/directory/:personId', element: <Profile /> },
+                  { path: '/directory', element: <DirectoryPage /> },
+                  { path: '/directory/:personId', element: <ProfilePage /> },
                   { path: '*', element: <NotFound /> },
                 ],
               },

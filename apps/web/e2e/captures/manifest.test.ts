@@ -20,7 +20,7 @@ describe('the screen rows', () => {
     }
   })
 
-  it('give every screenshot in 01, 02, 03, and 05 exactly one row', () => {
+  it('give every screenshot in 01 to 05 exactly one row', () => {
     for (const png of pngs) {
       const rows = SCREEN_ROWS.filter((row) => row.designImage === png)
       expect(rows.length, `${png} needs exactly one row in SCREEN_ROWS`).toBe(1)

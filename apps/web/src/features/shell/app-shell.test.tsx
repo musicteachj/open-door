@@ -5,6 +5,7 @@ import { getGetMeQueryKey } from '@/api/generated'
 import { getSessionStatus } from '@/app/session-status'
 import { useChatStore } from '@/features/chat/store'
 import { installFakeApi } from '@/test/fake-api'
+import { DIRECTORY_PEOPLE, installFakeDirectory } from '@/test/fake-directory'
 import { meFor } from '@/test/fixtures'
 import { useShellToast } from './toast-store'
 import { personaSwitcher, signOutViaMenu, switchViaMenu } from '@/test/persona-menu'
@@ -55,6 +56,28 @@ describe('the shell: layout', () => {
     expect(within(sidebar).getByText('Juniper Row')).toBeInTheDocument()
     expect(screen.getAllByRole('main')).toHaveLength(1)
     expect(screen.getByRole('complementary', { name: 'Sandbox status' })).toBeInTheDocument()
+  })
+
+  it('has no rail on the directory or a profile, and shows the indicator in the page header', async () => {
+    installFakeApi('priya')
+    installFakeDirectory('priya')
+    const { router } = renderApp({ at: '/directory' })
+    const main = await screen.findByRole('main')
+    await screen.findByRole('list', { name: 'People' })
+    expect(screen.queryByRole('complementary', { name: 'Sandbox status' })).not.toBeInTheDocument()
+    const inList = within(main).getByText(/^Sandbox resets in/)
+    expect(inList.closest('header')).not.toBeNull()
+    // The top bar carries it below 760 px, so the header's hides there.
+    expect(inList.closest('[data-slot="sandbox-indicator"]')).toHaveClass('max-[760px]:hidden')
+
+    await act(() => router.navigate(`/directory/${DIRECTORY_PEOPLE[0]!.id}`))
+    await screen.findByRole('heading', { level: 1, name: /\w/ })
+    expect(screen.queryByRole('complementary', { name: 'Sandbox status' })).not.toBeInTheDocument()
+    expect(
+      within(screen.getByRole('main'))
+        .getByText(/^Sandbox resets in/)
+        .closest('header'),
+    ).not.toBeNull()
   })
 
   it('keeps exactly one main on the pages, the profile, and not found', async () => {

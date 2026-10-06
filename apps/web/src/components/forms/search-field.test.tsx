@@ -32,6 +32,11 @@ describe('SearchField', () => {
     expect(input).toHaveAttribute('placeholder', 'Search by name, title, or email')
   })
 
+  it('takes a maxLength for the input, so the field can never hold more', () => {
+    render(<SearchField value="" onChange={() => {}} maxLength={100} />)
+    expect(screen.getByRole('searchbox')).toHaveAttribute('maxlength', '100')
+  })
+
   it('is wrapped in a search landmark', () => {
     const { container } = render(<Controlled />)
     const landmark = container.querySelector('search')
