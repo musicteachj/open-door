@@ -43,3 +43,35 @@ test('the component gallery fits a 390 px screen', async ({ page }) => {
   ).toBeVisible()
   expect(await scrollWidth(page)).toBeLessThanOrEqual(390)
 })
+
+test('a directory row stacks its cells below 760 px, and the table drops its column labels', async ({
+  page,
+}) => {
+  await page.goto('/gallery')
+  const table = page.locator('section[aria-labelledby="directory-table-default"]')
+  await table.scrollIntoViewIfNeeded()
+  await expect(table.getByText('Department', { exact: true })).toBeHidden()
+  const cells = table.getByRole('link').first().locator(':scope > span')
+  const boxes = await Promise.all([0, 1, 2, 3].map((i) => cells.nth(i).boundingBox()))
+  for (let i = 1; i < 4; i += 1) {
+    // Each cell starts below the previous one's top, not beside it.
+    expect(boxes[i]!.y).toBeGreaterThan(boxes[i - 1]!.y)
+    expect(boxes[i]!.x).toBeGreaterThanOrEqual(boxes[0]!.x)
+  }
+  const link = await table.getByRole('link').first().boundingBox()
+  expect(link!.height).toBeGreaterThan(60)
+})
+
+test('a detail row stacks its label over its value at 390 px', async ({ page }) => {
+  await page.goto('/gallery')
+  const row = page
+    .locator('section[aria-labelledby="detail-list-values"] [data-slot="detail-row"]')
+    .first()
+  await row.scrollIntoViewIfNeeded()
+  const [label, value] = await Promise.all([
+    row.locator('dt').boundingBox(),
+    row.locator('dd').boundingBox(),
+  ])
+  expect(value!.y).toBeGreaterThanOrEqual(label!.y + label!.height)
+  expect(value!.x).toBeLessThanOrEqual(label!.x + 1)
+})

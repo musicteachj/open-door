@@ -5,6 +5,11 @@ should pick it up. When one is done, delete it here and record it in the changel
 
 ## Any phase
 
+- **Decide whether loading skeletons animate.** The design draws them static, with no shimmer or
+  pulse, and the build matches (the skeleton and skeleton-row tests assert it). The owner noticed
+  the stillness in the Stage 4a gallery review and may want motion. That's a design change first,
+  in Claude Design, then the build. Any animation must stop under `prefers-reduced-motion`, which
+  `base.css` already handles. (Phase 2 stage 4a gallery review.)
 - **Don't run Alembic inside an async test.** `env.py` calls `asyncio.run`, which fails inside a
   running event loop, and `fileConfig` resets the root log handlers. Test setup should run
   `alembic upgrade head` as a subprocess, or from a synchronous session fixture. Phase 1's tests
