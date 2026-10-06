@@ -1186,6 +1186,57 @@ the plan allowed:
 - **Stage 2a ended at 207 web tests** (1 before it) and 517 API tests. The trial's 222 web tests
   covered all of Stage 2, so the counts aren't comparable. `CLAUDE.md`'s single-web-test example
   now names `src/lib/api-fetch.test.ts`, because `App.test.tsx` is gone.
+- **Stage 2b,** on `feat/phase-2-web-primitives`, branched from `dev` at `2ac153a` after 2a merged as
+  PR #24.
+- **Task 15:**
+  - **The field look is shared** in `field-classes.ts`, and the menu rows' focus ring in
+    `focus-ring.ts`, because oxlint rejects a non-component export from a component file.
+  - **The select trigger looks like an input.** The filter's own trigger (strong border, label and
+    value) is Task 25's product component.
+  - **No design values existed for these, so the build chose:** a 300 ms tooltip hover delay (focus
+    opens it at once); a 6 s toast, from the sketch's default; `aria-invalid:border-danger` as a
+    field's error state, until the design draws one.
+  - **The small avatar's initials are `text-[11px]`,** as the sketch hard-codes it. The type scale has
+    no 11 px step, and adding one would put a token in the theme that the export doesn't have.
+  - **The button takes icons as children.** It has no `icon` props and no `asChild`. A button with a
+    trailing icon, such as "Ask →", needs `pr-3.5` from its caller to match the sketch's 14 px.
+  - **The review's medium finding, fixed:** menu rows and select options showed no visible keyboard
+    focus. The gray highlight is 1.15:1 against the menu, and a checked row didn't change at all.
+    They now carry the sketch's 2 px inset focus ring on `:focus-visible`.
+  - **Also from the review:** the toast message and select options are regular weight, menus have
+    the sketch's 2 px row gap, and the toast viewport keeps the global focus ring.
+  - Toast tests that click use real timers. Testing Library's async wrapper hangs under fake ones.
+- **Task 16:**
+  - The gallery is at `/gallery`, outside the session guard.
+  - A Vitest test proves the route exists in development and with the flag, and not in a production
+    build.
+  - `check:no-gallery` exits 1 on `dist-e2e` (naming the gallery chunk) and 0 on `dist`. The
+    production build has no gallery chunk at all.
+- **Task 17:**
+  - **The API starts with `uvicorn --factory app.main:create_app`,** because the module has no `app`
+    object.
+  - **The preview's proxy reads `API_PROXY_TARGET`,** set to the e2e API on 8100. The dev server
+    keeps 8000.
+  - Vite's config now imports `defineConfig` from `vitest/config`, because oxlint rejects the
+    triple-slash reference. Vitest skips `e2e/` and `dist-e2e/`.
+  - The browser tests type-check through their own `tsconfig.e2e.json`.
+  - **Playwright's preview command builds `dist-e2e` itself,** so `npx playwright test` works alone. A
+    reused preview server serves whatever was built last.
+  - **The CI job** runs on its own path filter (`apps/web`, `apps/api`, `.nvmrc`, the workflow) and
+    on `workflow_dispatch`. It caches browsers by the Playwright version. `actions/cache` and
+    `actions/upload-artifact` are new, and pinned by SHA.
+  - **The focus ring appears at once.** Tailwind's `transition-colors` also faded `outline-color`,
+    unlike the design's button. The button now transitions only color, background, and border, and
+    the browser test reads the ring right after Tab, without waiting.
+  - The session test waits for the exact switch and sign-out requests. The toast's axe scan waits
+    for its entry animation to finish.
+  - **The session round trip, once in each other browser:** Firefox passed it all. WebKit signed in,
+    reached `/ask`, then dropped the `Secure` cookies on `http://localhost`, so `/me` answered 401
+    and the page showed "This sandbox has reset." That only limits local development in
+    Safari-family browsers, since every deployed origin is HTTPS.
+- **Stage 2b ended at 269 web unit tests and 13 browser tests** (517 API tests). The trial ended
+  Stage 2 at 222 and 13. `CLAUDE.md` gains `make e2e`, how to run one browser test, and the
+  Chromium download.
 
 ## Backlog
 

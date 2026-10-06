@@ -2,7 +2,7 @@
   "$schema": "./node_modules/oxlint/configuration_schema.json",
   "plugins": ["react", "typescript", "oxc", "jsx-a11y", "vitest"],
   "categories": { "correctness": "error" },
-  "ignorePatterns": ["src/api/generated.ts"],
+  "ignorePatterns": ["src/api/generated.ts", "dist-e2e", "playwright-report", "test-results"],
   "rules": {
     "react/rules-of-hooks": "error",
     "react/only-export-components": ["warn", { "allowConstantExport": true }]

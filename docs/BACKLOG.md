@@ -57,9 +57,11 @@ should pick it up. When one is done, delete it here and record it in the changel
 
 ## Phase 2: design system, shell, sandbox entry
 
-- **Check the `__Host-` cookies in each target browser.** They are `Secure`. Chrome and Firefox
-  accept them on `http://localhost`, but Safari has historically refused them. Keep `/api` on the
-  same origin through the Vite proxy, and test sign-in in each browser the demo supports.
+- **Local development in Safari-family browsers.** WebKit drops every `Secure` cookie on
+  `http://localhost`, so the `__Host-` session cookies never stick and sign-in ends at "This
+  sandbox has reset." Chromium and Firefox keep them: the session round trip passed in both. Every
+  deployed origin is HTTPS, so this is a note for local development, not a defect. Develop and run
+  the browser tests in Chromium or Firefox. (Phase 2 stage 2b, checked in WebKit.)
 
 ## Phase 3: handbook and retrieval
 
