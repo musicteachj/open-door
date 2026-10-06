@@ -190,7 +190,7 @@ describe('private details for everyone else', () => {
     api.viewAs('priya')
     await switchViaMenu(user, 'Priya')
     // A switch lands on Ask: open the same profile again as Priya, from a cleared cache.
-    await screen.findByText(/Good morning, Priya/)
+    await screen.findByText(/Good (morning|afternoon|evening), Priya/)
     await act(() => router.navigate(`/directory/${LEO.id}`))
     await profileHeading(leoName)
     expect(within(privateDetails()).getAllByText(/^Visible to /)).toHaveLength(4)
@@ -205,7 +205,7 @@ describe('private details for everyone else', () => {
     api.viewAs('marcus')
     await switchViaMenu(user, 'Marcus')
     // A switch lands on Ask: open the same profile again as Marcus.
-    await screen.findByText(/Good morning, Marcus/)
+    await screen.findByText(/Good (morning|afternoon|evening), Marcus/)
     await act(() => router.navigate(`/directory/${LEO.id}`))
     await profileHeading(leoName)
     expect(within(privateDetails()).getAllByText(/^Visible to /)).toHaveLength(4)

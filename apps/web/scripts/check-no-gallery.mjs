@@ -4,7 +4,23 @@
 import { readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 
-const MARKER = 'Open Door component gallery'
+// The marker is the gallery's heading, kept in one JSON file that Gallery.tsx renders and this
+// check reads, so renaming the heading renames the check with it. If the gallery stops rendering
+// the file's text the check would pass on anything, so that is checked first.
+const MARKER_FILE = new URL('../src/app/gallery/gallery-marker.json', import.meta.url)
+const GALLERY_FILE = new URL('../src/app/gallery/Gallery.tsx', import.meta.url)
+const { marker: MARKER } = JSON.parse(readFileSync(MARKER_FILE, 'utf8'))
+if (typeof MARKER !== 'string' || MARKER.trim().length < 8) {
+  console.error(`${MARKER_FILE.pathname} has no usable "marker" text.`)
+  process.exit(1)
+}
+const gallerySource = readFileSync(GALLERY_FILE, 'utf8')
+if (!gallerySource.includes('./gallery-marker.json') || !gallerySource.includes('{marker}')) {
+  console.error(
+    'Gallery.tsx no longer renders the marker from gallery-marker.json, so this check would find nothing.',
+  )
+  process.exit(1)
+}
 const dir = process.argv[2] ?? 'dist'
 
 function* files(root) {

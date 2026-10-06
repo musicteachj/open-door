@@ -7,6 +7,7 @@ import { Logo } from '@/components/core/logo'
 import { InlineError } from '@/components/feedback/inline-error'
 import { PersonaCard } from '@/components/landing/persona-card'
 import { PERSONAS } from '@/features/personas/personas'
+import { ApiError } from '@/lib/api-fetch'
 import { AI_DISCLOSURE } from '@/lib/disclosure'
 
 // From docs/design/screens/01-landing/notes.md. "How it's built" and the tour button are designed
@@ -34,8 +35,10 @@ export function LandingPage() {
     },
   })
 
-  // A signed-in visitor has nothing to choose.
-  if (me.data) return <Navigate to="/ask" replace />
+  // A signed-in visitor has nothing to choose. Cached data whose latest fetch was a 401 is not a
+  // signed-in visitor: the sandbox ended, and sending them on would bounce them to the reset page.
+  const unauthorized = me.error instanceof ApiError && me.error.status === 401
+  if (me.data && !unauthorized) return <Navigate to="/ask" replace />
   if (me.isPending) return <output className="sr-only">Loading…</output>
 
   const startingKey = start.isPending ? start.variables?.data?.persona : undefined

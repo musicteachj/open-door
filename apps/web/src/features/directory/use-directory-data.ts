@@ -25,7 +25,7 @@ function useThrowBeforeFirstList() {
  * query at page one rather than adding to the old pages. The previous results stay on screen
  * while the new ones load. The key holds no identity: a switch or sign-out clears the whole cache.
  */
-export function useDirectoryList(params: DirectoryApiParams) {
+export function useDirectoryList(params: DirectoryApiParams, { enabled = true } = {}) {
   const throwOnError = useThrowBeforeFirstList()
   return useInfiniteQuery({
     queryKey: [...LIST_KEY, params],
@@ -38,6 +38,7 @@ export function useDirectoryList(params: DirectoryApiParams) {
     getNextPageParam: (last) => last.nextCursor ?? undefined,
     placeholderData: keepPreviousData,
     throwOnError,
+    enabled,
   })
 }
 

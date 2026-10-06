@@ -63,6 +63,8 @@ export function useDirectoryParams() {
   // The text in the box. It leads the URL's `q` by the pause, and follows it when the URL changes
   // some other way (Back, a link).
   const [searchText, setSearchText] = useState(q)
+  // The latest typed text, for a flush that runs between renders.
+  const searchTextRef = useRef(searchText)
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
   const waiting = useRef(false)
   const cancelPending = useCallback(() => {
@@ -94,6 +96,7 @@ export function useDirectoryParams() {
 
   const onSearchText = useCallback(
     (text: string) => {
+      searchTextRef.current = text
       setSearchText(text)
       cancelPending()
       waiting.current = true
@@ -104,6 +107,14 @@ export function useDirectoryParams() {
     },
     [cancelPending, writeSearch],
   )
+
+  // Following a row unmounts the page, which drops a write still waiting, and Back would come to a
+  // list without the typed text. So the row writes it first, onto the entry Back returns to.
+  const flushSearch = useCallback(() => {
+    if (!waiting.current) return
+    cancelPending()
+    writeSearch(searchTextRef.current)
+  }, [cancelPending, writeSearch])
 
   const clearSearch = useCallback(() => {
     cancelPending()
@@ -126,6 +137,16 @@ export function useDirectoryParams() {
     searchText,
     setSearchText: onSearchText,
     clearSearch,
+    flushSearch,
+    /** The list's query string as it will be once the typed search is written: for a row's link. */
+    listSearch: (() => {
+      const next = new URLSearchParams(searchParams)
+      const typed = searchText.replaceAll('\0', '').trim()
+      if (typed) next.set('q', typed)
+      else next.delete('q')
+      const text = next.toString()
+      return text ? `?${text}` : ''
+    })(),
     location,
     department,
     myTeam,

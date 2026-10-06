@@ -22,6 +22,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { Textarea } from '@/components/ui/textarea'
 import { Toast, ToastProvider, ToastViewport } from '@/components/ui/toast'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
+import { marker } from './gallery-marker.json'
 import { Group, Section } from './gallery-parts'
 import { AssistantSections } from './sections/assistant-sections'
 import { DirectorySections } from './sections/directory-sections'
@@ -33,7 +34,8 @@ import { NavigationSections } from './sections/navigation-sections'
 
 // Every primitive in every state it has, for the browser tests and for looking at. The route is
 // compiled in only for development and the e2e build (router.tsx), and the build check
-// (scripts/check-no-gallery.mjs) fails if this page's marker text reaches a production build.
+// (scripts/check-no-gallery.mjs) fails if this page's marker text (gallery-marker.json, which the
+// heading and the check share) reaches a production build.
 // Hover and focus are not shown here: the tests hover and focus the real elements.
 //
 // Each state sits under a heading with a stable id, so a test can address it. The overlays
@@ -250,7 +252,7 @@ export function Gallery() {
   return (
     <ToastProvider>
       <main className="mx-auto flex max-w-content flex-col gap-8 p-8 text-ink">
-        <h1 className="text-h1 font-semibold">Open Door component gallery</h1>
+        <h1 className="text-h1 font-semibold">{marker}</h1>
         <p className="text-body text-ink-muted">
           Every primitive in every state. Development and test builds only.
         </p>

@@ -9,6 +9,7 @@ from fastapi.dependencies.models import Dependant
 from fastapi.routing import APIRoute
 from fastapi.testclient import TestClient
 
+from app.api.problems import document_problems_as_problem_json
 from app.api.v1.router import api_router
 from app.modules.identity.deps import signed_in
 
@@ -149,3 +150,34 @@ def test_a_real_error_matches_the_problem_model(client: TestClient) -> None:
         assert problem.status == status
         assert problem.request_id == response.headers["x-request-id"]
         assert set(response.json()) == set(problem.model_dump(by_alias=True, exclude_none=True))
+
+
+def _refs(node: Any) -> Iterator[str]:
+    if isinstance(node, dict):
+        for key, value in node.items():
+            if key == "$ref" and isinstance(value, str):
+                yield value
+            else:
+                yield from _refs(value)
+    elif isinstance(node, list):
+        for item in node:
+            yield from _refs(item)
+
+
+def test_a_route_that_forgets_to_declare_its_422_still_gets_a_problem_not_a_dangling_ref() -> None:
+    forgetful = FastAPI()
+
+    @forgetful.get("/things")
+    def things(limit: int) -> dict[str, int]:
+        return {"limit": limit}
+
+    document_problems_as_problem_json(forgetful)
+    schema = forgetful.openapi()
+
+    content = schema["paths"]["/things"]["get"]["responses"]["422"]["content"]
+    assert list(content) == ["application/problem+json"]
+    assert content["application/problem+json"]["schema"] == {"$ref": PROBLEM_REF}
+    components = schema["components"]["schemas"]
+    for ref in _refs(schema):
+        assert ref.startswith("#/components/schemas/"), ref
+        assert ref.removeprefix("#/components/schemas/") in components, ref
