@@ -1237,6 +1237,71 @@ the plan allowed:
 - **Stage 2b ended at 269 web unit tests and 13 browser tests** (517 API tests). The trial ended
   Stage 2 at 222 and 13. `CLAUDE.md` gains `make e2e`, how to run one browser test, and the
   Chromium download.
+- **Stage 3,** on `feat/phase-2-components-core`, branched from `dev` at `e3dac4b` after Stage 2b
+  merged as PR #25.
+- **Task 19:**
+  - **PageHeader and EmptyState have no component sketch,** so they follow the directory frames in
+    `Directory.dc.html` and the directory notes.
+    - EmptyState is an `<output>`, because the design marks its empty frame `role="status"`.
+    - PageHeader's back form has no heading; the profile's `h1` is the page's own.
+  - **The marker sits beside the figure, and is hidden from screen readers,** as the sketch does it.
+    The figure and caption carry the meaning.
+  - **Small departures from the sketches:**
+    - GlanceList is a `ul` where the sketch has `div`s.
+    - SandboxIndicator takes its text as children, rather than `hours`.
+    - Logo takes `customerName`, rather than `org`.
+  - **The logo's 16/20 name is `text-[16px]/leading-5`,** as the sketch hard-codes it. The type scale
+    has no such step.
+  - `labels.ts` gives "X, N waiting" for any positive count. The sketch's word doesn't change with
+    the number.
+  - **The gallery is split** into `gallery-parts.tsx` and `sections/`. The browser test lists every
+    new state id.
+  - **Task 22's theme-spec change wasn't needed.** Its heading query already names the gallery's
+    own `h1`.
+- **Task 20:**
+  - **PersonaMenu includes the switcher as its trigger.** It takes `personas`, `currentKey`,
+    `onSwitch`, `onSignOut`, and an optional `busyLabel`.
+  - **While `busyLabel` is set, the switcher is `aria-disabled`, not `disabled`, so it keeps
+    focus.** The menu refuses to open, and closes if it was open. That covers Stage 5's note about
+    disabling the persona controls while a switch or sign-out is pending.
+  - **NavItem is a `Link` matched with `useMatch({ end: false })`,** so a profile keeps Directory
+    current. A `current` prop forces the look for the gallery. Its name comes from `labels.ts`, and
+    the badge is hidden from screen readers.
+  - **Truncation is measured with `scrollWidth > clientWidth`.** It is re-checked when the title
+    changes, because a new title in a box of the same width resizes nothing.
+  - **The menu is named by its visible "View as" label** (`aria-labelledby`), and described by the
+    "Switching starts a new conversation." note. `loop` gives the sketch's wrapping arrows.
+  - `lib/initials.ts` is new, because the switcher and the menu rows both need initials. It takes
+    whole characters, not UTF-16 units.
+  - The switcher's `min-h-[61px]` is the sketch's own value. The 18 px icons use the spacing scale
+    (`size-4.5`, `leading-4.5`).
+- **Task 21:**
+  - **The banner's close button defaults to "Dismiss for this session",** the sketch's label, rather
+    than the plan's "Dismiss", because it tells screen-reader users the scope. A `dismissLabel`
+    prop can change it. Only the warning tone exists; the budget banner is Phase 4's.
+  - **FullPageMessage** focuses its `h1` (`tabIndex={-1}`, no ring) unless `focusOnMount={false}`,
+    which only the gallery passes. The outside variant puts the logo in flow above the centered
+    message. The measure is the plan's 440 px, against the sketch's 480, so "find it:" doesn't sit
+    alone.
+  - **The 32-character request reference wraps at 390 px.** A browser test proves the message keeps
+    it inside its own box.
+  - **The whole gallery now fits a 390 px screen,** checked by a browser test. That test found Task
+    19's page header overflowing, because the title, count, and right slot sat on one line. The
+    header now wraps, and the right slot drops below the title.
+- **Task 22:** the gallery is at `/gallery`, not `/dev/gallery`, as Stage 2 built it. `components.md`'s
+  Button row says the loading state is built, not designed.
+- **Stage 3's code reviews found four edge cases, all fixed:**
+  - With an unknown current persona, the menu put focus nowhere. Radix's own focus now stays when
+    there is no checked item.
+  - With an unknown current persona, the switcher named the first persona while the menu checked
+    no one. It now names no one ("Choose a persona"), and choosing anyone switches.
+  - The truncation check went stale when the web font arrived after it ran. It now checks again
+    once `document.fonts.ready` resolves.
+  - The switcher's tooltip flipped between controlled and uncontrolled, so a switcher focused
+    before its title was cut off never showed it. The tooltip is now always controlled.
+  - A switcher with a name but no title announced "undefined". The label now leaves the title out.
+- **Stage 3 ended at 373 web unit tests and 17 browser tests** (517 API tests). The trial ended at
+  343 web tests. The owner reviewed every new gallery state in the browser and approved them.
 
 ## Backlog
 

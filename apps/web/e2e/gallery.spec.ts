@@ -33,6 +33,32 @@ test('every state has its heading', async ({ page }) => {
     'menu-open',
     'avatar-sm',
     'skeleton-default',
+    'logo-default',
+    'logo-customer',
+    'page-header-title',
+    'page-header-count',
+    'page-header-back',
+    'empty-state-action',
+    'empty-state-message',
+    'sandbox-indicator-default',
+    'glance-link-default',
+    'glance-link-marker',
+    'glance-list-default',
+    'nav-item-default',
+    'nav-item-current',
+    'nav-item-count',
+    'nav-item-count-current',
+    'persona-switcher-closed',
+    'persona-switcher-truncated',
+    'persona-switcher-switching',
+    'persona-menu-open',
+    'banner-default',
+    'banner-no-dismiss',
+    'inline-error-retry',
+    'inline-error-message',
+    'full-page-message-session-expired',
+    'full-page-message-not-found',
+    'full-page-message-error',
   ]) {
     await expect(page.locator(`h3#${id}`)).toBeVisible()
   }
@@ -95,4 +121,39 @@ test('a toast has no violations', async ({ page }) => {
     )
     .toBe(true)
   expect((await scan(page)).violations).toEqual([])
+})
+
+test('an open persona menu has no violations, focus starts on the checked persona, and stays inside', async ({
+  page,
+}) => {
+  await page.locator('[aria-labelledby="persona-menu-open"] button').click()
+  const menu = page.getByRole('menu')
+  await expect(menu).toBeVisible()
+  await expect(page.getByRole('menuitemradio', { name: /Priya Raman/ })).toBeFocused()
+  expect((await scan(page, MODAL_OVERLAY_RULES)).violations).toEqual([])
+
+  for (let i = 0; i < 6; i += 1) {
+    await page.keyboard.press('Tab')
+    expect(await focusIsIn(page, '[role="menu"]')).toBe(true)
+  }
+  await page.keyboard.press('Escape')
+  await expect(menu).toBeHidden()
+  await expect(page.locator('[aria-labelledby="persona-menu-open"] button')).toBeFocused()
+})
+
+test('a truncated persona title shows its tooltip in a real browser', async ({ page }) => {
+  // Real layout decides truncation. Arrive by keyboard, since Radix opens on keyboard focus.
+  const button = page.locator('#persona-switcher-truncated-button')
+  await button.focus()
+  await page.keyboard.press('Shift+Tab')
+  await page.keyboard.press('Tab')
+  await expect(button).toBeFocused()
+  await expect(page.getByRole('tooltip')).toContainText('Senior Department Lead')
+
+  // A title that fits shows none.
+  await page.locator('[aria-labelledby="persona-switcher-closed"] button').focus()
+  await page.keyboard.press('Shift+Tab')
+  await page.keyboard.press('Tab')
+  await expect(page.locator('[aria-labelledby="persona-switcher-closed"] button')).toBeFocused()
+  await expect(page.getByRole('tooltip')).toBeHidden()
 })

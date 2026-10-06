@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from 'react'
+import { useState } from 'react'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { Button } from '@/components/ui/button'
 import {
@@ -22,6 +22,10 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { Textarea } from '@/components/ui/textarea'
 import { Toast, ToastProvider, ToastViewport } from '@/components/ui/toast'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
+import { Group, Section } from './gallery-parts'
+import { FeedbackSections } from './sections/feedback-sections'
+import { CoreSections } from './sections/core-sections'
+import { NavigationSections } from './sections/navigation-sections'
 
 // Every primitive in every state it has, for the browser tests and for looking at. The route is
 // compiled in only for development and the e2e build (router.tsx), and the build check
@@ -30,26 +34,6 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip
 //
 // Each state sits under a heading with a stable id, so a test can address it. The overlays
 // (select, menu, tooltip, toast) start closed, with a trigger the test presses.
-
-function Section({ id, title, children }: { id: string; title: string; children: ReactNode }) {
-  return (
-    <section aria-labelledby={id} className="flex flex-col gap-3">
-      <h3 id={id} className="text-small font-semibold text-ink-muted">
-        {title}
-      </h3>
-      <div className="flex flex-wrap items-center gap-3">{children}</div>
-    </section>
-  )
-}
-
-function Group({ title, children }: { title: string; children: ReactNode }) {
-  return (
-    <section className="flex flex-col gap-4 border-t border-border pt-6">
-      <h2 className="text-h2 text-ink">{title}</h2>
-      {children}
-    </section>
-  )
-}
 
 const VARIANTS = ['primary', 'secondary', 'ghost', 'destructive'] as const
 
@@ -274,6 +258,9 @@ export function Gallery() {
         <Toasts />
         <Avatars />
         <Skeletons />
+        <CoreSections />
+        <NavigationSections />
+        <FeedbackSections />
       </main>
       <ToastViewport />
     </ToastProvider>

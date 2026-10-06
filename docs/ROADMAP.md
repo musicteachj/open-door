@@ -19,7 +19,7 @@ every stage.
 | Planning (repo, spec, roadmap, design brief) | Done | `docs/initial-planning` | [#1](https://github.com/musicteachj/open-door/pull/1) | [initial plan](plans/2026-09-29-open-door-initial-plan.md) | 2026-09-29 |
 | 0 Foundation | Done | `chore/phase-0-ci` | [#2](https://github.com/musicteachj/open-door/pull/2), [#3](https://github.com/musicteachj/open-door/pull/3), [#4](https://github.com/musicteachj/open-door/pull/4) | [phase 0 plan](plans/2026-09-29-phase-0-foundation.md) | 2026-10-03 |
 | 1 Tenancy, identity, permissions | Done. The whole-phase review found nothing high or medium; its fixes are in `fix/phase-1-review`. Released in `v0.1.0`. | `fix/phase-1-review` | [#8](https://github.com/musicteachj/open-door/pull/8), [#9](https://github.com/musicteachj/open-door/pull/9), [#10](https://github.com/musicteachj/open-door/pull/10), [#11](https://github.com/musicteachj/open-door/pull/11), [#14](https://github.com/musicteachj/open-door/pull/14) | [phase 1 plan](plans/2026-10-03-phase-1-tenancy-identity-permissions.md) | 2026-10-04 |
-| 2 Design system, shell, sandbox entry | In progress: stage 2 of 6 (web foundation), in two PRs: the plumbing, then the primitives, gallery, and browser tests | `feat/phase-2-web-primitives` | [#23](https://github.com/musicteachj/open-door/pull/23), [#24](https://github.com/musicteachj/open-door/pull/24) | [phase 2 plan](plans/2026-10-05-phase-2-design-system-shell-sandbox-entry.md) | 2026-10-05 |
+| 2 Design system, shell, sandbox entry | In progress: stage 3 of 6 (core, navigation, and feedback components). Stage 2 was two PRs. | `feat/phase-2-components-core` | [#23](https://github.com/musicteachj/open-door/pull/23), [#24](https://github.com/musicteachj/open-door/pull/24), [#25](https://github.com/musicteachj/open-door/pull/25) | [phase 2 plan](plans/2026-10-05-phase-2-design-system-shell-sandbox-entry.md) | 2026-10-05 |
 | 3 Handbook and retrieval | Not started | — | — | — | — |
 | 4 Assistant core (read-only) | Not started | — | — | — | — |
 | 5 Time off | Not started | — | — | — | — |
@@ -34,9 +34,10 @@ assistant home, the directory, and the global states) were approved on 2026-10-0
 [`design/tokens.md`](design/tokens.md) and [`design/screens/`](design/screens/). **Phase 2's UI
 stage is unblocked. Phase 2 is planned: see the
 [spec](specs/2026-10-05-phase-2-design-system-shell-sandbox-entry.md) and the
-[plan](plans/2026-10-05-phase-2-design-system-shell-sandbox-entry.md). Stages 1 and 2a are
-merged, and stage 2b (the primitives, the gallery, and browser tests) is built. Next: Phase 2
-stage 3, the core, navigation, and feedback components, at effort `medium`.** Later phases' screens are designed
+[plan](plans/2026-10-05-phase-2-design-system-shell-sandbox-entry.md). Stages 1 and 2 are
+merged, and stage 3 (the core, navigation, and feedback components) is built. Next: Phase 2 stage
+4, the assistant, landing, form, and directory components and the capture report, at effort
+`medium`.** Later phases' screens are designed
 shortly before each phase.
 Decided on 2026-10-04, changing the original plan:
 - **Mockups are desktop only.** The build still adapts every screen to a phone's width, checked

@@ -17,7 +17,7 @@ build then implements it in the component gallery before any screen uses it.
 
 | Component | Variants | States | Designed |
 |---|---|---|---|
-| Button | primary, secondary, ghost, destructive; 40 px and 32 px | default, hover, focus, active, disabled, loading | partly: no loading state yet |
+| Button | primary, secondary, ghost, destructive; 40 px and 32 px | default, hover, focus, active, disabled, loading | partly: the loading state is built, not designed (a spinner before the label; it stays focusable) |
 | Text input / textarea | with label, helper, error | default, focus, disabled, error | partly: the search field (see Forms below); labeled form fields come with Phase 5 |
 | Select | | default, open, focus, disabled, error | partly: the filter select (see Forms below) |
 | Checkbox / radio / switch | | default, checked, focus, disabled | [ ] |
