@@ -243,6 +243,52 @@ favicon, and a social-share image.
 
 ---
 
+## Decisions from the 2026-10-06 brainstorm
+
+Claude Design proposed enhancements after the Phase 2 screens. These are settled with the owner:
+
+- **Order of design work** follows the build order:
+  1. the logo now;
+  2. the handbook browser and passage panel before Phase 3's UI stage;
+  3. the conversation view before Phase 4;
+  4. then the time-off, escalation, and console screens before Phases 5, 6, and 7.
+
+  The conversation view's source panel reuses the handbook passage view, so they're designed
+  together.
+- **Logo:** one round, with "door ajar" (a slim wedge of an open door) as the lead concept. It must
+  be legible as a 16 px favicon, work in the lockup "Open Door · Juniper Row", use the token
+  colors, and pass contrast on `surface` and `surface-raised`.
+- **Passage panel:** show the section's "Applies to" label (for example "Applies to: California
+  employees") and its "Last updated" date.
+- **Feedback:** "Was this right?" per answer, with no thumb icons. It still feeds the eval backlog.
+- **The sensitive hand-off says only what's true.** Before the person writes anything, it says:
+  - only HR sees it, never managers;
+  - it's stored encrypted;
+  - when to expect a reply;
+  - the AI writes HR a neutral summary with no recommendation.
+
+  It must **not** say "the AI won't read it": the safety check reads every message, and HR's case
+  summary is AI-written. A route that doesn't involve a manager is real, since managers never see
+  cases.
+- **No "delete this conversation."** Conversations are append-only and every AI action is audited.
+  Show retention instead ("This sandbox and its conversations are deleted in 21 h"), and offer
+  "Start a new conversation".
+- **No "this policy changed since you last asked."** The assistant doesn't remember you between
+  conversations, and the handbook is pinned for a sandbox's 24 hours. The "Last updated" date
+  carries that information.
+- **Hourly staff:** overtime and meal-break questions get cited handbook answers. The assistant
+  never calculates overtime, and there's no shift-swap feature. Statutory figures are verified in
+  Phase 3.
+- **Spanish answers stay a stretch goal.**
+- **New screens, in their phases:**
+  - in Phase 5, team coverage beside a manager's approval: context only, never advice;
+  - in Phase 7, the console's report of questions the handbook couldn't answer;
+  - in Phase 7, the "design notes" idea, folded into the tour and the "How it's built" page.
+- **Keyboard shortcuts** (`/` to focus the composer, ⌘K to jump to a page) are backlogged for
+  Phase 8.
+
+---
+
 ## Voice and tone
 
 Calm, plain, and specific. American English. No exclamation points, and no jokes about sensitive

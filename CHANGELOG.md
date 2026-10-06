@@ -141,6 +141,13 @@ version (`0.x.y` while the app is being built, `1.0.0` when it is complete).
 
 ### Changed
 
+- **The design plan for the phases ahead** (design track, 2026-10-06). After the Phase 2 screens,
+  Claude Design proposed enhancements. The brief now records what was settled:
+  - the order of design work, which follows the build order: a logo round first, then the handbook
+    browser;
+  - corrections where an idea would contradict the project's rules: no "the AI won't read it", no
+    conversation deletion, and no memory of past questions;
+  - new screens for later phases, with matching backlog entries.
 - **The API's schema describes the errors it really sends** (Phase 2, stage 1). Every route
   declares its 401, 403, 404, and 422 responses as the problem-details body the API returns, filed
   as `application/problem+json`, in place of FastAPI's default validation error. The generated
