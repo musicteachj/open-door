@@ -12,6 +12,11 @@ version (`0.x.y` while the app is being built, `1.0.0` when it is complete).
 
 ### Added
 
+- **`make captures`, the design and the build side by side** (Phase 2, stage 4b). A local report
+  sets each design specimen beside a photograph of the build's gallery, one row per state, at
+  1440 px. The build is photographed after its hover, keyboard focus, or click, and with any menu,
+  list, or tooltip open. The owner reviews it before each UI pull request. It needs a network,
+  because the design pages load React from a CDN, and CI never runs it.
 - **The assistant, landing, form, and directory components** (Phase 2, stage 4a). The rest of the
   pieces the Phase 2 screens are built from, each in the gallery in every state:
   - **Assistant:** the composer, which always shows the AI disclosure and never sends on an empty

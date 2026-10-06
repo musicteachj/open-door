@@ -8,6 +8,8 @@ const API_ORIGIN = 'http://127.0.0.1:8100'
 
 export default defineConfig({
   testDir: './e2e',
+  // `make captures` has its own config (playwright.captures.config.ts), and CI never runs it.
+  testIgnore: '**/captures/**',
   // Every spec starts its own sandbox, so files run side by side.
   fullyParallel: true,
   forbidOnly: !!process.env.CI,
