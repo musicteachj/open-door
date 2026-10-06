@@ -10,6 +10,15 @@ version (`0.x.y` while the app is being built, `1.0.0` when it is complete).
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-10-06
+
+Phase 2: the design system, the app shell, and sandbox entry. A visitor picks a persona, lands in
+a private sandbox, and can switch persona, sign out, and find anyone in the directory, seeing only
+the profile fields their role allows. The design is built from the approved Claude Design screens,
+every acceptance criterion has a browser test with axe, and the phase closed with a whole-phase
+review and a new logo. The assistant itself arrives in Phase 4; until then it gives one fixed,
+person-written reply.
+
 ### Added
 
 - **The directory and profiles** (Phase 2, stage 6), which complete Phase 2's screens.

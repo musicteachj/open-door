@@ -19,7 +19,7 @@ every stage.
 | Planning (repo, spec, roadmap, design brief) | Done | `docs/initial-planning` | [#1](https://github.com/musicteachj/open-door/pull/1) | [initial plan](plans/2026-09-29-open-door-initial-plan.md) | 2026-09-29 |
 | 0 Foundation | Done | `chore/phase-0-ci` | [#2](https://github.com/musicteachj/open-door/pull/2), [#3](https://github.com/musicteachj/open-door/pull/3), [#4](https://github.com/musicteachj/open-door/pull/4) | [phase 0 plan](plans/2026-09-29-phase-0-foundation.md) | 2026-10-03 |
 | 1 Tenancy, identity, permissions | Done. The whole-phase review found nothing high or medium; its fixes are in `fix/phase-1-review`. Released in `v0.1.0`. | `fix/phase-1-review` | [#8](https://github.com/musicteachj/open-door/pull/8), [#9](https://github.com/musicteachj/open-door/pull/9), [#10](https://github.com/musicteachj/open-door/pull/10), [#11](https://github.com/musicteachj/open-door/pull/11), [#14](https://github.com/musicteachj/open-door/pull/14) | [phase 1 plan](plans/2026-10-03-phase-1-tenancy-identity-permissions.md) | 2026-10-04 |
-| 2 Design system, shell, sandbox entry | Done. The whole-phase review found nothing high; its fixes are in `fix/phase-2-review`. Ready to release as `v0.2.0`. | `fix/phase-2-review` | [#23](https://github.com/musicteachj/open-door/pull/23), [#24](https://github.com/musicteachj/open-door/pull/24), [#25](https://github.com/musicteachj/open-door/pull/25), [#26](https://github.com/musicteachj/open-door/pull/26), [#27](https://github.com/musicteachj/open-door/pull/27), [#28](https://github.com/musicteachj/open-door/pull/28), [#29](https://github.com/musicteachj/open-door/pull/29), [#30](https://github.com/musicteachj/open-door/pull/30) | [phase 2 plan](plans/2026-10-05-phase-2-design-system-shell-sandbox-entry.md) | 2026-10-06 |
+| 2 Design system, shell, sandbox entry | Done. The whole-phase review found nothing high; its fixes are in `fix/phase-2-review`. Released in `v0.2.0`. | `fix/phase-2-review` | [#23](https://github.com/musicteachj/open-door/pull/23), [#24](https://github.com/musicteachj/open-door/pull/24), [#25](https://github.com/musicteachj/open-door/pull/25), [#26](https://github.com/musicteachj/open-door/pull/26), [#27](https://github.com/musicteachj/open-door/pull/27), [#28](https://github.com/musicteachj/open-door/pull/28), [#29](https://github.com/musicteachj/open-door/pull/29), [#30](https://github.com/musicteachj/open-door/pull/30), [#32](https://github.com/musicteachj/open-door/pull/32) | [phase 2 plan](plans/2026-10-05-phase-2-design-system-shell-sandbox-entry.md) | 2026-10-06 |
 | 3 Handbook and retrieval | Not started | — | — | — | — |
 | 4 Assistant core (read-only) | Not started | — | — | — | — |
 | 5 Time off | Not started | — | — | — | — |
@@ -34,9 +34,8 @@ assistant home, the directory, and the global states) were approved on 2026-10-0
 [`design/tokens.md`](design/tokens.md) and [`design/screens/`](design/screens/). **Phase 2's UI
 stage is unblocked. Phase 2 is planned: see the
 [spec](specs/2026-10-05-phase-2-design-system-shell-sandbox-entry.md) and the
-[plan](plans/2026-10-05-phase-2-design-system-shell-sandbox-entry.md). Phase 2 is done.
-Next: the `v0.2.0` release PR (`dev` → `main`), then planning Phase 3, handbook and retrieval, at
-effort `high`.** Later phases' screens are designed
+[plan](plans/2026-10-05-phase-2-design-system-shell-sandbox-entry.md). Phase 2 is done and
+released in `v0.2.0`. Next: planning Phase 3, handbook and retrieval, at effort `high`.** Later phases' screens are designed
 shortly before each phase. **Next for design (decided 2026-10-06):** the logo round is done and
 ships with Phase 2's close; next is the handbook browser and passage panel, before Phase 3's UI
 stage. The brief's "Decisions from the 2026-10-06 brainstorm" records the rest.
@@ -50,7 +49,8 @@ Decided on 2026-10-04, changing the original plan:
 The brief records these, and the Phase 2 decisions on the shell, the assistant home, and the
 directory.
 
-**Releases (`dev` → `main`):** `v0.1.0` (2026-10-04): planning, Phase 0, and Phase 1.
+**Releases (`dev` → `main`):** `v0.1.0` (2026-10-04): planning, Phase 0, and Phase 1. `v0.2.0`
+(2026-10-06): Phase 2.
 
 ---
 
