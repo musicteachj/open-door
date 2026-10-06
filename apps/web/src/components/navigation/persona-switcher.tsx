@@ -40,6 +40,8 @@ function PersonaSwitcher({
         <button
           type="button"
           data-slot="persona-switcher"
+          // The measured state, which the browser tests wait for before they focus.
+          data-truncated={truncated || undefined}
           aria-busy={busy || undefined}
           // Not `disabled`: that would drop keyboard focus. It just looks and reports as inactive.
           aria-disabled={busy || undefined}

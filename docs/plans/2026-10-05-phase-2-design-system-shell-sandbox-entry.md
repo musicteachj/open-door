@@ -1406,6 +1406,128 @@ the plan allowed:
 - **Stage 4b ended at 485 web unit tests and 26 browser tests** (517 API tests). The trial ended
   Stage 4 at 473 and 30, counting browser tests differently.
 
+**Stage 5,** on `feat/phase-2-shell`, branched from `dev` at `94dd417` after Stage 4b merged as
+PR #28. #28 was merged before its CI finished; `dev`'s run on the merge commit came back green.
+
+- **Task 30:** `PERSONAS` adds `firstName`, which the greeting and "Switching to Marcus…" need.
+  The persona keys are pinned against the generated `PersonaKey` and `seed_data.py`.
+- **Task 31:**
+  - `navFor(me, items)` takes the item list, so tests can mark every item available.
+  - **The paths other than `/ask` and `/directory` are invented**: `/time-off`, `/handbook`,
+    `/approvals`, `/cases`, `/console`, and `/how-its-built`. No document names them, so the phase
+    that builds each page confirms or renames its path.
+- **Task 32:**
+  - Under an hour reads "45 min"; zero, negative, or not a number reads "less than a minute",
+    which the notes don't word.
+  - `greetingLine` gives "Good morning, Priya.", with the 03 notes' period.
+- **Task 33:**
+  - **Retry sends the box's current text through `send`.** There is no separate retry action in the
+    store, and the composer's Retry button is the only caller. (Stage 5's first build had a
+    `resend`; it was dead code and was removed.)
+  - The transport is passed to `send`, not kept in the store. The interface and hook
+    are in `transport.ts`, and the provider in `transport-provider.tsx`, for oxlint.
+  - **A reset during a send drops the late reply,** by both an `AbortController` and a generation
+    count.
+  - A new send clears the previous reply, and a success clears the draft only if it still holds the
+    sent question, so a follow-up typed while waiting survives.
+  - The fake reply is the spec's text, word for word, checked by the review.
+- **Task 34:**
+  - **The landing page is a 1168 px content column,** with its padding outside. The review caught
+    the padding taken from the width, which left the cards 48 px narrower than 01. A browser check
+    pins the width.
+  - **The cards are a `ul` of `li`s** in an auto-fill grid with 240 px minimums. A failed start
+    re-enables them, with "We couldn't start a sandbox." and a Retry for the same persona. While
+    `/me` is pending, the page shows only an `sr-only` status.
+  - The browser tests' helpers start sandboxes through the real cards, named "Start a sandbox as
+    …". Switching and signing out still go through the `/ask` placeholder until Tasks 35–36.
+- **Task 37:**
+  - **The global states live in `features/global-states/`.** `isNotFound()` and `requestIdOf()` are
+    the helpers Stage 6's profile reuses. A 403 shows "Something went wrong"; nothing in Phase 2
+    hides a profile with one.
+  - **The signed-in routes sit under a pathless route with `errorElement: <RouteError />`,** and
+    Task 35's shell goes between it and `RequireSession`. Retry resets the query error boundary,
+    then replaces the location with itself, because the routes have no loaders to revalidate.
+  - **The root route has its own boundary,** so a render error outside the shell shows "Something
+    went wrong", not React Router's default page.
+- **For Task 35, from batch B's review:**
+  - The content sheet must be the one `<main>`. The inside pages render none, and the `/ask` and
+    directory placeholders' own `<main>`s must go.
+  - `RequireSession`'s pending state is still the unstyled "Loading…".
+- **For Task 39, from batch B's review,** acceptance criteria only a browser can prove:
+  - axe on 01 and 05;
+  - no nav item current on not found;
+  - `prefers-reduced-motion` stopping the spinner;
+  - the reference selected with one click.
+- **Task 35:**
+  - **The shell lives in `features/shell/`.** It sits between `RequireSession` (under the reset
+    key) and the pathless error route, so a switch remounts all of it.
+  - **The layout:** the sidebar is an `<aside aria-label="Sidebar">`, as in the kit. The content
+    sheet is the one `<main>`, and takes focus after a switch.
+  - **Below 1100 px the rail drops below the content,** as the kit's CSS does. Below 760 px it hides
+    while it has nothing to show, and the indicator moves to the top bar. Both indicators are in
+    the DOM, one shown per width, and a browser check proved the hidden one is `display: none`.
+  - **The switch toast's store holds the person's id** and resets with the identity. The Opus
+    re-check proved the first version, kept out of the reset on purpose, could tell the next person
+    "Now viewing as Marcus Bell." after another tab changed the session or the sandbox expired. Now
+    the toast shows only for the person it names.
+  - **The expiry banner is announced once,** through an always-mounted status region, not as a live
+    region whose minute-by-minute text would be re-read.
+  - **Copy the notes don't give, approved by the owner on 2026-10-06:** "We couldn't switch to
+    Marcus.", "We couldn't sign you out.", "Signing out…", and the "Sandbox status" landmark.
+  - The failure's resend key is `again`, because of the `retry:` guard.
+  - `meFor`'s test expiry is now relative to the clock, so no test shows the banner by accident.
+  - The browser tests switch and sign out through the real persona menu.
+- **Task 38:** `DATA-INVENTORY.md` gains a "Browser storage" section for the banner's
+  `od.expiryBannerDismissed.<tenantExpiresAt>` key, and says the web app sets no cookies of its own
+  and uses no `localStorage`.
+- **Task 36:**
+  - **The 03 notes list the logo first in the Tab order, but the kit's logo is a plain `div`,** with
+    no destination drawn. So it stays non-focusable, and Tab starts at the nav: Ask, Directory, the
+    switcher, the composer, Ask, then the four "Try asking" rows.
+  - A "Try asking" pick fills the box and leaves focus on the row, as the notes say nothing about
+    focus.
+  - The send-failure message, "Something went wrong sending that.", is the 03 notes' own copy.
+  - The reply block is labeled "Open Door's reply", the plan's wording, and marked "Deleted in
+    Phase 4".
+- **Task 39:**
+  - **Four specs name a test after each acceptance criterion:** `landing`, `shell`, `home`, and
+    `global-states`. "Matches the screenshots" belongs to the capture report.
+  - **A few criteria can't be reached in a browser in Phase 2,** so unit tests or the gallery cover
+    them, with the reason stated:
+    - the failed send, because the fake transport can't fail from a browser;
+    - the cinnamon marker, because there are no glance figures yet;
+    - the in-shell "something went wrong", because no signed-in page loads data yet;
+    - Approvals and its count, which are Phase 5's.
+  - **The 390 px nav fade is proved by narrowing to 150 px,** because Phase 2's two items fit at
+    390 px. Recheck it at 390 px once the nav has more items.
+  - **Captures:** `SCREEN_ROWS` has one row per design PNG in 01, 02, 03, and 05, and a manifest
+    test fails if a new PNG has no row. The capture run now starts real sandboxes, so `make
+    captures` needs `make db`. 18 of the 20 screen rows are marked "differs by design until Phase
+    N" for later-phase features.
+  - **The review found the session-expired page off its design:** the button was missing its arrow,
+    and the outside-the-shell logo sat at the window's edge rather than the landing page's 136 px
+    inset. Both are fixed.
+  - **A busy-label test couldn't fail** with Phase 2's short names. It now squeezes the switcher, so
+    a wrap fails it.
+  - **Two browser tests flaked under the full suite,** both from reading a style before it settled:
+    - the truncated-title tooltip, focused before the switcher had measured its title;
+    - the composer's halo, read mid-transition after the border had settled.
+
+    The switcher now exposes its measurement as `data-truncated`, which the test waits for. Every
+    color or shadow read after an interaction is polled. The whole suite then passed five times in
+    a row, 390 of 390.
+  - `make e2e` runs 78 browser tests in about 15 s.
+- **Task 40:** the owner reviewed the capture report (68 rows: 48 components and 20 screens, none
+  missing) and approved it, with the fixed reply's wording, on 2026-10-06.
+- **Stage 5 ended at 646 web unit tests and 78 browser tests** (517 API tests).
+- **For Stage 6:**
+  - add the browser test for the in-shell "something went wrong", reached through a directory
+    request that fails;
+  - recheck the nav fade at 390 px when the nav has more items.
+- **Deferred:** the manager-to-employee nav change after a switch can't be observed until a phase
+  makes Approvals, Cases, or Console available. Recheck it then, with a `navFor` test and the
+  switch test.
+
 ## Backlog
 
 New items from planning, added in the tasks named:

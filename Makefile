@@ -87,7 +87,8 @@ e2e: ## Run the browser tests in Chromium, against the real API and a build with
 	cd $(WEB) && npm run e2e
 
 # Local only: `make check` and CI never run it. The specimen pages load React and Babel from
-# unpkg.com, so it needs a network. It needs no database: the gallery is static.
+# unpkg.com, so it needs a network. The screens start real sandboxes, so it needs Postgres up with
+# the login users: run `make db` first.
 captures: ## Photograph the build's gallery beside the design specimens; write apps/web/captures/index.html
 	cd $(WEB) && npx playwright install chromium
 	cd $(WEB) && npm run build:e2e

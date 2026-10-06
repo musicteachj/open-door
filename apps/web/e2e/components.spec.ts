@@ -67,6 +67,7 @@ test('the composer shows the primary border and the focus halo when the box has 
 
   const primary = await themeColor(page, 'primary')
   // The halo is the primary at 18%: three pixels, spread only.
+  // Both fade in over 150 ms, so wait for each to settle rather than reading mid-transition.
   await expect.poll(async () => (await read()).border).toBe(primary)
-  expect((await read()).shadow).toMatch(/rgba?\(.*\) 0px 0px 0px 3px/)
+  await expect.poll(async () => (await read()).shadow).toMatch(/rgba?\(.*\) 0px 0px 0px 3px/)
 })

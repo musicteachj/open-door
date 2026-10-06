@@ -97,6 +97,11 @@ should pick it up. When one is done, delete it here and record it in the changel
 
 ## Phase 5: time off
 
+- **Check the nav after a switch from a manager to an employee.** `navFor` builds the nav from the
+  fresh `/me` inside a remounted shell, but in Phase 2 everyone sees only Ask and Directory, so the
+  manager's items disappearing after a switch can't be observed. When Approvals becomes available,
+  add a `navFor` test and extend the shell's switch test to prove the employee never sees it.
+  (Phase 2 stage 5 security re-check.)
 - **Keep a write from the old identity out of the new cache.** `resetIdentity` clears the query
   cache, but a mutation already in flight still runs its callbacks when it finishes. If its
   `onSuccess` calls `setQueryData`, the old person's data lands in the new person's cache. Phase

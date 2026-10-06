@@ -8,6 +8,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { meFor } from '@/test/fixtures'
 import { installFakeApi } from '@/test/fake-api'
 import { server } from '@/test/msw'
+import { signOutViaMenu, switchViaMenu } from '@/test/persona-menu'
 import { renderApp } from '@/test/render-app'
 import { RequireSession } from './RequireSession'
 import { getSessionStatus } from './session-status'
@@ -22,20 +23,25 @@ function gate() {
 }
 
 const heading = (name: string) => screen.findByRole('heading', { level: 1, name })
-const signedInAs = (name: string) => screen.findByText(`Signed in as ${name}`)
+const LANDING = 'Your open-door policy, now always open.'
+// The home's greeting names the person, and its first word depends on the hour.
+const greetingRegex = (name: string) =>
+  new RegExp(`^Good (morning|afternoon|evening), ${name.split(' ')[0]}\\.$`)
+const signedInAs = (name: string) =>
+  screen.findByRole('heading', { level: 1, name: greetingRegex(name) })
 
 describe('the router', () => {
   it('sends an app route to the landing page when nobody is signed in', async () => {
     installFakeApi()
     const { router } = renderApp({ at: '/directory' })
-    await heading('Open Door')
+    await heading(LANDING)
     expect(router.state.location.pathname).toBe('/')
   })
 
   it('sends an unknown route to the landing page for an anonymous visitor', async () => {
     installFakeApi()
     const { router } = renderApp({ at: '/nowhere' })
-    await heading('Open Door')
+    await heading(LANDING)
     expect(router.state.location.pathname).toBe('/')
   })
 
@@ -64,7 +70,9 @@ describe('the router', () => {
     api.expire()
     await act(() => queryClient.invalidateQueries())
     await heading('This sandbox has reset.')
-    expect(screen.queryByText(/Signed in as/)).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('heading', { level: 1, name: /^Good (morning|afternoon|evening),/ }),
+    ).not.toBeInTheDocument()
   })
 
   it('sends the reset page button to a landing page that does not find the old person', async () => {
@@ -74,8 +82,23 @@ describe('the router', () => {
     api.expire()
     await act(() => queryClient.invalidateQueries())
     await user.click(await screen.findByRole('button', { name: 'Choose who to be' }))
-    await heading('Open Door')
+    await heading(LANDING)
     expect(router.state.location.pathname).toBe('/')
+  })
+
+  it('shows nothing but a screen-reader status while the first /me loads', async () => {
+    installFakeApi('priya')
+    const hold = gate()
+    server.use(
+      http.get(`${window.location.origin}/api/v1/me`, async () => {
+        await hold.promise
+        return HttpResponse.json(meFor('priya'))
+      }),
+    )
+    renderApp({ at: '/ask' })
+    expect(await screen.findByText('Loading…')).toHaveClass('sr-only')
+    hold.resolve()
+    await signedInAs('Priya Raman')
   })
 
   it('redirects a signed-in visitor at / to /ask', async () => {
@@ -94,7 +117,7 @@ describe('the router', () => {
   it('starts a sandbox as the chosen person', async () => {
     const api = installFakeApi()
     const { user, router } = renderApp({ at: '/' })
-    await user.click(await screen.findByRole('button', { name: 'Start as Marcus' }))
+    await user.click(await screen.findByRole('button', { name: /^Start a sandbox as Marcus / }))
     await signedInAs('Marcus Bell')
     expect(router.state.location.pathname).toBe('/ask')
     expect(api.signedInAs()).toBe('marcus')
@@ -104,15 +127,17 @@ describe('the router', () => {
     installFakeApi('priya')
     const { user } = renderApp({ at: '/ask' })
     await signedInAs('Priya Raman')
-    await user.click(screen.getByRole('button', { name: 'Switch to Marcus' }))
+    await switchViaMenu(user, 'Marcus')
     await signedInAs('Marcus Bell')
-    expect(screen.queryByText('Signed in as Priya Raman')).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('heading', { level: 1, name: greetingRegex('Priya Raman') }),
+    ).not.toBeInTheDocument()
   })
 
   it('does not show the reset page when an anonymous 401 is followed by a sign-in elsewhere', async () => {
     const api = installFakeApi()
     const { queryClient, router } = renderApp({ at: '/' })
-    await heading('Open Door')
+    await heading(LANDING)
     api.signIn('priya')
     await act(() => queryClient.invalidateQueries())
     await signedInAs('Priya Raman')
@@ -139,28 +164,30 @@ describe('the router', () => {
             )
       }),
     )
-    const { user } = renderApp({ at: '/ask' })
-    await signedInAs('Priya Raman')
-    await user.click(screen.getByRole('button', { name: 'Switch to Marcus' }))
-    await user.click(screen.getByRole('button', { name: 'Switch to Marcus' }))
+    // The real shell's switcher refuses a second switch while one runs, so two overlapping
+    // switches (as from two tabs) are started from the test shell's own button.
+    const { user } = renderApp({ at: '/ask', routes: shellRoutes })
+    await waitFor(() => expect(screen.getByTestId('header')).toHaveTextContent('Priya Raman'))
+    await user.click(screen.getByRole('button', { name: 'Switch' }))
+    await user.click(screen.getByRole('button', { name: 'Switch' }))
     gates[0]!.resolve()
-    await signedInAs('Marcus Bell')
+    await waitFor(() => expect(screen.getByTestId('header')).toHaveTextContent('Marcus Bell'))
     gates[1]!.resolve()
     await act(() => new Promise((resolve) => setTimeout(resolve, 50)))
     expect(screen.queryByText('This sandbox has reset.')).not.toBeInTheDocument()
-    expect(screen.getByText('Signed in as Marcus Bell')).toBeInTheDocument()
+    expect(screen.getByTestId('header')).toHaveTextContent('Marcus Bell')
   })
 
   it('signs out to the landing page, and a later visit finds nobody', async () => {
     const api = installFakeApi('priya')
     const { user, router } = renderApp({ at: '/ask' })
     await signedInAs('Priya Raman')
-    await user.click(screen.getByRole('button', { name: 'Sign out' }))
-    await heading('Open Door')
+    await signOutViaMenu(user)
+    await heading(LANDING)
     expect(router.state.location.pathname).toBe('/')
     expect(api.signedInAs()).toBeNull()
     await act(() => router.navigate('/ask'))
-    await heading('Open Door')
+    await heading(LANDING)
   })
 })
 
