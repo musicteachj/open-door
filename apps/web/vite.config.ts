@@ -20,8 +20,10 @@ export default defineConfig({
   preview: { port: 4173, strictPort: true, proxy },
   test: {
     environment: 'jsdom',
-    // The browser tests in e2e/ belong to Playwright.
-    exclude: [...configDefaults.exclude, 'e2e/**', 'dist-e2e/**'],
+    // The browser tests in e2e/ belong to Playwright, and so does the capture run. The one file
+    // there that Vitest runs is the capture report's test, which the default include already
+    // finds because the report is a pure function: it is the only e2e file not named *.spec.ts.
+    exclude: [...configDefaults.exclude, 'e2e/**/*.spec.ts', 'dist-e2e/**'],
     setupFiles: ['./src/test/setup.ts'],
     restoreMocks: true,
     unstubGlobals: true,

@@ -1378,6 +1378,34 @@ the plan allowed:
   motion. The design draws them static, so it went to the backlog as a design question.
 - **Stage 4a ended at 470 web unit tests and 26 browser tests** (517 API tests).
 
+**Stage 4b,** on `feat/phase-2-captures`, branched from `dev` at `ca9527f` after 4a merged as PR #27:
+- **Task 28:**
+  - **Specimens are photographed whole,** one picture per design area at the viewport each
+    `.card.html` page declares. The pages have no per-component anchors, so each area's picture
+    sits beside every build row of that area.
+  - **One row per gallery state,** 48 in all, from the shared `gallery-ids.ts`. A test checks every
+    id is real. Ten states have no specimen and are left out: the Stage 2 primitives' extra
+    states, the page header, and the empty state.
+  - **Interactions run before each build photo:** hover, keyboard focus (the nav item, the
+    composer), or a click.
+  - **Overlay rows** (the open filter select, the persona menu, the truncated title's tooltip) wait
+    for the overlay's own role to be visible, then take a viewport photo. The first version clipped
+    a full-page photo and lost two of the three overlays.
+  - **Specimens are served by `python3 -m http.server` on 8101,** which needs no new dependency.
+    Each wait is capped at 10 s. A specimen that fails to load is "Not captured", and the report
+    is written even if the run fails.
+  - **Paths in the report come from `designFile()` and `buildFile()`,** and a test proves they are
+    relative.
+  - **Vitest excludes `e2e/**/*.spec.ts`,** rather than all of `e2e/`, so it runs
+    `e2e/captures/report.test.ts` without the plan's extra `include`.
+  - **If 4173 serves a build without the gallery,** the run stops with a message saying what to do.
+  - CI never runs captures: `playwright.config.ts` ignores `e2e/captures/`, and nothing in `check`
+    or the workflows calls the captures config.
+- **Task 29:** the owner reviewed the capture report (48 rows, none missing) and approved it.
+  `CLAUDE.md` gains `make captures`.
+- **Stage 4b ended at 485 web unit tests and 26 browser tests** (517 API tests). The trial ended
+  Stage 4 at 473 and 30, counting browser tests differently.
+
 ## Backlog
 
 New items from planning, added in the tasks named:

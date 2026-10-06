@@ -31,6 +31,10 @@ test-results/
 blob-report/
 playwright/.cache/
 
+# --- Captures --------------------------------------------------------------
+# `make captures` writes the design-beside-build report and its pictures here.
+apps/web/captures/
+
 # --- Evals -----------------------------------------------------------------
 # Live eval runs write here. Recorded fixtures and the committed scoreboard live
 # elsewhere under evals/ and are tracked.
