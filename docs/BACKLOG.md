@@ -71,6 +71,9 @@ should pick it up. When one is done, delete it here and record it in the changel
 
 ## Phase 3: handbook and retrieval
 
+- **Label each cited section with "Applies to" and "Last updated."** The passage panel shows, for
+  example, "Applies to: California employees", and the section's last-updated date. That covers
+  "has this changed?" without remembering past conversations. (2026-10-06 design brainstorm.)
 - **Pin each sandbox to a handbook version** with a `tenants.handbook_version_id` column, so an
   answer cites the handbook the sandbox was created with, even after the handbook changes.
   Source: [the Phase 1 spec](specs/2026-10-03-phase-1-tenancy-identity-permissions.md#later-phases).
@@ -98,6 +101,9 @@ should pick it up. When one is done, delete it here and record it in the changel
 
 ## Phase 5: time off
 
+- **Show team coverage beside a manager's approval.** When Marcus reviews a request, show who else
+  on his team is off on those dates. It's context only: the assistant never recommends approving
+  or denying (invariant 5). (2026-10-06 design brainstorm.)
 - **Check the nav after a switch from a manager to an employee.** `navFor` builds the nav from the
   fresh `/me` inside a remounted shell, but in Phase 2 everyone sees only Ask and Directory, so the
   manager's items disappearing after a switch can't be observed. When Approvals becomes available,
@@ -131,6 +137,14 @@ Source for both: [the Phase 1 spec](specs/2026-10-03-phase-1-tenancy-identity-pe
 
 ## Phase 6: cases and escalation
 
+- **The hand-off says only what's true.** Before the person writes anything, say:
+  - only HR sees it, never managers;
+  - it's encrypted;
+  - when to expect a reply;
+  - the AI writes HR a neutral summary.
+
+  Never say "the AI won't read it": the guard reads every message, and `summarize_case` is
+  AI-written. (2026-10-06 design brainstorm.)
 - **Encrypt case narratives.** They are the most sensitive text the app will hold.
   Source: [the Phase 1 spec](specs/2026-10-03-phase-1-tenancy-identity-permissions.md#later-phases).
 
@@ -143,12 +157,21 @@ Source for both: [the Phase 1 spec](specs/2026-10-03-phase-1-tenancy-identity-pe
   IDs are derived from the sandbox's random tenant ID, which is shown only inside that sandbox.
   (Stage 4 security review.)
 
+## Phase 7: AI Ops console, reviewer experience, model decision
+
+- **Report the questions the handbook couldn't answer.** The console lists them, so HR can see
+  what to write next. The question text is user-written, so it's untrusted data, and it's redacted
+  for guard-flagged turns. Fold the "design notes" idea into the tour and the "How it's built" page
+  rather than adding a third explainer. (2026-10-06 design brainstorm.)
+
 ## Phase 8: hardening and deploy-readiness
 
 - **Make the directory's counts cheaper.** `GET /people/facets` runs up to five queries one after
   another (total, matching, the location and department menus, and "My team") on every debounced
   search. Total and matching can be one `count(*) FILTER (WHERE …)`, and the total doesn't change
   with the filters. Measure in the load test first. (Phase 2 close-out review.)
+- **Keyboard shortcuts.** Add `/` to focus the composer (never while typing in a field) and ⌘K to
+  jump to a page. Both need screen-reader and conflict checks. (2026-10-06 design brainstorm.)
 - **Notice another tab's session change at once.** If another tab switches persona or signs out,
   this tab keeps showing what it had loaded, such as HR's view of someone's private details, until
   it next refetches `/me`: on focus, on navigation, or after a 401. It's the same visitor, and every
