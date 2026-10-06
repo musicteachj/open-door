@@ -3,6 +3,7 @@
 from fastapi import APIRouter, HTTPException, Request, Response, status
 from sqlalchemy import select
 
+from app.api.problems import problem_responses
 from app.api.schemas import CamelModel
 from app.db.models import Person
 from app.modules.audit.service import record_event
@@ -26,6 +27,7 @@ class PersonaChoice(CamelModel):
     operation_id="getMe",
     summary="The signed-in person's own card, and when their sandbox expires",
     response_model=Me,
+    responses=problem_responses(status.HTTP_401_UNAUTHORIZED),
 )
 async def get_current_person(signed_in: SignedInDep) -> Me:
     return await get_me(signed_in.db, signed_in.actor, signed_in.session.expires_at)
@@ -36,6 +38,12 @@ async def get_current_person(signed_in: SignedInDep) -> Me:
     operation_id="switchPersona",
     summary="Sign in as another persona in the same sandbox, with new session and CSRF tokens",
     response_model=Me,
+    responses=problem_responses(
+        status.HTTP_401_UNAUTHORIZED,
+        status.HTTP_403_FORBIDDEN,
+        status.HTTP_404_NOT_FOUND,
+        status.HTTP_422_UNPROCESSABLE_CONTENT,
+    ),
 )
 async def switch_persona(
     choice: PersonaChoice, signed_in: SignedInDep, request: Request, response: Response
@@ -77,6 +85,7 @@ async def switch_persona(
     operation_id="endSession",
     summary="Sign out: end the session and clear its cookies",
     status_code=status.HTTP_204_NO_CONTENT,
+    responses=problem_responses(status.HTTP_401_UNAUTHORIZED, status.HTTP_403_FORBIDDEN),
 )
 async def sign_out(signed_in: SignedInDep, response: Response) -> None:
     ended = await end_session(signed_in.db, signed_in.session.token_hash)

@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet data-dc-atomics>
+<meta name="design_doc_mode" content="canvas">
+<link rel="stylesheet" href="styles.css">
+<style>body{margin:0;background:#ECEEEF;font-family:'Instrument Sans',system-ui,sans-serif;-webkit-font-smoothing:antialiased}a{color:#59256A}a:hover{color:#461B54}@keyframes od-spin{to{transform:rotate(360deg)}}@media (prefers-reduced-motion: reduce){[data-spin]{animation:none !important}}.dv-turn{padding:40px 44px 32px;border-bottom:1px solid rgba(0,0,0,.08);scroll-margin-top:16px}.dv-thd{display:flex;align-items:baseline;gap:10px;margin:0 0 8px}.dv-tid{font:600 10px ui-monospace,Menlo,monospace;padding:3px 7px;background:#1a1a1a;color:#fff;border-radius:4px;text-decoration:none}.dv-tname{font:600 13px/1.2 system-ui,sans-serif;color:#1a1a1a}.dv-note{font:12px/1.55 system-ui,sans-serif;color:rgba(0,0,0,.6);max-width:960px;margin:0 0 24px}.dv-opts{display:flex;flex-wrap:wrap;gap:56px;align-items:flex-start}.dv-opt{flex:none;display:flex;flex-direction:column;gap:12px;scroll-margin-top:16px}.dv-oid{font:600 10.5px ui-monospace,Menlo,monospace;padding:3px 7px;background:rgba(0,0,0,.08);color:#1a1a1a;border-radius:5px;text-decoration:none}.dv-olabel{display:flex;align-items:baseline;gap:8px;font:400 12px/1.3 system-ui,sans-serif;color:rgba(0,0,0,.6)}.dv-card{max-width:100%;background:#fff;border:1px solid rgba(0,0,0,.08);border-radius:8px;box-shadow:0 1px 3px rgba(0,0,0,.06);overflow:hidden}.dv-opt:target .dv-oid{background:#2a78d6;color:#fff}.dv-next{margin:28px 0 0;font:12px/1.5 system-ui,sans-serif;color:rgba(0,0,0,.55)}</style>
+</helmet>
+<section class="dv-turn" id="t1" data-screen-label="01 Landing">
+<div class="dv-thd"><a class="dv-tid" href="#t1">1</a><span class="dv-tname">Screen 01: Try Open Door</span></div>
+<p class="dv-note">The live page is <a class="dv-oid" href="#1a">1a</a>. Selecting a card shows the starting state for about two seconds, then the card returns to normal. Turn on simulateFailure in Tweaks to land on the error instead. The pitch, the cards and the footer share one 1168 px column. The person cards are the main action, so they get the most visual weight. The tour and the sandbox note sit in one quiet row under the cards. The new PersonaCard component is in the design system under components/landing. <a class="dv-oid" href="#1b">1b</a> to <a class="dv-oid" href="#1d">1d</a> freeze the requested states.</p>
+<div class="dv-opts">
+<div class="dv-opt" id="1a">
+<div class="dv-olabel"><a class="dv-oid" href="#1a">1a</a>Landing page, live</div>
+<div class="dv-card" style="width:1440px">
+<div style="background:var(--surface);font-family:var(--font-sans);color:var(--ink);padding:0 136px">
+  <header style="height:72px;display:flex;align-items:center;justify-content:space-between">
+    <div style="display:flex;align-items:center;gap:12px"><img src="assets/logo-mark.svg" width="32" height="32" alt=""><span style="font-size:16px;line-height:20px;font-weight:600;letter-spacing:-0.01em">Open Door</span></div>
+    <a href="#1a" style="display:flex;align-items:center;gap:8px;height:40px;padding:0 12px;border-radius:var(--radius-md);color:var(--ink-nav);font-size:var(--text-ui);line-height:var(--leading-ui);font-weight:500;text-decoration:none" style-hover="background:var(--neutral-hover);color:var(--ink)" style-focus="outline:2px solid var(--focus-ring);outline-offset:2px"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="m16 18 6-6-6-6M8 6l-6 6 6 6"></path></svg>How it's built</a>
+  </header>
+  <main>
+    <section style="padding-top:72px;max-width:760px;display:flex;flex-direction:column;gap:20px">
+      <h1 style="margin:0;font-size:var(--text-display);line-height:var(--leading-display);font-weight:600;letter-spacing:var(--tracking-display);text-wrap:balance">Your open-door policy, now always open.</h1>
+      <p style="margin:0;font-size:var(--text-body-lg);line-height:var(--leading-body-lg);color:var(--ink-muted);text-wrap:pretty">An AI help desk for HR questions. It answers with citations to the company handbook, proposes actions for a person to confirm, and sends sensitive topics like harassment or medical leave to a human HR partner.</p>
+    </section>
+    <section aria-labelledby="pick-h" style="margin-top:72px">
+      <h2 id="pick-h" style="margin:0 0 20px;font-size:var(--text-h2);line-height:var(--leading-h2);font-weight:600">Choose who to be</h2>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:16px">
+        <sc-for list="{{ cards }}" as="c" hint-placeholder-count="4">
+          <button type="button" onClick="{{ c.onClick }}" disabled="{{ c.disabled }}" aria-busy="{{ c.busy }}" aria-label="{{ c.aria }}" style="display:flex;flex-direction:column;align-items:stretch;text-align:left;padding:24px;background:var(--surface-raised);border:1px solid {{ c.border }};box-shadow:{{ c.ring }};border-radius:var(--radius-lg);font-family:var(--font-sans);color:{{ c.fg }};cursor:{{ c.cursor }};transition:border-color 150ms" style-hover="border-color:{{ c.hoverBorder }}" style-focus="outline:2px solid var(--focus-ring);outline-offset:2px">
+            <span style="width:40px;height:40px;border-radius:9999px;background:{{ c.avBg }};color:{{ c.avFg }};display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600">{{ c.initials }}</span>
+            <span style="margin-top:16px;font-size:var(--text-body-lg);line-height:var(--leading-body-lg);font-weight:600">{{ c.name }}</span>
+            <span style="font-size:var(--text-ui);line-height:var(--leading-ui)">{{ c.role }}</span>
+            <span style="margin-top:4px;display:flex;align-items:center;gap:6px;font-size:var(--text-small);line-height:var(--leading-small);color:{{ c.muted }}"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="flex:none"><path d="M20 10c0 4.993-5.539 10.193-7.399 11.799a1 1 0 0 1-1.202 0C9.539 20.193 4 14.993 4 10a8 8 0 0 1 16 0"></path><circle cx="12" cy="10" r="3"></circle></svg>{{ c.location }}</span>
+            <span style="height:1px;background:var(--border-subtle);margin:20px 0"></span>
+            <span style="flex:1;font-size:var(--text-body);line-height:var(--leading-body)">{{ c.prompt }}</span>
+            <span style="margin-top:20px;min-height:20px;display:flex;align-items:center;gap:8px;font-size:var(--text-small);line-height:var(--leading-small);font-weight:600;color:{{ c.cta }}">
+              <sc-if value="{{ c.starting }}" hint-placeholder-val="{{ false }}">{{ spinner }}<span style="color:var(--ink)">Setting up Juniper Row…</span></sc-if>
+              <sc-if value="{{ c.notStarting }}" hint-placeholder-val="{{ true }}">{{ c.startLabel }}<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex:none"><path d="M5 12h14M12 5l7 7-7 7"></path></svg></sc-if>
+            </span>
+          </button>
+        </sc-for>
+      </div>
+      <sc-if value="{{ showError }}" hint-placeholder-val="{{ false }}">
+        <div role="alert" style="display:flex;align-items:center;gap:12px;margin-top:16px;padding:0 4px 0 8px">
+          <p style="flex:1;display:flex;align-items:center;gap:8px;margin:0;font-size:var(--text-ui);line-height:var(--leading-ui);color:var(--danger)"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="flex:none"><circle cx="12" cy="12" r="10"></circle><path d="M12 8v4M12 16h.01"></path></svg>We couldn't start a sandbox.</p>
+          <button type="button" onClick="{{ retry }}" style="height:32px;padding:0 12px;border:1px solid var(--border-strong);border-radius:var(--radius-sm);background:var(--surface-raised);color:var(--ink);display:flex;align-items:center;gap:6px;font-family:var(--font-sans);font-size:var(--text-small);font-weight:600;cursor:pointer;flex:none" style-hover="background:var(--surface-hover);border-color:var(--border-strong-hover)" style-focus="outline:2px solid var(--focus-ring);outline-offset:2px"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"></path><path d="M3 3v5h5"></path></svg>Retry</button>
+        </div>
+      </sc-if>
+      <div aria-live="polite" style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap">{{ status }}</div>
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:24px;flex-wrap:wrap;margin-top:24px">
+        <p style="margin:0;font-size:var(--text-small);line-height:var(--leading-small);color:var(--ink-muted);max-width:640px;text-wrap:pretty">Each visit gets its own private copy of Juniper Row, a fictional company. It resets after 24 hours.</p>
+        <button type="button" style="height:40px;padding:0 16px;border:1px solid var(--border-strong);border-radius:var(--radius-md);background:var(--surface-raised);color:var(--ink);display:inline-flex;align-items:center;gap:8px;font-family:var(--font-sans);font-size:var(--text-ui);font-weight:600;cursor:pointer;white-space:nowrap" style-hover="background:var(--surface-hover);border-color:var(--border-strong-hover)" style-focus="outline:2px solid var(--focus-ring);outline-offset:2px"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><path d="m10 8 6 4-6 4z"></path></svg>Take the 2-minute tour</button>
+      </div>
+    </section>
+  </main>
+  <footer style="margin-top:88px;padding:24px 0 40px;border-top:1px solid var(--border);display:flex;flex-direction:column;gap:8px">
+    <p style="margin:0;display:flex;align-items:center;gap:8px;font-size:var(--text-small);line-height:var(--leading-small);color:var(--ink-muted)"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="flex:none"><circle cx="12" cy="12" r="10"></circle><path d="M12 16v-4M12 8h.01"></path></svg>Open Door is an AI assistant. It can make mistakes, and it always shows its sources.</p>
+    <p style="margin:0;padding-left:22px;font-size:var(--text-small);line-height:var(--leading-small);color:var(--ink-muted)">Juniper Row and everyone in it are fictional. This is a demo, not legal advice. Don't enter real personal information.</p>
+  </footer>
+</div>
+</div>
+</div>
+</div>
+<div class="dv-opts" style="margin-top:56px;flex-direction:column;gap:48px">
+<div class="dv-opt" id="1b"><div class="dv-olabel"><a class="dv-oid" href="#1b">1b</a>Hover and focus: Priya hovered (darker border), Mateo focused (2 px ring)</div><div class="dv-card" style="width:1264px"><div style="background:var(--surface);font-family:var(--font-sans);color:var(--ink);padding:40px 48px 44px"><h2 style="margin:0 0 20px;font-size:var(--text-h2);line-height:var(--leading-h2);font-weight:600">Choose who to be</h2><div style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:16px"><div style="display:flex;flex-direction:column;align-items:stretch;text-align:left;padding:24px;background:var(--surface-raised);border:1px solid var(--input-border-hover);border-radius:var(--radius-lg);font-family:var(--font-sans);color:var(--ink);">
+  <span style="width:40px;height:40px;border-radius:9999px;background:var(--primary-tint);color:var(--ink);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600">PR</span>
+  <span style="margin-top:16px;font-size:var(--text-body-lg);line-height:var(--leading-body-lg);font-weight:600">Priya Raman</span>
+  <span style="font-size:var(--text-ui);line-height:var(--leading-ui)">Visual Merchandiser</span>
+  <span style="margin-top:4px;display:flex;align-items:center;gap:6px;font-size:var(--text-small);line-height:var(--leading-small);color:var(--ink-muted)"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="flex:none"><path d="M20 10c0 4.993-5.539 10.193-7.399 11.799a1 1 0 0 1-1.202 0C9.539 20.193 4 14.993 4 10a8 8 0 0 1 16 0"></path><circle cx="12" cy="10" r="3"></circle></svg>Oakland store</span>
+  <span style="height:1px;background:var(--border-subtle);margin:20px 0"></span>
+  <span style="flex:1;font-size:var(--text-body);line-height:var(--leading-body)">Ask about California sick leave and book a day off.</span>
+  <span style="margin-top:20px;min-height:20px;display:flex;align-items:center;gap:8px;font-size:var(--text-small);line-height:var(--leading-small);font-weight:600;color:var(--primary)">Start as Priya<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex:none"><path d="M5 12h14M12 5l7 7-7 7"></path></svg></span>
+</div><div style="display:flex;flex-direction:column;align-items:stretch;text-align:left;padding:24px;background:var(--surface-raised);border:1px solid var(--border);border-radius:var(--radius-lg);font-family:var(--font-sans);color:var(--ink);outline:2px solid var(--focus-ring);outline-offset:2px;">
+  <span style="width:40px;height:40px;border-radius:9999px;background:var(--primary-tint);color:var(--ink);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600">MA</span>
+  <span style="margin-top:16px;font-size:var(--text-body-lg);line-height:var(--leading-body-lg);font-weight:600">Mateo Alvarez</span>
+  <span style="font-size:var(--text-ui);line-height:var(--leading-ui)">Warehouse Associate</span>
+  <span style="margin-top:4px;display:flex;align-items:center;gap:6px;font-size:var(--text-small);line-height:var(--leading-small);color:var(--ink-muted)"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="flex:none"><path d="M20 10c0 4.993-5.539 10.193-7.399 11.799a1 1 0 0 1-1.202 0C9.539 20.193 4 14.993 4 10a8 8 0 0 1 16 0"></path><circle cx="12" cy="10" r="3"></circle></svg>Austin warehouse</span>
+  <span style="height:1px;background:var(--border-subtle);margin:20px 0"></span>
+  <span style="flex:1;font-size:var(--text-body);line-height:var(--leading-body)">Ask the same questions and get Texas answers.</span>
+  <span style="margin-top:20px;min-height:20px;display:flex;align-items:center;gap:8px;font-size:var(--text-small);line-height:var(--leading-small);font-weight:600;color:var(--primary)">Start as Mateo<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex:none"><path d="M5 12h14M12 5l7 7-7 7"></path></svg></span>
+</div><div style="display:flex;flex-direction:column;align-items:stretch;text-align:left;padding:24px;background:var(--surface-raised);border:1px solid var(--border);border-radius:var(--radius-lg);font-family:var(--font-sans);color:var(--ink);">
+  <span style="width:40px;height:40px;border-radius:9999px;background:var(--primary-tint);color:var(--ink);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600">MB</span>
+  <span style="margin-top:16px;font-size:var(--text-body-lg);line-height:var(--leading-body-lg);font-weight:600">Marcus Bell</span>
+  <span style="font-size:var(--text-ui);line-height:var(--leading-ui)">Store Manager</span>
+  <span style="margin-top:4px;display:flex;align-items:center;gap:6px;font-size:var(--text-small);line-height:var(--leading-small);color:var(--ink-muted)"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="flex:none"><path d="M20 10c0 4.993-5.539 10.193-7.399 11.799a1 1 0 0 1-1.202 0C9.539 20.193 4 14.993 4 10a8 8 0 0 1 16 0"></path><circle cx="12" cy="10" r="3"></circle></svg>Oakland store</span>
+  <span style="height:1px;background:var(--border-subtle);margin:20px 0"></span>
+  <span style="flex:1;font-size:var(--text-body);line-height:var(--leading-body)">Approve a request and check on your team.</span>
+  <span style="margin-top:20px;min-height:20px;display:flex;align-items:center;gap:8px;font-size:var(--text-small);line-height:var(--leading-small);font-weight:600;color:var(--primary)">Start as Marcus<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex:none"><path d="M5 12h14M12 5l7 7-7 7"></path></svg></span>
+</div><div style="display:flex;flex-direction:column;align-items:stretch;text-align:left;padding:24px;background:var(--surface-raised);border:1px solid var(--border);border-radius:var(--radius-lg);font-family:var(--font-sans);color:var(--ink);">
+  <span style="width:40px;height:40px;border-radius:9999px;background:var(--primary-tint);color:var(--ink);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600">DW</span>
+  <span style="margin-top:16px;font-size:var(--text-body-lg);line-height:var(--leading-body-lg);font-weight:600">Dana Whitfield</span>
+  <span style="font-size:var(--text-ui);line-height:var(--leading-ui)">HR Business Partner</span>
+  <span style="margin-top:4px;display:flex;align-items:center;gap:6px;font-size:var(--text-small);line-height:var(--leading-small);color:var(--ink-muted)"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="flex:none"><path d="M20 10c0 4.993-5.539 10.193-7.399 11.799a1 1 0 0 1-1.202 0C9.539 20.193 4 14.993 4 10a8 8 0 0 1 16 0"></path><circle cx="12" cy="10" r="3"></circle></svg>Denver HQ</span>
+  <span style="height:1px;background:var(--border-subtle);margin:20px 0"></span>
+  <span style="flex:1;font-size:var(--text-body);line-height:var(--leading-body)">See the confidential case queue.</span>
+  <span style="margin-top:20px;min-height:20px;display:flex;align-items:center;gap:8px;font-size:var(--text-small);line-height:var(--leading-small);font-weight:600;color:var(--primary)">Start as Dana<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex:none"><path d="M5 12h14M12 5l7 7-7 7"></path></svg></span>
+</div></div></div></div></div>
+<div class="dv-opt" id="1c"><div class="dv-olabel"><a class="dv-oid" href="#1c">1c</a>Starting: Priya selected, others disabled. Usually under two seconds.</div><div class="dv-card" style="width:1264px"><div style="background:var(--surface);font-family:var(--font-sans);color:var(--ink);padding:40px 48px 44px"><h2 style="margin:0 0 20px;font-size:var(--text-h2);line-height:var(--leading-h2);font-weight:600">Choose who to be</h2><div style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:16px"><div style="display:flex;flex-direction:column;align-items:stretch;text-align:left;padding:24px;background:var(--surface-raised);border:1px solid var(--primary);border-radius:var(--radius-lg);font-family:var(--font-sans);color:var(--ink);box-shadow:0 0 0 1px var(--primary);">
+  <span style="width:40px;height:40px;border-radius:9999px;background:var(--primary-tint);color:var(--ink);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600">PR</span>
+  <span style="margin-top:16px;font-size:var(--text-body-lg);line-height:var(--leading-body-lg);font-weight:600">Priya Raman</span>
+  <span style="font-size:var(--text-ui);line-height:var(--leading-ui)">Visual Merchandiser</span>
+  <span style="margin-top:4px;display:flex;align-items:center;gap:6px;font-size:var(--text-small);line-height:var(--leading-small);color:var(--ink-muted)"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="flex:none"><path d="M20 10c0 4.993-5.539 10.193-7.399 11.799a1 1 0 0 1-1.202 0C9.539 20.193 4 14.993 4 10a8 8 0 0 1 16 0"></path><circle cx="12" cy="10" r="3"></circle></svg>Oakland store</span>
+  <span style="height:1px;background:var(--border-subtle);margin:20px 0"></span>
+  <span style="flex:1;font-size:var(--text-body);line-height:var(--leading-body)">Ask about California sick leave and book a day off.</span>
+  <span style="margin-top:20px;min-height:20px;display:flex;align-items:center;gap:8px;font-size:var(--text-small);line-height:var(--leading-small);font-weight:600;color:var(--primary)"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--primary)" stroke-width="2" stroke-linecap="round" style="flex:none"><path d="M21 12a9 9 0 1 1-6.219-8.56"></path></svg><span style="color:var(--ink)">Setting up Juniper Row…</span></span>
+</div><div style="display:flex;flex-direction:column;align-items:stretch;text-align:left;padding:24px;background:var(--surface-raised);border:1px solid var(--border-subtle);border-radius:var(--radius-lg);font-family:var(--font-sans);color:var(--disabled-fg);">
+  <span style="width:40px;height:40px;border-radius:9999px;background:var(--disabled-bg);color:var(--disabled-fg);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600">MA</span>
+  <span style="margin-top:16px;font-size:var(--text-body-lg);line-height:var(--leading-body-lg);font-weight:600">Mateo Alvarez</span>
+  <span style="font-size:var(--text-ui);line-height:var(--leading-ui)">Warehouse Associate</span>
+  <span style="margin-top:4px;display:flex;align-items:center;gap:6px;font-size:var(--text-small);line-height:var(--leading-small);color:var(--disabled-fg)"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="flex:none"><path d="M20 10c0 4.993-5.539 10.193-7.399 11.799a1 1 0 0 1-1.202 0C9.539 20.193 4 14.993 4 10a8 8 0 0 1 16 0"></path><circle cx="12" cy="10" r="3"></circle></svg>Austin warehouse</span>
+  <span style="height:1px;background:var(--border-subtle);margin:20px 0"></span>
+  <span style="flex:1;font-size:var(--text-body);line-height:var(--leading-body)">Ask the same questions and get Texas answers.</span>
+  <span style="margin-top:20px;min-height:20px;display:flex;align-items:center;gap:8px;font-size:var(--text-small);line-height:var(--leading-small);font-weight:600;color:var(--disabled-fg)">Start as Mateo<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex:none"><path d="M5 12h14M12 5l7 7-7 7"></path></svg></span>
+</div><div style="display:flex;flex-direction:column;align-items:stretch;text-align:left;padding:24px;background:var(--surface-raised);border:1px solid var(--border-subtle);border-radius:var(--radius-lg);font-family:var(--font-sans);color:var(--disabled-fg);">
+  <span style="width:40px;height:40px;border-radius:9999px;background:var(--disabled-bg);color:var(--disabled-fg);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600">MB</span>
+  <span style="margin-top:16px;font-size:var(--text-body-lg);line-height:var(--leading-body-lg);font-weight:600">Marcus Bell</span>
+  <span style="font-size:var(--text-ui);line-height:var(--leading-ui)">Store Manager</span>
+  <span style="margin-top:4px;display:flex;align-items:center;gap:6px;font-size:var(--text-small);line-height:var(--leading-small);color:var(--disabled-fg)"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="flex:none"><path d="M20 10c0 4.993-5.539 10.193-7.399 11.799a1 1 0 0 1-1.202 0C9.539 20.193 4 14.993 4 10a8 8 0 0 1 16 0"></path><circle cx="12" cy="10" r="3"></circle></svg>Oakland store</span>
+  <span style="height:1px;background:var(--border-subtle);margin:20px 0"></span>
+  <span style="flex:1;font-size:var(--text-body);line-height:var(--leading-body)">Approve a request and check on your team.</span>
+  <span style="margin-top:20px;min-height:20px;display:flex;align-items:center;gap:8px;font-size:var(--text-small);line-height:var(--leading-small);font-weight:600;color:var(--disabled-fg)">Start as Marcus<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex:none"><path d="M5 12h14M12 5l7 7-7 7"></path></svg></span>
+</div><div style="display:flex;flex-direction:column;align-items:stretch;text-align:left;padding:24px;background:var(--surface-raised);border:1px solid var(--border-subtle);border-radius:var(--radius-lg);font-family:var(--font-sans);color:var(--disabled-fg);">
+  <span style="width:40px;height:40px;border-radius:9999px;background:var(--disabled-bg);color:var(--disabled-fg);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600">DW</span>
+  <span style="margin-top:16px;font-size:var(--text-body-lg);line-height:var(--leading-body-lg);font-weight:600">Dana Whitfield</span>
+  <span style="font-size:var(--text-ui);line-height:var(--leading-ui)">HR Business Partner</span>
+  <span style="margin-top:4px;display:flex;align-items:center;gap:6px;font-size:var(--text-small);line-height:var(--leading-small);color:var(--disabled-fg)"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="flex:none"><path d="M20 10c0 4.993-5.539 10.193-7.399 11.799a1 1 0 0 1-1.202 0C9.539 20.193 4 14.993 4 10a8 8 0 0 1 16 0"></path><circle cx="12" cy="10" r="3"></circle></svg>Denver HQ</span>
+  <span style="height:1px;background:var(--border-subtle);margin:20px 0"></span>
+  <span style="flex:1;font-size:var(--text-body);line-height:var(--leading-body)">See the confidential case queue.</span>
+  <span style="margin-top:20px;min-height:20px;display:flex;align-items:center;gap:8px;font-size:var(--text-small);line-height:var(--leading-small);font-weight:600;color:var(--disabled-fg)">Start as Dana<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex:none"><path d="M5 12h14M12 5l7 7-7 7"></path></svg></span>
+</div></div><div style="display:flex;align-items:center;justify-content:space-between;gap:24px;margin-top:24px"><p style="margin:0;font-size:var(--text-small);line-height:var(--leading-small);color:var(--ink-muted)">Each visit gets its own private copy of Juniper Row, a fictional company. It resets after 24 hours.</p><span style="height:40px;padding:0 16px;border:1px solid var(--border-strong);border-radius:var(--radius-md);background:var(--surface-raised);color:var(--ink);display:inline-flex;align-items:center;gap:8px;font-size:var(--text-ui);font-weight:600;white-space:nowrap"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><path d="m10 8 6 4-6 4z"></path></svg>Take the 2-minute tour</span></div></div></div></div>
+<div class="dv-opt" id="1d"><div class="dv-olabel"><a class="dv-oid" href="#1d">1d</a>Error: inline error under the picker, cards enabled again, Retry restarts as Priya</div><div class="dv-card" style="width:1264px"><div style="background:var(--surface);font-family:var(--font-sans);color:var(--ink);padding:40px 48px 44px"><h2 style="margin:0 0 20px;font-size:var(--text-h2);line-height:var(--leading-h2);font-weight:600">Choose who to be</h2><div style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:16px"><div style="display:flex;flex-direction:column;align-items:stretch;text-align:left;padding:24px;background:var(--surface-raised);border:1px solid var(--border);border-radius:var(--radius-lg);font-family:var(--font-sans);color:var(--ink);">
+  <span style="width:40px;height:40px;border-radius:9999px;background:var(--primary-tint);color:var(--ink);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600">PR</span>
+  <span style="margin-top:16px;font-size:var(--text-body-lg);line-height:var(--leading-body-lg);font-weight:600">Priya Raman</span>
+  <span style="font-size:var(--text-ui);line-height:var(--leading-ui)">Visual Merchandiser</span>
+  <span style="margin-top:4px;display:flex;align-items:center;gap:6px;font-size:var(--text-small);line-height:var(--leading-small);color:var(--ink-muted)"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="flex:none"><path d="M20 10c0 4.993-5.539 10.193-7.399 11.799a1 1 0 0 1-1.202 0C9.539 20.193 4 14.993 4 10a8 8 0 0 1 16 0"></path><circle cx="12" cy="10" r="3"></circle></svg>Oakland store</span>
+  <span style="height:1px;background:var(--border-subtle);margin:20px 0"></span>
+  <span style="flex:1;font-size:var(--text-body);line-height:var(--leading-body)">Ask about California sick leave and book a day off.</span>
+  <span style="margin-top:20px;min-height:20px;display:flex;align-items:center;gap:8px;font-size:var(--text-small);line-height:var(--leading-small);font-weight:600;color:var(--primary)">Start as Priya<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex:none"><path d="M5 12h14M12 5l7 7-7 7"></path></svg></span>
+</div><div style="display:flex;flex-direction:column;align-items:stretch;text-align:left;padding:24px;background:var(--surface-raised);border:1px solid var(--border);border-radius:var(--radius-lg);font-family:var(--font-sans);color:var(--ink);">
+  <span style="width:40px;height:40px;border-radius:9999px;background:var(--primary-tint);color:var(--ink);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600">MA</span>
+  <span style="margin-top:16px;font-size:var(--text-body-lg);line-height:var(--leading-body-lg);font-weight:600">Mateo Alvarez</span>
+  <span style="font-size:var(--text-ui);line-height:var(--leading-ui)">Warehouse Associate</span>
+  <span style="margin-top:4px;display:flex;align-items:center;gap:6px;font-size:var(--text-small);line-height:var(--leading-small);color:var(--ink-muted)"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="flex:none"><path d="M20 10c0 4.993-5.539 10.193-7.399 11.799a1 1 0 0 1-1.202 0C9.539 20.193 4 14.993 4 10a8 8 0 0 1 16 0"></path><circle cx="12" cy="10" r="3"></circle></svg>Austin warehouse</span>
+  <span style="height:1px;background:var(--border-subtle);margin:20px 0"></span>
+  <span style="flex:1;font-size:var(--text-body);line-height:var(--leading-body)">Ask the same questions and get Texas answers.</span>
+  <span style="margin-top:20px;min-height:20px;display:flex;align-items:center;gap:8px;font-size:var(--text-small);line-height:var(--leading-small);font-weight:600;color:var(--primary)">Start as Mateo<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex:none"><path d="M5 12h14M12 5l7 7-7 7"></path></svg></span>
+</div><div style="display:flex;flex-direction:column;align-items:stretch;text-align:left;padding:24px;background:var(--surface-raised);border:1px solid var(--border);border-radius:var(--radius-lg);font-family:var(--font-sans);color:var(--ink);">
+  <span style="width:40px;height:40px;border-radius:9999px;background:var(--primary-tint);color:var(--ink);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600">MB</span>
+  <span style="margin-top:16px;font-size:var(--text-body-lg);line-height:var(--leading-body-lg);font-weight:600">Marcus Bell</span>
+  <span style="font-size:var(--text-ui);line-height:var(--leading-ui)">Store Manager</span>
+  <span style="margin-top:4px;display:flex;align-items:center;gap:6px;font-size:var(--text-small);line-height:var(--leading-small);color:var(--ink-muted)"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="flex:none"><path d="M20 10c0 4.993-5.539 10.193-7.399 11.799a1 1 0 0 1-1.202 0C9.539 20.193 4 14.993 4 10a8 8 0 0 1 16 0"></path><circle cx="12" cy="10" r="3"></circle></svg>Oakland store</span>
+  <span style="height:1px;background:var(--border-subtle);margin:20px 0"></span>
+  <span style="flex:1;font-size:var(--text-body);line-height:var(--leading-body)">Approve a request and check on your team.</span>
+  <span style="margin-top:20px;min-height:20px;display:flex;align-items:center;gap:8px;font-size:var(--text-small);line-height:var(--leading-small);font-weight:600;color:var(--primary)">Start as Marcus<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex:none"><path d="M5 12h14M12 5l7 7-7 7"></path></svg></span>
+</div><div style="display:flex;flex-direction:column;align-items:stretch;text-align:left;padding:24px;background:var(--surface-raised);border:1px solid var(--border);border-radius:var(--radius-lg);font-family:var(--font-sans);color:var(--ink);">
+  <span style="width:40px;height:40px;border-radius:9999px;background:var(--primary-tint);color:var(--ink);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600">DW</span>
+  <span style="margin-top:16px;font-size:var(--text-body-lg);line-height:var(--leading-body-lg);font-weight:600">Dana Whitfield</span>
+  <span style="font-size:var(--text-ui);line-height:var(--leading-ui)">HR Business Partner</span>
+  <span style="margin-top:4px;display:flex;align-items:center;gap:6px;font-size:var(--text-small);line-height:var(--leading-small);color:var(--ink-muted)"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="flex:none"><path d="M20 10c0 4.993-5.539 10.193-7.399 11.799a1 1 0 0 1-1.202 0C9.539 20.193 4 14.993 4 10a8 8 0 0 1 16 0"></path><circle cx="12" cy="10" r="3"></circle></svg>Denver HQ</span>
+  <span style="height:1px;background:var(--border-subtle);margin:20px 0"></span>
+  <span style="flex:1;font-size:var(--text-body);line-height:var(--leading-body)">See the confidential case queue.</span>
+  <span style="margin-top:20px;min-height:20px;display:flex;align-items:center;gap:8px;font-size:var(--text-small);line-height:var(--leading-small);font-weight:600;color:var(--primary)">Start as Dana<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex:none"><path d="M5 12h14M12 5l7 7-7 7"></path></svg></span>
+</div></div><div role="alert" style="display:flex;align-items:center;gap:12px;margin-top:16px;padding:0 4px 0 8px"><p style="flex:1;display:flex;align-items:center;gap:8px;margin:0;font-size:var(--text-ui);line-height:var(--leading-ui);color:var(--danger)"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="flex:none"><circle cx="12" cy="12" r="10"></circle><path d="M12 8v4M12 16h.01"></path></svg>We couldn't start a sandbox.</p><span style="height:32px;padding:0 12px;border:1px solid var(--border-strong);border-radius:var(--radius-sm);background:var(--surface-raised);color:var(--ink);display:flex;align-items:center;gap:6px;font-size:var(--text-small);font-weight:600;flex:none"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"></path><path d="M3 3v5h5"></path></svg>Retry</span></div><div style="display:flex;align-items:center;justify-content:space-between;gap:24px;margin-top:24px"><p style="margin:0;font-size:var(--text-small);line-height:var(--leading-small);color:var(--ink-muted)">Each visit gets its own private copy of Juniper Row, a fictional company. It resets after 24 hours.</p><span style="height:40px;padding:0 16px;border:1px solid var(--border-strong);border-radius:var(--radius-md);background:var(--surface-raised);color:var(--ink);display:inline-flex;align-items:center;gap:8px;font-size:var(--text-ui);font-weight:600;white-space:nowrap"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><path d="m10 8 6 4-6 4z"></path></svg>Take the 2-minute tour</span></div></div></div></div>
+</div>
+<p class="dv-next">Try next: "design the 2-minute tour" · "show the hand-off into Priya's assistant home" · "try the cards in a two-by-two grid"</p>
+</section>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;simulateFailure&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:false,&quot;tsType&quot;:&quot;boolean&quot;},&quot;startDelay&quot;:{&quot;editor&quot;:&quot;int&quot;,&quot;min&quot;:500,&quot;max&quot;:5000,&quot;step&quot;:100,&quot;unit&quot;:&quot;ms&quot;,&quot;default&quot;:1800,&quot;tsType&quot;:&quot;number&quot;}}">
+class Component extends DCLogic {
+  state = { phase: 'idle', who: null };
+  componentWillUnmount() { clearTimeout(this.t); }
+  start(id) {
+    if (this.state.phase === 'starting') return;
+    this.setState({ phase: 'starting', who: id });
+    clearTimeout(this.t);
+    this.t = setTimeout(() => {
+      this.setState(this.props.simulateFailure ? { phase: 'error' } : { phase: 'idle', who: null });
+    }, this.props.startDelay ?? 1800);
+  }
+  renderVals() {
+    const P = [
+      { id: 'priya', name: 'Priya Raman', first: 'Priya', initials: 'PR', role: 'Visual Merchandiser', location: 'Oakland store', prompt: 'Ask about California sick leave and book a day off.' },
+      { id: 'mateo', name: 'Mateo Alvarez', first: 'Mateo', initials: 'MA', role: 'Warehouse Associate', location: 'Austin warehouse', prompt: 'Ask the same questions and get Texas answers.' },
+      { id: 'marcus', name: 'Marcus Bell', first: 'Marcus', initials: 'MB', role: 'Store Manager', location: 'Oakland store', prompt: 'Approve a request and check on your team.' },
+      { id: 'dana', name: 'Dana Whitfield', first: 'Dana', initials: 'DW', role: 'HR Business Partner', location: 'Denver HQ', prompt: 'See the confidential case queue.' }
+    ];
+    const s = this.state;
+    const starting = s.phase === 'starting';
+    const who = P.find(p => p.id === s.who);
+    const cards = P.map(p => {
+      const me = starting && s.who === p.id;
+      const dis = starting && !me;
+      return {
+        ...p,
+        startLabel: 'Start as ' + p.first,
+        aria: me ? 'Starting a sandbox as ' + p.name : 'Start a sandbox as ' + p.name + ', ' + p.role + ', ' + p.location + '. ' + p.prompt,
+        onClick: () => this.start(p.id),
+        disabled: starting, busy: me ? 'true' : 'false', starting: me, notStarting: !me,
+        border: me ? 'var(--primary)' : (dis ? 'var(--border-subtle)' : 'var(--border)'),
+        ring: me ? '0 0 0 1px var(--primary)' : 'none',
+        hoverBorder: me ? 'var(--primary)' : (dis ? 'var(--border-subtle)' : 'var(--input-border-hover)'),
+        fg: dis ? 'var(--disabled-fg)' : 'var(--ink)',
+        muted: dis ? 'var(--disabled-fg)' : 'var(--ink-muted)',
+        cta: dis ? 'var(--disabled-fg)' : 'var(--primary)',
+        avBg: dis ? 'var(--disabled-bg)' : 'var(--primary-tint)',
+        avFg: dis ? 'var(--disabled-fg)' : 'var(--ink)',
+        cursor: me ? 'progress' : (dis ? 'not-allowed' : 'pointer')
+      };
+    });
+    const spinner = React.createElement('svg', { width: 16, height: 16, viewBox: '0 0 24 24', fill: 'none', stroke: 'var(--primary)', strokeWidth: 2, strokeLinecap: 'round', 'data-spin': '', 'aria-hidden': true, style: { animation: 'od-spin 0.9s linear infinite', flex: 'none' } }, React.createElement('path', { d: 'M21 12a9 9 0 1 1-6.219-8.56' }));
+    return {
+      cards, spinner,
+      showError: s.phase === 'error',
+      retry: () => this.start(s.who || 'priya'),
+      status: starting && who ? 'Setting up Juniper Row as ' + who.name + '.' : (s.phase === 'error' ? "We couldn't start a sandbox." : '')
+    };
+  }
+}
+</script>
+</body>
+</html>

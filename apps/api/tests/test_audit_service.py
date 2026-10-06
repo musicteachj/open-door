@@ -30,7 +30,7 @@ ALLOWED_PAYLOADS = {
     "persona switch": {"personaKey": "priya"},
     "private read": {"fields": ["phone", "home_address"]},
     "nested names as values": {"x": {"fields": ["phone", "dateOfBirth"]}},
-    "directory fields": {"givenName": "Priya", "workEmail": "priya@opendoor.example"},
+    "directory fields": {"givenName": "Priya", "workEmail": "priya@juniperrow.example"},
     "empty": {},
 }
 

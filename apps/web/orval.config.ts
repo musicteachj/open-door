@@ -10,6 +10,11 @@ export default defineConfig({
       httpClient: 'fetch',
       mode: 'single',
       clean: true,
+      override: {
+        // Every call goes through apiFetch: CSRF header, JSON content type, and ApiError on failure.
+        mutator: { path: './src/lib/api-fetch.ts', name: 'apiFetch' },
+        fetch: { includeHttpResponseReturnType: false },
+      },
     },
   },
 })

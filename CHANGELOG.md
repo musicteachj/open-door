@@ -10,6 +10,222 @@ version (`0.x.y` while the app is being built, `1.0.0` when it is complete).
 
 ## [Unreleased]
 
+### Fixed
+
+- **A flaky browser test in CI** (after Phase 2). The check that another person's profile leaks no
+  private value read each API response's body after the fact, and on CI's single worker one body
+  was gone by then. It now records every body as the response passes through, so none can be
+  lost. A planted background request for private details still fails it.
+
+## [0.2.0] - 2026-10-06
+
+Phase 2: the design system, the app shell, and sandbox entry. A visitor picks a persona, lands in
+a private sandbox, and can switch persona, sign out, and find anyone in the directory, seeing only
+the profile fields their role allows. The design is built from the approved Claude Design screens,
+every acceptance criterion has a browser test with axe, and the phase closed with a whole-phase
+review and a new logo. The assistant itself arrives in Phase 4; until then it gives one fixed,
+person-written reply.
+
+### Added
+
+- **The directory and profiles** (Phase 2, stage 6), which complete Phase 2's screens.
+  - **The directory:** everyone in the company, 50 at a time with Show more, searched by name,
+    title, or work email, and filtered by location, department, and "My team" for managers. The
+    search and filters live in the address, so a link or Back keeps them, and Back returns to the
+    same scroll position.
+  - **Profiles:** work details, with the manager and email as links, and private details for the
+    person and HR only. Everyone else sees which fields are private and who can see them, and the
+    browser never asks for the values.
+  - **Browser tests check the private rule against the real API:** another person's profile holds
+    no private value in the page or in any response, and HR's read writes an audit event naming
+    only the fields.
+- **The landing page, the app shell, the assistant home, and the global states** (Phase 2,
+  stage 5). A visitor now picks a persona, lands in a private sandbox, and can switch persona or
+  sign out.
+  - **Landing:** the four personas as cards. Starting a sandbox shows "Setting up Juniper Row…",
+    and a failure offers Retry for the same persona.
+  - **The shell:** the sidebar and its nav for each role, the persona menu, the content sheet, and
+    the rail with the sandbox countdown. Switching shows "Now viewing as Marcus Bell." Below 3
+    hours a banner warns before the sandbox resets, and dismissing it lasts for that sandbox in
+    this tab. On a phone the shell becomes a top bar.
+  - **The assistant home:** a greeting in the location's own time zone, the composer with the AI
+    disclosure, and each persona's "Try asking" questions. Until Phase 4 connects the assistant,
+    asking gives one fixed, person-written reply.
+  - **The global states:** "This sandbox has reset.", a not-found page, and "Something went wrong"
+    with the full request reference to quote.
+  - **Every acceptance criterion in the four screens' notes has a browser test,** with axe on every
+    state, and the capture report has a row for every design screenshot.
+- **`make captures`, the design and the build side by side** (Phase 2, stage 4b). A local report
+  sets each design specimen beside a photograph of the build's gallery, one row per state, at
+  1440 px. The build is photographed after its hover, keyboard focus, or click, and with any menu,
+  list, or tooltip open. The owner reviews it before each UI pull request. It needs a network,
+  because the design pages load React from a CDN, and CI never runs it.
+- **The assistant, landing, form, and directory components** (Phase 2, stage 4a). The rest of the
+  pieces the Phase 2 screens are built from, each in the gallery in every state:
+  - **Assistant:** the composer, which always shows the AI disclosure and never sends on an empty
+    box or while an input method is composing, and the "Try asking" list.
+  - **Landing:** the persona card, which announces "Setting up Juniper Row…" and can't start two
+    sandboxes.
+  - **Forms:** the search field, the filter select with counts beside each option, and the "My
+    team" toggle.
+  - **Directory:** the table, each row one link, with a skeleton while loading; and the detail
+    list, whose locked rows show who can see a field and never its value.
+  - **Browser tests** check the real hover colors, the composer's focus halo, axe with a filter
+    open, and rows stacking on a phone.
+- **The core, navigation, and feedback components** (Phase 2, stage 3). The pieces the shell and
+  every page frame are built from, each in the gallery in every state:
+  - **Core and status:** the logo, the page header, the empty state, the sandbox indicator, and the
+    at-a-glance link and list.
+  - **Navigation:** the nav item, and the persona switcher and its menu. The menu starts focus on
+    the current persona, and won't open while a switch or sign-out is under way.
+  - **Feedback:** the banner, the inline error, and the full-page message, whose heading takes focus
+    when it appears. Errors appear beside what failed, never in a toast.
+  - **One tested module holds the accessible names,** such as "Approvals, 1 waiting".
+  - **The whole gallery fits a 390 px screen,** checked in a real browser.
+- **The restyled components, the gallery, and browser tests** (Phase 2, stage 2b).
+  - **Nine primitives** built by hand from the design's sketches and tokens: the button, input,
+    textarea, select, dropdown menu, tooltip, toast, avatar, and skeleton. A loading button keeps
+    its label and stays focusable, toasts are for confirmations only, and every control shows a
+    visible keyboard focus ring.
+  - **A component gallery** at `/gallery` shows each one in every state. It exists only in
+    development and in the browser-test build, and a check fails if it ever reaches a production
+    build.
+  - **Browser tests** with Playwright drive the built app against the real API: axe finds no
+    WCAG 2.2 AA problems in the gallery, with each overlay open too; a visitor can start, switch
+    persona, and sign out; nothing scrolls sideways at 390 px; and the focus ring and color
+    transitions match the design. They run in `make check` and in a new CI job.
+- **The web app's foundation** (Phase 2, stage 2a). The plumbing the Phase 2 screens are built on:
+  - **The design's theme.** The approved tokens are the Tailwind theme, and Tailwind's own
+    colors, type sizes, radii, and shadows are removed, so components can use only the design's
+    names. The fonts are self-hosted. Tests fail if the theme drifts from the design export, or if
+    a component uses a raw color.
+  - **One way to the network.** Every API call goes through `apiFetch`. It sends the CSRF token on
+    writes, only to the app's own origin, reading it fresh each time, and sends JSON as JSON. A
+    failure throws an error carrying the status, the problem details, and the request ID.
+  - **Query rules.** Reads never retry a client error, and retry a server or network failure once.
+    Writes never retry. A test forbids overriding these anywhere else.
+  - **A clean slate on every identity change.** Switching persona or signing out clears all
+    cached data and remounts everything signed-in, so the previous person never appears. The same
+    happens when another tab changes who is signed in. A test holds a component on screen across a
+    switch to prove it.
+  - **The router and session guard,** with placeholder pages. A visitor without a session goes to
+    the start, a signed-in visitor goes to `/ask`, and a session that ends shows "This sandbox has
+    reset." A late refusal from before a switch, or from a signed-out visit, doesn't show it to
+    someone who is signed in.
+- **Directory search, filters, and counts** (Phase 2, stage 1). `GET /api/v1/people` now searches
+  by name, title, or work email, and filters by location, department, and "My team" (everyone who
+  reports to a manager, directly or through a lead). A new `GET /api/v1/people/facets` returns the
+  counts the directory shows: everyone, the people matching, and beside every filter option how
+  many the list would show if it were picked. Searches can't use `%` or `_` as wildcards, and a
+  search containing a NUL character is refused rather than failing. Other sandboxes' locations and
+  departments match no one, and a person with no reports gets an empty team, never an error.
+- **Each card's location carries its timezone** (Phase 2, stage 1), such as `America/Denver`, so
+  the web app can greet people at the right time of day. A location's timezone isn't personal data.
+- **The Phase 2 spec and plan** (Phase 2 planning). The spec says how the build meets the approved
+  designs: the directory API's search, filters, and counts; the theme and its token tests; the web
+  client's CSRF handling and error rules; the screens and their routes; accessibility; and testing,
+  with Playwright and axe in a new CI job and a local side-by-side capture report. The plan builds
+  it in six stages, each a pull request, with test-first task outlines rather than pre-run code.
+- **The design system and the assistant home** (Phase 2 design). Designed in Claude Design and
+  approved: the "aubergine and cinnamon" palette, from Wada Sanzo's *A Dictionary of Color
+  Combinations*, set in Instrument Sans.
+  - `docs/design/tokens.md` lists every color, type, spacing, radius, shadow, and motion token,
+    with contrast ratios checked independently. All text meets WCAG 2.2 AA.
+  - `docs/design/system/` holds the design system's source as Claude Design exported it: the
+    tokens as CSS, the component sketches, the specimen pages, and the fonts with their licenses.
+  - `docs/design/screens/03-assistant-home/` has the approved screen, its states, and its notes,
+    including the acceptance criteria.
+  - The component inventory marks what is designed so far.
+  - The fictional employer is now named Juniper Row.
+- **The landing page and the directory** (Phase 2 design). Both approved in Claude Design, with
+  their states and notes in `docs/design/screens/`.
+  - The landing page explains the product and starts a sandbox with one click on a persona card.
+  - The directory lists everyone with search and filters, and profiles show private details only
+    to the person and HR. Everyone else sees which fields are private and who can see them.
+  - The design system gains the persona card, search, filters, the directory list, and profile
+    detail rows.
+  - The backlog notes what the directory needs from the API in Phase 2: search, filters, and
+    counts, and work emails on the employer's domain.
+- **The app shell and the global states** (Phase 2 design). The last two Phase 2 screens,
+  approved in Claude Design, so every Phase 2 screen is now designed.
+  - The shell adds the persona menu, switching with a confirming toast, the navigation for each
+    persona (Approvals for managers, Cases and Console for HR), and a banner when the sandbox
+    has 3 hours or less left.
+  - The global states are a session that has expired, a page that doesn't exist, and an
+    unexpected error that shows the request's reference for support.
+  - The notes also settle the "Try asking" questions for each persona.
+
+### Changed
+
+- **A new logo: the door ajar** (Phase 2 close, with Claude Design). The mark is an aubergine tile
+  with a doorway and its open door. The app's logo draws it in theme colors, and the browser now
+  gets real icons: an SVG favicon, 16 and 32 px fallbacks, an Apple touch icon, and a web app
+  manifest with a 512 px icon. The design's mark is updated to match.
+- **The design plan for the phases ahead** (design track, 2026-10-06). After the Phase 2 screens,
+  Claude Design proposed enhancements. The brief now records what was settled:
+  - the order of design work, which follows the build order: a logo round first, then the handbook
+    browser;
+  - corrections where an idea would contradict the project's rules: no "the AI won't read it", no
+    conversation deletion, and no memory of past questions;
+  - new screens for later phases, with matching backlog entries.
+- **The API's schema describes the errors it really sends** (Phase 2, stage 1). Every route
+  declares its 401, 403, 404, and 422 responses as the problem-details body the API returns, filed
+  as `application/problem+json`, in place of FastAPI's default validation error. The generated
+  web client now types its errors correctly, and gains the directory's filters and counts. A test
+  keeps the schema in step with the real error bodies.
+- **Work emails are on the employer's domain** (Phase 2, stage 1): `first.last@juniperrow.example`,
+  as the designs show, instead of the product's name.
+- **A first visit is no longer a security event** (Phase 2, stage 1). A request with no session
+  cookie is logged at debug level, so the security log holds only real refusals. A cookie that
+  doesn't match a session is still a warning.
+- **The design brief is ready for Claude Design** (Phase 2 planning). Mockups are now desktop
+  only; the build still makes every screen usable on a phone, checked automatically at 390 px.
+  Screens are designed in their final form, and the build hides what isn't ready yet. The brief
+  records the Phase 2 decisions:
+  - The navigation is designed in full, and each item appears once its page exists.
+  - Switching persona needs no confirmation.
+  - A banner warns before the sandbox expires.
+  - The directory is one list, with a "My team" filter for managers.
+  - A profile shows the fields you can't see as locked rows, by name only.
+
+  It also adds guidance on what makes an HR product look professional, with references to borrow
+  ideas from rather than copying an existing design system. The component list is now a living
+  inventory. "Indigo with gold" left the list of colors to avoid, because the app that used it is
+  leaving the portfolio and Open Door replaces it. The handoff loop is now one screen per round:
+  - Claude Code writes each prompt for Claude Design and reviews the result.
+  - The first round settles the look as a design-system project.
+  - Claude Design's HTML export is preferred over screenshots alone.
+  - Claude Code writes each screen's notes.
+
+### Fixed
+
+- **The right rail now appears only on the assistant home** (Phase 2, stage 6). The shell showed it
+  on every page, which squeezed the directory: its toolbar wrapped and the profile's panels
+  stacked.
+- **"Show more" keeps keyboard focus while it loads** (Phase 2, stage 6). It was disabled while
+  loading, which dropped focus.
+- **Phase 2 close-out review fixes.**
+  - **Directory links from another sandbox:** a location or department that isn't one of this
+    sandbox's options is no filter, instead of "0 of 120 people" under menus that say "All".
+  - **Directory filters that fail to load:** the list still shows, the count and the menus are
+    hidden, and a "We couldn't load the filters." message offers Retry.
+  - **Opening a row quickly after typing a search** no longer loses the search when you come back.
+  - **A read that gets a 401 asks who is signed in before deciding.** Another tab's switch or
+    sign-out no longer shows "This sandbox has reset." while the sandbox is alive, and an expired
+    sandbox no longer bounces from the landing page to the assistant and back.
+  - **The schema hook** rewrites any default 422 to the problem-details body, so a route that
+    forgets to declare it can't leave a dangling reference.
+  - **The production-build check for the component gallery** now shares its marker with the
+    gallery's heading and fails if the two drift apart.
+  - **A profile test** no longer depends on the time of day.
+
+### Security
+
+- **A switch, a sign-out, or a change in another tab never shows the previous person** (Phase 2,
+  stage 5). A security re-check proved the switch toast could name the wrong person after another
+  tab changed the session or the sandbox expired. The toast now resets with the identity, and
+  shows only for the person it names.
+
 ## [0.1.0] - 2026-10-04
 
 The first release: the planning documents, the Phase 0 foundation, and Phase 1's tenancy,

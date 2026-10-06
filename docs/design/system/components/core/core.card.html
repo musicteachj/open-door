@@ -1,0 +1,32 @@
+<!-- @dsCard group="Components" viewport="700x400" name="Core" -->
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><link rel="stylesheet" href="../../styles.css"><script src="https://unpkg.com/react@18.3.1/umd/react.production.min.js"></script><script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.production.min.js"></script><script src="https://unpkg.com/@babel/standalone@7.24.7/babel.min.js"></script><script src="../../preview/loader.js"></script></head><body style="margin:0;background:var(--surface-raised)"><div id="root"></div>
+<script type="text/babel" data-presets="react">
+loadOpenDoor("../../", OD_FILES).then(function (OD) {
+  const { Button, Logo, Icon } = OD;
+  const Lbl = ({ children }) => <div style={{ font: "400 11px/16px var(--font-sans)", color: "var(--ink-muted)" }}>{children}</div>;
+  function Card() {
+    return (
+      <div style={{ padding: "20px 24px", display: "flex", flexDirection: "column", gap: 18 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 32 }}>
+          <Logo />
+          <Button iconRight="arrow-right">Ask</Button>
+          <Button variant="secondary" size="sm" icon="rotate-ccw">Retry</Button>
+        </div>
+        <div style={{ display: "grid", gridTemplateColumns: "84px repeat(4, max-content)", gap: "12px 16px", alignItems: "center" }}>
+          <div></div><Lbl>Default</Lbl><Lbl>Hover</Lbl><Lbl>Focus</Lbl><Lbl>Disabled</Lbl>
+          {[["primary", "Primary", "Confirm"], ["secondary", "Secondary", "Edit dates"], ["ghost", "Ghost", "View source"], ["destructive", "Destructive", "Withdraw"]].map(([v, n, l]) => (
+            <React.Fragment key={v}>
+              <div style={{ font: "600 12px/16px var(--font-sans)", color: "var(--ink)" }}>{n}</div>
+              <Button variant={v} icon={v === "destructive" ? "trash-2" : undefined}>{l}</Button>
+              <Button variant={v} data-state="hover" icon={v === "destructive" ? "trash-2" : undefined}>{l}</Button>
+              <Button variant={v} data-state="focus" icon={v === "destructive" ? "trash-2" : undefined}>{l}</Button>
+              <Button variant={v} disabled icon={v === "destructive" ? "trash-2" : undefined}>{l}</Button>
+            </React.Fragment>
+          ))}
+        </div>
+      </div>);
+  }
+  ReactDOM.createRoot(document.getElementById("root")).render(<Card />);
+});
+</script></body></html>

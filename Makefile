@@ -14,7 +14,7 @@ ZIZMOR := zizmor@1.30.1
 GITLEAKS := ghcr.io/gitleaks/gitleaks:v8.30.1
 
 .DEFAULT_GOAL := help
-.PHONY: help setup db db-stop migrate bootstrap-db migrations-roundtrip dev dev-api dev-web openapi check check-api check-web check-docs check-workflows audit
+.PHONY: help setup db db-stop migrate bootstrap-db migrations-roundtrip dev dev-api dev-web openapi check check-api check-web e2e captures check-docs check-workflows audit
 
 help: ## List the available commands
 	@grep -E '^[a-zA-Z_-]+:.*## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*## "}; {printf "  %-22s %s\n", $$1, $$2}'
@@ -58,7 +58,7 @@ openapi: ## Regenerate the OpenAPI schema and the web app's API client
 	cd $(API) && uv run python scripts/export_openapi.py
 	cd $(WEB) && npm run generate:api
 
-check: check-api check-web check-docs check-workflows ## Run everything CI runs (start Postgres first with `make db`)
+check: check-api check-web e2e check-docs check-workflows ## Run everything CI runs (start Postgres first with `make db`)
 
 check-api: ## Lint, type-check, migrate, and test the API; confirm the schema is current
 	cd $(API) && uv run ruff check .
@@ -77,7 +77,23 @@ check-web: ## Lint, format-check, type-check, test, and build the web app; confi
 	cd $(WEB) && npm run typecheck
 	cd $(WEB) && npm test
 	cd $(WEB) && npm run build
+	cd $(WEB) && npm run check:no-gallery
 	cd $(WEB) && npm run check:api-client
+
+# Playwright starts the API (:8100) and a preview of the gallery build (dist-e2e/), reusing either
+# if it is already running. It needs Postgres up with the login users: run `make db` first.
+e2e: ## Run the browser tests in Chromium, against the real API and a build with the gallery
+	cd $(WEB) && npx playwright install chromium
+	cd $(WEB) && npm run e2e
+
+# Local only: `make check` and CI never run it. The specimen pages load React and Babel from
+# unpkg.com, so it needs a network. The screens start real sandboxes, so it needs Postgres up with
+# the login users: run `make db` first.
+captures: ## Photograph the build's gallery beside the design specimens; write apps/web/captures/index.html
+	cd $(WEB) && npx playwright install chromium
+	cd $(WEB) && npm run build:e2e
+	cd $(WEB) && npx playwright test --config playwright.captures.config.ts
+	@echo "Report: $(CURDIR)/$(WEB)/captures/index.html"
 
 # gitleaks scans every commit; the pre-commit hook scans each commit's staged changes.
 audit: ## Scan for leaked secrets and vulnerable dependencies (what the Security workflow runs)

@@ -1,0 +1,24 @@
+<!-- @dsCard group="Components" viewport="700x380" name="Status" -->
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><link rel="stylesheet" href="../../styles.css"><script src="https://unpkg.com/react@18.3.1/umd/react.production.min.js"></script><script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.production.min.js"></script><script src="https://unpkg.com/@babel/standalone@7.24.7/babel.min.js"></script><script src="../../preview/loader.js"></script></head><body style="margin:0;background:var(--surface-raised)"><div id="root"></div>
+<script type="text/babel" data-presets="react">
+loadOpenDoor("../../", OD_FILES).then(function (OD) {
+  const { GlanceList, GlanceLink, SandboxIndicator } = OD;
+  const Lbl = ({ children }) => <div style={{ font: "400 11px/16px var(--font-sans)", color: "var(--ink-muted)" }}>{children}</div>;
+  function Card() {
+    return (
+      <div style={{ display: "grid", gridTemplateColumns: "340px 1fr", gap: 32, padding: "20px 24px", background: "var(--surface-sunken)", minHeight: "100vh" }}>
+        <GlanceList label="At a glance (second hovered, third focused)">
+          <GlanceLink value="11.5" caption="days PTO available" destination="Time off" />
+          <GlanceLink value="1" caption="request pending" destination="Time off" marker data-state="hover" />
+          <GlanceLink value="Sep 12" caption="Handbook updated" destination="Handbook" data-state="focus" />
+        </GlanceList>
+        <div style={{ display: "flex", flexDirection: "column", gap: 8, alignItems: "flex-start" }}>
+          <Lbl>Sandbox indicator</Lbl>
+          <SandboxIndicator hours={21} />
+        </div>
+      </div>);
+  }
+  ReactDOM.createRoot(document.getElementById("root")).render(<Card />);
+});
+</script></body></html>

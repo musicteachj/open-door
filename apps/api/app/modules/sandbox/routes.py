@@ -8,6 +8,7 @@ from fastapi import APIRouter, Depends, Request, Response, status
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 from app.api.deps import get_engine
+from app.api.problems import problem_responses
 from app.api.schemas import CamelModel
 from app.modules.identity.cookies import SESSION_COOKIE, set_session_cookies
 from app.modules.identity.tokens import hash_token
@@ -37,6 +38,8 @@ class SandboxCreated(CamelModel):
     summary="Start a new sandbox company and sign in to it as one of its personas",
     status_code=status.HTTP_201_CREATED,
     response_model=SandboxCreated,
+    # A 403 is the same-origin check refusing a cross-site request.
+    responses=problem_responses(status.HTTP_403_FORBIDDEN, status.HTTP_422_UNPROCESSABLE_CONTENT),
 )
 async def post_sandbox(
     request: Request,

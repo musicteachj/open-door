@@ -5,6 +5,20 @@ should pick it up. When one is done, delete it here and record it in the changel
 
 ## Any phase
 
+- **Locally, the browser tests can reuse a stale server.** `playwright.config.ts` sets
+  `reuseExistingServer` off CI, so a preview already on 4173, or an older API on 8100, is tested
+  without a rebuild, and `make check` can pass or fail against old code. CI always starts fresh
+  servers. Stop old servers before `make e2e`, or run with `CI=1`. (Phase 2 close-out review.)
+- **Local development in Safari-family browsers.** WebKit drops every `Secure` cookie on
+  `http://localhost`, so the `__Host-` session cookies never stick and sign-in ends at "This
+  sandbox has reset." Chromium and Firefox keep them: the session round trip passed in both. Every
+  deployed origin is HTTPS, so this is a note for local development, not a defect. Develop and run
+  the browser tests in Chromium or Firefox. (Phase 2 stage 2b, checked in WebKit.)
+- **Decide whether loading skeletons animate.** The design draws them static, with no shimmer or
+  pulse, and the build matches (the skeleton and skeleton-row tests assert it). The owner noticed
+  the stillness in the Stage 4a gallery review and may want motion. That's a design change first,
+  in Claude Design, then the build. Any animation must stop under `prefers-reduced-motion`, which
+  `base.css` already handles. (Phase 2 stage 4a gallery review.)
 - **Don't run Alembic inside an async test.** `env.py` calls `asyncio.run`, which fails inside a
   running event loop, and `fileConfig` resets the root log handlers. Test setup should run
   `alembic upgrade head` as a subprocess, or from a synchronous session fixture. Phase 1's tests
@@ -34,12 +48,13 @@ should pick it up. When one is done, delete it here and record it in the changel
   Whichever phase first binds a private value or user-written text, such as Phase 4's
   conversations, must set it in `app/db/engine.py`. (Stage 4 security review.)
 
-- **Keep the directory cursor from naming a hidden person.** The next cursor is the sort key of
-  the last row read, so paging continues past cards the policy layer hides. Every card is visible
-  in Phase 1, so it reveals nothing. Whichever phase first makes the `directory.read` rule refuse
-  anyone must encrypt the cursor or move the filter into the query. Taking the cursor from the
-  last card returned instead is wrong: a page whose rows are all hidden would end the directory
-  early. (Stage 4 security review.)
+- **Keep the directory cursor and the facet counts from naming a hidden person.** The next cursor is
+  the sort key of the last row read, so paging continues past cards the policy layer hides. The
+  directory's facet counts (Phase 2) skip the per-card check altogether. Every card is visible in
+  Phase 1, so it reveals nothing. Whichever phase first makes the `directory.read` rule refuse
+  anyone must encrypt the cursor, or move the filter into the query, and count only the cards it
+  shows. Taking the cursor from the last card returned instead is wrong: a page whose rows are all
+  hidden would end the directory early. (Stage 4 security review.)
 
 - **Make the HR flag part of the tenant context, and reapply it after a persona switch.**
   `app.is_hr` isn't in `TenantContext`: the transaction hook clears it, and only `signed_in` turns
@@ -54,37 +69,11 @@ should pick it up. When one is done, delete it here and record it in the changel
   router routes. On a Starlette upgrade, check that the two still agree. (Phase 1 close-out
   review.)
 
-## Phase 2: design system, shell, sandbox entry
-
-- **Send the CSRF token from the web client.** The generated client sends no `X-CSRF-Token`, so
-  every state-changing call would get a 403. Add an Orval `override.mutator`: a custom fetch that
-  reads `__Host-od_csrf` from `document.cookie` on every unsafe request. Read it fresh each time,
-  because it changes when a sandbox is created and when a persona switches. Keep
-  `Content-Type: application/json`. (Stage 3 security review.)
-- **Reset client state when the identity changes.** Clear every TanStack Query cache on a persona
-  switch or sign-out. Treat any 401 as "go to sandbox entry", and never auto-retry a
-  state-changing request after a 403. (Stage 3 security review.)
-- **Describe the real error shapes in the OpenAPI schema.** The schema shows FastAPI's default
-  422 body (`detail`), but the API returns problem details (`errors`), and it doesn't list the
-  401, 403, and 404 responses at all. Declare `responses=` with a `Problem` model on each route,
-  so the generated client's error types are right. (Stage 3 security review.)
-- **Check the `__Host-` cookies in each target browser.** They are `Secure`. Chrome and Firefox
-  accept them on `http://localhost`, but Safari has historically refused them. Keep `/api` on the
-  same origin through the Vite proxy, and test sign-in in each browser the demo supports.
-
-- **Send JSON as JSON.** The same-origin check refuses a state-changing request whose body isn't
-  `application/json`. Orval's generated client sets the header. A hand-written
-  `fetch(url, { method: "POST", body: JSON.stringify(x) })` sends `text/plain` and gets a 403, so
-  any request outside the client must set `Content-Type: application/json` itself. (Stage 3
-  security review.)
-- **Don't log a first visit as a security event.** A request with no session cookie is logged as
-  a WARNING-level `security.session_invalid`. Once the web app asks `GET /me` on load, every
-  anonymous visitor writes one, and real refusals get lost. Log a missing cookie at a lower level,
-  or not at all, and keep the warning for a cookie that doesn't match a session. (Phase 1
-  close-out review.)
-
 ## Phase 3: handbook and retrieval
 
+- **Label each cited section with "Applies to" and "Last updated."** The passage panel shows, for
+  example, "Applies to: California employees", and the section's last-updated date. That covers
+  "has this changed?" without remembering past conversations. (2026-10-06 design brainstorm.)
 - **Pin each sandbox to a handbook version** with a `tenants.handbook_version_id` column, so an
   answer cites the handbook the sandbox was created with, even after the handbook changes.
   Source: [the Phase 1 spec](specs/2026-10-03-phase-1-tenancy-identity-permissions.md#later-phases).
@@ -112,10 +101,32 @@ should pick it up. When one is done, delete it here and record it in the changel
 
 ## Phase 5: time off
 
+- **Show team coverage beside a manager's approval.** When Marcus reviews a request, show who else
+  on his team is off on those dates. It's context only: the assistant never recommends approving
+  or denying (invariant 5). (2026-10-06 design brainstorm.)
+- **Check the nav after a switch from a manager to an employee.** `navFor` builds the nav from the
+  fresh `/me` inside a remounted shell, but in Phase 2 everyone sees only Ask and Directory, so the
+  manager's items disappearing after a switch can't be observed. When Approvals becomes available,
+  add a `navFor` test and extend the shell's switch test to prove the employee never sees it.
+  (Phase 2 stage 5 security re-check.)
+- **Keep a write from the old identity out of the new cache.** `resetIdentity` clears the query
+  cache, but a mutation already in flight still runs its callbacks when it finishes. If its
+  `onSuccess` calls `setQueryData`, the old person's data lands in the new person's cache. Phase
+  2's only writes start or end a session, so nothing does this yet. Write hooks should invalidate
+  queries rather than set their data. Where one must set data, `resetIdentity` should count
+  identities and the write should check the count first. (Phase 2 stage 2 security review.)
 - **Seed last year's holidays too.** A sandbox stores the holiday calendar for its anchor year and
   the next. One created in early January therefore lacks the previous December's closures, so a
   question about leave taken over the holidays just before it would miss them. If the time-off
   engine answers past-dated questions, seed the prior year as well. (Stage 2 review.)
+- **Never treat the anchor date as today.** `create_sandbox` sets `tenants.anchor_date` to
+  today's date in UTC, not in any location's timezone. Every seeded location is in the US, so a
+  sandbox created in the US evening is anchored to the location's tomorrow. Seed dates are only
+  shifted by a day, which is harmless, but invariant 2 needs today's date in the location's
+  timezone. The time-off engine and the per-turn context must compute today from the location's
+  `timezone`, never from `anchor_date`. A test should create a sandbox at, say, 03:00 UTC and
+  check that a Pacific-time employee's "tomorrow" is the right date. (`/code-review medium` on
+  the `v0.1.0` release.)
 
 - **Record who confirms a proposal as an audit event of its own,** separate from the action it
   executes, so the log shows both who proposed and who decided.
@@ -126,6 +137,14 @@ Source for both: [the Phase 1 spec](specs/2026-10-03-phase-1-tenancy-identity-pe
 
 ## Phase 6: cases and escalation
 
+- **The hand-off says only what's true.** Before the person writes anything, say:
+  - only HR sees it, never managers;
+  - it's encrypted;
+  - when to expect a reply;
+  - the AI writes HR a neutral summary.
+
+  Never say "the AI won't read it": the guard reads every message, and `summarize_case` is
+  AI-written. (2026-10-06 design brainstorm.)
 - **Encrypt case narratives.** They are the most sensitive text the app will hold.
   Source: [the Phase 1 spec](specs/2026-10-03-phase-1-tenancy-identity-permissions.md#later-phases).
 
@@ -138,8 +157,27 @@ Source for both: [the Phase 1 spec](specs/2026-10-03-phase-1-tenancy-identity-pe
   IDs are derived from the sandbox's random tenant ID, which is shown only inside that sandbox.
   (Stage 4 security review.)
 
+## Phase 7: AI Ops console, reviewer experience, model decision
+
+- **Report the questions the handbook couldn't answer.** The console lists them, so HR can see
+  what to write next. The question text is user-written, so it's untrusted data, and it's redacted
+  for guard-flagged turns. Fold the "design notes" idea into the tour and the "How it's built" page
+  rather than adding a third explainer. (2026-10-06 design brainstorm.)
+
 ## Phase 8: hardening and deploy-readiness
 
+- **Make the directory's counts cheaper.** `GET /people/facets` runs up to five queries one after
+  another (total, matching, the location and department menus, and "My team") on every debounced
+  search. Total and matching can be one `count(*) FILTER (WHERE …)`, and the total doesn't change
+  with the filters. Measure in the load test first. (Phase 2 close-out review.)
+- **Keyboard shortcuts.** Add `/` to focus the composer (never while typing in a field) and ⌘K to
+  jump to a page. Both need screen-reader and conflict checks. (2026-10-06 design brainstorm.)
+- **Notice another tab's session change at once.** If another tab switches persona or signs out,
+  this tab keeps showing what it had loaded, such as HR's view of someone's private details, until
+  it next refetches `/me`: on focus, on navigation, or after a 401. It's the same visitor, and every
+  new read goes out with the new cookie and is refused, so nothing new leaks. Listen for the
+  change and refetch `/me` straight away, for example with a `BroadcastChannel` message from the
+  tab that changed it. (Phase 2 stage 6 security check.)
 - **Make sign-out end a session's replacements too.** If one tab switches persona while another
   signs out, the switch replaces the session first. The sign-out then finds nothing to end and
   answers 204, but the new persona's session stays valid until the sandbox expires. Give each

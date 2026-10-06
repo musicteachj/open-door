@@ -1,6 +1,8 @@
 """The directory and private details over HTTP: the permission matrix, isolation, and paging."""
 
 import logging
+from collections.abc import Mapping
+from typing import Any
 from uuid import UUID, uuid4, uuid5
 
 import pytest
@@ -218,8 +220,16 @@ def test_the_directory_shows_only_the_cards_fields(browser: Browser) -> None:
         assert forbidden.isdisjoint(shown)
     assert set(me) == CARD_FIELDS | ME_ONLY_FIELDS
     assert set(card["department"]) == {"id", "name"}
-    assert set(card["location"]) == {"id", "name", "state"}
+    assert set(card["location"]) == {"id", "name", "state", "timezone"}
     assert set(card["manager"]) == {"id", "givenName", "familyName"}
+
+
+def test_priyas_card_carries_her_locations_timezone(browser: Browser) -> None:
+    browser.start_sandbox("priya")
+
+    me = browser.client.get("/api/v1/me").json()
+
+    assert me["location"]["timezone"] == "America/Los_Angeles"
 
 
 def test_the_people_endpoints_need_a_session(browser: Browser) -> None:
@@ -362,3 +372,195 @@ def test_the_list_asks_the_policy_about_each_card_and_pages_past_hidden_people(
     assert shown == [person for person in everyone if person not in hidden]
     # The cursor continues from the last row read, not the last card shown.
     assert pages[:3] == [[], [everyone[2], everyone[3]], [everyone[5]]]
+
+
+def get_all(
+    browser: Browser, params: Mapping[str, str | int] | None = None
+) -> list[dict[str, Any]]:
+    """Every card the directory lists for these filters, read at the largest page size."""
+    cards: list[dict[str, Any]] = []
+    cursor: str | None = None
+    while True:
+        page_params: dict[str, str | int] = {"limit": 100, **(params or {})}
+        if cursor is not None:
+            page_params["cursor"] = cursor
+        response = browser.client.get("/api/v1/people", params=page_params)
+        assert response.status_code == 200, response.text
+        cards.extend(response.json()["items"])
+        cursor = response.json()["nextCursor"]
+        if cursor is None:
+            return cards
+
+
+def get_facets(browser: Browser, params: dict[str, str] | None = None) -> dict[str, Any]:
+    response = browser.client.get("/api/v1/people/facets", params=params)
+    assert response.status_code == 200, response.text
+    facets: dict[str, Any] = response.json()
+    return facets
+
+
+def test_each_filter_narrows_the_list_and_the_facets_agree(browser: Browser) -> None:
+    browser.start_sandbox("marcus")
+    me = browser.client.get("/api/v1/me").json()
+    location, department = me["location"]["id"], me["department"]["id"]
+    cases: list[dict[str, str]] = [
+        {},
+        {"q": "manager"},
+        {"locationId": location},
+        {"departmentId": department},
+        {"team": "mine"},
+        {"q": "lead", "locationId": location, "departmentId": department},
+        {"q": "a", "locationId": location, "team": "mine"},
+    ]
+
+    for params in cases:
+        cards = get_all(browser, params)
+        facets = get_facets(browser, params)
+
+        assert cards, params  # Every case must match someone, or the checks below prove nothing.
+        assert facets["total"] == 120
+        assert facets["matching"] == len(cards), params
+        if "locationId" in params:
+            assert {card["location"]["id"] for card in cards} == {location}
+        if "departmentId" in params:
+            assert {card["department"]["id"] for card in cards} == {department}
+        if "q" in params:
+            needle = params["q"].lower()
+            for card in cards:
+                text = " ".join(
+                    [card["givenName"], card["familyName"], card["title"], card["workEmail"]]
+                )
+                assert needle in text.lower()
+    assert len(get_all(browser, cases[0])) == 120
+    assert len(get_all(browser, cases[2])) < 120
+    # The location menu agrees with the list for each location.
+    for option in get_facets(browser, cases[1])["locations"]:
+        chosen = get_all(browser, {"q": "manager", "locationId": option["id"]})
+        assert option["count"] == len(chosen)
+    for option in get_facets(browser, cases[2])["departments"]:
+        chosen = get_all(browser, {"locationId": location, "departmentId": option["id"]})
+        assert option["count"] == len(chosen)
+
+
+def test_the_facets_have_the_agreed_shape(browser: Browser) -> None:
+    browser.start_sandbox("marcus")
+
+    facets = get_facets(browser)
+
+    assert set(facets) == {"total", "matching", "locations", "departments", "myTeam"}
+    assert [set(location) for location in facets["locations"]] == [
+        {"id", "name", "state", "count"}
+    ] * 3
+    assert {tuple(sorted(department)) for department in facets["departments"]} == {
+        ("count", "id", "name")
+    }
+    assert [(loc["name"], loc["count"]) for loc in facets["locations"]] == [
+        ("Austin warehouse", 35),
+        ("Denver HQ", 40),
+        ("Oakland store", 45),
+    ]
+
+
+def test_marcus_sees_his_team_of_44_and_priya_has_none(open_browser: OpenBrowser) -> None:
+    marcus, priya = open_browser(), open_browser()
+    marcus.start_sandbox("marcus")
+    priya.start_sandbox("priya")
+
+    team = get_all(marcus, {"team": "mine"})
+    marcus_facets = get_facets(marcus, {"team": "mine"})
+    priyas = priya.client.get("/api/v1/people", params={"team": "mine"})
+
+    assert len(team) == 44
+    assert marcus_facets["myTeam"] == marcus_facets["matching"] == 44
+    assert get_facets(marcus)["myTeam"] == 44
+    assert priyas.status_code == 200
+    assert priyas.json() == {"items": [], "nextCursor": None}
+    assert get_facets(priya)["myTeam"] is None
+    assert get_facets(priya, {"team": "mine"})["matching"] == 0
+
+
+def test_the_search_is_trimmed_and_limited_to_100_characters(browser: Browser) -> None:
+    browser.start_sandbox()
+    long_name = "x" * 100
+
+    too_long = browser.client.get("/api/v1/people", params={"q": "x" * 101})
+    too_long_facets = browser.client.get("/api/v1/people/facets", params={"q": "x" * 101})
+    padded = browser.client.get("/api/v1/people", params={"q": f"  {long_name}  "})
+    blank = browser.client.get("/api/v1/people", params={"q": "   ", "limit": 100})
+    padded_101 = browser.client.get("/api/v1/people", params={"q": f" {long_name}x "})
+
+    assert [too_long.status_code, too_long_facets.status_code] == [422, 422]
+    assert padded.status_code == 200
+    assert padded.json()["items"] == []
+    assert padded_101.status_code == 422
+    assert blank.status_code == 200
+    assert len(blank.json()["items"]) == 100
+    # The stripped value is what is matched, and a blank search on the facets is no filter.
+    marcus = get_all(browser, {"q": "  marcus "})
+    assert "Marcus Bell" in {f"{card['givenName']} {card['familyName']}" for card in marcus}
+    assert 0 < len(marcus) < 120
+    assert get_all(browser, {"q": "  marcus "}) == get_all(browser, {"q": "marcus"})
+    blank_facets = get_facets(browser, {"q": "   "})
+    assert blank_facets["matching"] == blank_facets["total"] == 120
+    assert get_facets(browser, {"q": "  marcus "})["matching"] == len(marcus)
+
+
+def test_a_search_with_a_nul_byte_is_a_422_not_a_500(browser: Browser) -> None:
+    browser.start_sandbox()
+
+    responses = [
+        browser.client.get(url, params={"q": "abc\x00x"})
+        for url in ("/api/v1/people", "/api/v1/people/facets")
+    ]
+
+    assert [response.status_code for response in responses] == [422, 422]
+    assert all(
+        [error["loc"] for error in response.json()["errors"]] == [["query", "q"]]
+        for response in responses
+    )
+
+
+@pytest.mark.parametrize(
+    "params", [{"team": "everyone"}, {"locationId": "not-a-uuid"}, {"departmentId": "42"}]
+)
+def test_a_bad_filter_is_a_422(browser: Browser, params: dict[str, str]) -> None:
+    browser.start_sandbox()
+
+    statuses = [
+        browser.client.get(url, params=params).status_code
+        for url in ("/api/v1/people", "/api/v1/people/facets")
+    ]
+
+    assert statuses == [422, 422]
+
+
+def test_another_sandboxs_location_matches_no_one(open_browser: OpenBrowser) -> None:
+    mine, theirs = open_browser(), open_browser()
+    mine.start_sandbox("priya")
+    theirs.start_sandbox("priya")
+    their_location = theirs.client.get("/api/v1/me").json()["location"]["id"]
+    their_department = theirs.client.get("/api/v1/me").json()["department"]["id"]
+
+    for params in ({"locationId": their_location}, {"departmentId": their_department}):
+        assert get_all(mine, params) == []
+        facets = get_facets(mine, params)
+        assert (facets["total"], facets["matching"]) == (120, 0)
+        # The foreign ID is no menu option either: every option is this sandbox's own.
+        assert their_location not in {loc["id"] for loc in facets["locations"]}
+        assert their_department not in {dep["id"] for dep in facets["departments"]}
+
+
+def test_the_facets_route_is_not_taken_for_a_person_id(browser: Browser) -> None:
+    browser.start_sandbox()
+
+    response = browser.client.get("/api/v1/people/facets")
+
+    assert response.status_code == 200
+    assert "person_id" not in response.text
+
+
+def test_the_facets_need_a_session(browser: Browser) -> None:
+    assert browser.client.get("/api/v1/people/facets").status_code == 401
+    assert (
+        browser.client.get("/api/v1/people", params={"q": "a", "team": "mine"}).status_code == 401
+    )

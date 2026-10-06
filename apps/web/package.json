@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
+    "build:e2e": "VITE_GALLERY=true vite build --outDir dist-e2e --emptyOutDir",
     "lint": "oxlint --deny-warnings",
     "preview": "vite preview",
     "typecheck": "tsc -b",
@@ -13,22 +14,35 @@
     "format:check": "prettier --check .",
     "test": "vitest run",
     "generate:api": "orval --config orval.config.ts && prettier --write src/api",
-    "check:api-client": "node scripts/check-api-client.mjs"
+    "check:api-client": "node scripts/check-api-client.mjs",
+    "check:no-gallery": "node scripts/check-no-gallery.mjs",
+    "e2e": "playwright test"
   },
   "dependencies": {
     "@tanstack/react-query": "^5.104.1",
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.1.1",
+    "lucide-react": "^1.52.0",
+    "radix-ui": "^1.6.7",
     "react": "^19.2.8",
-    "react-dom": "^19.2.8"
+    "react-dom": "^19.2.8",
+    "react-router": "^7.18.4",
+    "tailwind-merge": "^3.7.0",
+    "zustand": "^5.0.15"
   },
   "devDependencies": {
+    "@axe-core/playwright": "^4.13.0",
+    "@playwright/test": "^1.63.0",
     "@tailwindcss/vite": "^4.3.3",
     "@testing-library/jest-dom": "^7.0.1",
     "@testing-library/react": "^16.3.3",
+    "@testing-library/user-event": "^14.6.7",
     "@types/node": "^24.13.3",
     "@types/react": "^19.2.18",
     "@types/react-dom": "^19.2.7",
     "@vitejs/plugin-react": "^6.1.1",
     "jsdom": "^30.1.1",
+    "msw": "^2.15.0",
     "orval": "^8.39.0",
     "oxlint": "^1.81.0",
     "prettier": "^3.9.9",

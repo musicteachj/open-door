@@ -223,12 +223,17 @@ make setup      install dependencies; create apps/api/.env from .env.example
 make db         start Postgres (127.0.0.1:5433), migrate, then create the login users
 make dev        Postgres, migrations, API (:8000) and web app (:5173) together
 make check      everything CI runs; needs `make db` first
+make e2e        the browser tests (Playwright, Chromium) against the real API on :8100
+make captures   a local report of each design beside the build (needs `make db` and a network; not in CI)
 make openapi    after changing an API route: regenerate the schema and the web client
 make audit      scan for leaked secrets and vulnerable dependencies
 ```
 
 Run a single API test: `cd apps/api && uv run pytest tests/test_health.py -q`. Run a single web
-test: `cd apps/web && npx vitest run src/App.test.tsx`.
+test: `cd apps/web && npx vitest run src/lib/api-fetch.test.ts`. Run a single browser test:
+`cd apps/web && npx playwright test e2e/session.spec.ts`. The first `make e2e` (and so the first
+`make check`) downloads Chromium, about 170 MB. The component gallery is at `/gallery` in
+development and never in a production build.
 
 **The database has three URLs**, all in `apps/api/.env` (see `.env.example`):
 

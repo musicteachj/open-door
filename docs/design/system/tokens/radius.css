@@ -1,0 +1,9 @@
+/* Open Door corner radii. */
+:root {
+  --radius-xs: 6px; /* Tooltips */
+  --radius-sm: 8px; /* Small buttons */
+  --radius-md: 10px; /* Buttons, nav items, rows, glance links */
+  --radius-lg: 14px; /* Composer */
+  --radius-xl: 16px; /* Content sheet */
+  --radius-full: 9999px; /* Avatar, sandbox pill, markers */
+}

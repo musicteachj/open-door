@@ -62,7 +62,7 @@ Visible to the API only for its own sandbox, and to the cleanup role only once i
 |---|---|---|
 | `id`, `tenant_id` | IDs | Identity, and the sandbox it belongs to. |
 | `code`, `name`, `city`, `state` | Denver HQ (CO), the Oakland store (CA), the Austin warehouse (TX) | The directory shows each person's location and state. Each state's handbook addendum applies by location (Phase 3). |
-| `timezone` | An IANA zone, such as `America/Denver` | Leave dates are calendar dates in the location's time zone (Phase 5). |
+| `timezone` | An IANA zone, such as `America/Denver` | Leave dates are calendar dates in the location's time zone (Phase 5). Directory cards and `/me` carry it in their `location`. It describes a place, not a person, so it isn't personal data. |
 
 Visible to everyone in the sandbox. Deleted with the sandbox.
 
@@ -80,7 +80,7 @@ Visible to everyone in the sandbox. Deleted with the sandbox.
 | Column | Holds | Why |
 |---|---|---|
 | `id`, `tenant_id` | IDs | Identity, and the sandbox. |
-| `given_name`, `family_name`, `title`, `work_email` | Fictional names, job titles, and `opendoor.example` addresses | The directory card. |
+| `given_name`, `family_name`, `title`, `work_email` | Fictional names, job titles, and `juniperrow.example` addresses | The directory card. |
 | `department_id`, `location_id` | References | The directory card, and the rules that depend on location. |
 | `manager_id` | The person's manager | The reporting line. Being a manager is derived from it on every request, never stored. |
 | `employment_type` | `salaried` or `hourly` | Company PTO accrues at a fixed amount per employment type (Phase 5). Shown only at `/me`. |
@@ -152,6 +152,21 @@ choice described above.
 
 Signing out clears both. There are no tracking or analytics cookies.
 
+The web app sets no cookies of its own: these two come from the API, and the page only reads the
+CSRF one.
+
+### Browser storage
+
+The web app uses no `localStorage`. It keeps two keys in `sessionStorage`:
+
+| Key | Holds | Why |
+|---|---|---|
+| `od.expiryBannerDismissed.<tenantExpiresAt>` | `1`, once the visitor has closed the "This sandbox resets in …" banner. The key ends with the sandbox's expiry time, which is not secret. | So the banner stays closed across a reload. A new sandbox has a new expiry, so it gets a new key and shows the banner again. |
+| `od.scrollPositions` | How far each page in the tab's history was scrolled, as a list of `[history entry key, pixels]` pairs, newest last, capped at the last 50. The keys are random router-generated strings, not addresses. | So Back or a reload returns to where the visitor was in a long list. |
+
+Only the person at that browser tab can see it. It is gone when the tab closes, and the API never
+receives it.
+
 ### Security log
 
 Refused requests are written to the JSON application log under the `app.security` logger, not to
@@ -159,11 +174,13 @@ the audit table. The events are `security.session_invalid`, `security.origin_rej
 `security.csrf_rejected`, and `security.authz_denied`. Each carries:
 
 - the request ID
-- a fixed phrase saying why it was refused, such as "no session cookie"
+- a fixed phrase saying why it was refused, such as "unknown or expired session"
 - the sandbox and the actor, when they are known
 - the target person's ID, for a denied read
 - the client's IP address
 - the first 8 characters of the session token's hash
 
-A raw token, a cookie value, or a private detail is never logged. How long logs are kept is set
+A request with no session cookie at all, such as a first visit, isn't a refusal worth recording, so
+it logs nothing here (only a DEBUG line with the method and path). A raw token, a cookie value, or a
+private detail is never logged. How long logs are kept is set
 where they are stored, when Open Door is deployed (Phase 9).

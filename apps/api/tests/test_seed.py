@@ -20,7 +20,7 @@ ANCHOR = date(2026, 10, 5)
 
 # Phones in 555-0100 to 555-0199 are reserved for fiction, so none of them can ring a real person.
 FICTIONAL_PHONE = re.compile(r"[0-9]{3}-555-01[0-9]{2}")
-WORK_EMAIL = re.compile(r"[a-z]+\.[a-z]+@opendoor\.example")
+WORK_EMAIL = re.compile(r"[a-z]+\.[a-z]+@juniperrow\.example")
 
 
 @pytest.fixture(scope="module")

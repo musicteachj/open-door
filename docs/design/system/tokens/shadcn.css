@@ -1,0 +1,20 @@
+/* shadcn/ui aliases. shadcn components read these names; they point at Open Door tokens. */
+:root {
+  --background: var(--surface); /* App background */
+  --foreground: var(--ink); /* Default text */
+  --card: var(--surface-raised); /* Card surface */
+  --card-foreground: var(--ink); /* Card text */
+  --popover: var(--surface-raised); /* Popover surface */
+  --popover-foreground: var(--ink); /* Popover text */
+  --primary-foreground: var(--on-primary); /* Text on primary (primary itself is shared) */
+  --secondary: var(--surface-hover); /* Secondary fill */
+  --secondary-foreground: var(--ink); /* Secondary text */
+  --muted: var(--surface-sunken); /* Muted surface */
+  --muted-foreground: var(--ink-muted); /* Muted text */
+  --accent: var(--primary-tint); /* shadcn hover/selected fill; the brand accent is --marker */
+  --accent-foreground: var(--ink); /* Text on accent */
+  --destructive: var(--danger); /* Destructive actions and errors */
+  --input: var(--input-border); /* Input borders */
+  --ring: var(--focus-ring); /* Focus ring */
+  --radius: var(--radius-md); /* Base radius */
+}

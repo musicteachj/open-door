@@ -1,0 +1,35 @@
+<!-- @dsCard group="Components" viewport="700x640" name="Directory" -->
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><link rel="stylesheet" href="../../styles.css"><script src="https://unpkg.com/react@18.3.1/umd/react.production.min.js"></script><script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.production.min.js"></script><script src="https://unpkg.com/@babel/standalone@7.24.7/babel.min.js"></script><script src="../../preview/loader.js"></script></head><body style="margin:0;background:var(--surface-raised)"><div id="root"></div>
+<script type="text/babel" data-presets="react">
+loadOpenDoor("../../", OD_FILES).then(function (OD) {
+  const { DirectoryRow, SkeletonRow, DetailList, DetailRow } = OD;
+  const Lbl = ({ children }) => <div style={{ font: "400 11px/16px var(--font-sans)", color: "var(--ink-muted)", marginBottom: 6 }}>{children}</div>;
+  function Card() {
+    return (
+      <div style={{ padding: "20px 24px", display: "flex", flexDirection: "column", gap: 8 }}>
+        <Lbl>Rows: default, your own, hovered, focused, then loading</Lbl>
+        <div>
+          <div className="od-dir-cols od-dir-head"><span>Name</span><span>Title</span><span>Department</span><span>Location</span><span></span></div>
+          <div role="list">
+            <DirectoryRow name="Leo Nakamura" title="Sales Associate" department="Store Operations" location="Oakland store" />
+            <DirectoryRow name="Priya Raman" title="Visual Merchandiser" department="Store Operations" location="Oakland store" isYou />
+            <DirectoryRow name="Marcus Bell" title="Store Manager" department="Store Operations" location="Oakland store" data-state="hover" />
+            <DirectoryRow name="Zara Bautista" title="Department Lead, Apparel" department="Store Operations" location="Oakland store" data-state="focus" />
+          </div>
+          <SkeletonRow variant={0} /><SkeletonRow variant={1} />
+        </div>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginTop: 12 }}>
+          <DetailList title="Private details" icon="lock">
+            <DetailRow label="Phone" locked reason="Visible to Leo and HR" />
+            <DetailRow label="Home address" locked reason="Visible to Leo and HR" />
+          </DetailList>
+          <DetailList title="Private details" icon="lock" note="Only Leo and HR can see these." auditNote="Viewing private details is recorded in the audit log.">
+            <DetailRow label="Phone" value="(510) 555-0175" />
+          </DetailList>
+        </div>
+      </div>);
+  }
+  ReactDOM.createRoot(document.getElementById("root")).render(<Card />);
+});
+</script></body></html>
