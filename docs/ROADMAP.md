@@ -38,7 +38,9 @@ stage is unblocked. Phase 2 is planned: see the
 and stage 6 (the directory and profiles) is built. Next: after it merges, the Phase 2 review
 (`/code-review high` on the phase's application code against `de75e53`), a small fix-up PR for
 its findings, and the Done row, at effort `medium`.** Later phases' screens are designed
-shortly before each phase.
+shortly before each phase. **Next for design (decided 2026-10-06):** a logo round now, then the
+handbook browser and passage panel before Phase 3's UI stage. The brief's "Decisions from the
+2026-10-06 brainstorm" records the rest.
 Decided on 2026-10-04, changing the original plan:
 - **Mockups are desktop only.** The build still adapts every screen to a phone's width, checked
   automatically at 390 px.
