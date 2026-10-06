@@ -1303,6 +1303,81 @@ the plan allowed:
 - **Stage 3 ended at 373 web unit tests and 17 browser tests** (517 API tests). The trial ended at
   343 web tests. The owner reviewed every new gallery state in the browser and approved them.
 
+**Stage 4 is two pull requests,** as the owner prefers small PRs:
+- **4a, the components and their browser tests (Tasks 23–27, then a close),** on
+  `feat/phase-2-components-screens`, branched from `dev` at `0870738` after Stage 3 merged as
+  PR #26.
+- **4b, `make captures` (Task 28, then Task 29's close),** on its own branch after 4a merges.
+
+**Stage 4a:**
+- **Task 23:**
+  - **The composer is controlled only,** with no `autoFocus` prop, which oxlint forbids. If Stage 5
+    wants the box focused on load, it focuses it through a ref.
+  - **The disclosure is the one `AI_DISCLOSURE` constant,** always visible, and it describes the
+    box. The sketch's `disclosure` prop is gone, so no caller can hide it.
+  - No character limit or auto-grow, as the sketch has neither.
+  - The "Try asking" row isn't a separate component.
+  - The composer takes the content width in the gallery, and a browser test checks it.
+- **Task 24:**
+  - **The persona card keeps its full name while starting,** where the sketch swaps in "Starting a
+    sandbox as …". A sibling `sr-only` `<output>` announces "Setting up Juniper Row…" politely, as
+    the notes ask; a name change on a focused button isn't reliably announced.
+  - It stays enabled while starting, as the plan says, and the review caught its hover border
+    turning gray as a result. It now keeps the primary border.
+  - **For Stage 5:** each card is a fragment of the button and its `<output>`. The landing grid
+    must not style its direct children with `:nth-child`, `:last-child`, or `space-y`, or it should
+    wrap each card in an `li`.
+- **Task 25:**
+  - **FilterSelect is named by its label alone** ("Location", "Department") through
+    `aria-labelledby`; the chosen value is the trigger's text. "All" travels through Radix as
+    `'all'` and comes out as `null`, so **Task 41 must leave a `null` filter out of the URL and the
+    query**. A value missing from the options shows "All" and isn't active.
+  - The trigger has the ring only, not the field's focus halo, as the sketch draws it.
+  - **The search field is a `<search>` with `type="search"`.** The browser's own clear button is
+    hidden, and Escape clears while there's text, as the sketch does.
+- **Task 26:**
+  - **The column labels are visual and hidden from screen readers,** because each row link's name
+    already carries the name, title, department, and location.
+  - **The rows are a `ul` (with `role="list"`, for VoiceOver) of `li`s, each holding one `Link`.**
+    The sketch put `role="listitem"` on the anchor, which hides that it's a link.
+  - **Loading shows eight skeleton rows in an `aria-busy` region.** A polite status beside it, not
+    inside, says "Loading the directory". **For Task 42:** keep the previous page on screen while a
+    search or filter loads, so the skeleton and its announcement come only on the first load.
+  - A locked DetailRow can't take a value in its types, ignores one at runtime, and a test proves
+    it.
+  - Rows stack below 760 px of viewport, the sketch's breakpoint. The skeleton row hides its extra
+    bars there.
+  - Browser tests check that a directory row and a detail row both stack at 390 px.
+- **Task 27:**
+  - **The gallery's state ids live in one list,** `e2e/gallery-ids.ts`, which the heading check uses
+    and Task 28's manifest should import.
+  - **Already covered, so not duplicated:** the menu's and the filter select's axe scans, the
+    truncated tooltip, and the rows stacking at 390 px.
+  - **`e2e/components.spec.ts` adds the real hover colors,** each matching its sketch's CSS: the nav
+    item is neutral, never the tint; the directory row and the "Try asking" row are the tint. It
+    also checks the composer's keyboard focus halo.
+  - The plan's planted bug, a nav item that hovers to the tint, fails it.
+  - Stage 2's select test already finds its trigger by id, so no name clash was possible.
+- **Stage 4a's code reviews found five problems, all fixed:**
+  - **A filter option's count ran into its name** ("Denver HQ40"), for screen readers and for
+    type-to-find. The browser test expected the joined text, so it hid the bug. The count now sits
+    outside the item's text, through a new optional `trailing` prop on the Stage 2 `SelectItem`,
+    and each option reads "Denver HQ, 40".
+  - **The skeleton row threw on a negative or fractional `variant`.** The index now wraps.
+  - **A browser check that the count sits apart from the name couldn't fail,** because it measured
+    the checkmark slot. The item text now has `data-slot="select-item-text"`, and the check fails
+    when the count touches the name.
+  - **A table that mounts already loading never announced it,** because the text was in the live
+    region from the start. The region now renders empty, and an effect fills it.
+  - **A filter set to an unknown value couldn't be cleared.** The select showed "All", and Radix
+    saw no change when "All" was chosen. An unknown value now goes to Radix as no selection.
+- **One browser flake to watch:** "a truncated persona title shows its tooltip" failed once, on the
+  first run after a change, which also rebuilds `dist-e2e`. It then passed 20 times in a row on its
+  own. If CI shows it, look at the tooltip's 300 ms hover delay against the test's wait.
+- **The owner's gallery review** approved every new state, and asked about the skeletons' lack of
+  motion. The design draws them static, so it went to the backlog as a design question.
+- **Stage 4a ended at 470 web unit tests and 26 browser tests** (517 API tests).
+
 ## Backlog
 
 New items from planning, added in the tasks named:

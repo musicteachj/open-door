@@ -12,6 +12,18 @@ version (`0.x.y` while the app is being built, `1.0.0` when it is complete).
 
 ### Added
 
+- **The assistant, landing, form, and directory components** (Phase 2, stage 4a). The rest of the
+  pieces the Phase 2 screens are built from, each in the gallery in every state:
+  - **Assistant:** the composer, which always shows the AI disclosure and never sends on an empty
+    box or while an input method is composing, and the "Try asking" list.
+  - **Landing:** the persona card, which announces "Setting up Juniper Row…" and can't start two
+    sandboxes.
+  - **Forms:** the search field, the filter select with counts beside each option, and the "My
+    team" toggle.
+  - **Directory:** the table, each row one link, with a skeleton while loading; and the detail
+    list, whose locked rows show who can see a field and never its value.
+  - **Browser tests** check the real hover colors, the composer's focus halo, axe with a filter
+    open, and rows stacking on a phone.
 - **The core, navigation, and feedback components** (Phase 2, stage 3). The pieces the shell and
   every page frame are built from, each in the gallery in every state:
   - **Core and status:** the logo, the page header, the empty state, the sandbox indicator, and the

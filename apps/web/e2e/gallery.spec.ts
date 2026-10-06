@@ -1,5 +1,6 @@
 import AxeBuilder from '@axe-core/playwright'
 import { expect, test, type Page } from '@playwright/test'
+import { GALLERY_STATE_IDS } from './gallery-ids'
 
 const TAGS = ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa']
 
@@ -23,43 +24,7 @@ test.beforeEach(async ({ page }) => {
 })
 
 test('every state has its heading', async ({ page }) => {
-  for (const id of [
-    'button-primary-default',
-    'button-primary-disabled',
-    'button-primary-loading',
-    'button-destructive-loading',
-    'input-invalid',
-    'select-open',
-    'menu-open',
-    'avatar-sm',
-    'skeleton-default',
-    'logo-default',
-    'logo-customer',
-    'page-header-title',
-    'page-header-count',
-    'page-header-back',
-    'empty-state-action',
-    'empty-state-message',
-    'sandbox-indicator-default',
-    'glance-link-default',
-    'glance-link-marker',
-    'glance-list-default',
-    'nav-item-default',
-    'nav-item-current',
-    'nav-item-count',
-    'nav-item-count-current',
-    'persona-switcher-closed',
-    'persona-switcher-truncated',
-    'persona-switcher-switching',
-    'persona-menu-open',
-    'banner-default',
-    'banner-no-dismiss',
-    'inline-error-retry',
-    'inline-error-message',
-    'full-page-message-session-expired',
-    'full-page-message-not-found',
-    'full-page-message-error',
-  ]) {
+  for (const id of GALLERY_STATE_IDS) {
     await expect(page.locator(`h3#${id}`)).toBeVisible()
   }
 })
@@ -156,4 +121,60 @@ test('a truncated persona title shows its tooltip in a real browser', async ({ p
   await page.keyboard.press('Tab')
   await expect(page.locator('[aria-labelledby="persona-switcher-closed"] button')).toBeFocused()
   await expect(page.getByRole('tooltip')).toBeHidden()
+})
+
+test('the composer states fill their section, not just their text', async ({ page }) => {
+  for (const id of ['composer-empty', 'composer-error', 'composer-busy']) {
+    const section = page.locator(`section[aria-labelledby="${id}"]`)
+    const composer = section.locator('[data-slot="composer"]')
+    const sectionBox = await section.boundingBox()
+    const composerBox = await composer.boundingBox()
+    expect(composerBox?.width).toBeGreaterThan(600)
+    expect(composerBox?.width).toBe(sectionBox?.width)
+  }
+})
+
+test('a hovered starting persona card keeps its primary border', async ({ page }) => {
+  const card = page.locator('section[aria-labelledby="persona-card-starting"] button')
+  await card.hover()
+  const border = await card.evaluate((el) => getComputedStyle(el).borderTopColor)
+  const primary = await page.evaluate(() => {
+    const probe = document.createElement('div')
+    probe.style.color = 'var(--color-primary)'
+    document.body.append(probe)
+    const color = getComputedStyle(probe).color
+    probe.remove()
+    return color
+  })
+  expect(border).toBe(primary)
+})
+
+test('an open filter select has no violations, and keeps its label and counts', async ({
+  page,
+}) => {
+  await page.locator('#filter-select-open-trigger').click()
+  const listbox = page.getByRole('listbox')
+  await expect(listbox).toBeVisible()
+  for (const name of ['All', 'Austin warehouse, 35', 'Denver HQ, 40', 'Oakland store, 0']) {
+    await expect(listbox.getByRole('option', { name, exact: true })).toBeVisible()
+  }
+  // The count sits at the option's right edge, apart from the name.
+  const option = listbox.getByRole('option', { name: 'Denver HQ, 40' })
+  const [nameBox, countBox, optionBox] = await Promise.all([
+    option.locator('[data-slot="select-item-text"]').boundingBox(),
+    option.locator('span[aria-hidden="true"].tabular-nums').boundingBox(),
+    option.boundingBox(),
+  ])
+  expect(countBox!.x).toBeGreaterThan(nameBox!.x + nameBox!.width + 16)
+  expect(countBox!.x + countBox!.width).toBeGreaterThan(optionBox!.x + optionBox!.width - 20)
+  expect((await scan(page, MODAL_OVERLAY_RULES)).violations).toEqual([])
+  await page.keyboard.press('Escape')
+  await expect(page.locator('#filter-select-open-trigger')).toBeFocused()
+})
+
+test('clearing the search puts focus back in the field', async ({ page }) => {
+  const section = page.locator('section[aria-labelledby="search-field-typed"]')
+  await section.getByRole('button', { name: 'Clear search' }).click()
+  await expect(section.getByRole('searchbox')).toBeFocused()
+  await expect(section.getByRole('searchbox')).toHaveValue('')
 })

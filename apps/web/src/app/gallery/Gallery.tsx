@@ -23,8 +23,12 @@ import { Textarea } from '@/components/ui/textarea'
 import { Toast, ToastProvider, ToastViewport } from '@/components/ui/toast'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { Group, Section } from './gallery-parts'
+import { AssistantSections } from './sections/assistant-sections'
+import { DirectorySections } from './sections/directory-sections'
 import { FeedbackSections } from './sections/feedback-sections'
+import { FormsSections } from './sections/forms-sections'
 import { CoreSections } from './sections/core-sections'
+import { LandingSections } from './sections/landing-sections'
 import { NavigationSections } from './sections/navigation-sections'
 
 // Every primitive in every state it has, for the browser tests and for looking at. The route is
@@ -261,6 +265,10 @@ export function Gallery() {
         <CoreSections />
         <NavigationSections />
         <FeedbackSections />
+        <AssistantSections />
+        <LandingSections />
+        <FormsSections />
+        <DirectorySections />
       </main>
       <ToastViewport />
     </ToastProvider>

@@ -1,6 +1,6 @@
 import { Check, ChevronDown } from 'lucide-react'
 import { Select as SelectPrimitive } from 'radix-ui'
-import type { ComponentProps } from 'react'
+import type { ComponentProps, ReactNode } from 'react'
 import { cn } from '@/lib/utils'
 import { rowFocusRing } from './focus-ring'
 import { fieldClasses } from './field-classes'
@@ -73,11 +73,14 @@ function SelectLabel({ className, ...props }: ComponentProps<typeof SelectPrimit
   )
 }
 
+// `trailing` sits after the text, right-aligned, outside the item's text: Radix takes the trigger's
+// shown value and the typeahead match from the text alone, so a count there stays out of both.
 function SelectItem({
   className,
   children,
+  trailing,
   ...props
-}: ComponentProps<typeof SelectPrimitive.Item>) {
+}: ComponentProps<typeof SelectPrimitive.Item> & { trailing?: ReactNode }) {
   return (
     <SelectPrimitive.Item
       data-slot="select-item"
@@ -95,7 +98,8 @@ function SelectItem({
           <Check aria-hidden="true" className="size-4" strokeWidth={2} />
         </SelectPrimitive.ItemIndicator>
       </span>
-      <SelectPrimitive.ItemText>{children}</SelectPrimitive.ItemText>
+      <SelectPrimitive.ItemText data-slot="select-item-text">{children}</SelectPrimitive.ItemText>
+      {trailing}
     </SelectPrimitive.Item>
   )
 }
