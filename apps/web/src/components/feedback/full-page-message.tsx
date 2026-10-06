@@ -42,8 +42,12 @@ function FullPageMessage({
   return (
     <div data-slot="full-page-message" className={cn('flex h-full flex-col', className)}>
       {outsideShell && (
-        <div className="p-6">
-          <Logo />
+        // The design's frame: a 72 px header inside the landing page's 1168 px column (136 px in
+        // from a 1440 px window), with 24 px of padding at the window's edge on a narrow screen.
+        <div className="px-6">
+          <header className="mx-auto flex h-18 max-w-292 flex-none items-center">
+            <Logo />
+          </header>
         </div>
       )}
       <div className="flex flex-1 items-center justify-center p-12">

@@ -7,6 +7,11 @@ type BannerProps = {
   onDismiss?: () => void
   /** The close button's name. It says the scope, for screen readers. From Banner.jsx. */
   dismissLabel?: string
+  /**
+   * A polite status by default. Pass false when a banner's text changes while it is shown (a
+   * countdown) and something else announces it once: a live region would announce every change.
+   */
+  live?: boolean
   className?: string
 }
 
@@ -19,10 +24,12 @@ function Banner({
   message,
   onDismiss,
   dismissLabel = 'Dismiss for this session',
+  live = true,
   className,
 }: BannerProps) {
+  const Root = live ? 'output' : 'div'
   return (
-    <output
+    <Root
       data-slot="banner"
       className={cn(
         'flex items-center gap-3 border-b border-border bg-surface-sunken py-2.5 pr-3 pl-5',
@@ -45,7 +52,7 @@ function Banner({
           <X aria-hidden="true" className="size-4" />
         </button>
       )}
-    </output>
+    </Root>
   )
 }
 

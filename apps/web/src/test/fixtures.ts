@@ -8,7 +8,12 @@ const PERSONAS: Record<PersonaKey, { givenName: string; familyName: string; titl
   dana: { givenName: 'Dana', familyName: 'Whitfield', title: 'HR Director' },
 }
 
-export function meFor(persona: PersonaKey): Me {
+// A sandbox lasts 24 hours, so a fresh one has about 21 hours left here: no banner, "21 h". It is
+// fixed when the test file loads, so two calls to meFor() give the same person to compare.
+const DEFAULT_EXPIRY = new Date(Date.now() + 21.5 * 3_600_000).toISOString()
+
+/** `tenantExpiresAt` is when the sandbox resets. It defaults to 21.5 hours after the test file loaded. */
+export function meFor(persona: PersonaKey, tenantExpiresAt: string = DEFAULT_EXPIRY): Me {
   return {
     id: `00000000-0000-4000-8000-${persona.padEnd(12, '0')}`,
     ...PERSONAS[persona],
@@ -20,7 +25,7 @@ export function meFor(persona: PersonaKey): Me {
     isManager: persona === 'marcus',
     isHrAdmin: persona === 'dana',
     personaKey: persona,
-    tenantExpiresAt: '2026-10-06T12:00:00Z',
+    tenantExpiresAt,
   }
 }
 

@@ -11,6 +11,12 @@ describe('Banner', () => {
     expect(screen.getByRole('status')).toHaveTextContent(MESSAGE)
   })
 
+  it('is plain content, not a live region, with live={false}', () => {
+    render(<Banner message={MESSAGE} live={false} />)
+    expect(screen.queryByRole('status')).not.toBeInTheDocument()
+    expect(screen.getByText(MESSAGE)).toBeInTheDocument()
+  })
+
   it('pairs the warning icon, in the warning color, with ink text', () => {
     render(<Banner message={MESSAGE} />)
     const status = screen.getByRole('status')

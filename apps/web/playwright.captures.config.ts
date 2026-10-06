@@ -4,16 +4,19 @@ import { defineConfig, devices } from '@playwright/test'
 // captures/index.html. A local development tool. CI never runs it: playwright.config.ts ignores
 // e2e/captures/, and no workflow or `make check` target calls this config.
 //
-// It needs a network, because the specimen pages load React and Babel from unpkg.com.
+// It needs a network, because the specimen pages load React and Babel from unpkg.com. It also
+// needs Postgres up with the login users (`make db`), because the screens start real sandboxes.
 //
-// Two servers, both reused if already running:
+// Three servers, all reused if already running:
+//  - The API on :8100, the same one `make e2e` starts (see playwright.config.ts).
 //  - `vite preview` on :4173 serves dist-e2e/, which `make captures` builds first with the gallery
-//    (the same build `make e2e` uses). The gallery needs no API.
+//    (the same build `make e2e` uses), and forwards /api to the API.
 //  - Python's built-in http.server on :8101 serves docs/design/system. The specimens fetch() their
 //    component sketches, which file:// forbids. Python is already a project prerequisite (uv), so
 //    there is nothing new to install.
 export const WEB_ORIGIN = 'http://localhost:4173'
 export const SPECIMEN_ORIGIN = 'http://127.0.0.1:8101'
+const API_ORIGIN = 'http://127.0.0.1:8100'
 
 export default defineConfig({
   testDir: './e2e/captures',
@@ -34,8 +37,20 @@ export default defineConfig({
   ],
   webServer: [
     {
+      // As in playwright.config.ts: `env -u` because an agent shell may export ANTHROPIC_API_KEY
+      // as an empty string, which would shadow the key in .env.
+      command: 'env -u ANTHROPIC_API_KEY uv run uvicorn --factory app.main:create_app --port 8100',
+      cwd: '../api',
+      url: `${API_ORIGIN}/api/v1/health`,
+      env: { APP_ORIGIN: WEB_ORIGIN },
+      reuseExistingServer: true,
+      stdout: 'ignore',
+      stderr: 'ignore',
+    },
+    {
       command: 'npm run preview -- --outDir dist-e2e',
       url: WEB_ORIGIN,
+      env: { API_PROXY_TARGET: API_ORIGIN },
       reuseExistingServer: true,
       stdout: 'ignore',
       stderr: 'ignore',

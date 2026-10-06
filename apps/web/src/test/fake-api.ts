@@ -17,25 +17,28 @@ function problem(status: number, title: string) {
 export function installFakeApi(initial: PersonaKey | null = null) {
   let current: PersonaKey | null = initial
   let meFailure: number | null = null
+  // When the sandbox resets, or null for the fixtures' default (21.5 hours from now).
+  let expiresAt: string | null = null
+  const me = (persona: PersonaKey) => meFor(persona, expiresAt ?? undefined)
 
   server.use(
     http.get(url('/api/v1/me'), () => {
       if (meFailure !== null) return problem(meFailure, 'Failure')
-      return current === null ? problem(401, 'Not signed in') : HttpResponse.json(meFor(current))
+      return current === null ? problem(401, 'Not signed in') : HttpResponse.json(me(current))
     }),
     http.post(url('/api/v1/sandboxes'), async ({ request }) => {
       const body = (await request.json()) as { persona?: PersonaKey } | null
       current = body?.persona ?? 'priya'
       const created: SandboxCreated = {
-        tenant: { id: 'tenant-1', expiresAt: '2026-10-06T12:00:00Z' },
-        me: meFor(current),
+        tenant: { id: 'tenant-1', expiresAt: expiresAt ?? '2026-10-06T12:00:00Z' },
+        me: me(current),
       }
       return HttpResponse.json(created, { status: 201 })
     }),
     http.put(url('/api/v1/session/persona'), async ({ request }) => {
       if (current === null) return problem(401, 'Not signed in')
       current = ((await request.json()) as { persona: PersonaKey }).persona
-      return HttpResponse.json(meFor(current))
+      return HttpResponse.json(me(current))
     }),
     http.delete(url('/api/v1/session'), () => {
       current = null
@@ -53,6 +56,10 @@ export function installFakeApi(initial: PersonaKey | null = null) {
     /** The sandbox's 24 hours are up: every later request is a 401. */
     expire: () => {
       current = null
+    },
+    /** When the sandbox resets, as /me and the start and switch answers report it. */
+    setExpiry: (iso: string) => {
+      expiresAt = iso
     },
     /** Make GET /me answer this status, or work again with null. */
     failMe: (status: number | null) => {

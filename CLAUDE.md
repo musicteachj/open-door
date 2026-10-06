@@ -224,7 +224,7 @@ make db         start Postgres (127.0.0.1:5433), migrate, then create the login 
 make dev        Postgres, migrations, API (:8000) and web app (:5173) together
 make check      everything CI runs; needs `make db` first
 make e2e        the browser tests (Playwright, Chromium) against the real API on :8100
-make captures   a local report of each design beside the build (needs a network; not in CI)
+make captures   a local report of each design beside the build (needs `make db` and a network; not in CI)
 make openapi    after changing an API route: regenerate the schema and the web client
 make audit      scan for leaked secrets and vulnerable dependencies
 ```

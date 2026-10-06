@@ -1,8 +1,9 @@
 import { useEffect } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { Navigate, Outlet } from 'react-router'
+import { requestIdOf } from '@/features/global-states/errors'
+import { SessionExpired, SomethingWentWrong } from '@/features/global-states/pages'
 import { ApiError } from '@/lib/api-fetch'
-import { SessionExpired, SomethingWentWrong } from './placeholders'
 import { rememberPerson, useSessionStatus } from './session-status'
 import { signInAs, useMe } from './useMe'
 
@@ -40,8 +41,16 @@ function Session() {
   // A 401 on the first load: nobody is signed in.
   if (unauthorized) return <Navigate to="/" replace />
   // Any other failure of the first load: the shell itself cannot load.
-  if (me.isError && !me.data) return <SomethingWentWrong onRetry={() => void me.refetch()} />
-  if (!me.data) return <output>Loading…</output>
+  if (me.isError && !me.data)
+    return (
+      <SomethingWentWrong
+        outsideShell
+        requestId={requestIdOf(me.error)}
+        onRetry={() => void me.refetch()}
+      />
+    )
+  // Quiet while /me loads, as the landing page is: a status for screen readers and nothing to see.
+  if (!me.data) return <output className="sr-only">Loading…</output>
   if (changed) return null
   return <Outlet />
 }

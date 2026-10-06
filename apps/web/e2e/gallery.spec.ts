@@ -109,6 +109,9 @@ test('an open persona menu has no violations, focus starts on the checked person
 test('a truncated persona title shows its tooltip in a real browser', async ({ page }) => {
   // Real layout decides truncation. Arrive by keyboard, since Radix opens on keyboard focus.
   const button = page.locator('#persona-switcher-truncated-button')
+  // Truncation is measured after layout and again once the web font loads. Under a busy run the
+  // focus could land first, so wait for the switcher's own measurement.
+  await expect(button).toHaveAttribute('data-truncated', 'true')
   await button.focus()
   await page.keyboard.press('Shift+Tab')
   await page.keyboard.press('Tab')

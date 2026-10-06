@@ -152,6 +152,20 @@ choice described above.
 
 Signing out clears both. There are no tracking or analytics cookies.
 
+The web app sets no cookies of its own: these two come from the API, and the page only reads the
+CSRF one.
+
+### Browser storage
+
+The web app uses no `localStorage`. It keeps one key in `sessionStorage`:
+
+| Key | Holds | Why |
+|---|---|---|
+| `od.expiryBannerDismissed.<tenantExpiresAt>` | `1`, once the visitor has closed the "This sandbox resets in …" banner. The key ends with the sandbox's expiry time, which is not secret. | So the banner stays closed across a reload. A new sandbox has a new expiry, so it gets a new key and shows the banner again. |
+
+Only the person at that browser tab can see it. It is gone when the tab closes, and the API never
+receives it.
+
 ### Security log
 
 Refused requests are written to the JSON application log under the `app.security` logger, not to

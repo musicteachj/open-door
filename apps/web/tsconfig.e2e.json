@@ -6,6 +6,8 @@
     "lib": ["ES2023", "DOM"],
     "types": ["node"],
     "skipLibCheck": true,
+    // The personas test imports the app's constant, which imports a type through this alias.
+    "paths": { "@/*": ["./src/*"] },
 
     /* Bundler mode */
     "module": "esnext",

@@ -5,16 +5,14 @@ test.use({ viewport: { width: 390, height: 844 } })
 
 const scrollWidth = (page: Page) => page.evaluate(() => document.documentElement.scrollWidth)
 
-test('the landing page fits a 390 px screen', async ({ page }) => {
-  await page.goto('/')
-  await expect(page.getByRole('heading', { level: 1, name: 'Open Door' })).toBeVisible()
-  expect(await scrollWidth(page)).toBeLessThanOrEqual(390)
-})
+// The landing page's and the home's 390 px checks (stacking, overflow, the nav, the indicator) are
+// in landing.spec.ts and home.spec.ts, beside the criteria they prove.
 
-test('/ask fits a 390 px screen', async ({ page }) => {
+test("the /ask greeting is the kit's 32/40 at 390 px", async ({ page }) => {
   await startAs(page, 'Priya')
-  await expect(page.getByRole('heading', { level: 1, name: 'Ask' })).toBeVisible()
-  expect(await scrollWidth(page)).toBeLessThanOrEqual(390)
+  const greeting = page.getByRole('heading', { level: 1 })
+  await expect(greeting).toHaveCSS('font-size', '32px')
+  await expect(greeting).toHaveCSS('line-height', '40px')
 })
 
 test('a full-page message keeps its 32-character reference inside its box at 390 px', async ({
@@ -74,4 +72,34 @@ test('a detail row stacks its label over its value at 390 px', async ({ page }) 
   ])
   expect(value!.y).toBeGreaterThanOrEqual(label!.y + label!.height)
   expect(value!.x).toBeLessThanOrEqual(label!.x + 1)
+})
+
+test.describe('at desktop width', () => {
+  test.use({ viewport: { width: 1440, height: 900 } })
+
+  test('the landing page picker is 1168 px wide, as the design draws it', async ({ page }) => {
+    await page.goto('/')
+    const list = page.getByRole('list')
+    await expect(list).toBeVisible()
+    const box = await list.boundingBox()
+    expect(Math.abs((box?.width ?? 0) - 1168)).toBeLessThanOrEqual(1)
+  })
+})
+
+test.describe('the assistant home at desktop width', () => {
+  test.use({ viewport: { width: 1440, height: 900 } })
+
+  test("matches the kit's content box: a 686 px composer, 213 px under the sheet's top", async ({
+    page,
+  }) => {
+    await startAs(page, 'Priya')
+    const composer = page.locator('[data-slot="composer"]')
+    await expect(composer).toBeVisible()
+    const box = await composer.boundingBox()
+    const sheet = await page.locator('[data-slot="shell-sheet"]').boundingBox()
+    expect(Math.abs(box!.width - 686)).toBeLessThanOrEqual(1)
+    // The kit: 120 px padding, a 56 px greeting, a 36 px gap, and the sheet's 1 px border.
+    expect(Math.abs(box!.y - sheet!.y - 213)).toBeLessThanOrEqual(1)
+    expect(await scrollWidth(page)).toBeLessThanOrEqual(1440)
+  })
 })

@@ -1,7 +1,12 @@
 import { createBrowserRouter, type RouteObject } from 'react-router'
 import { Root } from './Root'
 import { RequireSession } from './RequireSession'
-import { Ask, Directory, Landing, NotFound, Profile } from './placeholders'
+import { NotFound } from '@/features/global-states/pages'
+import { RootError, RouteError } from '@/features/global-states/route-error'
+import { LandingPage } from '@/features/landing/landing-page'
+import { AppShell } from '@/features/shell/app-shell'
+import { HomePage } from '@/features/home/home-page'
+import { Directory, Profile } from './placeholders'
 
 // The component gallery is compiled in for development and for the e2e build, which sets
 // VITE_GALLERY. In a production build both conditions are constants Vite folds to false, so the
@@ -21,16 +26,29 @@ const galleryRoutes: RouteObject[] =
 export const routes: RouteObject[] = [
   {
     element: <Root />,
+    errorElement: <RootError />,
     children: [
-      { path: '/', element: <Landing /> },
+      { path: '/', element: <LandingPage /> },
       ...galleryRoutes,
       {
         element: <RequireSession />,
         children: [
-          { path: '/ask', element: <Ask /> },
-          { path: '/directory', element: <Directory /> },
-          { path: '/directory/:personId', element: <Profile /> },
-          { path: '*', element: <NotFound /> },
+          {
+            // The shell sits under the session guard's reset key, so a switch remounts it. A
+            // failed page below shows RouteError inside the shell's content sheet.
+            element: <AppShell />,
+            children: [
+              {
+                errorElement: <RouteError />,
+                children: [
+                  { path: '/ask', element: <HomePage /> },
+                  { path: '/directory', element: <Directory /> },
+                  { path: '/directory/:personId', element: <Profile /> },
+                  { path: '*', element: <NotFound /> },
+                ],
+              },
+            ],
+          },
         ],
       },
     ],

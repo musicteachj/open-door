@@ -2,7 +2,16 @@ import { existsSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { GALLERY_STATE_IDS } from '../gallery-ids'
-import { AREAS, buildFile, COMPONENT_ROWS, designFile, SCREEN_ROWS, specimenPath } from './manifest'
+import {
+  AREAS,
+  buildFile,
+  buildScreenFile,
+  COMPONENT_ROWS,
+  designFile,
+  designScreenFile,
+  SCREEN_ROWS,
+  specimenPath,
+} from './manifest'
 import { renderReport, type ReportRow } from './report'
 
 const row = (over: Partial<ReportRow> = {}): ReportRow => ({
@@ -113,7 +122,10 @@ describe('the manifest', () => {
     }
   })
 
-  it('has no screen rows yet', () => {
-    expect(SCREEN_ROWS).toEqual([])
+  it('names the screen pictures the spec writes, relative to the report', () => {
+    for (const r of SCREEN_ROWS) {
+      expect(designScreenFile(r)).toMatch(/^design\/screens\/[a-z0-9-]+\.png$/)
+      expect(buildScreenFile(r)).toMatch(/^build\/screens\/[a-z0-9-]+\.png$/)
+    }
   })
 })

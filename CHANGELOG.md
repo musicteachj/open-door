@@ -12,6 +12,22 @@ version (`0.x.y` while the app is being built, `1.0.0` when it is complete).
 
 ### Added
 
+- **The landing page, the app shell, the assistant home, and the global states** (Phase 2,
+  stage 5). A visitor now picks a persona, lands in a private sandbox, and can switch persona or
+  sign out.
+  - **Landing:** the four personas as cards. Starting a sandbox shows "Setting up Juniper Row…",
+    and a failure offers Retry for the same persona.
+  - **The shell:** the sidebar and its nav for each role, the persona menu, the content sheet, and
+    the rail with the sandbox countdown. Switching shows "Now viewing as Marcus Bell." Below 3
+    hours a banner warns before the sandbox resets, and dismissing it lasts for that sandbox in
+    this tab. On a phone the shell becomes a top bar.
+  - **The assistant home:** a greeting in the location's own time zone, the composer with the AI
+    disclosure, and each persona's "Try asking" questions. Until Phase 4 connects the assistant,
+    asking gives one fixed, person-written reply.
+  - **The global states:** "This sandbox has reset.", a not-found page, and "Something went wrong"
+    with the full request reference to quote.
+  - **Every acceptance criterion in the four screens' notes has a browser test,** with axe on every
+    state, and the capture report has a row for every design screenshot.
 - **`make captures`, the design and the build side by side** (Phase 2, stage 4b). A local report
   sets each design specimen beside a photograph of the build's gallery, one row per state, at
   1440 px. The build is photographed after its hover, keyboard focus, or click, and with any menu,
@@ -142,6 +158,13 @@ version (`0.x.y` while the app is being built, `1.0.0` when it is complete).
   - The first round settles the look as a design-system project.
   - Claude Design's HTML export is preferred over screenshots alone.
   - Claude Code writes each screen's notes.
+
+### Security
+
+- **A switch, a sign-out, or a change in another tab never shows the previous person** (Phase 2,
+  stage 5). A security re-check proved the switch toast could name the wrong person after another
+  tab changed the session or the sandbox expired. The toast now resets with the identity, and
+  shows only for the person it names.
 
 ## [0.1.0] - 2026-10-04
 
