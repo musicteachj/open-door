@@ -10,6 +10,13 @@ version (`0.x.y` while the app is being built, `1.0.0` when it is complete).
 
 ## [Unreleased]
 
+### Fixed
+
+- **A flaky browser test in CI** (after Phase 2). The check that another person's profile leaks no
+  private value read each API response's body after the fact, and on CI's single worker one body
+  was gone by then. It now records every body as the response passes through, so none can be
+  lost. A planted background request for private details still fails it.
+
 ## [0.2.0] - 2026-10-06
 
 Phase 2: the design system, the app shell, and sandbox entry. A visitor picks a persona, lands in

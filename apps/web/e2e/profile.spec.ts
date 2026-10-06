@@ -89,25 +89,24 @@ test('as Priya on Leo’s profile, the page holds no private value, and none was
 }) => {
   const leo = await leosPrivateValues(browser, baseURL!)
 
-  // The network log, from before the first request: every API request, and every API body.
+  // The network log, from before the first request: every API request, and every API body. Each
+  // response is fetched here and its body recorded before the page receives it, so a body can't
+  // be lost when the page navigates on before it is read (it was, under CI's single worker).
   const requested: string[] = []
   const bodies: Promise<string>[] = []
   const unreadable: string[] = []
-  page.on('request', (request) => {
-    if (request.url().includes('/api/')) requested.push(request.url())
-  })
-  page.on('response', (response) => {
-    if (!response.url().includes('/api/')) return
-    bodies.push(
-      response.text().then(
-        (text) => text,
-        () => {
-          // A body that can't be read can't be checked, so it fails the test below.
-          unreadable.push(`${response.status()} ${response.url()}`)
-          return ''
-        },
-      ),
-    )
+  await page.route('**/api/**', async (route) => {
+    const url = route.request().url()
+    requested.push(url)
+    const response = await route.fetch()
+    const body = response.text().catch(() => {
+      // A body that can't be read can't be checked, so it fails the test below.
+      unreadable.push(`${response.status()} ${url}`)
+      return ''
+    })
+    bodies.push(body)
+    await body
+    await route.fulfill({ response })
   })
 
   await openLeo(page, 'Priya')
