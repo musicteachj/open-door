@@ -1,5 +1,5 @@
 import AxeBuilder from '@axe-core/playwright'
-import { expect, type Page } from '@playwright/test'
+import { expect, type Locator, type Page } from '@playwright/test'
 
 /** The four demo personas, by first name, as the landing page's cards are labeled. */
 export type FirstName = 'Priya' | 'Mateo' | 'Marcus' | 'Dana'
@@ -102,3 +102,29 @@ export const focusRing = (page: Page) =>
     const style = getComputedStyle(document.activeElement!)
     return { width: style.outlineWidth, style: style.outlineStyle, offset: style.outlineOffset }
   })
+
+/**
+ * Moves focus to `target` by keyboard, the way Radix needs to open a tooltip, without scrolling.
+ *
+ * Radix closes a tooltip when the page scrolls. If Tab has to scroll the trigger into view, that
+ * scroll can land just after the tooltip opens and close it, which under a busy run made tooltip
+ * tests flaky. So: center the trigger (its neighbors are then on screen too), wait for the fonts and
+ * the scroll position to settle, then Shift+Tab and Tab back onto it.
+ */
+export async function keyboardFocus(page: Page, target: Locator) {
+  await target.evaluate((el) => el.scrollIntoView({ block: 'center' }))
+  await page.evaluate(() => document.fonts.ready)
+  await expect
+    .poll(async () => {
+      const before = await page.evaluate(() => window.scrollY)
+      await page.evaluate(
+        () => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))),
+      )
+      return before === (await page.evaluate(() => window.scrollY))
+    })
+    .toBe(true)
+  await target.focus()
+  await page.keyboard.press('Shift+Tab')
+  await page.keyboard.press('Tab')
+  await expect(target).toBeFocused()
+}

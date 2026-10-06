@@ -157,11 +157,12 @@ CSRF one.
 
 ### Browser storage
 
-The web app uses no `localStorage`. It keeps one key in `sessionStorage`:
+The web app uses no `localStorage`. It keeps two keys in `sessionStorage`:
 
 | Key | Holds | Why |
 |---|---|---|
 | `od.expiryBannerDismissed.<tenantExpiresAt>` | `1`, once the visitor has closed the "This sandbox resets in …" banner. The key ends with the sandbox's expiry time, which is not secret. | So the banner stays closed across a reload. A new sandbox has a new expiry, so it gets a new key and shows the banner again. |
+| `od.scrollPositions` | How far each page in the tab's history was scrolled, as a list of `[history entry key, pixels]` pairs, newest last, capped at the last 50. The keys are random router-generated strings, not addresses. | So Back or a reload returns to where the visitor was in a long list. |
 
 Only the person at that browser tab can see it. It is gone when the tab closes, and the API never
 receives it.

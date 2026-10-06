@@ -12,6 +12,17 @@ version (`0.x.y` while the app is being built, `1.0.0` when it is complete).
 
 ### Added
 
+- **The directory and profiles** (Phase 2, stage 6), which complete Phase 2's screens.
+  - **The directory:** everyone in the company, 50 at a time with Show more, searched by name,
+    title, or work email, and filtered by location, department, and "My team" for managers. The
+    search and filters live in the address, so a link or Back keeps them, and Back returns to the
+    same scroll position.
+  - **Profiles:** work details, with the manager and email as links, and private details for the
+    person and HR only. Everyone else sees which fields are private and who can see them, and the
+    browser never asks for the values.
+  - **Browser tests check the private rule against the real API:** another person's profile holds
+    no private value in the page or in any response, and HR's read writes an audit event naming
+    only the fields.
 - **The landing page, the app shell, the assistant home, and the global states** (Phase 2,
   stage 5). A visitor now picks a persona, lands in a private sandbox, and can switch persona or
   sign out.
@@ -158,6 +169,14 @@ version (`0.x.y` while the app is being built, `1.0.0` when it is complete).
   - The first round settles the look as a design-system project.
   - Claude Design's HTML export is preferred over screenshots alone.
   - Claude Code writes each screen's notes.
+
+### Fixed
+
+- **The right rail now appears only on the assistant home** (Phase 2, stage 6). The shell showed it
+  on every page, which squeezed the directory: its toolbar wrapped and the profile's panels
+  stacked.
+- **"Show more" keeps keyboard focus while it loads** (Phase 2, stage 6). It was disabled while
+  loading, which dropped focus.
 
 ### Security
 

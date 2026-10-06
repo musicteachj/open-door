@@ -9,6 +9,8 @@ type SearchFieldProps = {
   placeholder?: string
   /** The field's accessible name. The placeholder alone is not a name. */
   label?: string
+  /** The most the field will hold. */
+  maxLength?: number
   className?: string
 }
 
@@ -23,6 +25,7 @@ function SearchField({
   onChange,
   placeholder = 'Search by name, title, or email',
   label = 'Search the directory by name, title, or email',
+  maxLength,
   className,
 }: SearchFieldProps) {
   const inputRef = useRef<HTMLInputElement>(null)
@@ -41,6 +44,7 @@ function SearchField({
       <Input
         ref={inputRef}
         type="search"
+        maxLength={maxLength}
         aria-label={label}
         placeholder={placeholder}
         value={value}

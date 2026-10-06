@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { Outlet } from 'react-router'
+import { Outlet, useLocation } from 'react-router'
 import { Logo } from '@/components/core/logo'
 import { Banner } from '@/components/feedback/banner'
 import { InlineError } from '@/components/feedback/inline-error'
@@ -27,6 +27,8 @@ import { useShellToast } from './toast-store'
 const COMPANY = 'Juniper Row'
 // "How it's built" sits at the bottom of the sidebar, apart from the rest of the navigation.
 const BUILT_PATH = '/how-its-built'
+// The only page with the right rail (the sandbox status and the at-a-glance list).
+const RAIL_PATH = '/ask'
 // The at-a-glance figures arrive with their data in Phases 3 and 5.
 const NO_GLANCE_ITEMS: GlanceItem[] = []
 const PERSONA_OPTIONS = PERSONAS.map(({ key, name, title }) => ({ key, name, title }))
@@ -40,6 +42,8 @@ export function AppShell() {
 function Frame({ me }: { me: NonNullable<ReturnType<typeof useMe>['data']> }) {
   const actions = useIdentityActions()
   const now = useNow()
+  // The right rail belongs to the assistant home alone. Every other page takes the sheet's width.
+  const showRail = useLocation().pathname === RAIL_PATH
   const items = navFor(me)
   const glance = NO_GLANCE_ITEMS
   const [navRef, navScrolls] = useScrollsMore<HTMLElement>()
@@ -135,26 +139,35 @@ function Frame({ me }: { me: NonNullable<ReturnType<typeof useMe>['data']> }) {
               {announcement}
             </output>
             {bannerShown && <Banner live={false} message={bannerMessage} onDismiss={dismiss} />}
-            <div className="grid min-h-0 flex-1 grid-cols-[minmax(0,1fr)_var(--spacing-rail)] max-[1100px]:grid-cols-1 max-[1100px]:grid-rows-[1fr_auto] max-[760px]:grid-cols-1">
+            <div
+              className={cn(
+                'grid min-h-0 flex-1',
+                showRail
+                  ? 'grid-cols-[minmax(0,1fr)_var(--spacing-rail)] max-[1100px]:grid-cols-1 max-[1100px]:grid-rows-[1fr_auto] max-[760px]:grid-cols-1'
+                  : 'grid-cols-1',
+              )}
+            >
               <main ref={mainRef} tabIndex={-1} className="flex min-w-0 flex-col outline-none">
                 <Outlet />
               </main>
-              <aside
-                aria-label="Sandbox status"
-                className={cn(
-                  'flex flex-col border-l border-border-subtle bg-surface-sunken px-8 pt-7 pb-8 max-[1100px]:border-t max-[1100px]:border-l-0',
-                  // Below 760 px the indicator is in the top bar, so with no glance items the
-                  // rail would be an empty strip.
-                  glance.length === 0 && 'max-[760px]:hidden',
-                )}
-              >
-                <div className="flex justify-end">
-                  <SandboxIndicator className="max-[760px]:hidden">
-                    Sandbox resets in {timeLeft}
-                  </SandboxIndicator>
-                </div>
-                <GlanceList items={glance} className="mt-16 max-[1100px]:mt-6" />
-              </aside>
+              {showRail && (
+                <aside
+                  aria-label="Sandbox status"
+                  className={cn(
+                    'flex flex-col border-l border-border-subtle bg-surface-sunken px-8 pt-7 pb-8 max-[1100px]:border-t max-[1100px]:border-l-0',
+                    // Below 760 px the indicator is in the top bar, so with no glance items the
+                    // rail would be an empty strip.
+                    glance.length === 0 && 'max-[760px]:hidden',
+                  )}
+                >
+                  <div className="flex justify-end">
+                    <SandboxIndicator className="max-[760px]:hidden">
+                      Sandbox resets in {timeLeft}
+                    </SandboxIndicator>
+                  </div>
+                  <GlanceList items={glance} className="mt-16 max-[1100px]:mt-6" />
+                </aside>
+              )}
             </div>
             <ShellToast personId={me.id} />
           </div>
