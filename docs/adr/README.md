@@ -13,6 +13,7 @@ records are never rewritten.
 | [0005](0005-native-citations.md) | Native `search_result` citations, not prompted sources | Accepted | 2026-09-29 |
 | [0006](0006-no-redux.md) | TanStack Query and Zustand, no Redux | Accepted | 2026-09-29 |
 | [0007](0007-session-lifetime.md) | Sessions last as long as the sandbox, with no idle timeout | Accepted | 2026-10-03 |
+| [0008](0008-handbook-retrieval.md) | Hybrid handbook search in Postgres, with embeddings cached in the repository | Accepted | 2026-10-07 |
 
 New records copy this shape:
 
