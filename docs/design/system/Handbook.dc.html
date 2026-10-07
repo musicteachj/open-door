@@ -1,0 +1,546 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="design_doc_mode" content="canvas">
+<link rel="stylesheet" href="styles.css">
+<style>body{margin:0;background:#ECEEEF;font-family:'Instrument Sans',system-ui,sans-serif;-webkit-font-smoothing:antialiased}a{color:#59256A}a:hover{color:#461B54}input::placeholder{color:#66737B}mark{background:#ECE2F0;color:#14212A}.dv-turn{padding:40px 44px 32px;border-bottom:1px solid rgba(0,0,0,.08);scroll-margin-top:16px}.dv-thd{display:flex;align-items:baseline;gap:10px;margin:0 0 8px}.dv-tid{font:600 10px ui-monospace,Menlo,monospace;padding:3px 7px;background:#1a1a1a;color:#fff;border-radius:4px;text-decoration:none}.dv-tname{font:600 13px/1.2 system-ui,sans-serif;color:#1a1a1a}.dv-note{font:12px/1.55 system-ui,sans-serif;color:rgba(0,0,0,.6);max-width:980px;margin:0 0 24px}.dv-opts{display:flex;flex-wrap:wrap;gap:56px;align-items:flex-start;max-width:2936px}.dv-opt{flex:none;display:flex;flex-direction:column;gap:12px;scroll-margin-top:16px}.dv-oid{font:600 10.5px ui-monospace,Menlo,monospace;padding:3px 7px;background:rgba(0,0,0,.08);color:#1a1a1a;border-radius:5px;text-decoration:none}.dv-olabel{display:flex;align-items:baseline;gap:8px;font:400 12px/1.3 system-ui,sans-serif;color:rgba(0,0,0,.6)}.dv-card{max-width:100%;background:#fff;border:1px solid rgba(0,0,0,.08);border-radius:8px;box-shadow:0 1px 3px rgba(0,0,0,.06);overflow:hidden}.dv-opt:target .dv-oid{background:#2a78d6;color:#fff}.dv-next{margin:28px 0 0;font:12px/1.5 system-ui,sans-serif;color:rgba(0,0,0,.55)}</style>
+</helmet>
+<section class="dv-turn" id="t1" data-screen-label="06 Handbook">
+<div class="dv-thd"><a class="dv-tid" href="#t1">1</a><span class="dv-tname">Screen 06: Handbook (Phase 3)</span></div>
+<p class="dv-note">The section list is laid out like a table of contents. Each row shows the number, title, who it applies to, and when it was last updated. In the list, "Applies to you" marks only sections with a restricted audience (a state, an employment type, or a location) that covers you. Rows for everyone carry no marker, so for Priya only CA-3.4 and CA-4.3 are marked. Section pages, search results, and the panel show the marker, yes or no, on every section. Section pages keep the body to the 760 px reading measure, at 18/28. A slim chapter navigator sits beside the body and stays in place as you scroll. A cited passage is set on the primary tint with a "Cited passage" label, a quote icon, and a slim cinnamon bar on its left edge, which keeps it distinct from hover and selected states. Color isn't the only signal. Arriving from a citation scrolls the page to the passage and moves focus to it. The passage is a region labeled "Cited passage", so a screen reader announces that label first. Rows are plain links in the Tab order with the visible focus ring, as in the directory. Search results list sections that apply to you first, then by relevance. On no results, "Ask the assistant" opens Ask with the search text in the composer, not sent. "Clear highlight" removes ?passage from the URL without adding a history entry. Every frame works: search, the Show filter, rows, back links, state rules, and Clear highlight. <a class="dv-oid" href="#1a">1a</a> can be viewed as Priya or Mateo with the liveAs setting in Tweaks.</p>
+<div class="dv-opts">
+<sc-for list="{{ options }}" as="o" hint-placeholder-count="2">
+<div class="dv-opt" id="{{ o.id }}">
+<div class="dv-olabel"><a class="dv-oid" href="{{ o.href }}">{{ o.id }}</a>{{ o.label }}</div>
+<sc-if value="{{ o.isSpec }}" hint-placeholder-val="{{ false }}"><p class="dv-note" style="margin:0;max-width:1740px">This component is shared with the assistant's source panel in the next phase. It opens beside the content and shows one cited passage, with the paragraph before and after it in muted text for context. The header and footer stay fixed while the passage scrolls inside the panel, so any length of passage fits. Errors appear inline in the panel. "Open in handbook" stays available on error, so there's always another way to reach the passage. The panel isn't modal. When it opens, focus moves to its title. Escape or the close button closes it, and focus returns to the citation that opened it. While it's open, it takes the right rail's place. Its eyebrow matches the section page: "Handbook CA-4.3 · California addendum" for addenda (no §), "Handbook §4.3 · Time off" for company sections.</p><div style="display:flex;gap:24px;flex-wrap:wrap">
+      <sc-for list="{{ specs }}" as="s" hint-placeholder-count="4">
+        <div style="display:flex;flex-direction:column;gap:8px">
+          <div class="dv-olabel">{{ s.label }}</div>
+          <div style="width:420px;height:640px;background:#fff;border:1px solid var(--border);border-radius:16px;overflow:hidden">
+            <dc-import name="Passage Panel" state="{{ s.state }}" eyebrow="{{ s.eyebrow }}" title="{{ s.title }}" applies="{{ s.applies }}" marker="{{ s.marker }}" updated="{{ s.updated }}" before="{{ s.before }}" cited="{{ s.cited }}" after="{{ s.after }}" on-retry="{{ s.retry }}" on-open="{{ s.noop }}" on-close="{{ s.noop }}" hint-size="420px,640px" style="height:100%"></dc-import>
+          </div>
+        </div>
+      </sc-for>
+    </div></sc-if>
+<sc-if value="{{ o.isFrames }}" hint-placeholder-val="{{ true }}">
+<div style="display:flex;flex-direction:column;gap:24px">
+<sc-for list="{{ o.cards }}" as="f" hint-placeholder-count="1">
+<div style="display:flex;flex-direction:column;gap:8px">
+<sc-if value="{{ f.hasSub }}" hint-placeholder-val="{{ false }}"><div class="dv-olabel">{{ f.sub }}</div></sc-if>
+<div class="dv-card" style="width:1440px">
+<div style="display:flex;height:900px;background:var(--surface);font-family:var(--font-sans);color:var(--ink)">
+  <aside style="width:248px;flex:none;display:flex;flex-direction:column;padding:28px 16px 20px 20px;box-sizing:border-box">
+    <div style="display:flex;align-items:center;gap:12px;padding:0 8px 32px"><img src="assets/logo-mark.svg" width="32" height="32" alt=""><div style="display:flex;flex-direction:column;gap:2px"><span style="font-size:16px;line-height:20px;font-weight:600;letter-spacing:-0.01em">Open Door</span><span style="font-size:12px;line-height:16px;color:var(--ink-muted)">Juniper Row</span></div></div>
+    <nav aria-label="Main" style="display:flex;flex-direction:column;gap:2px">
+      <sc-if value="{{ f.navAsk }}" hint-placeholder-val="{{ false }}"><a href="#" aria-current="page" style="display:flex;align-items:center;gap:12px;height:40px;padding:0 12px;border-radius:var(--radius-md);background:var(--primary-tint);color:var(--ink);font-size:14px;line-height:20px;font-weight:600;text-decoration:none" style-focus="outline:2px solid var(--focus-ring);outline-offset:2px"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z"></path></svg>Ask</a></sc-if>
+      <sc-if value="{{ f.navHb }}" hint-placeholder-val="{{ true }}"><a href="#" style="display:flex;align-items:center;gap:12px;height:40px;padding:0 12px;border-radius:var(--radius-md);color:var(--ink-nav);font-size:14px;line-height:20px;font-weight:500;text-decoration:none" style-hover="background:var(--neutral-hover);color:var(--ink)" style-focus="outline:2px solid var(--focus-ring);outline-offset:2px"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z"></path></svg>Ask</a></sc-if>
+      <a href="#" style="display:flex;align-items:center;gap:12px;height:40px;padding:0 12px;border-radius:var(--radius-md);color:var(--ink-nav);font-size:14px;line-height:20px;font-weight:500;text-decoration:none" style-hover="background:var(--neutral-hover);color:var(--ink)" style-focus="outline:2px solid var(--focus-ring);outline-offset:2px"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="4" rx="2"></rect><path d="M16 2v4M8 2v4M3 10h18"></path></svg>Time off</a>
+      <a href="#" style="display:flex;align-items:center;gap:12px;height:40px;padding:0 12px;border-radius:var(--radius-md);color:var(--ink-nav);font-size:14px;line-height:20px;font-weight:500;text-decoration:none" style-hover="background:var(--neutral-hover);color:var(--ink)" style-focus="outline:2px solid var(--focus-ring);outline-offset:2px"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"></path></svg>Directory</a>
+      <sc-if value="{{ f.navHb }}" hint-placeholder-val="{{ true }}"><a href="#" aria-current="page" onClick="{{ f.goHome }}" style="display:flex;align-items:center;gap:12px;height:40px;padding:0 12px;border-radius:var(--radius-md);background:var(--primary-tint);color:var(--ink);font-size:14px;line-height:20px;font-weight:600;text-decoration:none" style-focus="outline:2px solid var(--focus-ring);outline-offset:2px"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"></path><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"></path></svg>Handbook</a></sc-if>
+      <sc-if value="{{ f.navAsk }}" hint-placeholder-val="{{ false }}"><a href="#" onClick="{{ f.goHome }}" style="display:flex;align-items:center;gap:12px;height:40px;padding:0 12px;border-radius:var(--radius-md);color:var(--ink-nav);font-size:14px;line-height:20px;font-weight:500;text-decoration:none" style-hover="background:var(--neutral-hover);color:var(--ink)" style-focus="outline:2px solid var(--focus-ring);outline-offset:2px"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"></path><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"></path></svg>Handbook</a></sc-if>
+    </nav>
+    <div style="flex:1"></div>
+    <a href="#" style="display:flex;align-items:center;gap:12px;height:40px;padding:0 12px;margin-bottom:12px;border-radius:var(--radius-md);color:var(--ink-nav);font-size:14px;line-height:20px;font-weight:500;text-decoration:none" style-hover="background:var(--neutral-hover);color:var(--ink)" style-focus="outline:2px solid var(--focus-ring);outline-offset:2px"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="m16 18 6-6-6-6M8 6l-6 6 6 6"></path></svg>How it's built</a>
+    <button type="button" style="display:flex;align-items:center;gap:12px;width:100%;padding:12px 8px;border:0;border-top:1px solid var(--border);background:transparent;font-family:inherit;text-align:left;cursor:pointer;color:var(--ink)" style-hover="background:var(--neutral-hover)" style-focus="outline:2px solid var(--focus-ring);outline-offset:2px">
+      <span style="width:36px;height:36px;flex:none;border-radius:9999px;background:var(--primary-tint);display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:600">{{ f.pInitials }}</span>
+      <span style="flex:1;min-width:0;display:flex;flex-direction:column;gap:2px"><span style="font-size:14px;line-height:18px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ f.pName }}</span><span style="font-size:12px;line-height:16px;color:var(--ink-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ f.pTitle }}</span></span>
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="flex:none;color:var(--ink-muted)"><path d="m7 15 5 5 5-5M7 9l5-5 5 5"></path></svg>
+    </button>
+  </aside>
+  <main style="flex:1;min-width:0;padding:12px 12px 12px 0;box-sizing:border-box">
+    <div ref="{{ f.sheetRef }}" style="position:relative;height:100%;box-sizing:border-box;background:var(--surface-raised);border:1px solid var(--border);border-radius:var(--radius-xl);overflow:auto">
+
+      <sc-if value="{{ f.isHome }}" hint-placeholder-val="{{ true }}">
+      <div style="padding:40px 56px 72px">
+        <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:24px">
+          <div style="display:flex;flex-direction:column;gap:4px">
+            <h1 style="margin:0;font-size:var(--text-h1);line-height:var(--leading-h1);font-weight:600;letter-spacing:var(--tracking-h1)">Employee handbook</h1>
+            <p style="margin:0;font-size:var(--text-ui);line-height:20px;color:var(--ink-muted);font-variant-numeric:tabular-nums">Juniper Row · Version 2026.10 · Updated Sep 12, 2026</p>
+          </div>
+          <span style="display:inline-flex;align-items:center;gap:8px;height:28px;padding:0 12px;border:1px solid var(--border);border-radius:9999px;font-size:12px;line-height:16px;color:var(--ink-muted);font-variant-numeric:tabular-nums;white-space:nowrap"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><path d="M12 6v6l4 2"></path></svg>Sandbox resets in 21 h</span>
+        </div>
+        <p style="display:flex;align-items:center;gap:8px;margin:16px 0 0;font-size:var(--text-small);line-height:20px;color:var(--ink-muted)"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="flex:none"><circle cx="12" cy="12" r="10"></circle><path d="M12 16v-4M12 8h.01"></path></svg>Juniper Row is a fictional company. This handbook is demo content, not legal advice.</p>
+
+        <div role="search" style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-top:24px">
+          <div style="position:relative;width:360px;max-width:100%">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="position:absolute;left:12px;top:12px;color:var(--ink-muted);pointer-events:none"><circle cx="11" cy="11" r="8"></circle><path d="m21 21-4.3-4.3"></path></svg>
+            <input type="search" aria-label="Search the handbook" value="{{ f.query }}" onChange="{{ f.onQuery }}" placeholder="Search the handbook" style="width:100%;box-sizing:border-box;height:40px;padding:0 40px 0 36px;border:1px solid var(--input-border);border-radius:var(--radius-md);background:var(--surface-raised);font-family:var(--font-sans);font-size:var(--text-ui);color:var(--ink);outline:0;transition:border-color 150ms,box-shadow 150ms" style-hover="border-color:var(--input-border-hover)" style-focus="border-color:var(--focus-ring);box-shadow:var(--shadow-focus-halo)">
+            <sc-if value="{{ f.hasQuery }}" hint-placeholder-val="{{ false }}"><button type="button" aria-label="Clear search" onClick="{{ f.clearQuery }}" style="position:absolute;right:4px;top:4px;width:32px;height:32px;border:0;border-radius:var(--radius-sm);background:transparent;color:var(--ink-muted);display:flex;align-items:center;justify-content:center;cursor:pointer" style-hover="background:var(--neutral-hover);color:var(--ink)" style-focus="outline:2px solid var(--focus-ring);outline-offset:0"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"></path></svg></button></sc-if>
+          </div>
+          <div style="position:relative" onKeyDown="{{ f.filt.onKey }}">
+            <button type="button" aria-haspopup="listbox" aria-expanded="{{ f.filt.expanded }}" onClick="{{ f.filt.toggle }}" style="height:40px;padding:0 10px 0 14px;border:1px solid {{ f.filt.border }};border-radius:var(--radius-md);background:{{ f.filt.bg }};display:inline-flex;align-items:center;gap:6px;font-family:var(--font-sans);font-size:var(--text-ui);line-height:20px;color:var(--ink);cursor:pointer;white-space:nowrap" style-hover="border-color:var(--border-strong-hover)" style-focus="outline:2px solid var(--focus-ring);outline-offset:2px"><span style="color:var(--ink-muted)">Show</span><span style="font-weight:600">{{ f.filt.valueText }}</span><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="color:var(--ink-muted)"><path d="m6 9 6 6 6-6"></path></svg></button>
+            <sc-if value="{{ f.filt.open }}" hint-placeholder-val="{{ false }}">
+              <div role="listbox" aria-label="Show" style="position:absolute;top:44px;left:0;z-index:5;min-width:240px;padding:4px;background:var(--surface-raised);border:1px solid var(--border);border-radius:var(--radius-md);box-shadow:var(--shadow-md);display:flex;flex-direction:column;gap:2px">
+                <sc-for list="{{ f.filt.options }}" as="op" hint-placeholder-count="2">
+                  <button type="button" role="option" aria-selected="{{ op.selAttr }}" onClick="{{ op.pick }}" style="display:flex;align-items:center;gap:8px;width:100%;height:36px;padding:0 10px 0 8px;border:0;border-radius:var(--radius-xs);background:{{ op.bg }};font-family:var(--font-sans);font-size:var(--text-ui);color:var(--ink);text-align:left;cursor:pointer" style-hover="background:var(--neutral-hover)" style-focus="outline:2px solid var(--focus-ring);outline-offset:-2px">
+                    <span style="width:16px;height:16px;flex:none;display:flex;color:var(--primary)"><sc-if value="{{ op.sel }}" hint-placeholder-val="{{ false }}"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"></path></svg></sc-if></span>
+                    <span style="flex:1">{{ op.label }}</span><span style="color:var(--ink-muted);font-variant-numeric:tabular-nums">{{ op.count }}</span>
+                  </button>
+                </sc-for>
+              </div>
+            </sc-if>
+          </div>
+        </div>
+
+        <sc-if value="{{ f.showList }}" hint-placeholder-val="{{ true }}">
+        <div aria-busy="{{ f.busyAttr }}" style="margin-top:24px">
+          <div aria-hidden="true" style="display:grid;grid-template-columns:72px minmax(0,1fr) 220px 136px 128px 16px;column-gap:20px;align-items:center;height:40px;padding:0 12px;border-bottom:1px solid var(--border);font-size:var(--text-small);line-height:20px;color:var(--ink-muted)"><span style="grid-column:span 2">Section</span><span>Applies to</span><span></span><span>Last updated</span><span></span></div>
+          <sc-if value="{{ f.listLoading }}" hint-placeholder-val="{{ false }}">
+            <sc-for list="{{ f.skGroups }}" as="sg" hint-placeholder-count="3">
+              <div aria-hidden="true">
+                <div style="display:grid;grid-template-columns:72px minmax(0,1fr);column-gap:20px;align-items:center;height:62px;padding:0 12px;border-bottom:1px solid var(--border)"><span style="height:12px;width:16px;border-radius:6px;background:var(--surface-hover);align-self:end;margin-bottom:16px"></span><span style="height:12px;width:{{ sg.w }};border-radius:6px;background:var(--surface-hover);align-self:end;margin-bottom:16px"></span></div>
+                <sc-for list="{{ sg.rows }}" as="sk" hint-placeholder-count="4">
+                  <div style="display:grid;grid-template-columns:72px minmax(0,1fr) 220px 136px 128px 16px;column-gap:20px;align-items:center;height:48px;padding:0 12px;border-bottom:1px solid var(--border-subtle)"><span style="height:12px;width:28px;border-radius:6px;background:var(--surface-hover)"></span><span style="height:12px;width:{{ sk.a }};border-radius:6px;background:var(--surface-hover)"></span><span style="height:12px;width:{{ sk.b }};border-radius:6px;background:var(--surface-hover)"></span><span></span><span style="height:12px;width:84px;border-radius:6px;background:var(--surface-hover)"></span><span></span></div>
+                </sc-for>
+              </div>
+            </sc-for>
+            <span style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)">Loading the handbook</span>
+          </sc-if>
+          <sc-if value="{{ f.listReady }}" hint-placeholder-val="{{ true }}">
+          <div>
+            <sc-for list="{{ f.groups }}" as="g" hint-placeholder-count="3">
+              <section aria-labelledby="{{ g.hid }}">
+                <sc-if value="{{ g.firstAd }}" hint-placeholder-val="{{ false }}"><div style="display:flex;align-items:baseline;gap:12px;flex-wrap:wrap;margin-top:48px;padding:0 12px"><span style="font-size:var(--text-h2);line-height:var(--leading-h2);font-weight:600">State addenda</span><span style="font-size:var(--text-ui);line-height:20px;color:var(--ink-muted)">Each addendum section supplements the company section with the same number.</span></div></sc-if>
+                <div style="display:grid;grid-template-columns:72px minmax(0,1fr);column-gap:20px;align-items:baseline;padding:28px 12px 10px;border-bottom:1px solid var(--border)">
+                  <span style="font-size:15px;line-height:24px;font-weight:600;color:var(--ink-muted);font-variant-numeric:tabular-nums">{{ g.num }}</span>
+                  <div style="display:flex;align-items:baseline;gap:12px;flex-wrap:wrap;min-width:0"><h2 id="{{ g.hid }}" style="margin:0;font-size:15px;line-height:24px;font-weight:600">{{ g.title }}</h2><sc-if value="{{ g.hasNote }}" hint-placeholder-val="{{ false }}"><span style="font-size:var(--text-small);line-height:20px;color:var(--ink-muted)">{{ g.note }}</span></sc-if></div>
+                </div>
+                <ul role="list" style="margin:0;padding:0;list-style:none">
+                  <sc-for list="{{ g.rows }}" as="r" hint-placeholder-count="4">
+                    <li>
+                      <a data-row="true" href="{{ r.href }}" onClick="{{ r.open }}" aria-label="{{ r.aria }}" style="display:grid;grid-template-columns:72px minmax(0,1fr) 220px 136px 128px 16px;column-gap:20px;align-items:center;min-height:48px;padding:0 12px;border-bottom:1px solid var(--border-subtle);color:var(--ink);text-decoration:none;transition:background-color 150ms" style-hover="background:var(--primary-tint);color:var(--ink)" style-focus="outline:2px solid var(--focus-ring);outline-offset:-2px">
+                        <span style="font-size:var(--text-ui);line-height:20px;color:var(--ink-muted);font-variant-numeric:tabular-nums">{{ r.num }}</span>
+                        <span style="font-size:15px;line-height:24px;padding:12px 0">{{ r.title }}</span>
+                        <span style="font-size:var(--text-ui);line-height:20px;color:var(--ink-muted)">{{ r.applies }}</span>
+                        <span><sc-if value="{{ r.yes }}" hint-placeholder-val="{{ true }}"><span style="display:inline-flex;align-items:center;gap:6px;font-size:13px;line-height:20px;white-space:nowrap"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color:var(--primary)"><path d="M20 6 9 17l-5-5"></path></svg>Applies to you</span></sc-if></span>
+                        <span style="font-size:var(--text-ui);line-height:20px;color:var(--ink-muted);font-variant-numeric:tabular-nums;white-space:nowrap">{{ r.date }}</span>
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="color:var(--ink-muted)"><path d="m9 18 6-6-6-6"></path></svg>
+                      </a>
+                    </li>
+                  </sc-for>
+                </ul>
+              </section>
+            </sc-for>
+          </div>
+          </sc-if>
+        </div>
+        </sc-if>
+
+        <sc-if value="{{ f.showResults }}" hint-placeholder-val="{{ false }}">
+        <div style="margin-top:24px">
+          <p role="status" style="margin:0;padding:0 12px 12px;border-bottom:1px solid var(--border);font-size:var(--text-ui);line-height:20px;color:var(--ink-muted)">{{ f.resText }}</p>
+          <ul role="list" style="margin:0;padding:0;list-style:none">
+            <sc-for list="{{ f.results }}" as="r" hint-placeholder-count="3">
+              <li>
+                <a data-row="true" href="{{ r.href }}" onClick="{{ r.open }}" style="display:grid;grid-template-columns:72px minmax(0,1fr) 16px;column-gap:20px;align-items:start;padding:16px 12px 18px;border-bottom:1px solid var(--border-subtle);color:var(--ink);text-decoration:none;transition:background-color 150ms" style-hover="background:var(--primary-tint);color:var(--ink)" style-focus="outline:2px solid var(--focus-ring);outline-offset:-2px">
+                  <span style="font-size:var(--text-ui);line-height:24px;color:var(--ink-muted);font-variant-numeric:tabular-nums">{{ r.num }}</span>
+                  <span style="display:flex;flex-direction:column;gap:6px;min-width:0">
+                    <span style="font-size:15px;line-height:24px"><span style="font-weight:600">{{ r.title }}</span><span style="color:var(--ink-muted)"> · {{ r.group }}</span></span>
+                    <sc-if value="{{ r.hasEx }}" hint-placeholder-val="{{ true }}"><span style="font-size:var(--text-ui);line-height:22px;color:var(--ink-muted);max-width:760px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ r.pre }}<mark style="padding:0 2px;border-radius:3px;font-weight:600">{{ r.hit }}</mark>{{ r.post }}</span></sc-if>
+                    <span style="display:flex;flex-wrap:wrap;align-items:center;gap:8px 14px;margin-top:2px">
+                      <span style="display:inline-flex;align-items:center;gap:5px;height:24px;padding:0 8px;border:1px solid var(--border-strong);border-radius:var(--radius-xs);font-size:13px;line-height:20px;white-space:nowrap"><span style="color:var(--ink-muted)">Applies to:</span><span style="font-weight:600">{{ r.applies }}</span></span>
+                      <sc-if value="{{ r.yes }}" hint-placeholder-val="{{ true }}"><span style="display:inline-flex;align-items:center;gap:6px;font-size:13px;line-height:20px;white-space:nowrap"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color:var(--primary)"><path d="M20 6 9 17l-5-5"></path></svg>Applies to you</span></sc-if>
+                      <sc-if value="{{ r.no }}" hint-placeholder-val="{{ false }}"><span style="display:inline-flex;align-items:center;gap:6px;font-size:13px;line-height:20px;color:var(--ink-muted);white-space:nowrap"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"></path></svg>Doesn't apply to you</span></sc-if>
+                      <span style="font-size:13px;line-height:20px;color:var(--ink-muted);font-variant-numeric:tabular-nums;white-space:nowrap">Last updated {{ r.date }}</span>
+                    </span>
+                  </span>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="color:var(--ink-muted);margin-top:4px"><path d="m9 18 6-6-6-6"></path></svg>
+                </a>
+              </li>
+            </sc-for>
+          </ul>
+        </div>
+        </sc-if>
+
+        <sc-if value="{{ f.noResults }}" hint-placeholder-val="{{ false }}">
+          <div role="status" style="display:flex;flex-direction:column;align-items:center;gap:16px;padding:72px 0;text-align:center">
+            <p style="margin:0;font-size:var(--text-body-lg);line-height:var(--leading-body-lg)">{{ f.emptyText }}</p>
+            <div style="display:flex;gap:12px;flex-wrap:wrap;justify-content:center">
+              <button type="button" onClick="{{ f.clearQuery }}" style="height:40px;padding:0 16px;border:1px solid var(--border-strong);border-radius:var(--radius-md);background:var(--surface-raised);color:var(--ink);font-family:var(--font-sans);font-size:var(--text-ui);font-weight:600;cursor:pointer" style-hover="background:var(--surface-hover);border-color:var(--border-strong-hover)" style-focus="outline:2px solid var(--focus-ring);outline-offset:2px">Clear search</button>
+              <a href="#" onClick="{{ f.goAsk }}" style="display:inline-flex;align-items:center;gap:8px;height:40px;padding:0 14px 0 16px;border-radius:var(--radius-md);color:var(--primary);font-size:var(--text-ui);line-height:20px;font-weight:600;text-decoration:none" style-hover="background:var(--primary-tint);color:var(--primary-hover)" style-focus="outline:2px solid var(--focus-ring);outline-offset:2px">Ask the assistant<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M12 5l7 7-7 7"></path></svg></a>
+            </div>
+          </div>
+        </sc-if>
+      </div>
+      </sc-if>
+
+      <sc-if value="{{ f.isSection }}" hint-placeholder-val="{{ false }}">
+      <div style="padding:32px 56px 80px">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:24px">
+          <a href="/handbook" onClick="{{ f.goHome }}" style="display:inline-flex;align-items:center;gap:6px;height:32px;padding:0 10px 0 6px;margin-left:-6px;border-radius:var(--radius-sm);color:var(--ink-nav);font-size:var(--text-ui);font-weight:500;text-decoration:none" style-hover="background:var(--neutral-hover);color:var(--ink)" style-focus="outline:2px solid var(--focus-ring);outline-offset:2px"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="m12 19-7-7 7-7M19 12H5"></path></svg>Handbook</a>
+          <span style="display:inline-flex;align-items:center;gap:8px;height:28px;padding:0 12px;border:1px solid var(--border);border-radius:9999px;font-size:12px;line-height:16px;color:var(--ink-muted);font-variant-numeric:tabular-nums;white-space:nowrap"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><path d="M12 6v6l4 2"></path></svg>Sandbox resets in 21 h</span>
+        </div>
+
+        <sc-if value="{{ f.secLoading }}" hint-placeholder-val="{{ false }}">
+          <div aria-busy="true" style="display:grid;grid-template-columns:minmax(0,760px) 220px;column-gap:72px;margin-top:32px">
+            <div aria-hidden="true" style="display:flex;flex-direction:column">
+              <span style="height:12px;width:120px;border-radius:6px;background:var(--surface-hover)"></span>
+              <span style="height:28px;width:260px;margin-top:16px;border-radius:8px;background:var(--surface-hover)"></span>
+              <span style="height:12px;width:380px;margin-top:20px;border-radius:6px;background:var(--surface-hover)"></span>
+              <span style="height:12px;width:440px;margin-top:20px;border-radius:6px;background:var(--surface-hover)"></span>
+              <sc-for list="{{ f.skPara }}" as="sp" hint-placeholder-count="10"><span style="height:14px;width:{{ sp.w }};margin-top:{{ sp.m }};border-radius:6px;background:var(--surface-hover)"></span></sc-for>
+            </div>
+            <div aria-hidden="true" style="display:flex;flex-direction:column;gap:14px;padding:4px 10px">
+              <span style="height:12px;width:120px;border-radius:6px;background:var(--surface-hover)"></span>
+              <span style="height:12px;width:150px;border-radius:6px;background:var(--surface-hover)"></span>
+              <span style="height:12px;width:110px;border-radius:6px;background:var(--surface-hover)"></span>
+              <span style="height:12px;width:140px;border-radius:6px;background:var(--surface-hover)"></span>
+            </div>
+            <span style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)">Loading section</span>
+          </div>
+        </sc-if>
+
+        <sc-if value="{{ f.secReady }}" hint-placeholder-val="{{ true }}">
+        <div style="display:grid;grid-template-columns:minmax(0,760px) 220px;column-gap:72px;align-items:start;margin-top:32px">
+          <article aria-labelledby="{{ f.sec.hid }}" style="min-width:0">
+            <header style="display:flex;flex-direction:column;gap:6px">
+              <p style="margin:0;font-size:var(--text-ui);line-height:20px;color:var(--ink-muted);font-variant-numeric:tabular-nums">{{ f.sec.eyebrow }}</p>
+              <h1 id="{{ f.sec.hid }}" style="margin:0;font-size:var(--text-h1);line-height:var(--leading-h1);font-weight:600;letter-spacing:var(--tracking-h1)">{{ f.sec.title }}</h1>
+              <div style="display:flex;flex-wrap:wrap;align-items:center;gap:8px 16px;margin-top:8px">
+                <span style="display:inline-flex;align-items:center;gap:5px;height:24px;padding:0 8px;border:1px solid var(--border-strong);border-radius:var(--radius-xs);font-size:13px;line-height:20px;white-space:nowrap"><span style="color:var(--ink-muted)">Applies to:</span><span style="font-weight:600">{{ f.sec.applies }}</span></span>
+                <sc-if value="{{ f.sec.yes }}" hint-placeholder-val="{{ true }}"><span style="display:inline-flex;align-items:center;gap:6px;font-size:13px;line-height:20px;white-space:nowrap"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color:var(--primary)"><path d="M20 6 9 17l-5-5"></path></svg>Applies to you</span></sc-if>
+                <sc-if value="{{ f.sec.no }}" hint-placeholder-val="{{ false }}"><span style="display:inline-flex;align-items:center;gap:6px;font-size:13px;line-height:20px;color:var(--ink-muted);white-space:nowrap"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"></path></svg>Doesn't apply to you</span></sc-if>
+                <span style="font-size:13px;line-height:20px;color:var(--ink-muted);font-variant-numeric:tabular-nums;white-space:nowrap">Last updated {{ f.sec.date }}</span>
+              </div>
+              <p style="display:flex;align-items:center;gap:8px;margin:12px 0 0;font-size:var(--text-small);line-height:20px;color:var(--ink-muted)"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="flex:none"><circle cx="12" cy="12" r="10"></circle><path d="M12 16v-4M12 8h.01"></path></svg>Juniper Row is a fictional company. This handbook is demo content, not legal advice.</p>
+            </header>
+
+            <sc-if value="{{ f.sec.notApply }}" hint-placeholder-val="{{ false }}">
+              <div style="display:flex;gap:12px;align-items:flex-start;margin-top:24px;padding:14px 16px;background:var(--surface-sunken);border:1px solid var(--border);border-radius:var(--radius-md)">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="flex:none;margin-top:2px;color:var(--ink-muted)"><circle cx="12" cy="12" r="10"></circle><path d="M12 16v-4M12 8h.01"></path></svg>
+                <div style="display:flex;flex-direction:column;gap:4px">
+                  <p style="margin:0;font-size:var(--text-ui);line-height:20px">{{ f.sec.notApplyText }}</p>
+                  <a href="{{ f.sec.seeHref }}" onClick="{{ f.sec.seeOpen }}" style="align-self:flex-start;font-size:var(--text-ui);line-height:20px;font-weight:600;color:var(--primary);text-decoration:underline;text-decoration-thickness:1px;text-underline-offset:3px;border-radius:2px" style-hover="color:var(--primary-hover)" style-focus="outline:2px solid var(--focus-ring);outline-offset:2px">{{ f.sec.seeText }}</a>
+                </div>
+              </div>
+            </sc-if>
+
+            <sc-if value="{{ f.sec.hasLinks }}" hint-placeholder-val="{{ false }}">
+              <div style="margin-top:24px;border:1px solid var(--border);border-radius:var(--radius-lg)">
+                <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;padding:12px 16px 6px"><h2 style="margin:0;font-size:var(--text-small);line-height:20px;font-weight:600">{{ f.sec.linksTitle }}</h2><sc-if value="{{ f.sec.hasLinksNote }}" hint-placeholder-val="{{ false }}"><span style="font-size:var(--text-small);line-height:20px;color:var(--ink-muted)">{{ f.sec.linksNote }}</span></sc-if></div>
+                <ul role="list" style="margin:0;padding:0 4px 4px;list-style:none">
+                  <sc-for list="{{ f.sec.links }}" as="l" hint-placeholder-count="2">
+                    <li><a href="{{ l.href }}" onClick="{{ l.open }}" style="display:flex;align-items:center;gap:12px;min-height:44px;padding:0 12px;border-radius:var(--radius-md);color:var(--ink);text-decoration:none;transition:background-color 150ms" style-hover="background:var(--primary-tint);color:var(--ink)" style-focus="outline:2px solid var(--focus-ring);outline-offset:-2px">
+                      <span style="flex:1;min-width:0;font-size:15px;line-height:24px">{{ l.label }}<span style="color:var(--ink-muted)">{{ l.meta }}</span></span>
+                      <sc-if value="{{ l.yes }}" hint-placeholder-val="{{ false }}"><span style="display:inline-flex;align-items:center;gap:6px;font-size:13px;line-height:20px;white-space:nowrap"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color:var(--primary)"><path d="M20 6 9 17l-5-5"></path></svg>Applies to you</span></sc-if>
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="flex:none;color:var(--ink-muted)"><path d="m9 18 6-6-6-6"></path></svg>
+                    </a></li>
+                  </sc-for>
+                </ul>
+              </div>
+            </sc-if>
+
+            <div style="margin-top:32px">
+              <sc-for list="{{ f.sec.blocks }}" as="b" hint-placeholder-count="4">
+                <sc-if value="{{ b.isH2 }}" hint-placeholder-val="{{ false }}"><h2 style="margin:32px 0 8px;font-size:var(--text-h2);line-height:var(--leading-h2);font-weight:600">{{ b.t }}</h2></sc-if>
+                <sc-if value="{{ b.isP }}" hint-placeholder-val="{{ true }}"><p style="margin:0 0 16px;font-size:var(--text-body-lg);line-height:var(--leading-body-lg);text-wrap:pretty">{{ b.t }}</p></sc-if>
+                <sc-if value="{{ b.isUl }}" hint-placeholder-val="{{ false }}"><ul style="margin:0 0 16px;padding-left:24px;font-size:var(--text-body-lg);line-height:var(--leading-body-lg);display:flex;flex-direction:column;gap:4px"><sc-for list="{{ b.items }}" as="it" hint-placeholder-count="3"><li>{{ it.t }}</li></sc-for></ul></sc-if>
+                <sc-if value="{{ b.isCited }}" hint-placeholder-val="{{ false }}">
+                  <div data-cited="true" tabindex="-1" role="region" aria-labelledby="{{ b.lid }}" style="position:relative;margin:0 -20px 16px;padding:10px 20px 18px;background:var(--primary-tint);border-radius:var(--radius-md);outline:0"><span aria-hidden="true" style="position:absolute;left:0;top:8px;bottom:8px;width:3px;border-radius:2px;background:var(--marker)"></span>
+                    <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:4px">
+                      <span id="{{ b.lid }}" style="display:inline-flex;align-items:center;gap:8px;font-size:13px;line-height:20px;font-weight:600;color:var(--ink)"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="color:var(--primary)"><path d="M16 3a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2 1 1 0 0 1 1 1v1a2 2 0 0 1-2 2 1 1 0 0 0-1 1v2a1 1 0 0 0 1 1 6 6 0 0 0 6-6V5a2 2 0 0 0-2-2z"></path><path d="M5 3a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2 1 1 0 0 1 1 1v1a2 2 0 0 1-2 2 1 1 0 0 0-1 1v2a1 1 0 0 0 1 1 6 6 0 0 0 6-6V5a2 2 0 0 0-2-2z"></path></svg>Cited passage</span>
+                      <button type="button" onClick="{{ b.clear }}" style="display:inline-flex;align-items:center;gap:6px;height:28px;padding:0 8px;margin-right:-8px;border:0;border-radius:var(--radius-sm);background:transparent;font-family:var(--font-sans);font-size:13px;line-height:20px;font-weight:600;color:var(--ink);cursor:pointer" style-hover="background:var(--surface-raised)" style-focus="outline:2px solid var(--focus-ring);outline-offset:2px"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"></path></svg>Clear highlight</button>
+                    </div>
+                    <p style="margin:0;font-size:var(--text-body-lg);line-height:var(--leading-body-lg);color:var(--ink);text-wrap:pretty">{{ b.t }}</p>
+                  </div>
+                </sc-if>
+              </sc-for>
+              <sc-if value="{{ f.sec.noBody }}" hint-placeholder-val="{{ false }}"><p style="margin:0;font-size:var(--text-ui);line-height:20px;color:var(--ink-muted)">Sample text for this section isn't written yet.</p></sc-if>
+            </div>
+
+            <sc-if value="{{ f.sec.hasSources }}" hint-placeholder-val="{{ false }}">
+              <div style="display:flex;flex-direction:column;gap:4px;margin-top:40px;padding-top:16px;border-top:1px solid var(--border-subtle)">
+                <h2 style="margin:0;font-size:var(--text-small);line-height:20px;font-weight:600">Sources</h2>
+                <p style="margin:0;font-size:var(--text-small);line-height:20px;color:var(--ink-muted)">{{ f.sec.sources }}</p>
+              </div>
+            </sc-if>
+
+            <nav aria-label="Previous and next sections" style="display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:16px;margin-top:48px">
+              <sc-if value="{{ f.sec.prev.has }}" hint-placeholder-val="{{ true }}"><a href="{{ f.sec.prev.href }}" onClick="{{ f.sec.prev.open }}" style="display:flex;flex-direction:column;gap:2px;padding:12px 16px;border:1px solid var(--border);border-radius:var(--radius-md);color:var(--ink);text-decoration:none;transition:background-color 150ms" style-hover="background:var(--primary-tint);border-color:var(--primary-tint);color:var(--ink)" style-focus="outline:2px solid var(--focus-ring);outline-offset:2px"><span style="display:inline-flex;align-items:center;gap:6px;font-size:13px;line-height:20px;color:var(--ink-muted)"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="m12 19-7-7 7-7M19 12H5"></path></svg>Previous</span><span style="font-size:15px;line-height:24px;font-weight:600">{{ f.sec.prev.label }}</span></a></sc-if>
+              <sc-if value="{{ f.sec.prev.none }}" hint-placeholder-val="{{ false }}"><span></span></sc-if>
+              <sc-if value="{{ f.sec.next.has }}" hint-placeholder-val="{{ true }}"><a href="{{ f.sec.next.href }}" onClick="{{ f.sec.next.open }}" style="display:flex;flex-direction:column;align-items:flex-end;gap:2px;padding:12px 16px;border:1px solid var(--border);border-radius:var(--radius-md);color:var(--ink);text-decoration:none;text-align:right;transition:background-color 150ms" style-hover="background:var(--primary-tint);border-color:var(--primary-tint);color:var(--ink)" style-focus="outline:2px solid var(--focus-ring);outline-offset:2px"><span style="display:inline-flex;align-items:center;gap:6px;font-size:13px;line-height:20px;color:var(--ink-muted)">Next<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M12 5l7 7-7 7"></path></svg></span><span style="font-size:15px;line-height:24px;font-weight:600">{{ f.sec.next.label }}</span></a></sc-if>
+            </nav>
+          </article>
+
+          <nav aria-labelledby="{{ f.sec.navId }}" style="position:sticky;top:24px;display:flex;flex-direction:column;gap:6px;padding-top:2px">
+            <p id="{{ f.sec.navId }}" style="margin:0;padding:0 10px;font-size:var(--text-small);line-height:20px;color:var(--ink-muted)">{{ f.sec.navTitle }}</p>
+            <ul role="list" style="margin:0;padding:0;list-style:none;display:flex;flex-direction:column;gap:2px">
+              <sc-for list="{{ f.sec.nav }}" as="n" hint-placeholder-count="5">
+                <li><a href="{{ n.href }}" aria-current="{{ n.cur }}" onClick="{{ n.open }}" style="display:grid;grid-template-columns:52px minmax(0,1fr);align-items:baseline;padding:6px 10px;border-radius:var(--radius-md);background:{{ n.bg }};color:var(--ink);font-size:var(--text-ui);line-height:20px;font-weight:{{ n.w }};text-decoration:none" style-hover="background:var(--neutral-hover);color:var(--ink)" style-focus="outline:2px solid var(--focus-ring);outline-offset:-2px"><span style="color:var(--ink-muted);font-weight:400;font-variant-numeric:tabular-nums">{{ n.num }}</span><span>{{ n.title }}</span></a></li>
+              </sc-for>
+            </ul>
+          </nav>
+        </div>
+        </sc-if>
+      </div>
+      </sc-if>
+
+      <sc-if value="{{ f.isMissing }}" hint-placeholder-val="{{ false }}">
+        <div style="height:100%;box-sizing:border-box;display:flex;align-items:center;justify-content:center;padding:48px">
+          <div style="max-width:480px;display:flex;flex-direction:column;align-items:center;gap:12px;text-align:center;margin-top:-64px">
+            <h1 style="margin:0;font-size:var(--text-h1);line-height:var(--leading-h1);font-weight:600;letter-spacing:var(--tracking-h1);text-wrap:balance">This section isn't in your handbook version.</h1>
+            <p style="margin:0;font-size:var(--text-body);line-height:var(--leading-body);color:var(--ink-muted);text-wrap:pretty">There's no §8.2 in version 2026.10 of the Juniper Row handbook.</p>
+            <a href="/handbook" onClick="{{ f.goHome }}" style="display:inline-flex;align-items:center;gap:6px;margin-top:12px;font-size:var(--text-body);line-height:var(--leading-body);font-weight:600;color:var(--primary);text-decoration:underline;text-decoration-thickness:1px;text-underline-offset:3px;border-radius:2px" style-hover="color:var(--primary-hover)" style-focus="outline:2px solid var(--focus-ring);outline-offset:2px"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="m12 19-7-7 7-7M19 12H5"></path></svg>Back to the handbook</a>
+          </div>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{ f.isAssistant }}" hint-placeholder-val="{{ false }}">
+        <div style="height:100%;display:flex">
+          <div style="flex:1;min-width:0;display:flex;flex-direction:column;padding:28px 40px 32px 72px;box-sizing:border-box">
+            <div style="display:flex;justify-content:flex-end"><span style="display:inline-flex;align-items:center;gap:8px;height:28px;padding:0 12px;border:1px solid var(--border);border-radius:9999px;font-size:12px;line-height:16px;color:var(--ink-muted);font-variant-numeric:tabular-nums;white-space:nowrap"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><path d="M12 6v6l4 2"></path></svg>Sandbox resets in 21 h</span></div>
+            <div style="flex:1;width:100%;max-width:760px;display:flex;flex-direction:column;gap:12px;margin-top:32px">
+              <div aria-hidden="true" style="align-self:flex-end;width:260px;height:44px;border-radius:14px;background:var(--surface-hover)"></div>
+              <div aria-hidden="true" style="height:20px"></div>
+              <div aria-hidden="true" style="width:100%;height:12px;border-radius:6px;background:var(--surface-hover)"></div>
+              <div aria-hidden="true" style="width:94%;height:12px;border-radius:6px;background:var(--surface-hover)"></div>
+              <div style="display:flex;align-items:center;gap:8px"><div aria-hidden="true" style="width:58%;height:12px;border-radius:6px;background:var(--surface-hover)"></div><button type="button" onClick="{{ f.togglePanel }}" aria-expanded="{{ f.panelExp }}" aria-label="Source: Handbook CA-4.3, California addendum" style="height:24px;padding:0 8px;border:1px solid var(--border-strong);border-radius:var(--radius-xs);background:{{ f.chipBg }};font-family:var(--font-sans);font-size:12px;line-height:16px;color:var(--ink);cursor:pointer;font-variant-numeric:tabular-nums" style-hover="border-color:var(--border-strong-hover)" style-focus="outline:2px solid var(--focus-ring);outline-offset:2px">CA-4.3</button></div>
+              <div aria-hidden="true" style="height:12px"></div>
+              <div aria-hidden="true" style="width:100%;height:12px;border-radius:6px;background:var(--surface-hover)"></div>
+              <div aria-hidden="true" style="width:72%;height:12px;border-radius:6px;background:var(--surface-hover)"></div>
+              <div aria-hidden="true" style="width:240px;height:88px;margin-top:16px;border:1px solid var(--border);border-radius:var(--radius-lg)"></div>
+            </div>
+            <div aria-hidden="true" style="width:100%;max-width:760px;height:112px;box-sizing:border-box;border:1px solid var(--input-border);border-radius:var(--radius-lg)"></div>
+          </div>
+          <sc-if value="{{ f.panelShown }}" hint-placeholder-val="{{ true }}">
+            <div style="width:420px;flex:none;height:100%;border-left:1px solid var(--border)">
+              <dc-import name="Passage Panel" state="{{ f.pState }}" on-close="{{ f.closePanel }}" on-open="{{ f.openInHandbook }}" on-retry="{{ f.retryPanel }}" hint-size="420px,100%" style="height:100%"></dc-import>
+            </div>
+          </sc-if>
+        </div>
+      </sc-if>
+
+    </div>
+  </main>
+</div>
+</div>
+</div>
+</sc-for>
+</div>
+</sc-if>
+</div>
+</sc-for>
+</div>
+
+<p class="dv-next">Try next: "design the conversation view and the citation chip" · "show the handbook on a phone" · "add an HR view of the unanswered-questions report"</p>
+</section>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;liveAs&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;Priya&quot;,&quot;Mateo&quot;],&quot;default&quot;:&quot;Priya&quot;,&quot;tsType&quot;:&quot;string&quot;}}">
+class Component extends DCLogic {
+  state = { fs: {}, ps: {} };
+  sheets = {};
+  pend = {};
+  init() {
+    const CH = { '1': 'Welcome', '2': 'Working here', '3': 'Hours and pay', '4': 'Time off', '5': 'Leaves of absence', '6': 'Health, safety, and support', '7': 'Privacy and confidential cases' };
+    const AD = { CA: ['California', 'California addendum'], CO: ['Colorado', 'Colorado addendum'], TX: ['Texas', 'Texas addendum'] };
+    const raw = [
+      ['1.1', 'About this handbook', '', 'Jan 6'], ['1.2', 'Employment types', '', 'Jan 6'],
+      ['2.1', 'Equal opportunity', '', 'Mar 2'], ['2.2', 'Harassment and discrimination', '', 'Aug 3'], ['2.3', 'Raising a concern', '', 'Aug 3'], ['2.4', 'Workplace conduct', '', 'Mar 2'],
+      ['3.1', 'Schedules and timekeeping', '', 'Jun 18'], ['3.2', 'Overtime', 'H', 'Sep 12'], ['3.3', 'Meal and rest breaks', 'H', 'Jun 18'], ['3.4', 'Paydays and final pay', '', 'Jun 18'],
+      ['4.1', 'Paid time off', '', 'Sep 12'], ['4.2', 'Holidays', '', 'Jan 6'], ['4.3', 'Sick leave', '', 'Aug 3'], ['4.4', 'Bereavement leave', '', 'Mar 2'], ['4.5', 'Jury duty and voting', '', 'Mar 2'],
+      ['5.1', 'Family and medical leave', '', 'Jun 18'], ['5.2', 'Parental leave', '', 'Sep 12'], ['5.3', 'Accommodations', '', 'Aug 3'],
+      ['6.1', 'Workplace safety', '', 'Apr 14'], ['6.2', 'Employee Assistance Program', '', 'Apr 14'],
+      ['7.1', 'Your personal information', '', 'Aug 3'], ['7.2', 'How confidential HR cases work', '', 'Sep 12'],
+      ['CA-3.2', 'Overtime', 'H-CA', 'Sep 12'], ['CA-3.3', 'Meal and rest breaks', 'H-CA', 'Jun 18'], ['CA-3.4', 'Final pay', 'CA', 'Jun 18'], ['CA-4.3', 'Sick leave', 'CA', 'Sep 12'],
+      ['CO-3.2', 'Overtime', 'H-CO', 'Sep 12'], ['CO-3.3', 'Meal and rest breaks', 'H-CO', 'Jun 18'], ['CO-4.3', 'Sick leave', 'CO', 'Aug 3'],
+      ['TX-3.4', 'Final pay', 'TX', 'Jun 18'], ['TX-4.5', 'Jury duty and voting', 'TX', 'Mar 2']
+    ];
+    const BODY = {
+      '3.2': [['p', 'Hourly staff are paid overtime at 1.5 times their regular rate for hours worked over 40 in a workweek. Salaried staff are not eligible for overtime.'], ['h2', 'Approval'], ['p', "Overtime needs your manager's approval before you work it. If you work overtime without approval, you are still paid for it."], ['h2', 'Recording hours'], ['p', 'Record every hour you work in the timekeeping system, including overtime. See §3.1 Schedules and timekeeping.']],
+      '4.2': [['p', 'Juniper Row observes six paid holidays each year:'], ['ul', ["New Year's Day", 'Memorial Day', 'Independence Day', 'Labor Day', 'Thanksgiving Day', 'Christmas Day']], ['p', 'Denver HQ also closes the day after Thanksgiving.'], ['h2', 'Working on a holiday'], ['p', "Stores and the warehouse may open on some holidays. If you're scheduled to work one, your manager will offer you another day off in the same pay period."]],
+      '4.3': [['p', 'Juniper Row gives every employee paid sick leave. Some states add their own rules. If a state addendum applies to you, follow the rule that gives you more.'], ['h2', 'How much you receive'], ['p', 'Full-time employees receive 24 hours (3 days) of paid sick leave at the start of each calendar year. Part-time employees receive an amount based on their scheduled hours.'], ['h2', 'When you can use it'], ['ul', ['Your own illness, injury, or medical appointment', 'Caring for a family member who is ill or has an appointment', 'Other reasons listed in a state addendum']], ['h2', 'Calling out'], ['p', "Tell your manager before your shift starts, or as soon as you can. You don't need to share medical details. If you'd rather talk about a health matter privately, contact HR."], ['h2', 'Unused sick leave'], ['p', 'Unused sick leave does not carry over to the next year and is not paid out when employment ends, unless a state addendum says otherwise.']],
+      'CA-3.2': [['p', 'In California, overtime is owed for hours worked over 8 in a workday or 40 in a workweek, and double time for hours over 12 in a workday.']],
+      'CO-3.2': [['p', 'In Colorado, overtime is also owed for hours worked over 12 in a workday, in addition to hours over 40 in a workweek.']],
+      'CA-3.3': [['p', 'Hourly staff in California get a 30-minute unpaid meal break for every shift longer than 5 hours, and a second meal break for shifts longer than 10 hours.'], ['p', 'You also get a paid 10-minute rest break for every 4 hours you work, or major part of 4 hours. Take rest breaks near the middle of each work period when you can. During a meal break you are relieved of all duties and free to leave the premises. If your manager asks you to stay on call, the break is paid. If you miss a meal or rest break, or it is cut short, tell your manager or HR the same day. Juniper Row pays one additional hour at your regular rate for each workday a meal break is missed, and another for each workday a rest break is missed. Record the start and end of every meal break in the timekeeping system, even when the break is short. If the system is down, write the times on the paper log at the front desk and give it to your manager at the end of your shift.'], ['p', 'Shifts of 6 hours or less can waive the meal break by written agreement with your manager. Ask HR for the form.']],
+      'CA-4.3': [['h2', 'How much you receive'], ['p', 'California employees receive 40 hours (5 days) of paid sick leave at the start of each calendar year. Unused sick leave does not carry over, and it is not paid out when employment ends.'], ['h2', 'When you can use it'], ['p', 'You can use sick leave for your own illness, injury, or preventive care, or to care for a family member. You do not need to give a reason beyond that the time is sick leave.'], ['h2', 'Giving notice'], ['p', 'If you know about the need ahead of time, such as a scheduled appointment, tell your manager in advance. Otherwise, tell them as soon as you can.'], ['h2', 'How this works with §4.3'], ['p', 'For California employees, this addendum sets the amount of sick leave. Everything else in §4.3 still applies.']]
+    };
+    const SRC = {
+      'CA-3.2': 'California Labor Code §510, read from dir.ca.gov on Oct 6, 2026.',
+      'CA-3.3': 'California Labor Code §§226.7 and 512, read from dir.ca.gov on Oct 6, 2026.',
+      'CA-4.3': 'California Labor Code §246, read from dir.ca.gov on Oct 6, 2026.',
+      'CO-3.2': 'Colorado Overtime and Minimum Pay Standards Order, read from cdle.colorado.gov on Oct 6, 2026.'
+    };
+    this.CH = CH; this.AD = AD; this.BODY = BODY;
+    this.S = raw.map(([num, title, code, d]) => {
+      const st = num.includes('-') ? num.split('-')[0] : null;
+      const base = st ? num.split('-')[1] : num;
+      return { id: num, num, title, code, date: d + ', 2026', st, base, ch: base.split('.')[0], group: st ? AD[st][1] : 'Company handbook', body: BODY[num] || null, sources: SRC[num] || null };
+    });
+    this.byId = {}; this.S.forEach(s => { this.byId[s.id] = s; });
+    this.P = {
+      Priya: { name: 'Priya Raman', initials: 'PR', title: 'Visual Merchandiser', st: 'CA', type: 'Salaried', place: 'You work at the Oakland store in California.' },
+      Mateo: { name: 'Mateo Alvarez', initials: 'MA', title: 'Warehouse Associate', st: 'TX', type: 'Hourly', place: 'You work at the Austin warehouse in Texas.' }
+    };
+    this.pend['1c'] = true;
+  }
+  label(code) {
+    const ST = { CA: 'California', CO: 'Colorado', TX: 'Texas' };
+    if (!code) return 'Everyone';
+    if (code === 'H') return 'Hourly staff';
+    if (code.startsWith('H-')) return 'Hourly staff in ' + ST[code.slice(2)];
+    return ST[code] + ' employees';
+  }
+  applies(s, p) {
+    const c = s.code;
+    if (!c) return true;
+    if (c === 'H') return p.type === 'Hourly';
+    if (c.startsWith('H-')) return p.type === 'Hourly' && p.st === c.slice(2);
+    return p.st === c;
+  }
+  sheetRef(key) {
+    return el => {
+      if (!el) return;
+      this.sheets[key] = el;
+      if (this.pend[key]) { this.pend[key] = false; setTimeout(() => this.toPassage(key), 120); }
+    };
+  }
+  toPassage(key) {
+    const el = this.sheets[key]; if (!el) return;
+    const t = el.querySelector('[data-cited]'); if (!t) { el.scrollTop = 0; return; }
+    let y = 0, n = t; while (n && n !== el) { y += n.offsetTop; n = n.offsetParent; }
+    el.scrollTop = Math.max(0, y - 160);
+    try { t.focus({ preventScroll: true }); } catch (e) {}
+  }
+  top(key) { setTimeout(() => { const el = this.sheets[key]; if (el) el.scrollTop = 0; }, 0); }
+  frame(cfg) {
+    const key = cfg.key, S = this.S;
+    const st = Object.assign({ view: 'home', sid: null, passage: null, query: '', filter: 'all', open: false, loading: false, panel: 'open' }, cfg.init || {}, this.state.fs[key] || {});
+    const set = patch => this.setState(s => ({ fs: { ...s.fs, [key]: { ...(s.fs[key] || {}), ...patch } } }));
+    const p = this.P[cfg.as];
+    const go = (sid, passage) => e => { if (e && e.preventDefault) e.preventDefault(); set({ view: 'section', sid, passage: passage || null, loading: false }); if (passage) this.pend[key] = true; else this.top(key); };
+    const href = s => '/handbook/' + s.id;
+    const goHome = e => { if (e) e.preventDefault(); set({ view: 'home', loading: false }); this.top(key); };
+    const mine = s => this.applies(s, p);
+    const visible = S.filter(s => st.filter === 'all' || mine(s));
+    const q = st.query.trim().toLowerCase();
+    const groups = [];
+    let firstAdDone = false;
+    visible.forEach(s => {
+      const gk = s.st || s.ch;
+      let g = groups.find(x => x.k === gk);
+      if (!g) {
+        g = { k: gk, hid: key + '-g-' + gk, num: s.st || s.ch, title: s.st ? this.AD[s.st][1] : this.CH[s.ch], hasNote: !!s.st, note: s.st ? 'For ' + this.AD[s.st][0] + ' employees' : '', firstAd: false, rows: [] };
+        if (s.st && !firstAdDone) { g.firstAd = true; firstAdDone = true; }
+        groups.push(g);
+      }
+      const lab = this.label(s.code), yes = mine(s) && !!s.code;
+      g.rows.push({ num: s.num, title: s.title, applies: lab, yes, date: s.date, href: href(s), open: go(s.id), aria: s.num + ' ' + s.title + '. Applies to ' + lab + (yes ? '. Applies to you' : '') + '. Last updated ' + s.date });
+    });
+    const textOf = s => (s.body || []).map(b => Array.isArray(b[1]) ? b[1].join('. ') : b[1]);
+    const results = !q ? [] : visible.filter(s => s.title.toLowerCase().includes(q) || textOf(s).some(t => t.toLowerCase().includes(q)))
+      .sort((a, b) => (mine(b) - mine(a)) || (S.indexOf(a) - S.indexOf(b)))
+      .map(s => {
+        let pre = '', hit = '', post = '', hasEx = false;
+        const t = textOf(s).find(x => x.toLowerCase().includes(q));
+        if (t) {
+          const i = t.toLowerCase().indexOf(q);
+          const start = Math.max(0, t.lastIndexOf(' ', Math.max(0, i - 60)));
+          pre = (start > 0 ? '\u2026' : '') + t.slice(start, i).trimStart(); hit = t.slice(i, i + q.length); post = t.slice(i + q.length); hasEx = true;
+        }
+        const yes = mine(s);
+        return { num: s.num, title: s.title, group: s.group, pre, hit, post, hasEx, applies: this.label(s.code), yes, no: !yes, date: s.date, href: href(s), open: go(s.id) };
+      });
+    const isHome = st.view === 'home';
+    const nMine = S.filter(mine).length;
+    const filt = {
+      valueText: st.filter === 'all' ? 'All sections' : 'Applies to me', open: st.open, expanded: st.open ? 'true' : 'false',
+      border: st.filter === 'all' ? 'var(--border-strong)' : 'var(--primary-tint)', bg: st.filter === 'all' ? 'var(--surface-raised)' : 'var(--primary-tint)',
+      toggle: () => set({ open: !st.open }), onKey: e => { if (e.key === 'Escape') set({ open: false }); },
+      options: [['all', 'All sections', S.length], ['mine', 'Applies to me', nMine]].map(([v, l, c]) => ({ label: l, count: c, sel: st.filter === v, selAttr: st.filter === v ? 'true' : 'false', bg: st.filter === v ? 'var(--primary-tint)' : 'transparent', pick: () => set({ filter: v, open: false }) }))
+    };
+    let sec = {};
+    const s = st.sid ? this.byId[st.sid] : null;
+    if (s) {
+      const yes = mine(s);
+      const blocks = (s.body || []).map((b, i) => {
+        const pid = 'p' + (s.body.slice(0, i + 1).filter(x => x[0] === 'p').length);
+        const cited = b[0] === 'p' && st.passage === pid;
+        return { isH2: b[0] === 'h2', isP: b[0] === 'p' && !cited, isUl: b[0] === 'ul', isCited: cited, t: Array.isArray(b[1]) ? '' : b[1], items: Array.isArray(b[1]) ? b[1].map(t => ({ t })) : [], lid: key + '-cited', clear: () => set({ passage: null }) };
+      });
+      let links = [], linksTitle = '', linksNote = '';
+      if (s.st) {
+        const base = this.byId[s.base];
+        if (base) { linksTitle = 'Supplements'; links = [{ label: '§' + base.num + ' ' + base.title, meta: ' · Company handbook', yes: false, href: href(base), open: go(base.id) }]; }
+      } else {
+        const ads = S.filter(x => x.st && x.base === s.num);
+        if (ads.length) { linksTitle = 'State rules'; linksNote = ads.map(a => this.AD[a.st][0]).join(' and ') + (ads.length > 1 ? ' add' : ' adds') + ' to this section.'; links = ads.map(a => ({ label: this.AD[a.st][1], meta: ' · ' + a.num, yes: mine(a), href: href(a), open: go(a.id) })); }
+      }
+      const peers = S.filter(x => (s.st ? x.st === s.st : (!x.st && x.ch === s.ch)));
+      const idx = S.indexOf(s), prev = S[idx - 1], next = S[idx + 1];
+      const base = s.st ? this.byId[s.base] : null;
+      sec = {
+        hid: key + '-h', eyebrow: s.st ? s.num + ' · ' + this.AD[s.st][1] : '§' + s.num + ' · ' + this.CH[s.ch], title: s.title, applies: this.label(s.code), yes, no: !yes, date: s.date,
+        notApply: !yes, notApplyText: 'This section is for ' + this.label(s.code).replace(/^Hourly staff/, 'hourly staff') + '. ' + p.place,
+        seeText: base ? 'See what applies to you: §' + base.num + ' ' + base.title : 'See what applies to you', seeHref: base ? href(base) : '/handbook', seeOpen: base ? go(base.id) : goHome,
+        hasLinks: links.length > 0, linksTitle, linksNote, hasLinksNote: !!linksNote, links,
+        blocks, noBody: !s.body, hasSources: !!s.sources, sources: s.sources,
+        prev: { has: !!prev, none: !prev, label: prev ? prev.num + ' ' + prev.title : '', href: prev ? href(prev) : '#', open: prev ? go(prev.id) : null },
+        next: { has: !!next, label: next ? next.num + ' ' + next.title : '', href: next ? href(next) : '#', open: next ? go(next.id) : null },
+        navId: key + '-nav', navTitle: s.st ? this.AD[s.st][1] : 'Chapter ' + s.ch + ' · ' + this.CH[s.ch],
+        nav: peers.map(x => ({ num: x.num, title: x.title, cur: x === s ? 'page' : undefined, bg: x === s ? 'var(--primary-tint)' : 'transparent', w: x === s ? 600 : 400, href: href(x), open: go(x.id) }))
+      };
+    }
+    const pState = st.panel;
+    return {
+      key, hasSub: !!cfg.sub, sub: cfg.sub || '',
+      pInitials: p.initials, pName: p.name, pTitle: p.title,
+      navAsk: st.view === 'assistant', navHb: st.view !== 'assistant', goHome,
+      goAsk: e => { e.preventDefault(); },
+      sheetRef: this.sheetRef(key),
+      isHome, isSection: st.view === 'section', isMissing: st.view === 'missing', isAssistant: st.view === 'assistant',
+      query: st.query, onQuery: e => set({ query: e.target.value }), hasQuery: !!st.query, clearQuery: () => set({ query: '' }),
+      filt, listLoading: !!st.loading, listReady: !st.loading, busyAttr: st.loading ? 'true' : 'false', showList: isHome && !q,
+      groups,
+      skGroups: [['120px', [['46%', '64px'], ['38%', '64px'], ['52%', '64px']]], ['150px', [['30%', '64px'], ['44%', '96px'], ['36%', '96px'], ['50%', '64px']]], ['110px', [['40%', '64px'], ['48%', '64px'], ['34%', '64px']]]].map(([w, rows]) => ({ w, rows: rows.map(([a, b]) => ({ a, b })) })),
+      skPara: [['100%', '40px'], ['96%', '14px'], ['88%', '14px'], ['40%', '14px'], ['200px', '40px'], ['100%', '20px'], ['92%', '14px'], ['98%', '14px'], ['64%', '14px'], ['100%', '32px'], ['84%', '14px']].map(([w, m]) => ({ w, m })),
+      showResults: isHome && !!q && results.length > 0, results, resText: results.length + (results.length === 1 ? ' section matches' : ' sections match') + ' \u201C' + st.query.trim() + '\u201D',
+      noResults: isHome && !!q && results.length === 0, emptyText: 'No sections match \u201C' + st.query.trim() + '.\u201D',
+      secLoading: !!st.loading, secReady: !st.loading && !!s, sec,
+      panelShown: pState !== 'closed', pState: pState === 'closed' ? 'open' : pState, panelExp: pState !== 'closed' ? 'true' : 'false',
+      chipBg: pState !== 'closed' ? 'var(--primary-tint)' : 'var(--surface-raised)',
+      closePanel: () => set({ panel: 'closed' }),
+      togglePanel: () => { if (st.panel !== 'closed') { set({ panel: 'closed' }); return; } set({ panel: 'loading' }); setTimeout(() => set({ panel: 'open' }), 700); },
+      retryPanel: () => { set({ panel: 'loading' }); setTimeout(() => set({ panel: 'open' }), 700); },
+      openInHandbook: () => { set({ view: 'section', sid: 'CA-4.3', passage: 'p2', loading: false }); this.pend[key] = true; }
+    };
+  }
+  renderVals() {
+    if (!this.S) this.init();
+    const live = this.props.liveAs ?? 'Priya';
+    const O = [
+      { id: '1a', label: 'Handbook home as ' + live + ', live', cards: [{ key: '1a', as: live }] },
+      { id: '1b', label: 'Section page: §4.3 Sick leave, as Priya', cards: [{ key: '1b', as: 'Priya', init: { view: 'section', sid: '4.3' } }] },
+      { id: '1c', label: 'Deep link to a cited passage: /handbook/CA-4.3?passage=p2, as Priya', cards: [{ key: '1c', as: 'Priya', init: { view: 'section', sid: 'CA-4.3', passage: 'p2' } }] },
+      { id: '1d', label: "CA-4.3 as Mateo: doesn't apply to him", cards: [{ key: '1d', as: 'Mateo', init: { view: 'section', sid: 'CA-4.3' } }] },
+      { id: '1e', label: 'Search as Mateo', cards: [{ key: '1e1', as: 'Mateo', sub: 'Results for "overtime"', init: { query: 'overtime' } }, { key: '1e2', as: 'Mateo', sub: 'No results', init: { query: 'dental plan' } }] },
+      { id: '1f', label: 'States', cards: [{ key: '1f1', as: 'Priya', sub: 'List loading: static skeleton rows', init: { loading: true } }, { key: '1f2', as: 'Priya', sub: 'Section loading', init: { view: 'section', sid: '4.3', loading: true } }, { key: '1f3', as: 'Priya', sub: 'Deep link to a section not in this version: /handbook/8.2', init: { view: 'missing' } }] },
+      { id: '2a', label: 'Passage panel, component specimen: open, loading, error, long passage (scrolls inside)', spec: true },
+      { id: '2b', label: 'Passage panel docked on the assistant home, as Priya. The conversation is shown as placeholder blocks. Click CA-4.3 to reopen it. "Open in handbook" goes to the cited passage', cards: [{ key: '2b', as: 'Priya', init: { view: 'assistant' } }] }
+    ];
+    const options = O.map(o => ({ id: o.id, href: '#' + o.id, label: o.label, isSpec: !!o.spec, isFrames: !o.spec, cards: (o.cards || []).map(c => this.frame(c)) }));
+    const B = this.BODY;
+    const ps = this.state.ps;
+    const sp = (k, def) => ps[k] || def;
+    const setP = (k, v) => this.setState(s => ({ ps: { ...s.ps, [k]: v } }));
+    const ca = { eyebrow: 'Handbook CA-4.3 · California addendum', title: 'Sick leave', applies: 'California employees', marker: 'yes', updated: 'Sep 12, 2026', before: B['CA-4.3'][1][1], cited: B['CA-4.3'][3][1], after: B['CA-4.3'][5][1] };
+    const noop = () => {};
+    const retry = k => () => { setP(k, 'loading'); setTimeout(() => setP(k, 'open'), 800); };
+    const specs = [
+      { label: 'Open', state: 'open', ...ca, retry: noop, noop },
+      { label: 'Loading', state: 'loading', ...ca, retry: noop, noop },
+      { label: 'Error (Retry loads it)', state: sp('err', 'error'), ...ca, retry: retry('err'), noop },
+      { label: "Long passage, as Priya: doesn't apply to her", state: 'open', eyebrow: 'Handbook CA-3.3 · California addendum', title: 'Meal and rest breaks', applies: 'Hourly staff in California', marker: 'no', updated: 'Jun 18, 2026', before: B['CA-3.3'][0][1], cited: B['CA-3.3'][1][1], after: B['CA-3.3'][2][1], retry: noop, noop }
+    ];
+    return { options, specs };
+  }
+}
+</script>
+</body>
+</html>

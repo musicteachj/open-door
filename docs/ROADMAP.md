@@ -36,9 +36,11 @@ stage is unblocked. Phase 2 is planned: see the
 [spec](specs/2026-10-05-phase-2-design-system-shell-sandbox-entry.md) and the
 [plan](plans/2026-10-05-phase-2-design-system-shell-sandbox-entry.md). Phase 2 is done and
 released in `v0.2.0`. Next: planning Phase 3, handbook and retrieval, at effort `high`.** Later phases' screens are designed
-shortly before each phase. **Next for design (decided 2026-10-06):** the logo round is done and
-ships with Phase 2's close; next is the handbook browser and passage panel, before Phase 3's UI
-stage. The brief's "Decisions from the 2026-10-06 brainstorm" records the rest.
+shortly before each phase. **Design for Phase 3 is done:** the handbook browser and the passage
+panel were approved on 2026-10-07 (see [`design/screens/06-handbook/`](design/screens/06-handbook/notes.md)),
+so Phase 3's UI stage is unblocked. **Next for design:** the conversation view, before Phase 4.
+It reuses the passage panel as its source panel. The brief's "Decisions from the 2026-10-06
+brainstorm" records the rest.
 Decided on 2026-10-04, changing the original plan:
 - **Mockups are desktop only.** The build still adapts every screen to a phone's width, checked
   automatically at 390 px.
