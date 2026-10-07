@@ -22,13 +22,16 @@ Sources: everything here was designed in this project. The decision record is `A
 - `components/forms/`: SearchField, FilterSelect, FilterToggle.
 - `components/directory/`: DirectoryTable, DirectoryRow, SkeletonRow, DetailList, DetailRow.
 - `components/feedback/`: Toast, Banner, FullPageMessage (plus .od-icon-btn and .od-text-link helpers).
+- `components/handbook/`: ApplicabilityBadge (with appliesLabel), AppliesMarker, LastUpdated, SectionRow and SectionGroup (plus the .od-sec-nav chapter navigator), CitedPassage, LinkBlock (State rules, Supplements), SourcesBlock, SearchResultRow, PassagePanel.
 - `ui_kits/assistant/`: app shell and assistant home for Priya.
 - `App Shell.dc.html`: screen 02, persona menu, switching, per-persona navigation, expiry banner.
 - `Global States.dc.html`: screen 05, session expired, not found, something went wrong.
 - `Directory.dc.html`: screen 04, Directory list and profile pages with their states.
+- `Handbook.dc.html`: screen 06, handbook home, section page, cited passage deep link, search, states, and the passage panel docked on the assistant home.
+- `Passage Panel.dc.html`: the shared passage panel (open, loading, error), imported by Handbook and, next phase, the conversation view.
 - `Landing.dc.html`: screen 01, Try Open Door (landing page with persona picker and its states).
 - `guidelines/`: foundation specimen cards (colors, type, spacing, radius, shadows, focus, logo, icons).
-- `assets/`: `logo-mark.svg`, `fonts/` (Instrument Sans, Geist Mono, self-hosted woff2).
+- `assets/`: `logo-mark.svg` (32 px master), favicons (`favicon.svg`, `favicon-16.svg`, `favicon-16.png`, `favicon-32.png`, `apple-touch-icon.png` at 180, `icon-512.png`), `logo-explorations/` (round 1 candidates), `fonts/` (Instrument Sans, Geist Mono, self-hosted woff2).
 - `preview/loader.js`: preview-only helper so cards and kits render without a build.
 - `SKILL.md`: agent skill entry point.
 
@@ -71,6 +74,9 @@ Each component has `Name.jsx`, `Name.d.ts` (props contract) and `Name.prompt.md`
 - Navigation per persona: everyone gets Ask, Time off, Directory, Handbook; managers add Approvals with a waiting count; HR adds Cases and Console; How it's built sits at the bottom.
 - Notices: toasts confirm (bottom right, auto-dismiss); banners warn about the session (top of the sheet, neutral background, colored icon only); errors stay inline; full-page messages handle expired, not found, and server errors with one action and no illustration.
 - Loading: static skeleton bars in surface-hover, no shimmer.
+- Applicability: every handbook section carries one "Applies to" label (Everyone, a state, an employment type, a location, or combined). "Applies to you" is a primary check plus ink text; "Doesn't apply to you" is a muted minus plus muted text, never a warning. In the section list only the yes marker shows, and only on restricted sections (a state, an employment type, or a location) that cover the person.
+- Citations: the cited paragraph sits on primary tint with ink text, labeled "Cited passage" with a quote icon and a slim cinnamon bar on its left edge. Deep links scroll to it and move focus to it.
+- Reading: handbook body text is 18/28 in the 760 px measure; h2 20/28.
 - Color is never the only signal: the pending marker sits beside "request pending", errors pair an icon with text, links name their destination.
 
 ## Iconography
@@ -78,9 +84,9 @@ Each component has `Name.jsx`, `Name.d.ts` (props contract) and `Name.prompt.md`
 - Lucide (lucide.dev), outline style, 1.75 stroke, round caps and joins. In production use lucide-react; `components/core/Icon.jsx` holds the same geometry for specimens.
 - Sizes: 18 px in nav, 16 px in buttons and rows, 14 px beside 13 px text, 13 px in the sandbox pill.
 - Icons inherit text color (ink, ink-nav, or ink-muted); the destination chevron on glance links is primary.
-- In use: message-circle (Ask), calendar (Time off), users (Directory), book-open (Handbook), code (How it's built), info (AI disclosure), clock (sandbox), circle-alert (errors), rotate-ccw (Retry), chevrons-up-down (persona switcher), chevron-right (glance links), arrow-right (Ask, Try asking rows), trash-2 (destructive), map-pin (persona location), loader-circle (starting spinner), circle-play (tour), search, x (clear), chevron-down (filters), check (selected option, pressed toggle), lock (private details), arrow-left (back), eye (audit note), clipboard-check (Approvals), folder-lock (Cases), layout-dashboard (Console), log-out (Sign out), triangle-alert (warning banner), circle-check (success toast).
+- In use: message-circle (Ask), calendar (Time off), users (Directory), book-open (Handbook), code (How it's built), info (AI disclosure), clock (sandbox), circle-alert (errors), rotate-ccw (Retry), chevrons-up-down (persona switcher), chevron-right (glance links), arrow-right (Ask, Try asking rows), trash-2 (destructive), map-pin (persona location), loader-circle (starting spinner), circle-play (tour), search, x (clear), chevron-down (filters), check (selected option, pressed toggle), lock (private details), arrow-left (back), eye (audit note), clipboard-check (Approvals), folder-lock (Cases), layout-dashboard (Console), log-out (Sign out), triangle-alert (warning banner), circle-check (success toast), quote (cited passage), minus (doesn't apply to you), info (demo notice).
 - No emoji, no unicode symbols as icons, no icon font.
-- Logo: `assets/logo-mark.svg`, an open doorway in a 32 px aubergine tile with a 9 px radius, set beside "Open Door" (16 px, 600) and the customer name.
+- Logo: `assets/logo-mark.svg`, a door ajar in a 32 px aubergine tile with a 9 px radius: a surface-colored doorway with a thin jamb and head, and the leaf swung inward as an aubergine wedge, light showing on the latch side. Two token colors only (primary, surface); tile 10.3:1 on surface, 11.1:1 on surface-raised. At 16 px use `favicon-16.svg`, drawn on whole pixels. Lockups: stacked in the sidebar ("Open Door" 16 px 600 over the customer name 12 px ink-muted), or inline as "Open Door · Juniper Row" (name 600 ink, dot and customer 400 ink-muted, 8 px gaps). Decision record: `Logo.dc.html` option 1a.
 
 ## Tokens
 

@@ -20,7 +20,7 @@
   --primary: #59256A; /* Aubergine. Actions, links, selection, focus; 11.1:1 on white */
   --primary-hover: #461B54; /* Hovered primary fills and ghost text; 13.6:1 with white */
   --primary-tint: #ECE2F0; /* Selected nav item, hovered rows and links, avatar; text on it is always ink (13.0:1) */
-  --marker: #C27544; /* Cinnamon accent. Small markers only (pending dot), never text, always beside a label; 3.5:1 */
+  --marker: #C27544; /* Cinnamon accent. Small markers only (pending dot, cited-passage bar), never text, always beside a label; 3.5:1 */
 
   /* Lines */
   --border: #DDE3E6; /* Content sheet and card edges, sidebar dividers (decorative) */
