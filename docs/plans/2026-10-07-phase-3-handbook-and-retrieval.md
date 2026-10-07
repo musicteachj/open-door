@@ -882,7 +882,31 @@ batch.
 Record here anything that differs from this plan, with the reason, each stage's final test counts,
 and the retrieval eval's score at each stage close.
 
-**The phase's base commit:** to be recorded when Stage 1 branches.
+**The phase's base commit:** `8db9ef5` (`dev` after the plan merged). Task 38's phase review
+diffs against it.
+
+**Stage 1 (the handbook), 2026-10-07:**
+- **PTO has a balance ceiling, not a carryover cap.** California (DIR's vacation FAQ, Labor Code
+  §227.3) and Colorado (CDLE INFO #3E) forbid forfeiting earned vacation, and both count PTO as
+  vacation, but both allow a ceiling at which new earning stops. Section 4.1 caps the balance at
+  1.5 times a year's PTO (180 hours salaried, 144 hourly), nothing earned is ever lost, and unused
+  PTO is paid out at separation. Phase 5's engine builds this rule, not Task 2's "carryover cap".
+- **Three addendum sections were added,** for twelve in all: CA-5.1 (the California Family Rights
+  Act, which has no 75-mile test, so Oakland staff qualify), CO-5.1 (Colorado's paid FAMLI
+  program), and CO-3.4 (Colorado requires final pay immediately on discharge, sooner than the
+  company's next-payday rule).
+- **Colorado sick leave** (CO-4.3) is 48 hours on January 1, and unused hours carry over by raising
+  the balance back to 48 each January, which meets the state's 48-hour rollover rule. Company
+  section 4.3 stays at 40 hours front-loaded with no carryover, which California allows under its
+  up-front method (DIR's posting amended effective 2026-01-01).
+- **Federal FMLA likely reaches none of the locations** (none has 50 employees within 75 miles),
+  so section 5.1 offers the company's own unpaid, job-protected leave on FMLA-like terms, as the
+  owner decided.
+- **Voting leave** (4.5) gives up to 2 paid hours when someone lacks 3 consecutive hours off work
+  while the polls are open, generous enough for the Texas and Colorado tests.
+- **Colorado requires the COMPS poster with any handbook.** CO-3.3 says Juniper Row hands it out;
+  a real deployment would attach it.
+- **Section titles** follow the design's list, and addenda reuse their company section's title.
 
 ## Backlog
 

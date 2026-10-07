@@ -10,6 +10,18 @@ version (`0.x.y` while the app is being built, `1.0.0` when it is complete).
 
 ## [Unreleased]
 
+### Added
+
+- **The Juniper Row employee handbook** (Phase 3, stage 1). Twenty-two company sections in seven
+  chapters, plus twelve state addendum sections for California, Colorado, and Texas, written as
+  markdown in `handbook/` for the retrieval work that follows. Every statutory figure, such as an
+  overtime threshold, a final-pay deadline, or a sick-leave amount, was checked against the state
+  labor department, the U.S. Department of Labor, or the statute on 2026-10-07, and each section
+  records its sources. The company's own figures (paid time off, sick leave, bereavement, jury
+  pay) are fictional policy chosen to meet or beat all three states. Paid time off has a balance
+  ceiling rather than a year-end carryover cap, because California and Colorado don't allow earned
+  vacation to be forfeited. The handbook is demo content, not legal advice, and says so.
+
 ### Fixed
 
 - **A flaky browser test in CI** (after Phase 2). The check that another person's profile leaks no
