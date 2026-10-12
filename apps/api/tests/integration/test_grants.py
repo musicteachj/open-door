@@ -5,8 +5,10 @@ than the spec fails these tests.
 """
 
 import pytest
-from sqlalchemy import text
+from sqlalchemy import make_url, text
 from sqlalchemy.ext.asyncio import AsyncEngine
+
+from app.core.config import Settings
 
 pytestmark = pytest.mark.integration
 
@@ -21,6 +23,12 @@ EXPECTED_TABLE_GRANTS = {
     ("od_app", "sessions", "SELECT"),
     ("od_app", "sessions", "INSERT"),
     ("od_app", "sessions", "DELETE"),
+    # The handbook is global and read-only to the API. Ingestion runs as the database owner, and the
+    # cleanup login needs nothing from it.
+    *(
+        ("od_app", table, "SELECT")
+        for table in ("handbook_versions", "handbook_sections", "handbook_chunks")
+    ),
     ("od_cleanup", "tenants", "SELECT"),
     ("od_cleanup", "tenants", "DELETE"),
 }
@@ -66,9 +74,24 @@ SCHEMA_GRANTS = """
 """
 
 
-async def grants(engine: AsyncEngine, query: str) -> set[tuple[str, ...]]:
+def login_roles(database_settings: Settings) -> tuple[str, str]:
+    """The two login users, named by the usernames in the configured URLs."""
+    app_url = database_settings.database_url
+    cleanup_url = database_settings.cleanup_database_url
+    assert app_url is not None
+    assert cleanup_url is not None
+    app_login = make_url(str(app_url)).username
+    cleanup_login = make_url(str(cleanup_url)).username
+    assert app_login
+    assert cleanup_login
+    return app_login, cleanup_login
+
+
+async def grants(
+    engine: AsyncEngine, query: str, roles: tuple[str, ...] = ROLES
+) -> set[tuple[str, ...]]:
     async with engine.connect() as connection:
-        rows = await connection.execute(text(query), {"roles": list(ROLES)})
+        rows = await connection.execute(text(query), {"roles": list(roles)})
         return {tuple(row) for row in rows}
 
 
@@ -80,6 +103,41 @@ async def test_the_roles_have_exactly_the_planned_table_privileges(
 
 async def test_no_role_has_privileges_on_single_columns(app_engine: AsyncEngine) -> None:
     assert await grants(app_engine, COLUMN_GRANTS) == set()
+
+
+def direct_grants(rows: set[tuple[str, ...]], roles: tuple[str, ...]) -> set[tuple[str, ...]]:
+    """Only the rows granted to these roles. The queries also return PUBLIC, checked elsewhere."""
+    return {row for row in rows if row[0] in roles}
+
+
+async def test_the_login_users_have_no_privileges_of_their_own(
+    app_engine: AsyncEngine, database_settings: Settings
+) -> None:
+    """Everything reaches the logins through od_app and od_cleanup, never by a direct grant."""
+    logins = login_roles(database_settings)
+    assert set(logins).isdisjoint(ROLES)
+    assert direct_grants(await grants(app_engine, TABLE_GRANTS, logins), logins) == set()
+    assert direct_grants(await grants(app_engine, COLUMN_GRANTS, logins), logins) == set()
+    assert direct_grants(await grants(app_engine, SCHEMA_GRANTS, logins), logins) == set()
+
+
+# An owner has no ACL entry, so the grants queries above can't see ownership.
+OWNED_TABLES = """
+    SELECT n.nspname, c.relname, r.rolname
+    FROM pg_class c
+    JOIN pg_namespace n ON n.oid = c.relnamespace
+    JOIN pg_roles r ON r.oid = c.relowner
+    WHERE n.nspname IN ('public', 'app')
+      AND c.relkind IN ('r', 'p')
+      AND r.rolname = ANY(:roles)
+"""
+
+
+async def test_neither_role_nor_login_owns_a_table(
+    app_engine: AsyncEngine, database_settings: Settings
+) -> None:
+    roles = (*ROLES, *login_roles(database_settings))
+    assert await grants(app_engine, OWNED_TABLES, roles) == set()
 
 
 async def test_the_roles_can_use_exactly_the_planned_schemas(

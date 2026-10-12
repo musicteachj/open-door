@@ -221,6 +221,8 @@ Prerequisites: Node 24, uv, and Docker Desktop running.
 ```
 make setup      install dependencies; create apps/api/.env from .env.example
 make db         start Postgres (127.0.0.1:5433), migrate, then create the login users
+make ingest     load and publish the handbook from handbook/ and its committed embeddings
+make embed      fetch missing embeddings from Voyage (needs VOYAGE_API_KEY); commit the cache
 make dev        Postgres, migrations, API (:8000) and web app (:5173) together
 make check      everything CI runs; needs `make db` first
 make e2e        the browser tests (Playwright, Chromium) against the real API on :8100
@@ -243,8 +245,9 @@ development and never in a production build.
 - `CLEANUP_DATABASE_URL` is the cleanup login, `od_cleanup_login`, which can delete only expired
   sandboxes.
 
-`make db` does three things in order: it starts Postgres, applies the migrations, and runs
-`apps/api/scripts/bootstrap_db_users.py`, which creates the login users from those URLs.
+`make db` does four things in order: it starts Postgres, applies the migrations, runs
+`apps/api/scripts/bootstrap_db_users.py`, which creates the login users from those URLs, and
+loads the handbook (`make ingest`) from `handbook/` and its committed embeddings.
 `make migrate` applies new migrations on their own, and `make bootstrap-db` reruns the script
 after a password changes. `make migrations-roundtrip` undoes and reapplies every migration, which
 wipes the data.

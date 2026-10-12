@@ -60,6 +60,28 @@ async def test_the_app_schema_holds_only_the_known_functions_none_leakproof_or_d
         ("current_is_hr", "s", False, False),
         ("current_person_id", "s", False, False),
         ("current_tenant_id", "s", False, False),
-        # The trigger function (migration 0003) writes, so it is volatile.
+        # The trigger functions (migrations 0003 and 0005) write, so they are volatile.
+        ("pin_tenant_handbook_version", "v", False, False),
         ("stamp_tenant_created_at", "v", False, False),
+    ]
+
+
+async def test_public_cannot_execute_the_trigger_functions(app_engine: AsyncEngine) -> None:
+    # A trigger function needs no EXECUTE for the role that fires it, so nothing is lost by
+    # revoking the default grant to PUBLIC, and nobody can call one directly.
+    async with app_engine.connect() as connection:
+        rows = await connection.execute(
+            text(
+                "SELECT proname, EXISTS (SELECT 1 FROM aclexplode(coalesce(proacl,"
+                " acldefault('f', proowner))) a WHERE a.grantee = 0"
+                " AND a.privilege_type = 'EXECUTE') AS public_can_execute FROM pg_proc"
+                " WHERE pronamespace = 'app'::regnamespace AND prorettype = 'trigger'::regtype"
+                " ORDER BY proname"
+            )
+        )
+        functions = [tuple(row) for row in rows]
+
+    assert functions == [
+        ("pin_tenant_handbook_version", False),
+        ("stamp_tenant_created_at", False),
     ]

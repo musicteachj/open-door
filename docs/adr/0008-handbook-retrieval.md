@@ -20,7 +20,9 @@ may make no paid AI call, and the development budget is $25 a month.
   run in the same database as the tenant data, so "applies to this person, in this version" is part
   of the query.
 - **Voyage `voyage-4` embeddings at 1,024 dimensions,** called through a small `httpx` client.
-  Anthropic has no embedding model and recommends Voyage.
+  Anthropic has no embedding model of its own; its embeddings guide names Voyage as one provider
+  and uses it for its examples, while advising teams to assess several (Anthropic, "Embeddings",
+  docs.claude.com, read on 2026-10-12).
 - **Both the passage and the eval-question embeddings are cached in committed files.** CI and tests
   never call Voyage, and the retrieval eval is deterministic, so it gates CI for free. `make embed`
   is the only command that calls Voyage.

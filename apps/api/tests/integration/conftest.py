@@ -86,6 +86,26 @@ async def sweep_leftover_test_roles(database_settings: Settings) -> None:
         await engine.dispose()
 
 
+@pytest_asyncio.fixture(scope="session", loop_scope="session", autouse=True)
+async def handbook_is_published(database_settings: Settings) -> None:
+    """Fail at the start of the session if no handbook version is published.
+
+    A trigger pins every new sandbox to the newest published version and refuses to create one
+    without it, so a forgotten ingest would otherwise show up as dozens of baffling failures.
+    """
+    url = required_url(database_settings.migration_database_url, "MIGRATION_DATABASE_URL")
+    engine = create_engine(url)
+    try:
+        async with engine.connect() as connection:
+            published = await connection.scalar(
+                text("SELECT count(*) FROM handbook_versions WHERE published_at IS NOT NULL")
+            )
+    finally:
+        await engine.dispose()
+    if not published:
+        pytest.fail("No published handbook version: run `make ingest`.")
+
+
 @pytest.fixture
 async def app_engine(database_settings: Settings) -> AsyncIterator[AsyncEngine]:
     """The API's own login: a member of od_app, so row-level security applies to it."""

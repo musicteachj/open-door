@@ -92,7 +92,9 @@ async def test_a_chosen_created_at_is_replaced_with_the_current_time(
     assert created_at == now
 
 
-async def test_the_trigger_is_enabled_and_its_function_is_safe(app_engine: AsyncEngine) -> None:
+async def test_the_triggers_are_enabled_and_their_functions_are_safe(
+    app_engine: AsyncEngine,
+) -> None:
     async with app_engine.connect() as connection:
         triggers = (
             await connection.execute(
@@ -107,7 +109,15 @@ async def test_the_trigger_is_enabled_and_its_function_is_safe(app_engine: Async
 
     # Enabled ('O'), not SECURITY DEFINER, and its search_path pinned so no other schema can supply
     # the names it uses.
-    assert [tuple(row) for row in triggers] == [
+    assert sorted(tuple(row) for row in triggers) == [
+        (
+            "pin_handbook_version",
+            "O",
+            "pin_tenant_handbook_version",
+            "app",
+            False,
+            ["search_path=pg_catalog, pg_temp"],
+        ),
         (
             "stamp_created_at",
             "O",
@@ -115,5 +125,5 @@ async def test_the_trigger_is_enabled_and_its_function_is_safe(app_engine: Async
             "app",
             False,
             ["search_path=pg_catalog, pg_temp"],
-        )
+        ),
     ]

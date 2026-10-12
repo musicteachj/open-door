@@ -238,8 +238,6 @@ Source for both: [the Phase 1 spec](specs/2026-10-03-phase-1-tenancy-identity-pe
   unrelated to the app. The lockfile-only form is
   `uv export --locked --no-emit-project | uvx pip-audit -r - --no-deps --disable-pip`.
 
-- **Pin the pgvector image.** Use a specific `0.8.x-pg17` tag in `compose.yaml` and CI, so
-  development and CI run the same extension version.
 - **`ping()` has no hard wall-clock bound.** If canceling the query stalls on the network,
   closing the connection can take longer than the timeout, because SQLAlchemy shields the close.
   The orchestrator's own probe timeout covers it; revisit only if health checks need a strict
