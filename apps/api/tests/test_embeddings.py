@@ -22,6 +22,8 @@ from app.ai.embeddings import (
     EmbeddingError,
     EmbeddingMissing,
     FakeEmbedder,
+    InputType,
+    QueryEmbeddingLru,
     VoyageEmbedder,
 )
 from app.core.config import Settings
@@ -380,3 +382,64 @@ def test_a_voyage_key_is_a_secret(monkeypatch: pytest.MonkeyPatch) -> None:
     assert settings.voyage_api_key is not None
     assert settings.voyage_api_key.get_secret_value() == KEY
     assert KEY not in repr(settings)
+
+
+# QueryEmbeddingLru
+
+
+class CountingEmbedder:
+    def __init__(self) -> None:
+        self.calls: list[tuple[list[str], str]] = []
+
+    async def embed(self, texts: Sequence[str], *, input_type: InputType) -> list[list[float]]:
+        self.calls.append((list(texts), input_type))
+        return await FakeEmbedder().embed(texts, input_type=input_type)
+
+
+async def test_a_repeated_query_does_not_reach_the_embedder_again() -> None:
+    inner = CountingEmbedder()
+    lru = QueryEmbeddingLru(inner)
+
+    first = await lru.embed(["how much sick leave"], input_type="query")
+    second = await lru.embed(["how much sick leave"], input_type="query")
+
+    assert first == second
+    assert len(inner.calls) == 1
+
+
+async def test_the_memory_holds_hashes_and_vectors_never_text() -> None:
+    lru = QueryEmbeddingLru(CountingEmbedder())
+    question = "my secret question about leave"
+
+    await lru.embed([question], input_type="query")
+
+    assert len(lru) == 1
+    [(key, vector)] = lru._vectors.items()
+    assert key == EmbeddingCache.key("query", question)
+    assert question not in key
+    assert all(isinstance(value, float) for value in vector)
+
+
+async def test_the_oldest_query_is_forgotten_first() -> None:
+    inner = CountingEmbedder()
+    lru = QueryEmbeddingLru(inner, max_entries=2)
+
+    for question in ["a", "b", "a", "c"]:  # "a" is touched again, so "b" is the oldest
+        await lru.embed([question], input_type="query")
+    await lru.embed(["a"], input_type="query")
+    await lru.embed(["b"], input_type="query")
+
+    assert len(lru) == 2
+    assert [texts for texts, _ in inner.calls] == [["a"], ["b"], ["c"], ["b"]]
+
+
+async def test_documents_and_batches_pass_straight_through() -> None:
+    inner = CountingEmbedder()
+    lru = QueryEmbeddingLru(inner)
+
+    await lru.embed(["x"], input_type="document")
+    await lru.embed(["x", "y"], input_type="query")
+    await lru.embed(["x", "y"], input_type="query")
+
+    assert len(inner.calls) == 3
+    assert len(lru) == 0

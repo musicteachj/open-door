@@ -53,7 +53,7 @@ def do_run_migrations(connection: Connection) -> None:
 
 
 async def run_migrations_online() -> None:
-    engine = create_async_engine(database_url(), poolclass=pool.NullPool)
+    engine = create_async_engine(database_url(), poolclass=pool.NullPool, hide_parameters=True)
     async with engine.connect() as connection:
         await connection.run_sync(do_run_migrations)
     await engine.dispose()

@@ -28,7 +28,7 @@ async def main(actor: UUID) -> None:
     url = get_settings().migration_database_url
     if url is None:
         sys.exit("MIGRATION_DATABASE_URL is not set")
-    engine = create_async_engine(str(url))
+    engine = create_async_engine(str(url), hide_parameters=True)
     try:
         async with engine.connect() as connection:
             # The first statement of the transaction, so nothing here can write.

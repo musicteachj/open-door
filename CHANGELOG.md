@@ -12,6 +12,20 @@ version (`0.x.y` while the app is being built, `1.0.0` when it is complete).
 
 ### Added
 
+- **Handbook search, its eval, and the handbook API** (Phase 3, stage 3).
+  - **Search for the assistant:** `search_handbook` finds the passages that answer a question by
+    combining keyword search with search by meaning, merged into one ranking, and only over the
+    sections that apply to the person asking, in their sandbox's handbook. If Voyage can't be
+    reached it falls back to keywords alone and says so. Phase 4's assistant will call it.
+  - **The retrieval eval:** 71 questions written in employees' own words, including 14 that must
+    never show someone another state's rules or a section for hourly staff they aren't. CI fails
+    below a 90% hit rate in the top 5 or on any failed negative, with no network. It scores 100%
+    (57 of 57) with a mean reciprocal rank of 0.841. `make eval-retrieval` runs it.
+  - **Four handbook routes** for the browser: the section list with "Applies to", "Last updated",
+    and whether each section applies to you; one section as structured content (never HTML); one
+    passage with its neighbors, for the passage panel; and keyword search that requires every word
+    and marks the matched words. Each reads only the sandbox's own handbook version.
+
 - **The Juniper Row employee handbook** (Phase 3, stage 1). Twenty-two company sections in seven
   chapters, plus twelve state addendum sections for California, Colorado, and Texas, written as
   markdown in `handbook/` for the retrieval work that follows. Every statutory figure, such as an
@@ -48,6 +62,11 @@ version (`0.x.y` while the app is being built, `1.0.0` when it is complete).
 - **The secret scan skips the generated embedding caches** (Phase 3, stage 2). Each line's key is
   a hash of public handbook text, which gitleaks mistook for an API key. Every other file is
   scanned with the default rules, as before.
+
+### Security
+
+- **Failed database statements no longer log their values** (Phase 3, stage 3), so an error can
+  never write a search question or other bound text to the log.
 
 ### Fixed
 

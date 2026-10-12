@@ -14,7 +14,7 @@ ZIZMOR := zizmor@1.30.1
 GITLEAKS := ghcr.io/gitleaks/gitleaks:v8.30.1
 
 .DEFAULT_GOAL := help
-.PHONY: help setup db db-stop migrate bootstrap-db ingest embed migrations-roundtrip dev dev-api dev-web openapi check check-api check-web e2e captures check-docs check-workflows audit
+.PHONY: help setup db db-stop migrate bootstrap-db ingest embed eval-retrieval migrations-roundtrip dev dev-api dev-web openapi check check-api check-web e2e captures check-docs check-workflows audit
 
 help: ## List the available commands
 	@grep -E '^[a-zA-Z_-]+:.*## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*## "}; {printf "  %-22s %s\n", $$1, $$2}'
@@ -48,6 +48,11 @@ ingest: ## Load and publish the handbook from handbook/ and its committed embedd
 embed: ## Fetch missing handbook and eval embeddings from Voyage (needs VOYAGE_API_KEY); commit the result
 	cd $(API) && uv run python scripts/ingest_handbook.py embed
 
+# Reads the committed query embeddings, so it needs no key and no network. After changing a question
+# in evals/retrieval/dataset.yaml, run `make embed` first and commit the cache.
+eval-retrieval: ## Score handbook search against the labeled questions (needs `make db`); see evals/README.md
+	cd $(API) && uv run python ../../evals/retrieval/run.py
+
 # Not part of check-api: it deletes every row, including the sandboxes you're working in.
 migrations-roundtrip: ## Undo every migration, apply them again, recreate the logins, and reload the handbook (wipes data)
 	cd $(API) && uv run alembic downgrade base
@@ -71,14 +76,15 @@ openapi: ## Regenerate the OpenAPI schema and the web app's API client
 check: check-api check-web e2e check-docs check-workflows ## Run everything CI runs (start Postgres first with `make db`)
 
 check-api: ## Lint, type-check, migrate, and test the API; confirm the schema is current
-	cd $(API) && uv run ruff check .
-	cd $(API) && uv run ruff format --check .
+	cd $(API) && uv run ruff check . ../../evals --config pyproject.toml
+	cd $(API) && uv run ruff format --check . ../../evals --config pyproject.toml
 	cd $(API) && uv run mypy
 	cd $(API) && uv run lint-imports
 	cd $(API) && uv run alembic upgrade head
 	cd $(API) && uv run python scripts/bootstrap_db_users.py
 	cd $(API) && uv run alembic check
 	cd $(API) && uv run pytest
+	cd $(API) && uv run python ../../evals/retrieval/run.py --check
 	cd $(API) && uv run python scripts/export_openapi.py --check
 
 check-web: ## Lint, format-check, type-check, test, and build the web app; confirm the client

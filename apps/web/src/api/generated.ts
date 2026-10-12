@@ -22,6 +22,12 @@ import type {
 
 import { apiFetch } from '../lib/api-fetch'
 import type { ErrorType } from '../lib/api-fetch'
+export interface AudienceOut {
+  states: string[]
+  employmentTypes: string[]
+  locations: string[]
+}
+
 export interface DepartmentCount {
   id: string
   name: string
@@ -92,6 +98,59 @@ export interface FieldError {
   type: string
 }
 
+export type HandbookOverviewChapters = { [key: string]: string }
+
+export type HandbookOverviewAddenda = { [key: string]: string }
+
+export interface VersionInfo {
+  label: string
+  title: string
+  updatedOn: string
+}
+
+export type SectionSummaryKind = (typeof SectionSummaryKind)[keyof typeof SectionSummaryKind]
+
+export const SectionSummaryKind = {
+  company: 'company',
+  addendum: 'addendum',
+} as const
+
+/**
+ * A section as the list, the search results, and the section and passage headers show it.
+ */
+export interface SectionSummary {
+  id: string
+  title: string
+  kind: SectionSummaryKind
+  chapter: number | null
+  addendumState: string | null
+  groupName: string
+  audience: AudienceOut
+  audienceLabel: string
+  appliesToMe: boolean
+  lastUpdated: string
+}
+
+export interface HandbookOverview {
+  version: VersionInfo
+  chapters: HandbookOverviewChapters
+  addenda: HandbookOverviewAddenda
+  sections: SectionSummary[]
+}
+
+export type HeadingBlockLevel = (typeof HeadingBlockLevel)[keyof typeof HeadingBlockLevel]
+
+export const HeadingBlockLevel = {
+  NUMBER_2: 2,
+  NUMBER_3: 3,
+} as const
+
+export interface HeadingBlock {
+  type: 'heading'
+  level: HeadingBlockLevel
+  text: string
+}
+
 export type HealthResponseStatus = (typeof HealthResponseStatus)[keyof typeof HealthResponseStatus]
 
 export const HealthResponseStatus = {
@@ -111,6 +170,21 @@ export interface HealthResponse {
   status: HealthResponseStatus
   database: HealthResponseDatabase
   version: string
+}
+
+export interface Inline {
+  text: string
+  bold: boolean
+  italic: boolean
+  linkSectionId: string | null
+}
+
+export interface ListPassage {
+  type: 'passage'
+  id: string
+  kind: 'list'
+  ordered: boolean
+  items: Inline[][]
 }
 
 export type MeEmploymentType = (typeof MeEmploymentType)[keyof typeof MeEmploymentType]
@@ -152,6 +226,23 @@ export interface NewSandboxRequest {
   persona?: PersonaKey
 }
 
+export interface ParagraphPassage {
+  type: 'passage'
+  id: string
+  kind: 'paragraph'
+  inlines: Inline[]
+}
+
+/**
+ * What the passage panel shows.
+ */
+export interface PassageView {
+  section: SectionSummary
+  passage: ParagraphPassage | ListPassage
+  previous: ParagraphPassage | ListPassage | null
+  next: ParagraphPassage | ListPassage | null
+}
+
 export interface PersonaChoice {
   persona: PersonaKey
 }
@@ -186,6 +277,65 @@ export interface SandboxCreated {
   me: Me
 }
 
+export interface Segment {
+  text: string
+  match: boolean
+}
+
+export interface SearchResultOut {
+  section: SectionSummary
+  passageId: string
+  excerpt: Segment[]
+}
+
+export interface SearchResults {
+  results: SearchResultOut[]
+}
+
+export type SectionDetailKind = (typeof SectionDetailKind)[keyof typeof SectionDetailKind]
+
+export const SectionDetailKind = {
+  company: 'company',
+  addendum: 'addendum',
+} as const
+
+/**
+ * A related section: the one an addendum supplements, or an addendum that supplements one.
+ */
+export interface SectionRef {
+  id: string
+  title: string
+  audienceLabel: string
+  appliesToMe: boolean
+}
+
+/**
+ * A neighbor in the handbook's order.
+ */
+export interface SectionLink {
+  id: string
+  title: string
+}
+
+export interface SectionDetail {
+  id: string
+  title: string
+  kind: SectionDetailKind
+  chapter: number | null
+  addendumState: string | null
+  groupName: string
+  audience: AudienceOut
+  audienceLabel: string
+  appliesToMe: boolean
+  lastUpdated: string
+  blocks: (HeadingBlock | ParagraphPassage | ListPassage)[]
+  sources: string[]
+  supplements: SectionRef | null
+  supplementedBy: SectionRef[]
+  previous: SectionLink | null
+  next: SectionLink | null
+}
+
 export type ListPeopleParams = {
   cursor?: string | null
   /**
@@ -204,6 +354,13 @@ export type GetDirectoryFacetsParams = {
   locationId?: string | null
   departmentId?: string | null
   team?: 'mine' | null
+}
+
+export type SearchHandbookParams = {
+  /**
+   * @maxLength 100
+   */
+  q: string
 }
 
 type SecondParameter<T extends (...args: never) => unknown> = Parameters<T>[1]
@@ -1205,6 +1362,518 @@ export function useGetPersonPrivate<
   queryClient?: QueryClient,
 ): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
   const queryOptions = getGetPersonPrivateQueryOptions(personId, options)
+
+  const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
+    queryKey: DataTag<QueryKey, TData, TError>
+  }
+
+  return withQueryKey(query, queryOptions.queryKey)
+}
+
+export const getGetHandbookUrl = () => {
+  return `/api/v1/handbook`
+}
+
+/**
+ * @summary The handbook: its version and every section, in order
+ */
+export const getHandbook = async (
+  options?: Parameters<typeof apiFetch>[1],
+): Promise<HandbookOverview> => {
+  return apiFetch<HandbookOverview>(getGetHandbookUrl(), {
+    ...options,
+    method: 'GET',
+  })
+}
+
+export const getGetHandbookQueryKey = () => {
+  return [`/api/v1/handbook`] as const
+}
+
+export const getGetHandbookQueryOptions = <
+  TData = Awaited<ReturnType<typeof getHandbook>>,
+  TError = ErrorType<Problem>,
+>(options?: {
+  query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof getHandbook>>, TError, TData>>
+  request?: SecondParameter<typeof apiFetch>
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {}
+
+  const queryKey = queryOptions?.queryKey ?? getGetHandbookQueryKey()
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getHandbook>>> = ({ signal }) =>
+    getHandbook({ signal, ...requestOptions })
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getHandbook>>,
+    TError,
+    TData
+  > & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type GetHandbookQueryResult = NonNullable<Awaited<ReturnType<typeof getHandbook>>>
+export type GetHandbookQueryError = ErrorType<Problem>
+
+export function useGetHandbook<
+  TData = Awaited<ReturnType<typeof getHandbook>>,
+  TError = ErrorType<Problem>,
+>(
+  options: {
+    query: Partial<UseQueryOptions<Awaited<ReturnType<typeof getHandbook>>, TError, TData>> &
+      Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getHandbook>>,
+          TError,
+          Awaited<ReturnType<typeof getHandbook>>
+        >,
+        'initialData'
+      >
+    request?: SecondParameter<typeof apiFetch>
+  },
+  queryClient?: QueryClient,
+): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetHandbook<
+  TData = Awaited<ReturnType<typeof getHandbook>>,
+  TError = ErrorType<Problem>,
+>(
+  options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof getHandbook>>, TError, TData>> &
+      Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getHandbook>>,
+          TError,
+          Awaited<ReturnType<typeof getHandbook>>
+        >,
+        'initialData'
+      >
+    request?: SecondParameter<typeof apiFetch>
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetHandbook<
+  TData = Awaited<ReturnType<typeof getHandbook>>,
+  TError = ErrorType<Problem>,
+>(
+  options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof getHandbook>>, TError, TData>>
+    request?: SecondParameter<typeof apiFetch>
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary The handbook: its version and every section, in order
+ */
+
+export function useGetHandbook<
+  TData = Awaited<ReturnType<typeof getHandbook>>,
+  TError = ErrorType<Problem>,
+>(
+  options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof getHandbook>>, TError, TData>>
+    request?: SecondParameter<typeof apiFetch>
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+  const queryOptions = getGetHandbookQueryOptions(options)
+
+  const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
+    queryKey: DataTag<QueryKey, TData, TError>
+  }
+
+  return withQueryKey(query, queryOptions.queryKey)
+}
+
+export const getSearchHandbookUrl = (params: SearchHandbookParams) => {
+  const normalizedParams = new URLSearchParams()
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  })
+
+  const stringifiedParams = normalizedParams.toString()
+
+  return stringifiedParams.length > 0
+    ? `/api/v1/handbook/search?${stringifiedParams}`
+    : `/api/v1/handbook/search`
+}
+
+/**
+ * @summary Full-text search of the handbook: every word required, applicable sections first
+ */
+export const searchHandbook = async (
+  params: SearchHandbookParams,
+  options?: Parameters<typeof apiFetch>[1],
+): Promise<SearchResults> => {
+  return apiFetch<SearchResults>(getSearchHandbookUrl(params), {
+    ...options,
+    method: 'GET',
+  })
+}
+
+export const getSearchHandbookQueryKey = (params?: SearchHandbookParams) => {
+  return [`/api/v1/handbook/search`, ...(params ? [params] : [])] as const
+}
+
+export const getSearchHandbookQueryOptions = <
+  TData = Awaited<ReturnType<typeof searchHandbook>>,
+  TError = ErrorType<Problem>,
+>(
+  params: SearchHandbookParams,
+  options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof searchHandbook>>, TError, TData>>
+    request?: SecondParameter<typeof apiFetch>
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {}
+
+  const queryKey = queryOptions?.queryKey ?? getSearchHandbookQueryKey(params)
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof searchHandbook>>> = ({ signal }) =>
+    searchHandbook(params, { signal, ...requestOptions })
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof searchHandbook>>,
+    TError,
+    TData
+  > & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type SearchHandbookQueryResult = NonNullable<Awaited<ReturnType<typeof searchHandbook>>>
+export type SearchHandbookQueryError = ErrorType<Problem>
+
+export function useSearchHandbook<
+  TData = Awaited<ReturnType<typeof searchHandbook>>,
+  TError = ErrorType<Problem>,
+>(
+  params: SearchHandbookParams,
+  options: {
+    query: Partial<UseQueryOptions<Awaited<ReturnType<typeof searchHandbook>>, TError, TData>> &
+      Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof searchHandbook>>,
+          TError,
+          Awaited<ReturnType<typeof searchHandbook>>
+        >,
+        'initialData'
+      >
+    request?: SecondParameter<typeof apiFetch>
+  },
+  queryClient?: QueryClient,
+): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useSearchHandbook<
+  TData = Awaited<ReturnType<typeof searchHandbook>>,
+  TError = ErrorType<Problem>,
+>(
+  params: SearchHandbookParams,
+  options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof searchHandbook>>, TError, TData>> &
+      Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof searchHandbook>>,
+          TError,
+          Awaited<ReturnType<typeof searchHandbook>>
+        >,
+        'initialData'
+      >
+    request?: SecondParameter<typeof apiFetch>
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useSearchHandbook<
+  TData = Awaited<ReturnType<typeof searchHandbook>>,
+  TError = ErrorType<Problem>,
+>(
+  params: SearchHandbookParams,
+  options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof searchHandbook>>, TError, TData>>
+    request?: SecondParameter<typeof apiFetch>
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary Full-text search of the handbook: every word required, applicable sections first
+ */
+
+export function useSearchHandbook<
+  TData = Awaited<ReturnType<typeof searchHandbook>>,
+  TError = ErrorType<Problem>,
+>(
+  params: SearchHandbookParams,
+  options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof searchHandbook>>, TError, TData>>
+    request?: SecondParameter<typeof apiFetch>
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+  const queryOptions = getSearchHandbookQueryOptions(params, options)
+
+  const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
+    queryKey: DataTag<QueryKey, TData, TError>
+  }
+
+  return withQueryKey(query, queryOptions.queryKey)
+}
+
+export const getGetHandbookSectionUrl = (sectionId: string) => {
+  return `/api/v1/handbook/sections/${sectionId}`
+}
+
+/**
+ * @summary One section: its text, related sections, sources, and neighbors
+ */
+export const getHandbookSection = async (
+  sectionId: string,
+  options?: Parameters<typeof apiFetch>[1],
+): Promise<SectionDetail> => {
+  return apiFetch<SectionDetail>(getGetHandbookSectionUrl(sectionId), {
+    ...options,
+    method: 'GET',
+  })
+}
+
+export const getGetHandbookSectionQueryKey = (sectionId: string) => {
+  return [`/api/v1/handbook/sections/${sectionId}`] as const
+}
+
+export const getGetHandbookSectionQueryOptions = <
+  TData = Awaited<ReturnType<typeof getHandbookSection>>,
+  TError = ErrorType<Problem>,
+>(
+  sectionId: string,
+  options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof getHandbookSection>>, TError, TData>>
+    request?: SecondParameter<typeof apiFetch>
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {}
+
+  const queryKey = queryOptions?.queryKey ?? getGetHandbookSectionQueryKey(sectionId)
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getHandbookSection>>> = ({ signal }) =>
+    getHandbookSection(sectionId, { signal, ...requestOptions })
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: sectionId !== null && sectionId !== undefined,
+    ...queryOptions,
+  } as UseQueryOptions<Awaited<ReturnType<typeof getHandbookSection>>, TError, TData> & {
+    queryKey: DataTag<QueryKey, TData, TError>
+  }
+}
+
+export type GetHandbookSectionQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getHandbookSection>>
+>
+export type GetHandbookSectionQueryError = ErrorType<Problem>
+
+export function useGetHandbookSection<
+  TData = Awaited<ReturnType<typeof getHandbookSection>>,
+  TError = ErrorType<Problem>,
+>(
+  sectionId: string,
+  options: {
+    query: Partial<UseQueryOptions<Awaited<ReturnType<typeof getHandbookSection>>, TError, TData>> &
+      Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getHandbookSection>>,
+          TError,
+          Awaited<ReturnType<typeof getHandbookSection>>
+        >,
+        'initialData'
+      >
+    request?: SecondParameter<typeof apiFetch>
+  },
+  queryClient?: QueryClient,
+): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetHandbookSection<
+  TData = Awaited<ReturnType<typeof getHandbookSection>>,
+  TError = ErrorType<Problem>,
+>(
+  sectionId: string,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof getHandbookSection>>, TError, TData>
+    > &
+      Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getHandbookSection>>,
+          TError,
+          Awaited<ReturnType<typeof getHandbookSection>>
+        >,
+        'initialData'
+      >
+    request?: SecondParameter<typeof apiFetch>
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetHandbookSection<
+  TData = Awaited<ReturnType<typeof getHandbookSection>>,
+  TError = ErrorType<Problem>,
+>(
+  sectionId: string,
+  options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof getHandbookSection>>, TError, TData>>
+    request?: SecondParameter<typeof apiFetch>
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary One section: its text, related sections, sources, and neighbors
+ */
+
+export function useGetHandbookSection<
+  TData = Awaited<ReturnType<typeof getHandbookSection>>,
+  TError = ErrorType<Problem>,
+>(
+  sectionId: string,
+  options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof getHandbookSection>>, TError, TData>>
+    request?: SecondParameter<typeof apiFetch>
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+  const queryOptions = getGetHandbookSectionQueryOptions(sectionId, options)
+
+  const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
+    queryKey: DataTag<QueryKey, TData, TError>
+  }
+
+  return withQueryKey(query, queryOptions.queryKey)
+}
+
+export const getGetHandbookPassageUrl = (sectionId: string, passageId: string) => {
+  return `/api/v1/handbook/sections/${sectionId}/passages/${passageId}`
+}
+
+/**
+ * @summary One passage with the passages around it: what the passage panel shows
+ */
+export const getHandbookPassage = async (
+  sectionId: string,
+  passageId: string,
+  options?: Parameters<typeof apiFetch>[1],
+): Promise<PassageView> => {
+  return apiFetch<PassageView>(getGetHandbookPassageUrl(sectionId, passageId), {
+    ...options,
+    method: 'GET',
+  })
+}
+
+export const getGetHandbookPassageQueryKey = (sectionId: string, passageId: string) => {
+  return [`/api/v1/handbook/sections/${sectionId}/passages/${passageId}`] as const
+}
+
+export const getGetHandbookPassageQueryOptions = <
+  TData = Awaited<ReturnType<typeof getHandbookPassage>>,
+  TError = ErrorType<Problem>,
+>(
+  sectionId: string,
+  passageId: string,
+  options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof getHandbookPassage>>, TError, TData>>
+    request?: SecondParameter<typeof apiFetch>
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {}
+
+  const queryKey = queryOptions?.queryKey ?? getGetHandbookPassageQueryKey(sectionId, passageId)
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getHandbookPassage>>> = ({ signal }) =>
+    getHandbookPassage(sectionId, passageId, { signal, ...requestOptions })
+
+  return {
+    queryKey,
+    queryFn,
+    enabled:
+      sectionId !== null &&
+      sectionId !== undefined &&
+      passageId !== null &&
+      passageId !== undefined,
+    ...queryOptions,
+  } as UseQueryOptions<Awaited<ReturnType<typeof getHandbookPassage>>, TError, TData> & {
+    queryKey: DataTag<QueryKey, TData, TError>
+  }
+}
+
+export type GetHandbookPassageQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getHandbookPassage>>
+>
+export type GetHandbookPassageQueryError = ErrorType<Problem>
+
+export function useGetHandbookPassage<
+  TData = Awaited<ReturnType<typeof getHandbookPassage>>,
+  TError = ErrorType<Problem>,
+>(
+  sectionId: string,
+  passageId: string,
+  options: {
+    query: Partial<UseQueryOptions<Awaited<ReturnType<typeof getHandbookPassage>>, TError, TData>> &
+      Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getHandbookPassage>>,
+          TError,
+          Awaited<ReturnType<typeof getHandbookPassage>>
+        >,
+        'initialData'
+      >
+    request?: SecondParameter<typeof apiFetch>
+  },
+  queryClient?: QueryClient,
+): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetHandbookPassage<
+  TData = Awaited<ReturnType<typeof getHandbookPassage>>,
+  TError = ErrorType<Problem>,
+>(
+  sectionId: string,
+  passageId: string,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof getHandbookPassage>>, TError, TData>
+    > &
+      Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getHandbookPassage>>,
+          TError,
+          Awaited<ReturnType<typeof getHandbookPassage>>
+        >,
+        'initialData'
+      >
+    request?: SecondParameter<typeof apiFetch>
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetHandbookPassage<
+  TData = Awaited<ReturnType<typeof getHandbookPassage>>,
+  TError = ErrorType<Problem>,
+>(
+  sectionId: string,
+  passageId: string,
+  options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof getHandbookPassage>>, TError, TData>>
+    request?: SecondParameter<typeof apiFetch>
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary One passage with the passages around it: what the passage panel shows
+ */
+
+export function useGetHandbookPassage<
+  TData = Awaited<ReturnType<typeof getHandbookPassage>>,
+  TError = ErrorType<Problem>,
+>(
+  sectionId: string,
+  passageId: string,
+  options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof getHandbookPassage>>, TError, TData>>
+    request?: SecondParameter<typeof apiFetch>
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+  const queryOptions = getGetHandbookPassageQueryOptions(sectionId, passageId, options)
 
   const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
     queryKey: DataTag<QueryKey, TData, TError>

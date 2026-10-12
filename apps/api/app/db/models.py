@@ -29,6 +29,7 @@ from sqlalchemy import (
     UniqueConstraint,
     false,
     func,
+    text,
 )
 from sqlalchemy.dialects.postgresql import ARRAY, JSONB, TSVECTOR
 from sqlalchemy.orm import Mapped, mapped_column
@@ -225,6 +226,13 @@ class HandbookVersion(Base):
     embedding_dimensions: Mapped[int]
     # The latest section's `updated` date: the "Handbook updated" figure.
     updated_on: Mapped[date]
+    # {"chapters": {"1": "Welcome", ...}, "addenda": {"CA": "California addendum", ...}}, from
+    # handbook.yaml. '{}' for an insert that omits it.
+    group_names: Mapped[dict[str, dict[str, str]]] = mapped_column(
+        JSONB, server_default=text("'{}'::jsonb")
+    )
+    # The handbook's title, from handbook.yaml. '' for an insert that omits it.
+    title: Mapped[str] = mapped_column(server_default=text("''"))
     # Null for a version that is loaded but not published.
     published_at: Mapped[datetime | None]
     created_at: Mapped[datetime] = mapped_column(server_default=func.now())

@@ -42,12 +42,6 @@ should pick it up. When one is done, delete it here and record it in the changel
   delete those rows. Whichever phase first grants `UPDATE` or `DELETE` on `person_private` must
   add restrictive policies for them in the same migration. (Stage 1 security review.)
 
-- **Hide SQL parameters from the error log.** The engine doesn't set `hide_parameters=True`, so a
-  statement that fails is logged at ERROR level with its bound values. No private value is bound
-  in Phase 1: the private-details query binds only an ID, and its audit row binds field names.
-  Whichever phase first binds a private value or user-written text, such as Phase 4's
-  conversations, must set it in `app/db/engine.py`. (Stage 4 security review.)
-
 - **Keep the directory cursor and the facet counts from naming a hidden person.** The next cursor is
   the sort key of the last row read, so paging continues past cards the policy layer hides. The
   directory's facet counts (Phase 2) skip the per-card check altogether. Every card is visible in
@@ -74,12 +68,15 @@ should pick it up. When one is done, delete it here and record it in the changel
 - **Label each cited section with "Applies to" and "Last updated."** The passage panel shows, for
   example, "Applies to: California employees", and the section's last-updated date. That covers
   "has this changed?" without remembering past conversations. (2026-10-06 design brainstorm.)
-- **Pin each sandbox to a handbook version** with a `tenants.handbook_version_id` column, so an
-  answer cites the handbook the sandbox was created with, even after the handbook changes.
-  Source: [the Phase 1 spec](specs/2026-10-03-phase-1-tenancy-identity-permissions.md#later-phases).
 
 ## Phase 4: assistant core
 
+- **Map search hits to `search_result` blocks, and open the passage panel on a citation's
+  passage.** Each `search_handbook` hit carries its deep link, title, and passage texts, so it
+  maps one to one onto a Claude `search_result` block, and a citation's block index names a
+  passage. Call `embed_query` before opening the database session, and take the version only from
+  `pinned_version_id`. A section can appear twice, once per chunk; dedupe if the answer view
+  wants one card per section. (Phase 3 spec, "The shape Phase 4 cites".)
 - **Record why the assistant is not a high-risk AI system.** Annex III of the EU AI Act lists
   systems used for employment decisions as high-risk. Article 6(3) exempts a system that doesn't
   profile people or materially influence decisions, and Article 6(4) requires that assessment to
@@ -166,6 +163,10 @@ Source for both: [the Phase 1 spec](specs/2026-10-03-phase-1-tenancy-identity-pe
 
 ## Phase 8: hardening and deploy-readiness
 
+- **Delete handbook versions no sandbox uses.** Each `make ingest` of changed text adds a version,
+  and nothing removes old ones. A cleanup step can delete unpublished versions and published ones
+  that are neither the newest nor pinned by any sandbox; the foreign key already refuses to delete
+  a version in use. (Phase 3 spec, Data model.)
 - **Make the directory's counts cheaper.** `GET /people/facets` runs up to five queries one after
   another (total, matching, the location and department menus, and "My team") on every debounced
   search. Total and matching can be one `count(*) FILTER (WHERE …)`, and the total doesn't change
