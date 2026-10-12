@@ -21,6 +21,33 @@ version (`0.x.y` while the app is being built, `1.0.0` when it is complete).
   pay) are fictional policy chosen to meet or beat all three states. Paid time off has a balance
   ceiling rather than a year-end carryover cap, because California and Colorado don't allow earned
   vacation to be forfeited. The handbook is demo content, not legal advice, and says so.
+- **The handbook becomes data** (Phase 3, stage 2), ready for the search that follows.
+  - **Ingestion:** `make ingest` checks every section against a strict markdown subset (no HTML,
+    images, tables, or outside links; links only to other sections), reporting every problem
+    with its file and line. It numbers each paragraph and list as a citable passage, groups
+    passages into chunks for search, and loads the result as one immutable, published version.
+    `make db` now ends with it. Running it again on unchanged files does nothing.
+  - **Embeddings:** each chunk's meaning is captured as a vector from Voyage AI's `voyage-4`
+    model, through a small client that batches, retries, and never logs the key. The vectors are
+    committed in `handbook/embeddings/`, so tests and CI never call Voyage. `make embed` is the
+    only command that does, and it costs nothing within Voyage's free allowance. A version's
+    fingerprint covers the files and the vectors, so a changed vector needs a new version label.
+  - **Each new sandbox is pinned** to the newest published handbook by the database itself, so an
+    answer always cites the handbook the sandbox was created with. With no handbook loaded,
+    starting a sandbox answers "The handbook isn't loaded yet." and creates nothing.
+  - **Who a section applies to** (by state, employment type, and location) is decided by one pure
+    function, with exact expected sections recorded for every persona.
+  - **The API can only read the handbook.** Its database role has `SELECT` on the three new
+    tables and nothing else, and only the ingestion script, connecting as the database owner,
+    can write them.
+
+### Changed
+
+- **The development and CI databases use a pinned image,** `pgvector/pgvector:0.8.7-pg17`, rather
+  than whatever `pg17` pointed to on the day (Phase 3, stage 2).
+- **The secret scan skips the generated embedding caches** (Phase 3, stage 2). Each line's key is
+  a hash of public handbook text, which gitleaks mistook for an API key. Every other file is
+  scanned with the default rules, as before.
 
 ### Fixed
 

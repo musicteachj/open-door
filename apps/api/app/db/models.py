@@ -1,4 +1,6 @@
-"""The Phase 1 tables. Migration 0003 creates them, with their row-level security and grants.
+"""The tables. Migration 0003 creates the tenant tables, with their row-level security and grants.
+Migration 0004 adds the handbook tables at the end of this file, which are global and read-only to
+the API.
 
 Every table except `tenants` and `sessions` is a tenant table: it has a tenant_id, and Postgres
 shows the API only the rows of the tenant its transaction is scoped to (see app/db/tenancy.py).
@@ -16,16 +18,19 @@ import uuid
 from datetime import date, datetime
 from typing import Any
 
+from pgvector.sqlalchemy import Vector
 from sqlalchemy import (
     CheckConstraint,
+    Computed,
     ForeignKey,
     ForeignKeyConstraint,
     Index,
+    Text,
     UniqueConstraint,
     false,
     func,
 )
-from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.dialects.postgresql import ARRAY, JSONB, TSVECTOR
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
@@ -49,6 +54,13 @@ class Tenant(Base):
     expires_at: Mapped[datetime]
     # The date the seed data is relative to, so "last week" always means last week.
     anchor_date: Mapped[date]
+    # The handbook version this sandbox answers from. A trigger (migration 0005) sets it on insert
+    # to the newest published version, whatever the caller supplies, and refuses the insert if none
+    # is published. Null only for sandboxes created before migration 0004. RESTRICT: a version in
+    # use can't be deleted.
+    handbook_version_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("handbook_versions.id", ondelete="RESTRICT")
+    )
 
 
 class Location(Base):
@@ -198,3 +210,87 @@ class AuditEvent(Base):
     after: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
     proposal_id: Mapped[uuid.UUID | None]
     request_id: Mapped[str | None]
+
+
+class HandbookVersion(Base):
+    """One loaded edition of the handbook. Global: no tenant_id. The API reads, ingestion writes."""
+
+    __tablename__ = "handbook_versions"
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, server_default=func.gen_random_uuid())
+    label: Mapped[str] = mapped_column(unique=True)
+    # A SHA-256 over the source files, the chunker's version, and the embedding model and size.
+    content_hash: Mapped[str] = mapped_column(unique=True)
+    embedding_model: Mapped[str]
+    embedding_dimensions: Mapped[int]
+    # The latest section's `updated` date: the "Handbook updated" figure.
+    updated_on: Mapped[date]
+    # Null for a version that is loaded but not published.
+    published_at: Mapped[datetime | None]
+    created_at: Mapped[datetime] = mapped_column(server_default=func.now())
+
+
+class HandbookSection(Base):
+    __tablename__ = "handbook_sections"
+    __table_args__ = (
+        UniqueConstraint("version_id", "section_key"),
+        CheckConstraint("kind IN ('company', 'addendum')", name="kind"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, server_default=func.gen_random_uuid())
+    version_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("handbook_versions.id", ondelete="CASCADE")
+    )
+    # "4.3" for a company section, "CA-4.3" for a state addendum.
+    section_key: Mapped[str]
+    # The handbook's order.
+    position: Mapped[int]
+    kind: Mapped[str]
+    chapter: Mapped[int | None]
+    addendum_state: Mapped[str | None]
+    title: Mapped[str]
+    supplements_key: Mapped[str | None]
+    # {"states": [...], "employmentTypes": [...], "locations": [...]}
+    audience: Mapped[dict[str, Any]] = mapped_column(JSONB)
+    updated_on: Mapped[date]
+    sources: Mapped[list[str]] = mapped_column(JSONB)
+    # The structured body: headings, passages with their IDs, and inline runs.
+    blocks: Mapped[list[dict[str, Any]]] = mapped_column(JSONB)
+
+
+class HandbookChunk(Base):
+    """What retrieval searches: a run of whole passages under one heading."""
+
+    __tablename__ = "handbook_chunks"
+    __table_args__ = (Index(None, "search", postgresql_using="gin"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, server_default=func.gen_random_uuid())
+    version_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("handbook_versions.id", ondelete="CASCADE")
+    )
+    section_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("handbook_sections.id", ondelete="CASCADE")
+    )
+    # Copies of the section's key and title. A generated column can read only its own row, and the
+    # search vector weights both above the text.
+    section_key: Mapped[str]
+    section_title: Mapped[str]
+    position: Mapped[int]
+    # The `##` heading this chunk sits under; null for text before the section's first heading.
+    heading: Mapped[str | None]
+    # The passages this chunk covers, in order. A passage is never split across chunks.
+    passage_ids: Mapped[list[str]] = mapped_column(ARRAY(Text))
+    text: Mapped[str]
+    # 'english' is written as a literal so the expression is immutable.
+    search: Mapped[str] = mapped_column(
+        TSVECTOR,
+        Computed(
+            "setweight(to_tsvector('english',"
+            " coalesce(section_key, '') || ' ' || coalesce(section_title, '') || ' '"
+            " || coalesce(heading, '')), 'A')"
+            " || setweight(to_tsvector('english', text), 'B')",
+            persisted=True,
+        ),
+    )
+    # voyage-4 at 1024 dimensions. No approximate index: an exact scan over a few hundred rows.
+    embedding: Mapped[list[float]] = mapped_column(Vector(1024))

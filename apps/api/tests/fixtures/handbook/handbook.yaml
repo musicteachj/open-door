@@ -1,0 +1,11 @@
+version: "2026.10"
+title: Test Handbook
+chapters:
+  1: Welcome
+  4: Time off
+addenda:
+  CA: California addendum
+  TX: Texas addendum
+locations:
+  den: Denver HQ
+  oak: Oakland store

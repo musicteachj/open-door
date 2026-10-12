@@ -14,7 +14,7 @@ ZIZMOR := zizmor@1.30.1
 GITLEAKS := ghcr.io/gitleaks/gitleaks:v8.30.1
 
 .DEFAULT_GOAL := help
-.PHONY: help setup db db-stop migrate bootstrap-db migrations-roundtrip dev dev-api dev-web openapi check check-api check-web e2e captures check-docs check-workflows audit
+.PHONY: help setup db db-stop migrate bootstrap-db ingest embed migrations-roundtrip dev dev-api dev-web openapi check check-api check-web e2e captures check-docs check-workflows audit
 
 help: ## List the available commands
 	@grep -E '^[a-zA-Z_-]+:.*## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*## "}; {printf "  %-22s %s\n", $$1, $$2}'
@@ -25,10 +25,11 @@ setup: ## Install dependencies and git hooks; create apps/api/.env if it's missi
 	uvx pre-commit install
 	@test -f $(API)/.env || (cp $(API)/.env.example $(API)/.env && echo "Created $(API)/.env")
 
-db: ## Start the development Postgres, apply migrations, then create the login users
+db: ## Start the development Postgres, apply migrations, create the login users, then load the handbook
 	docker compose up --detach --wait db
 	cd $(API) && uv run alembic upgrade head
 	cd $(API) && uv run python scripts/bootstrap_db_users.py
+	cd $(API) && uv run python scripts/ingest_handbook.py ingest
 
 db-stop: ## Stop the development Postgres (its data is kept)
 	docker compose stop db
@@ -39,11 +40,20 @@ migrate: ## Apply new database migrations
 bootstrap-db: ## Create or update the login users named in DATABASE_URL and CLEANUP_DATABASE_URL
 	cd $(API) && uv run python scripts/bootstrap_db_users.py
 
+ingest: ## Load and publish the handbook from handbook/ and its committed embeddings (needs `make db`)
+	cd $(API) && uv run python scripts/ingest_handbook.py ingest
+
+# The only command that calls Voyage. If a key in apps/api/.env seems ignored, an empty
+# VOYAGE_API_KEY in your shell is shadowing it: run `env -u VOYAGE_API_KEY make embed`.
+embed: ## Fetch missing handbook and eval embeddings from Voyage (needs VOYAGE_API_KEY); commit the result
+	cd $(API) && uv run python scripts/ingest_handbook.py embed
+
 # Not part of check-api: it deletes every row, including the sandboxes you're working in.
-migrations-roundtrip: ## Undo every migration, apply them again, and recreate the logins (wipes data)
+migrations-roundtrip: ## Undo every migration, apply them again, recreate the logins, and reload the handbook (wipes data)
 	cd $(API) && uv run alembic downgrade base
 	cd $(API) && uv run alembic upgrade head
 	cd $(API) && uv run python scripts/bootstrap_db_users.py
+	cd $(API) && uv run python scripts/ingest_handbook.py ingest
 
 dev: db ## Run `make db`, then the API (:8000) and the web app (:5173) together
 	$(MAKE) -j2 dev-api dev-web

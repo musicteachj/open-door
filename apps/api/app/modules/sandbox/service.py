@@ -1,10 +1,12 @@
 """Creating a sandbox: a new company, seeded, with the visitor signed in as one of its personas."""
 
+import logging
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from uuid import UUID, uuid4
 
 from sqlalchemy import insert
+from sqlalchemy.exc import DBAPIError
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 from app.db.models import Tenant
@@ -17,8 +19,18 @@ from app.modules.people.queries import get_me
 from app.modules.people.schemas import Me, PersonaKey
 from app.modules.sandbox.seed import build_company, insert_company
 
+logger = logging.getLogger(__name__)
+
+# The SQLSTATE that the trigger on tenants (migration 0005) raises when no handbook version is
+# published. A custom code: class OD is ours.
+NO_PUBLISHED_HANDBOOK = "OD001"
+
 # A sandbox, and every session in it, is deleted 24 hours after it is created (ADR 0007).
 SANDBOX_LIFETIME = timedelta(hours=24)
+
+
+class HandbookNotLoadedError(Exception):
+    """No handbook version is published, so a sandbox can't be created (the route answers 503)."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -51,6 +63,10 @@ async def create_sandbox(
     transaction scoped to its own sandbox, where `session.ended` is audited, so each sandbox
     creation leaves the browser with exactly one session. If creating the new sandbox then fails,
     the visitor has no session.
+
+    The database pins the new tenant to the newest published handbook version (a trigger,
+    migration 0005), so there is no version logic here. If none is published, the insert fails, the
+    transaction rolls back, and this raises `HandbookNotLoadedError`.
     """
     if replacing is not None:
         await _end_replaced_session(engine, replacing)
@@ -59,26 +75,33 @@ async def create_sandbox(
     expires_at = created_at + SANDBOX_LIFETIME
     company = build_company(tenant_id, created_at.date())
     person_id = next(person.id for person in company.people if person.persona_key == persona)
-    async with tenant_session(engine, TenantContext(tenant_id, person_id)) as db:
-        await db.execute(
-            insert(Tenant).values(
-                id=tenant_id, expires_at=expires_at, anchor_date=company.anchor_date
+    try:
+        async with tenant_session(engine, TenantContext(tenant_id, person_id)) as db:
+            await db.execute(
+                insert(Tenant).values(
+                    id=tenant_id, expires_at=expires_at, anchor_date=company.anchor_date
+                )
             )
-        )
-        await insert_company(db, company)
-        tokens = await start_session(db, tenant_id, person_id)
-        await record_event(
-            db,
-            tenant_id=tenant_id,
-            actor_id=person_id,
-            action="sandbox.created",
-            target_type="tenant",
-            target_id=tenant_id,
-            after={"personaKey": persona},
-        )
-        actor = await load_actor(db, tenant_id, person_id)
-        if actor is None:
-            msg = f"The seed company has no {persona!r} persona"
-            raise RuntimeError(msg)
-        me = await get_me(db, actor, expires_at)
+            await insert_company(db, company)
+            tokens = await start_session(db, tenant_id, person_id)
+            await record_event(
+                db,
+                tenant_id=tenant_id,
+                actor_id=person_id,
+                action="sandbox.created",
+                target_type="tenant",
+                target_id=tenant_id,
+                after={"personaKey": persona},
+            )
+            actor = await load_actor(db, tenant_id, person_id)
+            if actor is None:
+                msg = f"The seed company has no {persona!r} persona"
+                raise RuntimeError(msg)
+            me = await get_me(db, actor, expires_at)
+    except DBAPIError as error:
+        if getattr(error.orig, "sqlstate", None) != NO_PUBLISHED_HANDBOOK:
+            raise
+        # The transaction has rolled back, so no tenant exists.
+        logger.warning("Sandbox not created: %s", error.orig)
+        raise HandbookNotLoadedError from error
     return NewSandbox(tenant_id, expires_at, tokens, me)

@@ -523,16 +523,20 @@ owner's side-by-side review.
 
 **Owner prerequisites,** needed before the first `make embed` in Stage 2:
 
-1. A Voyage account and API key, put in `apps/api/.env` as `VOYAGE_API_KEY`.
-2. A spend limit in the Voyage dashboard.
-3. Model-training data collection turned off for the account. MongoDB's documentation says it
-   *can* use data sent to the API to improve Voyage's models, through an organization setting.
-4. Optional: a payment method on file. Voyage's documentation ties its standard rate limits to
-   one, and the client retries on 429 either way.
+1. A Voyage account and API key, created on Voyage's own dashboard (an Atlas key works only
+   with MongoDB's `ai.mongodb.com` address), put in `apps/api/.env` as `VOYAGE_API_KEY`.
+2. A payment method on file. Without one, Voyage allows 3 requests and 10,000 tokens a minute,
+   too few for the first run. The free tokens still apply.
+3. A budget alert. It only sends an email: Voyage has no hard spending cap, so a project rate
+   limit is the only real ceiling.
+4. Model-training data collection turned off for the organization. MongoDB's documentation says
+   it *can* use data sent to the API to improve Voyage's models. Opting out needs the payment
+   method, and can't be undone from the dashboard.
 
 > Source: Voyage AI pricing, embeddings, and rate-limit documentation, docs.voyageai.com, read on
 > 2026-10-06. MongoDB, "Model training data" for Voyage AI, mongodb.com/docs/voyageai, read on
-> 2026-10-07.
+> 2026-10-07. Voyage's 429 message for accounts without a payment method, its FAQ (opting out of
+> training), and MongoDB's "Manage Voyage AI Model API Keys", read on 2026-10-12.
 
 ---
 

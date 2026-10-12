@@ -104,10 +104,13 @@ stubborn bug, then back.
 
 - **Before Stage 2's Task 16** (the first `make embed`):
   1. a Voyage API key in `apps/api/.env` as `VOYAGE_API_KEY`
-  2. a spend limit in the Voyage dashboard
-  3. model-training data collection turned off for the account
-  4. optionally, a payment method on file, which Voyage's documentation ties to its standard rate
-     limits
+  2. a payment method on file: without one, Voyage allows only 3 requests and 10,000 tokens a
+     minute, too few for the handbook's first run (the free tokens still apply with a card)
+  3. a budget alert in the Voyage dashboard (it only emails; Voyage has no hard spending cap)
+  4. model-training data collection turned off for the organization (this needs the payment
+     method)
+
+  These were corrected during Stage 2; see [Changes made during execution](#changes-made-during-execution).
 - **Docker Desktop is running,** and `make setup` and `make db` have run.
 - **Each stage branches off `dev` after the previous stage's PR merges.**
 - **Record the commit `dev` is at before Stage 1 branches.** Task 38's phase review diffs against
@@ -907,6 +910,51 @@ diffs against it.
 - **Colorado requires the COMPS poster with any handbook.** CO-3.3 says Juniper Row hands it out;
   a real deployment would attach it.
 - **Section titles** follow the design's list, and addenda reuse their company section's title.
+
+**Stage 2 (schema, ingestion, and embeddings), 2026-10-07 to 2026-10-12:**
+- **Versions:** the image is `pgvector/pgvector:0.8.7-pg17` (the newest 0.8.x for Postgres 17 on
+  Docker Hub, published 2026-10-01). The dependencies resolved to `pgvector` 0.5.0,
+  `markdown-it-py` 4.2.0, `pyyaml` 6.0.3, and `httpx` 0.28.1, plus `types-pyyaml` for mypy.
+- **Pinning is done by the database** (migration 0005, the owner's decision after the batch A
+  security review). A `BEFORE INSERT` trigger on `tenants` always sets `handbook_version_id` to
+  the newest published version (by `published_at`, then `created_at`, then `id`), whatever the
+  caller supplies, and raises SQLSTATE `OD001` when none is published. The sandbox service maps
+  that to the 503 problem. Without it, the API's role could have pinned a draft or nothing. The
+  migration also revokes `EXECUTE` from `PUBLIC` on both trigger functions.
+- **Task 16's first `make embed` ran before Task 15.** With the trigger, every test that creates a
+  tenant needs a published handbook, which needs the cache. 214 chunks, about 20,000 tokens, all
+  inside the free allowance. `make db` and `make migrations-roundtrip` both end with `make ingest`.
+- **YAML is read in the module, not the domain,** because Task 8 forbids `yaml` in `app.domain`.
+  `app/modules/handbook/source.py` parses the files and hands `load_handbook(config, files)`
+  `SourceFile`s with the parsed data and each field's line, so errors still name the file line.
+- **`Asker.from_actor` became `load_asker(session, actor)`,** because the actor carries only the
+  person and the tenant. It reads the person's state, employment type, and location under
+  row-level security.
+- **Schema details:** `handbook_chunks` copies `section_key` and `section_title` from its section,
+  because a generated column can read only its own row. `heading` is nullable, for text before
+  the first `##`. Every table has a UUID `id`.
+- **Stricter validation than the spec:** an addendum applies to exactly its own state and can't omit `applies_to`; a file sits
+  in the folder its ID implies and is named `{id}-{slug}.md`; a section needs at least one
+  passage; links in headings and empty list items are refused. Lists record `ordered`.
+- **The content hash covers the vectors and the parsed output,** not only the source files (a
+  security review finding and a `/code-review` finding). A change to the committed cache alone,
+  or a code change that renumbers passages or changes the stored blocks, makes a new hash, so it
+  needs a new label and shows in review. Ingestion therefore embeds from the cache before checking
+  for an unchanged version. Cached and ingested vectors must be finite and of unit length.
+- **`make embed` is a separate command,** as this plan says, not the spec's `--fetch-missing`
+  flag. Voyage is told not to truncate, so an over-long chunk fails loudly.
+- **Voyage prerequisites were wrong** and are corrected above and in the spec: there's no spending
+  cap (the budget limit only emails), an account without a card gets 3 requests a minute, and the
+  training opt-out needs a card. An Atlas-created key works only with `ai.mongodb.com`. ADR 0008
+  no longer says Anthropic "recommends" Voyage: its guide uses Voyage as its example provider.
+- **Notes for Stage 3:** retrieval must take the version from the sandbox's tenant row, read
+  under row-level security, never from a request. The `embed` command already fills an eval cache
+  from `evals/retrieval/dataset.yaml`, accepting a list (or a `questions:` list) of strings or of
+  mappings with a `question` key. Re-ingesting an older version's files reports "unchanged", doesn't
+  republish it, and warns that the newer version stays current (a warning, not an error, so
+  switching branches doesn't break `make db`).
+- **Tests at the close:** 744 API tests (258 against the database), 773 web unit tests, and 108
+  browser tests.
 
 ## Backlog
 
