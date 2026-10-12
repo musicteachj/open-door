@@ -223,6 +223,7 @@ make setup      install dependencies; create apps/api/.env from .env.example
 make db         start Postgres (127.0.0.1:5433), migrate, then create the login users
 make ingest     load and publish the handbook from handbook/ and its committed embeddings
 make embed      fetch missing embeddings from Voyage (needs VOYAGE_API_KEY); commit the cache
+make eval-retrieval  score handbook search against the labeled questions (needs `make db`; no network)
 make dev        Postgres, migrations, API (:8000) and web app (:5173) together
 make check      everything CI runs; needs `make db` first
 make e2e        the browser tests (Playwright, Chromium) against the real API on :8100

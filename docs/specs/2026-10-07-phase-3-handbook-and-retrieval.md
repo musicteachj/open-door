@@ -458,7 +458,8 @@ The Opus reviewer for the schema-and-ingestion stage is briefed on:
 
 The later stages carry these guarantees, checked by the normal review:
 
-- the search query is bound, never interpolated, and is capped at 100 characters
+- the search query is bound, never interpolated, and capped: 100 characters for the browser's
+  search route, 500 for `search_handbook`, which takes the assistant's sentence-length questions
 - `hide_parameters` is set
 - the asker always comes from the session
 - the excerpt markers can't be forged by the query: they're control characters, stripped from the

@@ -84,6 +84,11 @@ async def ingest(
             embedding_model=MODEL,
             embedding_dimensions=DIMENSIONS,
             updated_on=handbook.updated_on,
+            title=handbook.title,
+            group_names={
+                "chapters": {str(number): name for number, name in handbook.chapters.items()},
+                "addenda": dict(handbook.addenda),
+            },
             published_at=func.now() if publish else None,
         )
     )

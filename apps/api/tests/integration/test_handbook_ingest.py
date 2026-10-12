@@ -98,6 +98,11 @@ async def test_a_handbook_loads_with_its_sections_blocks_chunks_and_embeddings(
         assert version.embedding_dimensions == DIMENSIONS
         assert version.published_at is None
         assert version.updated_on == handbook.updated_on
+        assert version.title == handbook.title
+        assert version.group_names == {
+            "chapters": {"1": "Welcome", "4": "Time off"},
+            "addenda": {"CA": "California addendum", "TX": "Texas addendum"},
+        }
 
         sections = (
             await connection.execute(

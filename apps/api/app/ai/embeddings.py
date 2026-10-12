@@ -13,6 +13,7 @@ import json
 import logging
 import math
 import struct
+from collections import OrderedDict
 from collections.abc import Awaitable, Callable, Sequence
 from pathlib import Path
 from typing import Literal, Protocol, Self
@@ -284,3 +285,34 @@ class FakeEmbedder:
         values = [int.from_bytes(raw[i : i + 2], "little") - 32768 for i in range(0, len(raw), 2)]
         norm = math.sqrt(sum(v * v for v in values))
         return [v / norm for v in values]
+
+
+class QueryEmbeddingLru:
+    """A small in-process memory of recent query embeddings, wrapped around another embedder.
+
+    It keeps vectors under the same SHA-256 key the cache uses and never the question's text, so
+    nothing a person typed stays in memory in readable form. Only `input_type="query"` calls with
+    one text are remembered; anything else passes straight through.
+    """
+
+    def __init__(self, inner: Embedder, *, max_entries: int = 256) -> None:
+        self._inner = inner
+        self._max_entries = max_entries
+        self._vectors: OrderedDict[str, list[float]] = OrderedDict()
+
+    def __len__(self) -> int:
+        return len(self._vectors)
+
+    async def embed(self, texts: Sequence[str], *, input_type: InputType) -> list[list[float]]:
+        if input_type != "query" or len(texts) != 1:
+            return await self._inner.embed(texts, input_type=input_type)
+        key = EmbeddingCache.key(input_type, texts[0])
+        remembered = self._vectors.get(key)
+        if remembered is not None:
+            self._vectors.move_to_end(key)
+            return [list(remembered)]
+        [vector] = await self._inner.embed(texts, input_type=input_type)
+        self._vectors[key] = list(vector)
+        while len(self._vectors) > self._max_entries:
+            self._vectors.popitem(last=False)
+        return [vector]

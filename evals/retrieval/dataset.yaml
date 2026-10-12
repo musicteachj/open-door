@@ -1,0 +1,319 @@
+# The retrieval eval's labeled questions. See evals/README.md.
+#
+# Each question has an id, an asker, the question as an employee would type it, and one of:
+#   expect:    section IDs that genuinely answer it for that asker. Any chunk of any of them in
+#              the top 5 is a hit.
+#   must_not:  section IDs that must not appear in the top 5 (a negative).
+# `asker` is a persona (priya, marcus, dana, mateo) or an explicit state, employment_type, and
+# location. `location_code` asks about another location's policy ("what does California say?").
+#
+# Personas: priya and marcus are salaried in California (oak), dana is salaried in Colorado
+# (den), mateo is hourly in Texas (aus). Hourly staff in Colorado and California are not
+# personas, so they are written out.
+#
+# Written from the handbook text before the search was ever run. The questions do not change to
+# raise the score. After editing, run `make embed` and commit the cache.
+
+questions:
+  # Sick leave
+  - id: sick-mateo-1
+    asker: mateo
+    question: Can I stay home when my kid has the flu?
+    expect: ["4.3"]
+  - id: sick-priya-1
+    asker: priya
+    question: how many sick days do I get a year
+    expect: [CA-4.3, "4.3"]
+  - id: sick-priya-2
+    asker: priya
+    question: I got subpoenaed as a witness, can I use my sick time for that
+    expect: [CA-4.3]
+  - id: sick-dana-1
+    asker: dana
+    question: do my sick days roll over to next year
+    expect: [CO-4.3]
+  - id: sick-co-hourly-1
+    asker: { state: CO, employment_type: hourly, location: den }
+    question: school closed because of a flu outbreak and I have to stay with my daughter. can I use sick time
+    expect: [CO-4.3]
+  # Paid time off, holidays
+  - id: pto-priya-1
+    asker: priya
+    question: How much PTO do I earn a month?
+    expect: ["4.1", "1.2"]
+  - id: pto-dana-1
+    asker: dana
+    question: is there a cap on how much pto I can bank
+    expect: ["4.1"]
+  - id: holiday-dana-1
+    asker: dana
+    question: do we get the day after thanksgiving off
+    expect: ["4.2"]
+  - id: holiday-priya-1
+    asker: priya
+    question: the 4th falls on a saturday this year. what day do we get off
+    expect: ["4.2"]
+  # Bereavement, jury duty, voting
+  - id: bereave-marcus-1
+    asker: marcus
+    question: bereavement leave how many days
+    expect: ["4.4"]
+  - id: bereave-mateo-1
+    asker: mateo
+    question: My mom passed away last night. How much time can I take off?
+    expect: ["4.4"]
+  - id: jury-priya-1
+    asker: priya
+    question: I got a jury duty summons, do I still get paid
+    expect: ["4.5"]
+  - id: jury-mateo-1
+    asker: mateo
+    question: got called for jury duty. can they fire me for missing work
+    expect: [TX-4.5]
+  - id: final-mateo-2
+    asker: mateo
+    question: if they fire me how long do they have to get me my last check
+    expect: [TX-3.4]
+  - id: famli-dana-1
+    asker: dana
+    question: does colorado pay you anything while you're out on leave
+    expect: [CO-5.1]
+  - id: eeo-mateo-1
+    asker: mateo
+    question: the new guy keeps getting the better shifts and I've been here longer. is that even allowed
+    expect: ["2.1"]
+  - id: concern-dana-1
+    asker: dana
+    question: can I just email hr or do I have to go through the app
+    expect: ["2.3"]
+  - id: vote-dana-1
+    asker: dana
+    question: can I leave early on election day to vote
+    expect: ["4.5"]
+  # Family and medical leave, parental leave, accommodations
+  - id: leave-priya-1
+    asker: priya
+    question: I need about three months off to take care of my mom after her surgery
+    expect: [CA-5.1, "5.1"]
+  - id: leave-dana-1
+    asker: dana
+    question: do we even get fmla here, we're pretty small
+    expect: ["5.1", CO-5.1]
+  - id: leave-mateo-1
+    asker: mateo
+    question: my dad's having surgery next month and I'll need to help him for a couple weeks. is that covered
+    expect: ["5.1"]
+  - id: leave-marcus-1
+    asker: marcus
+    question: am I covered by cfra
+    expect: [CA-5.1]
+  - id: parental-marcus-1
+    asker: marcus
+    question: my wife and I are having a baby in march. how much leave do I get
+    expect: ["5.2"]
+  - id: parental-priya-1
+    asker: priya
+    question: I'm pregnant, what do I need to do about work
+    expect: ["5.2", "5.3"]
+  - id: accom-mateo-1
+    asker: mateo
+    question: my back is bad and all the lifting is killing me. can I get something changed
+    expect: ["5.3"]
+  - id: accom-priya-1
+    asker: priya
+    question: do I have to tell my manager my diagnosis to get a better chair
+    expect: ["5.3", "7.1"]
+
+  # Working here
+  - id: harass-marcus-1
+    asker: marcus
+    question: my manager keeps making comments about my body
+    expect: ["2.2", "2.3"]
+  - id: harass-dana-1
+    asker: dana
+    question: a coworker keeps asking me out even after I said no
+    expect: ["2.2"]
+  - id: concern-mateo-1
+    asker: mateo
+    question: who do I talk to if I think I'm being treated unfairly
+    expect: ["2.1", "2.3"]
+  - id: concern-priya-1
+    asker: priya
+    question: if I report my boss will it come back on me
+    expect: ["2.3", "2.2", "2.1"]
+  - id: eeo-marcus-1
+    asker: marcus
+    question: can they pass me over for a promotion because I'm 58
+    expect: ["2.1", "2.2"]
+  - id: conduct-marcus-1
+    asker: marcus
+    question: Can I do some freelance work on the side?
+    expect: ["2.4"]
+  # Hours and pay
+  - id: time-mateo-1
+    asker: mateo
+    question: I forgot to clock out yesterday
+    expect: ["3.1"]
+  - id: ot-mateo-1
+    asker: mateo
+    question: how does overtime work
+    expect: ["3.2"]
+  - id: ot-priya-1
+    asker: priya
+    question: do I get overtime if I work saturdays
+    expect: ["1.2"]
+  - id: ot-ca-hourly-1
+    asker: { state: CA, employment_type: hourly, location: oak }
+    question: I worked 10 hours today, do I get overtime
+    expect: [CA-3.2]
+  - id: ot-co-hourly-1
+    asker: { state: CO, employment_type: hourly, location: den }
+    question: I had a 13 hour shift thursday but only 30 hours for the week. is that overtime
+    expect: [CO-3.2]
+  - id: ot-co-hourly-2
+    asker: { state: CO, employment_type: hourly, location: den }
+    question: can my manager give me a day off instead of paying me ot
+    expect: [CO-3.2]
+  - id: break-mateo-1
+    asker: mateo
+    question: how long is my lunch break
+    expect: ["3.3"]
+  - id: break-ca-hourly-1
+    asker: { state: CA, employment_type: hourly, location: oak }
+    question: I worked 11 hours, do I get a second lunch
+    expect: [CA-3.3]
+  - id: break-ca-hourly-2
+    asker: { state: CA, employment_type: hourly, location: oak }
+    question: I missed my lunch today. do I get paid extra
+    expect: [CA-3.3]
+  - id: break-co-hourly-1
+    asker: { state: CO, employment_type: hourly, location: den }
+    question: how many rest breaks do I get on an 8 hour shift
+    expect: [CO-3.3, "3.3"]
+  - id: final-priya-1
+    asker: priya
+    question: I'm quitting, when do I get my last paycheck
+    expect: [CA-3.4]
+  - id: final-dana-1
+    asker: dana
+    question: they let me go today. when will my last paycheck come
+    expect: [CO-3.4]
+  - id: final-mateo-1
+    asker: mateo
+    question: if I quit what happens to my unused pto
+    expect: [TX-3.4, "3.4", "4.1"]
+  - id: pay-marcus-1
+    asker: marcus
+    question: When's payday?
+    expect: ["3.4"]
+  # Employment types, the handbook itself
+  - id: type-mateo-1
+    asker: mateo
+    question: what's the difference between salaried and hourly
+    expect: ["1.2"]
+  - id: about-dana-1
+    asker: dana
+    question: who is this handbook even for
+    expect: ["1.1"]
+  - id: about-marcus-1
+    asker: marcus
+    question: california says one thing and the handbook says another, which one counts
+    expect: ["1.1"]
+
+  # Safety, support, privacy
+  - id: safety-mateo-1
+    asker: mateo
+    question: I hurt my wrist at work, what do I do
+    expect: ["6.1"]
+  - id: eap-marcus-1
+    asker: marcus
+    question: I've been really stressed lately, is there someone I can talk to
+    expect: ["6.2"]
+  - id: privacy-priya-1
+    asker: priya
+    question: can my manager see my pay
+    expect: ["7.1"]
+  - id: case-dana-1
+    asker: dana
+    question: if I open a case with hr does my boss see it
+    expect: ["7.2"]
+  - id: case-marcus-1
+    asker: marcus
+    question: is the ai reading what I type in here
+    expect: ["7.2"]
+
+  # Another location's policy
+  - id: loc-mateo-ca-sick
+    asker: mateo
+    location_code: oak
+    question: what's the sick leave rule in california
+    expect: [CA-4.3]
+  - id: loc-priya-tx-jury
+    asker: priya
+    location_code: aus
+    question: what does texas say about jury duty
+    expect: [TX-4.5]
+  - id: loc-marcus-co-final
+    asker: marcus
+    location_code: den
+    question: if someone gets fired in colorado how fast do they have to get paid
+    expect: [CO-3.4]
+  - id: loc-mateo-den-sick-neg
+    asker: mateo
+    location_code: den
+    question: how many sick days would I get
+    must_not: [CA-4.3]
+
+  # Negatives: sections for another state or another employment type must never come back
+  - id: neg-sick-mateo
+    asker: mateo
+    question: how many sick days do I get
+    must_not: [CA-4.3, CO-4.3]
+  - id: neg-sick-priya
+    asker: priya
+    question: do I get sick days
+    must_not: [CO-4.3]
+  - id: neg-sick-dana
+    asker: dana
+    question: my kid has the flu, can I stay home
+    must_not: [CA-4.3]
+  - id: neg-ot-priya
+    asker: priya
+    question: I stay late a lot, how does overtime work
+    must_not: ["3.2", CA-3.2, CO-3.2]
+  - id: neg-ot-dana
+    asker: dana
+    question: do I get time and a half over 40 hours
+    must_not: ["3.2", CO-3.2, CA-3.2]
+  - id: neg-ot-mateo
+    asker: mateo
+    question: do I get overtime after 8 hours in a day
+    must_not: [CA-3.2, CO-3.2]
+  - id: neg-break-priya
+    asker: priya
+    question: how long is lunch
+    must_not: ["3.3", CA-3.3]
+  - id: neg-break-mateo
+    asker: mateo
+    question: do I get a second meal break on a long day
+    must_not: [CA-3.3, CO-3.3]
+  - id: neg-break-ca-hourly
+    asker: { state: CA, employment_type: hourly, location: oak }
+    question: how many rest breaks do I get
+    must_not: [CO-3.3]
+  - id: neg-final-mateo
+    asker: mateo
+    question: when do I get my last paycheck if I quit
+    must_not: [CA-3.4, CO-3.4]
+  - id: neg-final-dana
+    asker: dana
+    question: when do I get my final check
+    must_not: [CA-3.4, TX-3.4]
+  - id: neg-leave-mateo
+    asker: mateo
+    question: I need 12 weeks off for my mom's surgery
+    must_not: [CA-5.1, CO-5.1]
+  - id: neg-jury-priya
+    asker: priya
+    question: I got a jury summons
+    must_not: [TX-4.5]

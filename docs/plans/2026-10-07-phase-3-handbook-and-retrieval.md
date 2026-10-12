@@ -956,6 +956,40 @@ diffs against it.
 - **Tests at the close:** 744 API tests (258 against the database), 773 web unit tests, and 108
   browser tests.
 
+**Stage 3 (retrieval, the eval, and the handbook API), 2026-10-12:**
+- **The retrieval eval scored 100% hit rate at 5 on its first run, with no tuning:** 53 of 53,
+  mean reciprocal rank 0.863, all 14 negatives passing. The batch review then found three labels
+  that accepted a section giving the wrong answer, one negative that could never fail, a filler
+  entry in another, two questions that read as machine-written, and four sections that were
+  never the sole answer. With the owner's OK (2026-10-12), the labels were tightened, the negative
+  reworded so the forbidden sections rank without the filter, the two questions rewritten, and
+  four sole-answer questions added (CO-5.1, TX-3.4, 2.1, 2.3). **The score after the change:**
+  100% (57 of 57), mean reciprocal rank 0.841, all 14 negatives passing. 71 questions in all.
+  Before anything ran, five questions were also reworded for voice.
+- **The query is embedded outside the database session.** `embed_query(embedder, query)` runs
+  first and returns the vector, or None after one logged warning, and
+  `search_handbook(db, *, version_id, asker, query, query_vector, …)` takes the vector. Callers
+  call `embed_query` before opening `tenant_session`, and take the version only from
+  `pinned_version_id(db)`. A small `QueryEmbeddingLru` wraps the embedder for Phase 4.
+- **`search_handbook` accepts up to 500 characters** (the browser's search route keeps 100), and
+  drops control, format, surrogate, private-use, and unassigned characters. The spec says so now.
+- **`location_code` reads the tenant's own locations under row-level security** for the state and
+  the location names, and keeps the asker's employment type.
+- **Migrations 0006 and 0007 store the chapter and addendum names, and the title, on each
+  version,** written by ingest and backfilled for 2026.10, instead of copying `handbook.yaml`
+  into code.
+- **The eval runs as the app login** inside a scratch tenant (with the three seed locations) that
+  it always rolls back, because `location_code` reads locations under row-level security. It
+  refuses to run, with "run `make embed`", if any question's vector is missing, and counts any
+  keyword-only fallback as a failure. Ruff and mypy now cover `evals/`.
+- **The browser's search returns one result per section,** each with the `passageId` of the
+  passage holding the match (an addition to the spec's table), so the link and the excerpt agree.
+  Excerpts are built with `ts_headline` and control-character markers stripped from both the
+  query and the stored text, so no HTML is ever sent and no match can be forged.
+- **Search hits are per chunk,** so a section can appear twice in `search_handbook`'s results;
+  the eval counts any chunk of an expected section.
+- **Tests at the close:** 863 API tests (332 against the database) and 773 web unit tests.
+
 ## Backlog
 
 New items from planning, added in the tasks named:

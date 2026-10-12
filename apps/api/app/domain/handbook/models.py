@@ -3,7 +3,7 @@
 from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import date
-from typing import Literal
+from typing import Any, Literal
 
 from app.domain.handbook.blocks import Block
 from app.domain.handbook.source import SourceFile
@@ -18,6 +18,15 @@ class Audience:
     states: tuple[str, ...] = ()
     employment_types: tuple[str, ...] = ()
     locations: tuple[str, ...] = ()
+
+    @classmethod
+    def from_json(cls, raw: Mapping[str, Any]) -> "Audience":
+        """The audience from a section's `audience` column."""
+        return cls(
+            tuple(raw.get("states", ())),
+            tuple(raw.get("employmentTypes", ())),
+            tuple(raw.get("locations", ())),
+        )
 
     def to_json(self) -> dict[str, list[str]]:
         """The value for a section's `audience` column."""
