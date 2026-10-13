@@ -10,9 +10,10 @@ import { SandboxIndicator } from '@/components/status/sandbox-indicator'
 import { Toast, ToastProvider, ToastViewport } from '@/components/ui/toast'
 import { navFor } from '@/app/nav'
 import { useMe } from '@/app/useMe'
+import { getGetHandbookQueryKey, useGetHandbook } from '@/api/generated'
 import { PERSONAS } from '@/features/personas/personas'
 import { cn } from '@/lib/utils'
-import { formatTimeLeft, isExpiringSoon } from '@/lib/time'
+import { formatMonthDay, formatTimeLeft, isExpiringSoon } from '@/lib/time'
 import { useExpiryBannerDismissal } from './expiry-banner-dismissal'
 import { useIdentityActions } from './use-identity-actions'
 import { useNow } from './use-now'
@@ -29,8 +30,7 @@ const COMPANY = 'Juniper Row'
 const BUILT_PATH = '/how-its-built'
 // The only page with the right rail (the sandbox status and the at-a-glance list).
 const RAIL_PATH = '/ask'
-// The at-a-glance figures arrive with their data in Phases 3 and 5.
-const NO_GLANCE_ITEMS: GlanceItem[] = []
+// The balance and pending-request figures arrive with their data in Phase 5.
 const PERSONA_OPTIONS = PERSONAS.map(({ key, name, title }) => ({ key, name, title }))
 
 export function AppShell() {
@@ -45,7 +45,24 @@ function Frame({ me }: { me: NonNullable<ReturnType<typeof useMe>['data']> }) {
   // The right rail belongs to the assistant home alone. Every other page takes the sheet's width.
   const showRail = useLocation().pathname === RAIL_PATH
   const items = navFor(me)
-  const glance = NO_GLANCE_ITEMS
+  // Only the rail shows the figure, so only the assistant home asks. A failure leaves it out:
+  // the rail is a convenience, not the page.
+  // It has its own cache entry: the Handbook page's query throws to the error page, and a failure
+  // here must not be left in that entry for the page to find.
+  const handbook = useGetHandbook({
+    query: { queryKey: [...getGetHandbookQueryKey(), 'glance'], enabled: showRail },
+  })
+  const glance: GlanceItem[] = handbook.data
+    ? [
+        {
+          id: 'handbook-updated',
+          value: formatMonthDay(handbook.data.version.updatedOn),
+          label: 'Handbook updated',
+          destination: 'Handbook',
+          to: '/handbook',
+        },
+      ]
+    : []
   const [navRef, navScrolls] = useScrollsMore<HTMLElement>()
   const [dismissed, dismiss] = useExpiryBannerDismissal(me.tenantExpiresAt)
 

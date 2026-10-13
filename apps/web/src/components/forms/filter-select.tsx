@@ -22,6 +22,8 @@ type FilterSelectProps = {
   options: FilterOption[]
   onChange: (id: string | null) => void
   allLabel?: string
+  /** Shows a count beside "All", as the handbook's Show menu does. Left out, "All" has none. */
+  allCount?: number
   /** The trigger's DOM id, so a test or a label can address it. */
   id?: string
   className?: string
@@ -39,6 +41,7 @@ function FilterSelect({
   options,
   onChange,
   allLabel = 'All',
+  allCount,
   id,
   className,
 }: FilterSelectProps) {
@@ -72,7 +75,11 @@ function FilterSelect({
         </span>
       </SelectTrigger>
       <SelectContent align="start" className="min-w-65">
-        <SelectItem value={ALL}>{allLabel}</SelectItem>
+        {allCount === undefined ? (
+          <SelectItem value={ALL}>{allLabel}</SelectItem>
+        ) : (
+          <FilterOptionItem option={{ id: ALL, name: allLabel, count: allCount }} />
+        )}
         {options.map((option) => (
           <FilterOptionItem key={option.id} option={option} />
         ))}

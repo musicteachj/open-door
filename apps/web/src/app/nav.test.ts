@@ -37,8 +37,12 @@ describe('NAV_ITEMS', () => {
     for (const item of NAV_ITEMS) expect(item.icon).toBeTruthy()
   })
 
-  it('has only Ask and Directory available in Phase 2', () => {
-    expect(NAV_ITEMS.filter((i) => i.available).map((i) => i.label)).toEqual(['Ask', 'Directory'])
+  it('has only Ask, Directory, and Handbook available in Phase 3', () => {
+    expect(NAV_ITEMS.filter((i) => i.available).map((i) => i.label)).toEqual([
+      'Ask',
+      'Directory',
+      'Handbook',
+    ])
   })
 
   it("configures How it's built, hidden until Phase 7", () => {
@@ -61,14 +65,14 @@ describe('navFor with every item available (the 02 notes)', () => {
   })
 })
 
-describe('navFor in Phase 2', () => {
+describe('navFor in Phase 3', () => {
   it.each([
     ['Priya', priya],
     ['Mateo', mateo],
     ['Marcus', marcus],
     ['Dana', dana],
-  ])('%s sees exactly Ask and Directory', (_name, me) => {
-    expect(labels(navFor(me))).toEqual(['Ask', 'Directory'])
+  ])('%s sees exactly Ask, Directory, and Handbook', (_name, me) => {
+    expect(labels(navFor(me))).toEqual(['Ask', 'Directory', 'Handbook'])
   })
 
   it('applies roles to a manager who is also HR', () => {

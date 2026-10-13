@@ -9,7 +9,7 @@ import { LastUpdated } from './last-updated'
 import { handbookPath, markerShownInList, sectionRowLabel } from './labels'
 
 /** The list's columns (.od-sec-cols): number, title, audience, marker, date, chevron. */
-const sectionColumns =
+export const sectionColumns =
   'grid grid-cols-[72px_minmax(0,1fr)_220px_136px_128px_16px] items-center gap-x-5 px-3 @max-[56rem]:grid-cols-[3.5rem_minmax(0,1fr)_16px] @max-[56rem]:gap-x-3 @max-[56rem]:gap-y-0.5'
 
 type SectionRowProps = {

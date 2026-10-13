@@ -11,6 +11,9 @@ export const handbookCopy = {
   searchLabel: 'Search the handbook',
   clearSearch: 'Clear search',
   askAssistant: 'Ask the assistant',
+  showAllSections: 'Show all sections',
+  noneApplyMatch: (query: string) => `No sections that apply to you match “${query}.”`,
+  noMatch: (query: string) => `No sections match “${query}.”`,
   filterAll: 'All sections',
   filterApplies: 'Applies to me',
   columns: { section: 'Section', appliesTo: 'Applies to', lastUpdated: 'Last updated' },
@@ -27,11 +30,27 @@ export const handbookCopy = {
   stateRules: 'State rules',
   supplements: 'Supplements',
   companyHandbook: 'Company handbook',
+  previousAndNext: 'Previous and next',
   closePassage: 'Close passage',
   openInHandbook: 'Open in handbook',
   passageError: "Couldn't load this passage.",
   missingTitle: "This section isn't in your handbook version.",
   backToHandbook: 'Back to the handbook',
+  missingBody: (id: string, versionLabel: string | null) =>
+    `There's no ${sectionNumber(id)} in ${versionLabel ? `version ${versionLabel} of the Juniper Row handbook` : 'the Juniper Row handbook'}.`,
+  /** "This section is for California employees. You work at the Austin warehouse in Texas." */
+  notApplicable: (audienceLabel: string, locationName: string, stateCode: string) =>
+    `This section is for ${audienceForSentence(audienceLabel)}. You work at the ${locationName} in ${stateName(stateCode)}.`,
+  /** "This section is for hourly staff in California. You're salaried, at the Oakland store in California." */
+  notApplicableEmployment: (
+    audienceLabel: string,
+    employmentType: string,
+    locationName: string,
+    stateCode: string,
+  ) =>
+    `This section is for ${audienceForSentence(audienceLabel)}. You're ${employmentType}, at the ${locationName} in ${stateName(stateCode)}.`,
+  seeWhatApplies: (id: string, title: string) =>
+    `See what applies to you: ${sectionNumber(id)} ${title}`,
   loading: {
     handbook: 'Loading the handbook',
     section: 'Loading section',
@@ -76,9 +95,30 @@ const STATE_NAMES: Record<string, string> = {
   TX: 'Texas',
 }
 
+/** A state's name from its code ("TX" is "Texas"). An unknown state shows its code. */
+export function stateName(code: string): string {
+  return STATE_NAMES[code] ?? code
+}
+
+/**
+ * An audience label inside a sentence. An employment-type label loses its capital ("Hourly staff"
+ * is "hourly staff"); a state or a location is a name and keeps it ("California employees",
+ * "Denver HQ").
+ */
+function audienceForSentence(label: string): string {
+  return /^(hourly|salaried)\b/i.test(label)
+    ? label.charAt(0).toLowerCase() + label.slice(1)
+    : label
+}
+
+/** A section's number as the handbook writes it: "§4.3" for a company section, "CA-4.3" as is. */
+export function sectionNumber(id: string): string {
+  return /^\d/.test(id) ? `§${id}` : id
+}
+
 /** An addendum group's note, "For California employees". An unknown state shows its code. */
 export function addendumGroupNote(addendumState: string): string {
-  return `For ${STATE_NAMES[addendumState] ?? addendumState} employees`
+  return `For ${stateName(addendumState)} employees`
 }
 
 /** A section's page, optionally with the passage to highlight. Both parts are encoded. */
@@ -111,4 +151,39 @@ export function sectionRowLabel(
 ): string {
   const marker = markerShown ? `. ${handbookCopy.marker.yes}` : ''
   return `${section.id} ${section.title}. Applies to ${section.audienceLabel}${marker}. ${lastUpdatedText(section.lastUpdated)}`
+}
+
+/** "California and Colorado add to this section.", from the addenda's state codes. */
+export function stateRulesNote(stateCodes: string[]): string {
+  const names = stateCodes.map(stateName)
+  const list =
+    names.length > 2 ? `${names.slice(0, -1).join(', ')}, and ${names.at(-1)}` : names.join(' and ')
+  return `${list} ${names.length === 1 ? 'adds' : 'add'} to this section.`
+}
+
+/**
+ * The neutral note for a section that isn't for the reader. The state or the location decides
+ * first: where they work is the plainest reason. Only when they are in the right place does it
+ * say their employment type is why.
+ */
+export function notApplicableNote(
+  section: { audience: SectionSummary['audience']; audienceLabel: string },
+  me: {
+    location: { code: string; name: string; state: string }
+    employmentType: string
+  },
+): string {
+  const { states, employmentTypes, locations } = section.audience
+  const placeDiffers =
+    (states.length > 0 && !states.includes(me.location.state)) ||
+    (locations.length > 0 && !locations.includes(me.location.code))
+  if (!placeDiffers && employmentTypes.length > 0 && !employmentTypes.includes(me.employmentType)) {
+    return handbookCopy.notApplicableEmployment(
+      section.audienceLabel,
+      me.employmentType,
+      me.location.name,
+      me.location.state,
+    )
+  }
+  return handbookCopy.notApplicable(section.audienceLabel, me.location.name, me.location.state)
 }

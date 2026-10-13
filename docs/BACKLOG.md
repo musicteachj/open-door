@@ -63,12 +63,6 @@ should pick it up. When one is done, delete it here and record it in the changel
   router routes. On a Starlette upgrade, check that the two still agree. (Phase 1 close-out
   review.)
 
-## Phase 3: handbook and retrieval
-
-- **Label each cited section with "Applies to" and "Last updated."** The passage panel shows, for
-  example, "Applies to: California employees", and the section's last-updated date. That covers
-  "has this changed?" without remembering past conversations. (2026-10-06 design brainstorm.)
-
 ## Phase 4: assistant core
 
 - **Map search hits to `search_result` blocks, and open the passage panel on a citation's

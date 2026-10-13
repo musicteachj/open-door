@@ -21,7 +21,7 @@ function ChapterNav({ section, sections, className }: ChapterNavProps) {
   const heading = chapterNavHeading(section)
   return (
     <nav aria-label={heading} className={className}>
-      <p className="mb-2 px-2.5 text-small font-semibold text-ink-muted">{heading}</p>
+      <p className="mb-2 px-2.5 text-small font-regular text-ink-muted">{heading}</p>
       <ul className="m-0 flex list-none flex-col gap-0.5 p-0">
         {sections.map((item) => {
           const current = item.id === section.id

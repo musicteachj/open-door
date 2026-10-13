@@ -21,6 +21,8 @@ class DepartmentRef(CamelModel):
 
 class LocationRef(CamelModel):
     id: UUID
+    # The handbook's name for the place ("oak", "den", "aus"), which its audiences use.
+    code: str
     name: str
     state: str
     # An IANA zone, such as "America/Denver". Not personal: it describes the place, not the person.

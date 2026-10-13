@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest'
-import { formatShortDate, formatTimeLeft, greetingFor, greetingLine, isExpiringSoon } from './time'
+import {
+  formatMonthDay,
+  formatShortDate,
+  formatTimeLeft,
+  greetingFor,
+  greetingLine,
+  isExpiringSoon,
+} from './time'
 
 const MIN = 60_000
 const HOUR = 60 * MIN
@@ -98,5 +105,19 @@ describe('formatShortDate', () => {
 
   it('returns text that is not a date unchanged', () => {
     expect(formatShortDate('soon')).toBe('soon')
+  })
+})
+
+describe('formatMonthDay', () => {
+  it.each([
+    ['2026-09-12', 'Sep 12'],
+    ['2026-10-07', 'Oct 7'],
+    ['2026-12-31', 'Dec 31'],
+  ])('%s is %s, a calendar date no timezone moves', (iso, expected) => {
+    expect(formatMonthDay(iso)).toBe(expected)
+  })
+
+  it('returns text that is not a date unchanged', () => {
+    expect(formatMonthDay('soon')).toBe('soon')
   })
 })

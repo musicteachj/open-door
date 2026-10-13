@@ -113,6 +113,25 @@ describe('HandbookBlocks', () => {
     expect(screen.getByRole('region', { name: 'Cited passage' })).toHaveFocus()
   })
 
+  it('tells the page once the cited passage has been focused, and not when it was not', () => {
+    window.HTMLElement.prototype.scrollIntoView = vi.fn<() => void>()
+    const onCitedFocused = vi.fn<() => void>()
+    const { unmount } = renderWithRouter(
+      <HandbookBlocks blocks={blocks} citedPassageId="p3" onCitedFocused={onCitedFocused} />,
+    )
+    expect(onCitedFocused).not.toHaveBeenCalled()
+    unmount()
+    renderWithRouter(
+      <HandbookBlocks
+        blocks={blocks}
+        citedPassageId="p3"
+        focusCited
+        onCitedFocused={onCitedFocused}
+      />,
+    )
+    expect(onCitedFocused).toHaveBeenCalledTimes(1)
+  })
+
   it('scrolls and focuses again when another section arrives with the same passage id', () => {
     // Passage ids restart in every section, so a citation can move from 4.3's p1 to CA-4.3's p1.
     const scroll = vi.fn<() => void>()

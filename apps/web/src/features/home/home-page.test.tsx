@@ -215,8 +215,10 @@ describe('the page', () => {
     installFakeApi('priya')
     const { user } = renderApp({ at: '/ask', transport: FAST })
     await composer()
+    // The rail comes after the page, so its figure is the last stop.
+    await screen.findByRole('link', { name: 'Sep 12 Handbook updated. Open Handbook' })
     const seen: string[] = []
-    for (let i = 0; i < 9; i++) {
+    for (let i = 0; i < 11; i++) {
       await user.tab()
       const el = document.activeElement as HTMLElement
       seen.push(`${el.tagName.toLowerCase()}:${el.getAttribute('aria-label') ?? el.textContent}`)
@@ -224,6 +226,7 @@ describe('the page', () => {
     expect(seen).toEqual([
       'a:Ask',
       'a:Directory',
+      'a:Handbook',
       'button:Switch persona. Current: Priya Raman, Visual Merchandiser',
       'textarea:Ask Open Door',
       'button:Ask',
@@ -231,6 +234,7 @@ describe('the page', () => {
       'button:Book next Friday off',
       'button:What holidays do we have this year?',
       'button:Who do I talk to about a concern?',
+      'a:Sep 12 Handbook updated. Open Handbook',
     ])
   })
 })
