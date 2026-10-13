@@ -305,6 +305,7 @@ export const SectionDetailKind = {
 export interface SectionRef {
   id: string
   title: string
+  groupName: string
   audienceLabel: string
   appliesToMe: boolean
 }

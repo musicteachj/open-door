@@ -1892,6 +1892,10 @@
             "type": "string",
             "title": "Title"
           },
+          "groupName": {
+            "type": "string",
+            "title": "Groupname"
+          },
           "audienceLabel": {
             "type": "string",
             "title": "Audiencelabel"
@@ -1905,6 +1909,7 @@
         "required": [
           "id",
           "title",
+          "groupName",
           "audienceLabel",
           "appliesToMe"
         ],

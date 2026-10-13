@@ -20,7 +20,7 @@ every stage.
 | 0 Foundation | Done | `chore/phase-0-ci` | [#2](https://github.com/musicteachj/open-door/pull/2), [#3](https://github.com/musicteachj/open-door/pull/3), [#4](https://github.com/musicteachj/open-door/pull/4) | [phase 0 plan](plans/2026-09-29-phase-0-foundation.md) | 2026-10-03 |
 | 1 Tenancy, identity, permissions | Done. The whole-phase review found nothing high or medium; its fixes are in `fix/phase-1-review`. Released in `v0.1.0`. | `fix/phase-1-review` | [#8](https://github.com/musicteachj/open-door/pull/8), [#9](https://github.com/musicteachj/open-door/pull/9), [#10](https://github.com/musicteachj/open-door/pull/10), [#11](https://github.com/musicteachj/open-door/pull/11), [#14](https://github.com/musicteachj/open-door/pull/14) | [phase 1 plan](plans/2026-10-03-phase-1-tenancy-identity-permissions.md) | 2026-10-04 |
 | 2 Design system, shell, sandbox entry | Done. The whole-phase review found nothing high; its fixes are in `fix/phase-2-review`. Released in `v0.2.0`. | `fix/phase-2-review` | [#23](https://github.com/musicteachj/open-door/pull/23), [#24](https://github.com/musicteachj/open-door/pull/24), [#25](https://github.com/musicteachj/open-door/pull/25), [#26](https://github.com/musicteachj/open-door/pull/26), [#27](https://github.com/musicteachj/open-door/pull/27), [#28](https://github.com/musicteachj/open-door/pull/28), [#29](https://github.com/musicteachj/open-door/pull/29), [#30](https://github.com/musicteachj/open-door/pull/30), [#32](https://github.com/musicteachj/open-door/pull/32) | [phase 2 plan](plans/2026-10-05-phase-2-design-system-shell-sandbox-entry.md) | 2026-10-06 |
-| 3 Handbook and retrieval | In progress: stage 3 of 5 (retrieval, the eval, and the handbook API). Its screens are designed ([#36](https://github.com/musicteachj/open-door/pull/36)) | `feat/phase-3-retrieval` | [#37](https://github.com/musicteachj/open-door/pull/37), [#38](https://github.com/musicteachj/open-door/pull/38), [#39](https://github.com/musicteachj/open-door/pull/39) | [phase 3 plan](plans/2026-10-07-phase-3-handbook-and-retrieval.md) | 2026-10-12 |
+| 3 Handbook and retrieval | In progress: stage 4 of 6 (the handbook components). Its screens are designed ([#36](https://github.com/musicteachj/open-door/pull/36)) | `feat/phase-3-handbook-components` | [#37](https://github.com/musicteachj/open-door/pull/37), [#38](https://github.com/musicteachj/open-door/pull/38), [#39](https://github.com/musicteachj/open-door/pull/39), [#40](https://github.com/musicteachj/open-door/pull/40) | [phase 3 plan](plans/2026-10-07-phase-3-handbook-and-retrieval.md) | 2026-10-12 |
 | 4 Assistant core (read-only) | Not started | — | — | — | — |
 | 5 Time off | Not started | — | — | — | — |
 | 6 Cases and escalation | Not started | — | — | — | — |
@@ -41,7 +41,10 @@ released in `v0.2.0`. Phase 3 is planned: see the
 [ADR 0008](adr/0008-handbook-retrieval.md). Phase 3 stage 1, the handbook text, is written
 and fact-checked. Stage 2 loads it into the database with its embeddings, and pins each new
 sandbox to the newest version. Stage 3 adds the search, the retrieval eval (100% hit rate at 5),
-and the handbook API. Next: Phase 3 stage 4, the handbook components, at effort `medium`. The
+and the handbook API. Stage 4 builds the handbook components, shown in the gallery. Next: Phase
+3 stage 5, the handbook pages, at effort `medium`. **Phase 3 gains a sixth
+stage** (the owner's decision, 2026-10-12): a Georgia location and a Georgia addendum, after
+stage 5, with a short plan of its own first. The
 owner's Voyage account is ready for Phase 4: a payment method, the training opt-out, and a budget
 alert.** Later phases' screens are designed
 shortly before each phase. **Design for Phase 3 is done:** the handbook browser and the passage

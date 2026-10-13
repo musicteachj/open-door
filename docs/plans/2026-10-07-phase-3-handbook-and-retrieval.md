@@ -990,6 +990,51 @@ diffs against it.
   the eval counts any chunk of an expected section.
 - **Tests at the close:** 863 API tests (332 against the database) and 773 web unit tests.
 
+**A sixth stage, Georgia (the owner's decision, 2026-10-12):** after Stage 5, the seed company
+gains a Georgia location (an Atlanta store) and the handbook a Georgia addendum. Addenda cover
+only where a state's law differs from the company sections, which is why Texas has two. The stage
+needs a short plan first. It touches the seed's locations and holidays, `handbook.yaml`, the state
+names in the applicability code, Georgia law checked against the Georgia Department of Labor and
+the state code with a source line for each figure, a new handbook version label and `make embed`,
+eval questions and negatives for a Georgia employee, and the tests that assume three locations.
+
+**Stage 4 (the handbook components), 2026-10-12:**
+- **File names are kebab-case** (`section-row.tsx`), as the rest of the app, not the plan's
+  PascalCase. Dates use `formatShortDate` in `src/lib/time.ts`; there's no `format-date.ts`.
+- **Components take the API's generated types** rather than the sketches' loose props: the badge
+  takes the server's `audienceLabel`, `LastUpdated` takes the ISO date, rows take a section
+  summary, and links are React Router links built by one `handbookPath()` that encodes both IDs.
+- **The "State rules" rows read "California addendum · CA-4.3",** as the screenshot does, with the
+  marker only on the row that applies. That needed the addendum's name on the API's
+  `SectionRef` (`groupName`), a small Stage 3 route change made here, with a test.
+- **Addendum notes use one `STATE_NAMES` map** in `labels.ts`, keyed by the state code, so Stage
+  6's Georgia is one line.
+- **The cited passage wraps any passage,** lists included, and the host (`HandbookBlocks`)
+  scrolls to it and focuses it, again whenever the blocks or the cited ID change (passage IDs
+  restart in every section). The panel likewise refocuses its title when the passage changes. After "Clear highlight", focus moves to
+  the same passage, now plain, rather than the top of the page.
+- **The passage panel takes its data as props** (`view: PassageView`) and doesn't fetch. It isn't
+  a dialog and doesn't trap focus. Escape closes it only when focus is inside it or on the page
+  body, and never during text composition, so Phase 4's composer can't close it by accident. An
+  optional `groupName` gives the loading and error eyebrow its section name.
+- **The error state uses the app's `InlineError`,** whose "Retry" matches the notes.
+- **Built but not designed** is recorded in `docs/design/components.md`: the narrow section row,
+  the chapter navigator, the section body, and the standalone compact cited passage.
+- **The owner's gallery review caught a collapsed section row:** with its five fixed columns,
+  the row left the title no room in the gallery's 760 px column, so the title wrapped word by
+  word. Section rows, section groups, and link blocks now switch layout by their own width (CSS
+  container queries, at 56rem for rows and groups and 30rem for link blocks), not the window's,
+  so they hold up beside the Stage 5 navigator too. At narrow widths rows and group headings
+  share one 3.5rem number column so titles line up, and a State rules row puts its marker under
+  the name. The gallery shows the list states at a realistic list width. I then compared every
+  handbook state with the design myself, at desktop and phone width and in hover and focus,
+  before asking the owner again; browser tests now guard each of these layouts.
+- **The gallery's sample content is the real handbook text,** which exposed long source URLs
+  scrolling the page sideways at 390 px; the Sources block now wraps them.
+- **Tests at the close:** 887 web unit tests, 155 browser tests (47 in
+  `gallery-handbook.spec.ts`, steady at one worker), and 863 API tests. `make captures` gains 26
+  handbook rows.
+
 ## Backlog
 
 New items from planning, added in the tasks named:
