@@ -41,6 +41,7 @@ export interface DepartmentRef {
 
 export interface LocationRef {
   id: string
+  code: string
   name: string
   state: string
   timezone: string

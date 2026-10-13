@@ -10,8 +10,8 @@ import { focusRing, greetingHeading, scan, startAs, themeColor, type FirstName }
 //    fake transport has no way to fail from a browser, so home-page.test.tsx proves it with a
 //    failing transport, and the gallery's composer-error state shows it (axe-scanned in
 //    gallery.spec.ts).
-//  - "The cinnamon marker appears only beside text": Phase 2 has no at-a-glance figures, so no
-//    marker is on the page. glance-link.test.tsx proves it on the component, and the gallery's
+//  - "The cinnamon marker appears only beside text": the one at-a-glance figure so far
+//    (Handbook updated) has no marker, so none is on the page. glance-link.test.tsx proves it on the component, and the gallery's
 //    glance-link-marker state is scanned and captured.
 
 const scrollWidth = (page: Page) => page.evaluate(() => document.documentElement.scrollWidth)
@@ -74,8 +74,13 @@ test.describe('usable at 390 px', () => {
     expect(pill!.y).toBeLessThan(nav!.y)
     expect(pill!.y + pill!.height).toBeLessThan(heading!.y)
     expect(pill!.y).toBeLessThan(120)
-    // The rail has nothing else to show, so it is gone rather than an empty strip.
-    await expect(page.getByRole('complementary', { name: 'Sandbox status' })).toBeHidden()
+    // The rail now holds the glance list, so it stays; only its sandbox indicator is hidden, because
+    // the top bar carries it at this width.
+    await expect(
+      page
+        .getByRole('complementary', { name: 'Sandbox status' })
+        .locator('[data-slot="sandbox-indicator"]'),
+    ).toBeHidden()
   })
 
   test('axe reports no violations', async ({ page }) => {
@@ -87,13 +92,16 @@ test('every interactive element is reachable by keyboard in the order above and 
   page,
 }) => {
   // The notes list the logo first, but the logo is not a control in the kit (the plan's Task 36
-  // note), so the first stop is the navigation. "How it's built" is hidden until Phase 7, and
-  // there are no at-a-glance links until Phases 3 and 5.
+  // note), so the first stop is the navigation. "How it's built" is hidden until Phase 7. The rail
+  // follows the page, so the "Handbook updated" link is the last stop (the Phase 5 figures will
+  // join it).
   await page.reload()
   await expect(greetingHeading(page, 'Priya')).toBeVisible()
+  // The glance link arrives with its own request, after the greeting.
+  await expect(page.getByRole('link', { name: /Handbook updated/ })).toBeVisible()
   const stops: { name: string; ring: unknown }[] = []
   const priya = PERSONAS[0]!
-  for (let i = 0; i < 9; i += 1) {
+  for (let i = 0; i < 11; i += 1) {
     await page.keyboard.press('Tab')
     stops.push({
       name: await page.evaluate(() => {
@@ -106,15 +114,17 @@ test('every interactive element is reachable by keyboard in the order above and 
   expect(stops.map((stop) => stop.name)).toEqual([
     'Ask',
     'Directory',
+    'Handbook',
     `Switch persona. Current: ${priya.name}, ${priya.title}`,
     'Ask Open Door',
     'Ask',
     ...priya.tryAsking,
+    'Oct 7 Handbook updated. Open Handbook',
   ])
   // The ring is 2 px, offset 2 px. The composer's box shows its own primary border and halo
   // instead (components.spec.ts), so its stop is checked there.
   for (const [index, stop] of stops.entries()) {
-    if (index === 3) continue
+    if (index === 4) continue
     expect(stop.ring).toEqual({ width: '2px', style: 'solid', offset: '2px' })
   }
   // Focus then leaves the page's controls: nothing after the last row takes it.
@@ -148,7 +158,7 @@ test('the composer shows its primary border and halo when the keyboard reaches i
   const [light, dark] = [luminance(sheet), luminance(resting.border)].sort((a, b) => b - a)
   expect((light! + 0.05) / (dark! + 0.05)).toBeGreaterThanOrEqual(3)
 
-  for (let i = 0; i < 4; i += 1) await page.keyboard.press('Tab')
+  for (let i = 0; i < 5; i += 1) await page.keyboard.press('Tab')
   await expect(box(page)).toBeFocused()
   await expect.poll(async () => (await read()).border).toBe(await themeColor(page, 'primary'))
   // The halo transitions in with the border, so wait for it too.

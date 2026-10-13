@@ -69,6 +69,8 @@ type HandbookBlocksProps = {
   onClearCitation?: () => void
   /** Scroll the cited passage into view and move focus to it (a deep link). */
   focusCited?: boolean
+  /** Called after the cited passage has been scrolled to and focused, so a page can do it once. */
+  onCitedFocused?: () => void
   className?: string
 }
 
@@ -84,9 +86,15 @@ function HandbookBlocks({
   citedPassageId,
   onClearCitation,
   focusCited = false,
+  onCitedFocused,
   className,
 }: HandbookBlocksProps) {
   const citedRef = useRef<HTMLElement>(null)
+  // The latest callback, read inside the effect, so a new function each render never re-runs it.
+  const focusedCallback = useRef(onCitedFocused)
+  useEffect(() => {
+    focusedCallback.current = onCitedFocused
+  })
   // `blocks` is a dependency because passage ids restart in every section: following a citation
   // from 4.3's p2 to CA-4.3's p2 changes the blocks but not the id.
   useEffect(() => {
@@ -94,6 +102,7 @@ function HandbookBlocks({
     if (focusCited && el) {
       el.scrollIntoView({ block: 'center' })
       el.focus({ preventScroll: true })
+      focusedCallback.current?.()
     }
   }, [focusCited, citedPassageId, blocks])
 

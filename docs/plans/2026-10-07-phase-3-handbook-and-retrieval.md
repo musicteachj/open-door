@@ -1035,6 +1035,47 @@ eval questions and negatives for a Georgia employee, and the tests that assume t
   `gallery-handbook.spec.ts`, steady at one worker), and 863 API tests. `make captures` gains 26
   handbook rows.
 
+**Stage 5 (the handbook pages), 2026-10-13:**
+- **Each batch's implementer photographed its pages** at 1440 and 390 px, as Priya and as
+  Mateo, and compared them with the design screenshots before review, and I compared them again.
+  That found the excerpts (below), a version line missing while loading, the navigator's
+  position, and the navigator heading's weight.
+- **Search excerpts start at the beginning of the sentence** with the first match, as the design
+  shows, and list items are joined with "; ". The route marks the whole passage
+  (`HighlightAll`), walks back to the sentence start, and caps the excerpt at 300 characters on a
+  word boundary. When the match sits far into a long sentence, the excerpt starts about 70
+  characters before it with a leading "…", so the match always shows. A Stage 3 route change made
+  here, with tests.
+- **"Applies to me" while searching** keeps only the matching sections that apply. When there
+  are matches but none apply, the page says "No sections that apply to you match …" and offers
+  "Show all sections" (my call; the design doesn't cover it).
+- **While a new search loads,** the previous results stay dimmed and busy, and the count and
+  no-results lines wait for the new query, so neither the screen nor a screen reader reports
+  the old count under the new words (a batch review finding).
+- **"Ask the assistant"** is `useAskAssistant`: it puts the text in the chat store's draft and
+  goes to `/ask` without sending. It was built in batch A rather than Task 36.
+- **The not-applicable note** keeps the notes' wording for a state restriction and adds an
+  employment-type form: "This section is for hourly staff in California. You're salaried, at the
+  Oakland store in California." (my wording).
+- **The assistant home's "Handbook updated" figure has its own query cache entry,** so a
+  failed rail request never leaves an error behind that the handbook pages would show without
+  retrying (a `/code-review` finding).
+- **Focus on a deep link moves once per `?passage=` value:** the page records the
+  section-and-passage key once `HandbookBlocks` reports it focused, so a refetch never steals
+  focus, and a new citation (or the same one after "Clear highlight") focuses again.
+- **Sources show the site and a friendly date** ("read from dir.ca.gov on Oct 7, 2026."), as the
+  design does, while the files keep the full address and ISO date for traceability (the owner's
+  decision, 2026-10-13). A display change only.
+- **Eleven links in the handbook text put a § before an addendum's ID** ("§CA-5.1 …"), which
+  the design never does. The fix waits for Stage 6, which needs a new handbook version anyway
+  (the owner's decision, 2026-10-13).
+- **The whole-phase review moves to after Stage 6,** so one `/code-review high` pass covers all
+  of Phase 3.
+- **The capture report** gains the eleven `06-handbook` screens. The two panel screens differ
+  by design until Phase 4 docks the panel.
+- **Tests at the close:** 991 web unit tests, 174 browser tests (19 in `handbook.spec.ts`, one
+  per acceptance criterion, steady at one worker), and 868 API tests.
+
 ## Backlog
 
 New items from planning, added in the tasks named:

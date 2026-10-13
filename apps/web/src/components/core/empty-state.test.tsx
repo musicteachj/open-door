@@ -25,4 +25,17 @@ describe('EmptyState', () => {
     render(<EmptyState message="Nothing here." />)
     expect(screen.queryByRole('button')).not.toBeInTheDocument()
   })
+
+  it('offers a second action beside the first, which runs when pressed', async () => {
+    const onSecond = vi.fn<() => void>()
+    render(
+      <EmptyState
+        message="Nothing."
+        action={{ label: 'Clear', onAction: vi.fn<() => void>() }}
+        secondaryAction={{ label: 'Ask', onAction: onSecond }}
+      />,
+    )
+    await userEvent.click(screen.getByRole('button', { name: 'Ask' }))
+    expect(onSecond).toHaveBeenCalledTimes(1)
+  })
 })

@@ -12,6 +12,21 @@ version (`0.x.y` while the app is being built, `1.0.0` when it is complete).
 
 ### Added
 
+- **The handbook browser** (Phase 3, stage 5). Handbook is in everyone's navigation.
+  - **The handbook home** lists every section by chapter, then the state addenda, with who each
+    applies to, when it was last updated, and an "Applies to you" marker on the restricted
+    sections that cover you. "Applies to me" narrows the list, and search finds sections by their
+    words, applicable ones first, with the matched words marked. No results offers "Ask the
+    assistant", which puts the search in the chat box without sending it.
+  - **A section page** shows the section with its state rules or the company section it adds to,
+    its sources, previous and next, and the chapter navigator. A deep link such as
+    `/handbook/CA-4.3?passage=p2` highlights the passage and moves focus to it. A section that
+    doesn't apply to you says why and links to the one that does, and a section that isn't in
+    your handbook version says so.
+  - **The assistant home** shows when the handbook was last updated.
+  - Every acceptance criterion in the design notes has a browser test, with axe on every state
+    and a check at phone width.
+
 - **The handbook components** (Phase 3, stage 4), built from the approved design and shown in
   every state in the gallery: the "Applies to" badge, the "applies to you" marker, the last
   updated date, section rows and groups, the chapter navigator, search results with the matched
@@ -67,6 +82,8 @@ version (`0.x.y` while the app is being built, `1.0.0` when it is complete).
 
 ### Changed
 
+- **Search excerpts start at the beginning of the sentence** with the match, and list items are
+  separated (Phase 3, stage 5).
 - **The development and CI databases use a pinned image,** `pgvector/pgvector:0.8.7-pg17`, rather
   than whatever `pg17` pointed to on the day (Phase 3, stage 2).
 - **The secret scan skips the generated embedding caches** (Phase 3, stage 2). Each line's key is

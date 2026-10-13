@@ -1,5 +1,6 @@
 import { http, HttpResponse } from 'msw'
 import type { PersonaKey, SandboxCreated } from '@/api/generated'
+import { handbookOverview } from './fake-handbook'
 import { meFor } from './fixtures'
 import { server } from './msw'
 
@@ -26,6 +27,11 @@ export function installFakeApi(initial: PersonaKey | null = null) {
       if (meFailure !== null) return problem(meFailure, 'Failure')
       return current === null ? problem(401, 'Not signed in') : HttpResponse.json(me(current))
     }),
+    // The assistant home's "Handbook updated" figure reads the handbook's version, so every
+    // signed-in test has an answer. A test that installs the fake handbook overrides it.
+    http.get(url('/api/v1/handbook'), () =>
+      HttpResponse.json(handbookOverview(current === 'mateo' ? 'mateo' : 'priya')),
+    ),
     http.post(url('/api/v1/sandboxes'), async ({ request }) => {
       const body = (await request.json()) as { persona?: PersonaKey } | null
       current = body?.persona ?? 'priya'

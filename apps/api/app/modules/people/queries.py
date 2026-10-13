@@ -141,6 +141,7 @@ def _cards() -> Select[*tuple[Any, ...]]:
             Department.id.label("department_id"),
             Department.name.label("department_name"),
             Location.id.label("location_id"),
+            Location.code.label("location_code"),
             Location.name.label("location_name"),
             Location.state.label("location_state"),
             Location.timezone.label("location_timezone"),
@@ -171,6 +172,7 @@ def _card_fields(row: Row[Any]) -> dict[str, Any]:
         "department": DepartmentRef(id=row.department_id, name=row.department_name),
         "location": LocationRef(
             id=row.location_id,
+            code=row.location_code,
             name=row.location_name,
             state=row.location_state,
             timezone=row.location_timezone,

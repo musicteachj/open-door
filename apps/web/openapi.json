@@ -1321,6 +1321,10 @@
             "format": "uuid",
             "title": "Id"
           },
+          "code": {
+            "type": "string",
+            "title": "Code"
+          },
           "name": {
             "type": "string",
             "title": "Name"
@@ -1337,6 +1341,7 @@
         "type": "object",
         "required": [
           "id",
+          "code",
           "name",
           "state",
           "timezone"

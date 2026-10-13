@@ -11,6 +11,8 @@ import { handbookPath, searchResultSource } from './labels'
 
 type SearchResultRowProps = {
   result: SearchResultOut
+  /** Runs as the link is followed, before the page changes. */
+  onNavigate?: () => void
   className?: string
 }
 
@@ -21,7 +23,7 @@ type SearchResultRowProps = {
  * the match by searching the excerpt for the query; the API has already marked it. The marker
  * shows, yes or no, on every result. It renders the `li`.
  */
-function SearchResultRow({ result, className }: SearchResultRowProps) {
+function SearchResultRow({ result, onNavigate, className }: SearchResultRowProps) {
   const { section, passageId, excerpt } = result
   const excerptId = useId()
   const metaId = useId()
@@ -30,6 +32,7 @@ function SearchResultRow({ result, className }: SearchResultRowProps) {
       <Link
         to={handbookPath(section.id, passageId)}
         data-slot="search-result-row"
+        onClick={onNavigate}
         aria-label={`${section.id} ${section.title}, ${searchResultSource(section)}`}
         aria-describedby={`${excerpt.length > 0 ? `${excerptId} ` : ''}${metaId}`}
         className={cn(

@@ -67,6 +67,12 @@ MATCH_STOP = "\x03"
 HEADLINE_OPTIONS = (
     f"StartSel={MATCH_START}, StopSel={MATCH_STOP}, MaxWords=35, MinWords=15, HighlightAll=false"
 )
+# A passage's whole text with every match marked; the excerpt is cut from it in `_excerpt`.
+PASSAGE_HEADLINE_OPTIONS = f"StartSel={MATCH_START}, StopSel={MATCH_STOP}, HighlightAll=true"
+EXCERPT_MAX_CHARACTERS = 300
+EXCERPT_LEAD_THRESHOLD = 150  # a first match later than this starts the excerpt mid-sentence
+EXCERPT_LEAD_CHARACTERS = 70  # ... this many characters before the match, on a word boundary
+SENTENCE_BREAK = re.compile(r"(?<=[.!?])\s+|\n+")
 MAX_RESULTS = 50
 
 
@@ -247,12 +253,16 @@ async def search_handbook_text(
 
     results = []
     for index, row in enumerate(ranked):
-        pid, line = picked.get(index, (row.passage_ids[0], row.headline))
+        if index in picked:
+            pid, whole = picked[index]
+            excerpt = _excerpt(whole)
+        else:
+            pid, excerpt = row.passage_ids[0], _segments(row.headline)
         results.append(
             SearchResultOut(
                 section=_summary(row.HandbookSection, context),
                 passage_id=pid,
-                excerpt=_segments(line),
+                excerpt=excerpt,
             )
         )
     return SearchResults(results=results)
@@ -272,11 +282,54 @@ async def _passage_headlines(db: AsyncSession, question: str, bodies: list[str])
         {
             "markers": MATCH_START + MATCH_STOP,
             "question": question,
-            "options": HEADLINE_OPTIONS,
+            "options": PASSAGE_HEADLINE_OPTIONS,
             "bodies": bodies,
         },
     )
     return [line for _, line in rows]
+
+
+def _excerpt(whole: str) -> list[Segment]:
+    """An excerpt from a passage's whole marked text: it starts at the beginning of the sentence
+    with the first match and runs to the end of the passage, capped at about 300 characters on a
+    word boundary with an ellipsis. A list item is a sentence of its own: its "- " is dropped and
+    the items are joined with "; " (a space after an item that ends in punctuation)."""
+    whole = re.sub(r"(?m)^- ", "", whole)
+    first = whole.index(MATCH_START)
+    breaks = list(SENTENCE_BREAK.finditer(whole, 0, first))
+    cut = whole[breaks[-1].end() :] if breaks else whole
+    joined = re.sub(r"\n+", "; ", re.sub(r"(?<=[.!?])\n+", " ", cut))
+    segments = _segments(joined)
+    visible = "".join(segment.text for segment in segments)
+    # A match far into a long sentence would be cut off, so start a few words before it instead.
+    first_match = next(i for i, segment in enumerate(segments) if segment.match)
+    match_at = sum(len(segment.text) for segment in segments[:first_match])
+    lead: list[Segment] = []
+    if match_at > EXCERPT_LEAD_THRESHOLD:
+        begin = visible.find(" ", match_at - EXCERPT_LEAD_CHARACTERS) + 1
+        segments = _slice(segments, begin, len(visible))
+        visible = visible[begin:]
+        lead = [Segment(text="…", match=False)]
+    limit = EXCERPT_MAX_CHARACTERS - len(lead)
+    if len(visible) <= limit:
+        return [*lead, *segments]
+    end = visible.rfind(" ", 0, limit + 1)
+    end = end if end > 0 else limit
+    kept = _slice(segments, 0, end)
+    kept[-1] = Segment(text=kept[-1].text.rstrip(), match=kept[-1].match)
+    return [*lead, *kept, Segment(text="…", match=False)]
+
+
+def _slice(segments: list[Segment], begin: int, end: int) -> list[Segment]:
+    """The segments' visible characters from `begin` to `end`, with their match flags kept."""
+    sliced: list[Segment] = []
+    at = 0
+    for segment in segments:
+        piece = segment.text[max(begin - at, 0) : max(end - at, 0)]
+        at += len(segment.text)
+        if piece:
+            sliced.append(Segment(text=piece, match=segment.match))
+    return sliced
 
 
 def _segments(headline: str) -> list[Segment]:

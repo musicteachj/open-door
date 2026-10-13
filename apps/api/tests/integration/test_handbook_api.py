@@ -491,3 +491,86 @@ async def test_stored_text_cannot_forge_a_marker_in_the_chunk_level_excerpt(
             assert "\x02" not in "".join(s["text"] for s in results[0]["excerpt"])
         finally:
             await set_pin(owner_engine, tenant, None)
+
+
+def excerpt_text(result: Any) -> str:
+    return "".join(segment["text"] for segment in result["excerpt"])
+
+
+def test_an_excerpt_starts_at_the_beginning_of_the_sentence_with_the_match(
+    browser: Browser,
+) -> None:
+    signed_in(browser, "mateo")
+
+    results = search(browser, "overtime")
+
+    hit = next(result for result in results if result["section"]["id"] == "3.2")
+    assert excerpt_text(hit).startswith("Juniper Row classifies hourly employees as non-exempt, so")
+    assert next(s["text"] for s in hit["excerpt"] if s["match"]) == "overtime"
+    assert "\x02" not in excerpt_text(hit)
+
+
+def test_a_list_excerpt_starts_at_the_item_without_its_dash(browser: Browser) -> None:
+    signed_in(browser, "mateo")
+
+    results = search(browser, "touching")
+
+    hit = next(result for result in results if result["section"]["id"] == "2.2")
+    text_of_excerpt = excerpt_text(hit)
+    assert text_of_excerpt.startswith("unwanted touching, comments about a person's body")
+    assert "\n" not in text_of_excerpt
+    assert "- " not in text_of_excerpt
+    assert "after a no; sharing offensive images or messages; threats," in text_of_excerpt
+    assert any(s["match"] and s["text"] == "touching" for s in hit["excerpt"])
+
+
+async def test_a_long_excerpt_is_capped_on_a_word_boundary_with_an_ellipsis(
+    browser: Browser, owner_engine: AsyncEngine
+) -> None:
+    sentence = "Zebra crossings are painted with " + "extraordinarily " * 40 + "today."
+    body = "An earlier sentence comes first. " + sentence
+    sandbox = browser.start_sandbox("priya")
+    tenant = UUID(sandbox["tenant"]["id"])
+    async with second_version(owner_engine, body) as version_id:
+        try:
+            await set_pin(owner_engine, tenant, version_id)
+
+            results = search(browser, "painted")
+
+            excerpt = results[0]["excerpt"]
+            full = excerpt_text(results[0])
+            assert full.startswith("Zebra crossings are painted with extraordinarily")
+            assert full.endswith("…")
+            assert excerpt[-1] == {"text": "…", "match": False}
+            kept = full[:-1]
+            assert len(kept) <= 300
+            assert kept.split(" ")[-1] == "extraordinarily"  # a whole word
+            assert len(kept) > 270
+            assert [s["text"] for s in excerpt if s["match"]] == ["painted"]
+        finally:
+            await set_pin(owner_engine, tenant, None)
+
+
+async def test_a_match_far_into_a_long_sentence_is_still_in_the_excerpt(
+    browser: Browser, owner_engine: AsyncEngine
+) -> None:
+    body = (
+        "Short opener. " + "Extraordinarily " * 30 + "zebra crossings are painted. " + "More. " * 20
+    )
+    sandbox = browser.start_sandbox("priya")
+    tenant = UUID(sandbox["tenant"]["id"])
+    async with second_version(owner_engine, body) as version_id:
+        try:
+            await set_pin(owner_engine, tenant, version_id)
+
+            results = search(browser, "painted")
+
+            excerpt = results[0]["excerpt"]
+            full = excerpt_text(results[0])
+            assert excerpt[0] == {"text": "…", "match": False}
+            assert [s["text"] for s in excerpt if s["match"]] == ["painted"]
+            assert len(full) <= 300
+            assert full[1:].startswith("Extraordinarily")  # a whole word, not "xtraordinarily"
+            assert "zebra crossings are" in full
+        finally:
+            await set_pin(owner_engine, tenant, None)

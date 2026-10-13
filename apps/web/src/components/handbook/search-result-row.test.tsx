@@ -1,5 +1,6 @@
+import userEvent from '@testing-library/user-event'
 import { screen, within } from '@testing-library/react'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import type { SearchResultOut } from '@/api/generated'
 import { californiaSickLeave, sectionSummary } from '@/test/handbook-fixtures'
 import { renderWithRouter } from '@/test/render-with-router'
@@ -19,6 +20,13 @@ function result(overrides: Partial<SearchResultOut> = {}): SearchResultOut {
 }
 
 describe('SearchResultRow', () => {
+  it('runs onNavigate when the link is followed, before the page changes', async () => {
+    const onNavigate = vi.fn<() => void>()
+    renderWithRouter(<SearchResultRow result={result()} onNavigate={onNavigate} />)
+    await userEvent.click(screen.getByRole('link'))
+    expect(onNavigate).toHaveBeenCalledTimes(1)
+  })
+
   it('is one link that deep-links to the passage', () => {
     renderWithRouter(<SearchResultRow result={result()} />)
     const links = screen.getAllByRole('link')

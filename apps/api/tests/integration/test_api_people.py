@@ -220,7 +220,7 @@ def test_the_directory_shows_only_the_cards_fields(browser: Browser) -> None:
         assert forbidden.isdisjoint(shown)
     assert set(me) == CARD_FIELDS | ME_ONLY_FIELDS
     assert set(card["department"]) == {"id", "name"}
-    assert set(card["location"]) == {"id", "name", "state", "timezone"}
+    assert set(card["location"]) == {"id", "code", "name", "state", "timezone"}
     assert set(card["manager"]) == {"id", "givenName", "familyName"}
 
 
@@ -230,6 +230,15 @@ def test_priyas_card_carries_her_locations_timezone(browser: Browser) -> None:
     me = browser.client.get("/api/v1/me").json()
 
     assert me["location"]["timezone"] == "America/Los_Angeles"
+
+
+def test_a_location_carries_its_handbook_code(browser: Browser) -> None:
+    # The handbook's audiences name locations by code (oak, den, aus), so the page can compare.
+    browser.start_sandbox("priya")
+    assert browser.client.get("/api/v1/me").json()["location"]["code"] == "oak"
+
+    browser.start_sandbox("mateo")
+    assert browser.client.get("/api/v1/me").json()["location"]["code"] == "aus"
 
 
 def test_the_people_endpoints_need_a_session(browser: Browser) -> None:

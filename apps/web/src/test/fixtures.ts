@@ -26,10 +26,26 @@ export function meFor(persona: PersonaKey, tenantExpiresAt: string = DEFAULT_EXP
     id: PERSONA_IDS[persona],
     ...PERSONAS[persona],
     department: { id: 'dept-1', name: 'Store Operations' },
-    location: { id: 'loc-1', name: 'Oak Street', state: 'CA', timezone: 'America/Los_Angeles' },
+    // Mateo works in Texas, as the seed has him; the others are at the Oakland store in California.
+    location:
+      persona === 'mateo'
+        ? {
+            id: 'loc-3',
+            code: 'aus',
+            name: 'Austin warehouse',
+            state: 'TX',
+            timezone: 'America/Chicago',
+          }
+        : {
+            id: 'loc-1',
+            code: 'oak',
+            name: 'Oakland store',
+            state: 'CA',
+            timezone: 'America/Los_Angeles',
+          },
     manager: null,
     workEmail: `${persona}@example.test`,
-    employmentType: 'salaried',
+    employmentType: persona === 'mateo' ? 'hourly' : 'salaried',
     isManager: persona === 'marcus',
     isHrAdmin: persona === 'dana',
     personaKey: persona,
