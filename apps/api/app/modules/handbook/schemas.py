@@ -91,6 +91,7 @@ class SectionRef(CamelModel):
 
     id: str
     title: str
+    group_name: str
     audience_label: str
     applies_to_me: bool
 

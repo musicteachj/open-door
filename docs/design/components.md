@@ -106,3 +106,14 @@ The source is in [`system/components/handbook/`](system/components/handbook/).
 | Sources block | | default | [x] |
 | Search result row | applies, doesn't apply | default, hover, focus | [x] |
 | Passage panel | | open, loading, error, long passage (scrolls inside) | [x] |
+
+**Built but not designed** (Phase 3, stage 4), each derived from the screenshots and
+`handbook.css`, and shown in the gallery for the owner's review:
+- **Section row at 390 px:** the number stays beside the title, and the audience, the marker,
+  and the date stack under it (the notes say there's no mockup).
+- **Chapter navigator:** no component sketch; built from `.od-sec-nav` and the section page.
+- **Handbook blocks** (the section body: headings, paragraphs, lists, inline links): drawn only in
+  the page screenshots.
+- **The compact cited passage on its own:** drawn only inside the panel.
+- **The panel's loading and error eyebrow without a section name:** "Handbook CA-4.3", when the
+  host doesn't pass one.

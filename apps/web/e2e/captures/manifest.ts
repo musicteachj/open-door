@@ -14,6 +14,7 @@ export const AREAS = [
   'directory',
   'feedback',
   'forms',
+  'handbook',
   'landing',
   'navigation',
   'status',
@@ -150,6 +151,64 @@ export const COMPONENT_ROWS: ComponentRow[] = [
   row('directory', 'skeleton-row-default'),
   row('directory', 'detail-list-values'),
   row('directory', 'detail-list-locked'),
+
+  // Not photographed: the chapter navigator (.od-sec-nav has a style but no sketch) and the
+  // handbook blocks (the section screenshots show them, but no sketch does).
+  row('handbook', 'applicability-badge-chip'),
+  row('handbook', 'applicability-badge-text'),
+  row('handbook', 'applies-marker-applies'),
+  row('handbook', 'applies-marker-not'),
+  row('handbook', 'last-updated-default'),
+  row('handbook', 'section-row-default', {
+    variant: 'hover',
+    note: 'Hovered',
+    interaction: { action: 'hover', target: 'a' },
+  }),
+  row('handbook', 'section-row-default', {
+    variant: 'focus',
+    note: 'Keyboard focus',
+    interaction: { action: 'focus', target: 'a' },
+  }),
+  row('handbook', 'section-row-current'),
+  row('handbook', 'section-row-marker'),
+  row('handbook', 'section-row-addendum'),
+  row('handbook', 'section-group-chapter'),
+  row('handbook', 'section-group-addendum'),
+  row('handbook', 'search-result-applies', {
+    variant: 'hover',
+    note: 'Hovered',
+    interaction: { action: 'hover', target: 'a' },
+  }),
+  row('handbook', 'search-result-applies', {
+    variant: 'focus',
+    note: 'Keyboard focus',
+    interaction: { action: 'focus', target: 'a' },
+  }),
+  row('handbook', 'search-result-not'),
+  row('handbook', 'cited-passage-default'),
+  row('handbook', 'cited-passage-compact'),
+  row('handbook', 'link-block-state-rules', {
+    variant: 'hover',
+    note: 'First row hovered',
+    interaction: { action: 'hover', target: 'a' },
+  }),
+  row('handbook', 'link-block-state-rules', {
+    variant: 'focus',
+    note: 'First row focused by keyboard',
+    interaction: { action: 'focus', target: 'a' },
+  }),
+  row('handbook', 'link-block-supplements'),
+  row('handbook', 'sources-block-default'),
+  row('handbook', 'passage-panel-open', {
+    note: 'Opened by pressing the button',
+    interaction: { action: 'click', target: 'button' },
+  }),
+  row('handbook', 'passage-panel-long', {
+    note: 'Opened by pressing the button; the body scrolls inside the panel',
+    interaction: { action: 'click', target: 'button' },
+  }),
+  row('handbook', 'passage-panel-loading'),
+  row('handbook', 'passage-panel-error'),
 ]
 
 /** The screen folders the report compares, in docs/design/screens/. The other folders belong to

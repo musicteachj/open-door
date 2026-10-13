@@ -50,3 +50,13 @@ export function greetingFor(now: Date, timeZone: string): string {
 export function greetingLine(now: Date, timeZone: string, firstName: string): string {
   return `${greetingFor(now, timeZone)}, ${firstName}.`
 }
+
+/**
+ * "2026-09-12" as "Sep 12, 2026", the handbook's date. A calendar date, so no timezone moves it.
+ * Text that isn't a date comes back unchanged.
+ */
+export function formatShortDate(isoDate: string): string {
+  const date = new Date(`${isoDate}T00:00:00Z`)
+  if (Number.isNaN(date.getTime())) return isoDate
+  return date.toLocaleDateString('en-US', { dateStyle: 'medium', timeZone: 'UTC' })
+}

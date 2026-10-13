@@ -116,6 +116,7 @@ def test_a_section_has_its_text_related_sections_sources_and_neighbors(browser: 
     assert addendum["supplements"] == {
         "id": "4.3",
         "title": "Sick leave",
+        "groupName": "Time off",
         "audienceLabel": "Everyone",
         "appliesToMe": True,
     }
@@ -137,7 +138,9 @@ def test_a_section_has_its_text_related_sections_sources_and_neighbors(browser: 
     by_id = {ref["id"]: ref for ref in company["supplementedBy"]}
     assert by_id["CA-4.3"]["appliesToMe"] is True
     assert by_id["CO-4.3"]["appliesToMe"] is False
-    assert set(by_id["CA-4.3"]) == {"id", "title", "audienceLabel", "appliesToMe"}
+    assert set(by_id["CA-4.3"]) == {"id", "title", "groupName", "audienceLabel", "appliesToMe"}
+    assert by_id["CA-4.3"]["groupName"] == "California addendum"
+    assert by_id["CO-4.3"]["groupName"] == "Colorado addendum"
 
 
 def test_the_first_and_last_sections_have_one_neighbor(browser: Browser) -> None:

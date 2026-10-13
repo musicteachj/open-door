@@ -119,6 +119,7 @@ def _ref(section: HandbookSection, context: Context) -> SectionRef:
     return SectionRef(
         id=section.section_key,
         title=section.title,
+        group_name=group_name(section, context.version.group_names),
         audience_label=audience_label(audience, context.location_names),
         applies_to_me=applies(audience, context.asker),
     )

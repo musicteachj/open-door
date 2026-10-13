@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { formatTimeLeft, greetingFor, greetingLine, isExpiringSoon } from './time'
+import { formatShortDate, formatTimeLeft, greetingFor, greetingLine, isExpiringSoon } from './time'
 
 const MIN = 60_000
 const HOUR = 60 * MIN
@@ -84,5 +84,19 @@ describe('greetingLine', () => {
     expect(greetingLine(new Date('2026-10-06T15:00:00Z'), 'America/Los_Angeles', 'Priya')).toBe(
       'Good morning, Priya.',
     )
+  })
+})
+
+describe('formatShortDate', () => {
+  it.each([
+    ['2026-09-12', 'Sep 12, 2026'],
+    ['2026-01-01', 'Jan 1, 2026'],
+    ['2026-12-31', 'Dec 31, 2026'],
+  ])('%s is %s, a calendar date no timezone moves', (iso, expected) => {
+    expect(formatShortDate(iso)).toBe(expected)
+  })
+
+  it('returns text that is not a date unchanged', () => {
+    expect(formatShortDate('soon')).toBe('soon')
   })
 })

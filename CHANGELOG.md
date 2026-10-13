@@ -12,6 +12,16 @@ version (`0.x.y` while the app is being built, `1.0.0` when it is complete).
 
 ### Added
 
+- **The handbook components** (Phase 3, stage 4), built from the approved design and shown in
+  every state in the gallery: the "Applies to" badge, the "applies to you" marker, the last
+  updated date, section rows and groups, the chapter navigator, search results with the matched
+  words highlighted, the section body, the cited passage with "Clear highlight", the "State
+  rules" and "Supplements" blocks, the Sources block, and the passage panel (open, loading,
+  error, and a long passage that scrolls inside). Everything renders as React elements; a new
+  test fails if any file ever renders raw HTML. Each state has an axe check, and the passage
+  panel's focus behavior is tested in a real browser. The API's references to related sections
+  now carry the addendum's name ("California addendum").
+
 - **Handbook search, its eval, and the handbook API** (Phase 3, stage 3).
   - **Search for the assistant:** `search_handbook` finds the passages that answer a question by
     combining keyword search with search by meaning, merged into one ranking, and only over the
