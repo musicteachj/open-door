@@ -1,6 +1,6 @@
 # The handbook's table of contents: its version label, title, chapter names, state addendum names,
 # and the location codes the text may name. The sections themselves live in sections/ and addenda/.
-version: "2026.10"
+version: "2026.10.1"
 title: Juniper Row Employee Handbook
 chapters:
   1: Welcome
@@ -13,8 +13,10 @@ chapters:
 addenda:
   CA: California addendum
   CO: Colorado addendum
+  GA: Georgia addendum
   TX: Texas addendum
 locations:
   den: Denver HQ
   oak: Oakland store
   aus: Austin warehouse
+  atl: Atlanta store

@@ -86,7 +86,7 @@ async def test_the_same_question_gives_the_same_hits_in_the_same_order(
     assert first.location_used == "aus"
     assert 1 <= len(first.hits) <= 5
     assert any(hit.section_id == "4.3" for hit in first.hits)
-    assert not any(hit.section_id.startswith(("CA-", "CO-")) for hit in first.hits)
+    assert not any(hit.section_id.startswith(("CA-", "CO-", "GA-")) for hit in first.hits)
     assert first.hits[0].fulltext_rank is not None
 
 
@@ -221,7 +221,9 @@ async def test_each_hit_links_to_its_first_passage_and_carries_the_passage_texts
             version_id=version_id,
             asker=asker,
             query=SICK,
-            query_vector=await embed_query(FakeEmbedder(), SICK),
+            # Full-text only: the fake embedder's vectors are noise that can crowd out the
+            # addendum, and this test is about the shape of a hit, not the ranking.
+            query_vector=None,
         )
 
     assert result.location_used == "oak"

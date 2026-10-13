@@ -1,5 +1,6 @@
 """The seed company, built in memory: the same fictional company in every sandbox."""
 
+import hashlib
 import re
 from collections import Counter
 from dataclasses import fields
@@ -89,20 +90,21 @@ def test_another_tenant_gets_the_same_people_under_new_ids(company: SeedCompany)
     assert {person.tenant_id for person in other.people} == {OTHER_TENANT_ID}
 
 
-def test_120_people_40_in_denver_45_in_oakland_and_35_in_austin(company: SeedCompany) -> None:
+def test_145_people_across_four_locations_with_25_in_atlanta(company: SeedCompany) -> None:
     head_count = Counter(location_code(company, person) for person in company.people)
 
-    assert head_count == {"den": 40, "oak": 45, "aus": 35}
-    assert len(company.person_private) == 120
+    assert head_count == {"den": 40, "oak": 45, "aus": 35, "atl": 25}
+    assert len(company.person_private) == 145
 
 
-def test_eight_departments_and_three_locations_each_with_people(company: SeedCompany) -> None:
+def test_eight_departments_and_four_locations_each_with_people(company: SeedCompany) -> None:
     assert len(company.departments) == 8
     assert {row.id for row in company.departments} == {p.department_id for p in company.people}
     assert [(row.code, row.state, row.timezone) for row in company.locations] == [
         ("den", "CO", "America/Denver"),
         ("oak", "CA", "America/Los_Angeles"),
         ("aus", "TX", "America/Chicago"),
+        ("atl", "GA", "America/New_York"),
     ]
 
 
@@ -231,8 +233,8 @@ def test_holidays_are_the_company_calendar_for_the_anchor_year_and_the_next(
             for holiday in holidays_for(location.code, year)
         }
         assert seeded == expected
-    # Denver closes 7 days in 2026 and 8 in 2027; Oakland and Austin close 6 and 7.
-    assert len(company.holidays) == 15 + 13 + 13
+    # Denver closes 7 days in 2026 and 8 in 2027; the other three locations close 6 and 7.
+    assert len(company.holidays) == 15 + 13 + 13 + 13
 
 
 @pytest.mark.parametrize(("table_name", "row_type"), ROW_TYPES.items())
@@ -241,3 +243,39 @@ def test_each_row_type_has_exactly_its_tables_columns(table_name: str, row_type:
     columns = set(Base.metadata.tables[table_name].columns.keys())
 
     assert {field.name for field in fields(row_type)} == columns
+
+
+def test_the_people_who_existed_before_the_atlanta_store_are_unchanged(
+    company: SeedCompany,
+) -> None:
+    """Golden values taken from the seed as it was before Atlanta, with 120 people.
+
+    Names, phones, and addresses come from shuffles and draws whose results depend on the order
+    and size of every list. A new location or longer name list must not move any of them.
+    """
+    private = {row.person_id: row for row in company.person_private}
+    first_120 = [
+        (
+            person.given_name,
+            person.family_name,
+            private[person.id].phone,
+            private[person.id].home_address,
+        )
+        for person in company.people[:120]
+    ]
+
+    mid_oakland, last_austin = company.people[74], company.people[119]
+    assert (mid_oakland.title, mid_oakland.hire_date, first_120[74]) == (
+        "Cashier",
+        date(2024, 7, 24),
+        ("Mina", "Abbott", "510-555-0153", "6039 Bluebell Lane, Oakland, CA 94606"),
+    )
+    assert (last_austin.title, last_austin.hire_date, first_120[119]) == (
+        "Forklift Operator",
+        date(2021, 6, 21),
+        ("Fatima", "Kim", "512-555-0169", "5695 Linden Avenue, Austin, TX 78745"),
+    )
+    assert (
+        hashlib.sha256(repr(first_120).encode()).hexdigest()
+        == "0f412651d5b0a6acaf6a886f8d5cf0eacb10c6c4fdb4bc0f5c2f5b4de3e4d521"
+    )

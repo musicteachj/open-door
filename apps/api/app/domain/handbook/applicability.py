@@ -11,7 +11,7 @@ from dataclasses import dataclass
 
 from app.domain.handbook.models import Audience
 
-STATE_NAMES = {"CA": "California", "CO": "Colorado", "TX": "Texas"}
+STATE_NAMES = {"CA": "California", "CO": "Colorado", "GA": "Georgia", "TX": "Texas"}
 
 
 @dataclass(frozen=True, slots=True)

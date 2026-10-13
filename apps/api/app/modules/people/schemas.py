@@ -21,7 +21,7 @@ class DepartmentRef(CamelModel):
 
 class LocationRef(CamelModel):
     id: UUID
-    # The handbook's name for the place ("oak", "den", "aus"), which its audiences use.
+    # The handbook's name for the place ("oak", "den", "aus", "atl"), which its audiences use.
     code: str
     name: str
     state: str

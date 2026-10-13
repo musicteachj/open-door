@@ -8,8 +8,8 @@
 # location. `location_code` asks about another location's policy ("what does California say?").
 #
 # Personas: priya and marcus are salaried in California (oak), dana is salaried in Colorado
-# (den), mateo is hourly in Texas (aus). Hourly staff in Colorado and California are not
-# personas, so they are written out.
+# (den), mateo is hourly in Texas (aus). Hourly staff in Colorado and California, and everyone in
+# Georgia (atl), are not personas, so they are written out.
 #
 # Written from the handbook text before the search was ever run. The questions do not change to
 # raise the score. After editing, run `make embed` and commit the cache.
@@ -220,6 +220,44 @@ questions:
     question: california says one thing and the handbook says another, which one counts
     expect: ["1.1"]
 
+  # Georgia, and lactation
+  - id: vote-ga-hourly-1
+    asker: { state: GA, employment_type: hourly, location: atl }
+    question: can i leave early to vote during early voting
+    expect: [GA-4.5]
+  - id: vote-ga-salaried-1
+    asker: { state: GA, employment_type: salaried, location: atl }
+    question: do I get paid for the time I take to go vote
+    expect: [GA-4.5]
+  - id: court-ga-hourly-1
+    asker: { state: GA, employment_type: hourly, location: atl }
+    question: got a subpoena to testify, can they write me up for missing my shift
+    expect: [GA-4.5]
+  - id: court-ga-salaried-1
+    asker: { state: GA, employment_type: salaried, location: atl }
+    question: I have to be in court as a witness next week. can my boss hold that against me
+    expect: [GA-4.5]
+  - id: lact-ga-hourly-1
+    asker: { state: GA, employment_type: hourly, location: atl }
+    question: do pumping breaks come out of my pay
+    expect: ["5.4"]
+  - id: lact-ga-salaried-1
+    asker: { state: GA, employment_type: salaried, location: atl }
+    question: do I need a doctor's note to take breaks to pump
+    expect: ["5.4"]
+  - id: lact-mateo-1
+    asker: mateo
+    question: I'm back from leave and still pumping. where am I supposed to do that
+    expect: ["5.4"]
+  - id: lact-priya-1
+    asker: priya
+    question: my manager said there's no room for me to pump, what can I do
+    expect: [CA-5.4, "5.4"]
+  - id: lact-priya-2
+    asker: priya
+    question: if they won't give me a break to pump do I get anything for it
+    expect: [CA-5.4]
+
   # Safety, support, privacy
   - id: safety-mateo-1
     asker: mateo
@@ -258,6 +296,11 @@ questions:
     location_code: den
     question: if someone gets fired in colorado how fast do they have to get paid
     expect: [CO-3.4]
+  - id: loc-mateo-ga-vote
+    asker: mateo
+    location_code: atl
+    question: what does georgia say about getting time off to vote
+    expect: [GA-4.5]
   - id: loc-mateo-den-sick-neg
     asker: mateo
     location_code: den
@@ -317,3 +360,27 @@ questions:
     asker: priya
     question: I got a jury summons
     must_not: [TX-4.5]
+  - id: neg-sick-ga-hourly
+    asker: { state: GA, employment_type: hourly, location: atl }
+    question: how many sick days do I get
+    must_not: [CA-4.3, CO-4.3]
+  - id: neg-ot-ga-hourly
+    asker: { state: GA, employment_type: hourly, location: atl }
+    question: do I get overtime after 8 hours in a day
+    must_not: [CA-3.2, CO-3.2]
+  - id: neg-jury-ga-salaried
+    asker: { state: GA, employment_type: salaried, location: atl }
+    question: I got a jury summons
+    must_not: [TX-4.5]
+  - id: neg-vote-priya
+    asker: priya
+    question: can I take time off to vote
+    must_not: [GA-4.5]
+  - id: neg-vote-mateo
+    asker: mateo
+    question: do I get paid time to go vote
+    must_not: [GA-4.5]
+  - id: neg-lact-mateo
+    asker: mateo
+    question: do I get extra pay if they won't let me pump
+    must_not: [CA-5.4]

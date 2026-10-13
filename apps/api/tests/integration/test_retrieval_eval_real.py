@@ -35,8 +35,8 @@ async def test_the_real_dataset_covers_every_section_and_has_the_planned_shape(
     app_engine: AsyncEngine,
 ) -> None:
     questions = run.parse_dataset(run.DATASET_PATH)
-    assert 55 <= len(questions) <= 80
-    assert 12 <= sum(q.is_negative for q in questions) <= 20
+    assert 55 <= len(questions) <= 100
+    assert 12 <= sum(q.is_negative for q in questions) <= 30
     assert sum(q.location_code is not None for q in questions) >= 3
     assert {q.asker_label for q in questions} >= {"priya", "marcus", "dana", "mateo"}
 

@@ -76,11 +76,12 @@ describe('addendumGroupNote', () => {
   it('says who the addendum is for', () => {
     expect(addendumGroupNote('CA')).toBe('For California employees')
     expect(addendumGroupNote('CO')).toBe('For Colorado employees')
+    expect(addendumGroupNote('GA')).toBe('For Georgia employees')
     expect(addendumGroupNote('TX')).toBe('For Texas employees')
   })
 
   it('falls back to the code itself for a state it does not know', () => {
-    expect(addendumGroupNote('GA')).toBe('For GA employees')
+    expect(addendumGroupNote('NY')).toBe('For NY employees')
   })
 })
 
@@ -154,7 +155,8 @@ describe('the section page copy', () => {
 
   it('names a state from its code, or shows the code', () => {
     expect(stateName('TX')).toBe('Texas')
-    expect(stateName('GA')).toBe('GA')
+    expect(stateName('GA')).toBe('Georgia')
+    expect(stateName('NY')).toBe('NY')
   })
 
   it('writes the note for a section that does not apply, keeping a state name capitalized', () => {

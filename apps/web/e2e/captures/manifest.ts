@@ -460,7 +460,7 @@ export const SCREEN_ROWS: ScreenRow[] = [
     route: '/directory',
     persona: 'Priya',
     setup: 'directory-loading',
-    note: 'The list request is held, so the eight skeleton rows stay. The count already reads "120 people", because the counts load apart from the list; the design draws a bar there',
+    note: 'The list request is held, so the eight skeleton rows stay. The count already reads "145 people", because the counts load apart from the list; the design draws a bar there',
     differsUntil: DIRECTORY_NAV,
   },
   {

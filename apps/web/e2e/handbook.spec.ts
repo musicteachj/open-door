@@ -13,7 +13,7 @@ import { holdRequests, scan, startAs, type FirstName } from './helpers'
 
 // The restricted sections in handbook/ (front matter `applies_to`), for the two personas.
 // Priya: salaried, California. Mateo: hourly, Austin (Texas).
-const PRIYA_MARKED = ['CA-3.4', 'CA-4.3', 'CA-5.1']
+const PRIYA_MARKED = ['CA-3.4', 'CA-4.3', 'CA-5.1', 'CA-5.4']
 const MATEO_MARKED = ['3.2', '3.3', 'TX-3.4', 'TX-4.5']
 
 const rows = (page: Page) => page.locator('[data-slot="section-row"]')
@@ -52,12 +52,13 @@ test.describe('the handbook home', () => {
     const company = ids.filter((id) => !id.includes('-'))
     expect(company.length).toBeGreaterThanOrEqual(20)
     expect(ids.indexOf('1.1')).toBe(0)
-    // Addenda follow every company section, in the order California, Colorado, Texas.
+    // Addenda follow every company section, in the order California, Colorado, Georgia, Texas.
     const firstAddendum = ids.findIndex((id) => id.includes('-'))
     expect(firstAddendum).toBe(company.length)
     const states = ids.slice(firstAddendum).map((id) => id.split('-')[0])
+    const stateOrder = ['CA', 'CO', 'GA', 'TX']
     expect(states).toEqual(
-      [...states].sort((a, b) => ['CA', 'CO', 'TX'].indexOf(a!) - ['CA', 'CO', 'TX'].indexOf(b!)),
+      [...states].sort((a, b) => stateOrder.indexOf(a!) - stateOrder.indexOf(b!)),
     )
     await expect(page.getByRole('heading', { level: 2, name: 'State addenda' })).toBeVisible()
     await expect(page.getByText('Juniper Row · Version')).toBeVisible()

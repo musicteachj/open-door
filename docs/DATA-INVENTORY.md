@@ -62,7 +62,7 @@ Visible to the API only for its own sandbox, and to the cleanup role only once i
 | Column | Holds | Why |
 |---|---|---|
 | `id`, `tenant_id` | IDs | Identity, and the sandbox it belongs to. |
-| `code`, `name`, `city`, `state` | Denver HQ (CO), the Oakland store (CA), the Austin warehouse (TX) | The directory shows each person's location and state. Each state's handbook addendum applies by location (Phase 3). |
+| `code`, `name`, `city`, `state` | Denver HQ (CO), the Oakland store (CA), the Austin warehouse (TX), the Atlanta store (GA) | The directory shows each person's location and state. Each state's handbook addendum applies by location (Phase 3). |
 | `timezone` | An IANA zone, such as `America/Denver` | Leave dates are calendar dates in the location's time zone (Phase 5). Directory cards and `/me` carry it in their `location`. It describes a place, not a person, so it isn't personal data. |
 
 Visible to everyone in the sandbox. Deleted with the sandbox.
@@ -151,7 +151,7 @@ personal data and no sandbox data.
 
 | Table | Holds | Why |
 |---|---|---|
-| `handbook_versions` | One row per loaded edition: its label (`2026.10`), a content hash, the embedding model and size, the "Handbook updated" date, its title, its chapter and addendum names (`group_names`), and when it was published | A sandbox is pinned to one version, so its answers never change under it; the names label a hit's group ("Time off", "California addendum"). |
+| `handbook_versions` | One row per loaded edition: its label (`2026.10.1`), a content hash, the embedding model and size, the "Handbook updated" date, its title, its chapter and addendum names (`group_names`), and when it was published | A sandbox is pinned to one version, so its answers never change under it; the names label a hit's group ("Time off", "California addendum"). |
 | `handbook_sections` | One row per section per version: its key (`4.3`, `CA-4.3`), title, who it applies to (states, employment types, locations), its source citations, and its structured text | What the handbook screens show, and what a citation points to. |
 | `handbook_chunks` | The runs of passages that retrieval searches: their text, a full-text search vector, and a 1024-number embedding | Hybrid (keyword and meaning) search over the handbook. |
 

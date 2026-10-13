@@ -195,7 +195,11 @@ async def test_another_versions_chunks_never_appear(owner_engine: AsyncEngine) -
         # Pinned to the new version, the real handbook's chunks must not appear...
         session = AsyncSession(bind=connection)
         old_id = await session.scalar(
-            text("SELECT id FROM handbook_versions WHERE id <> :new AND label = '2026.10'"),
+            text(
+                "SELECT id FROM handbook_versions"
+                " WHERE id <> :new AND published_at IS NOT NULL"
+                " ORDER BY published_at DESC LIMIT 1"
+            ),
             {"new": new_id},
         )
         assert isinstance(old_id, UUID)

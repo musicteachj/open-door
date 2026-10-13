@@ -119,7 +119,8 @@ test('every interactive element is reachable by keyboard in the order above and 
     'Ask Open Door',
     'Ask',
     ...priya.tryAsking,
-    'Oct 7 Handbook updated. Open Handbook',
+    // The date is the published handbook's, so it changes with each edition.
+    expect.stringMatching(/^[A-Z][a-z]{2} \d{1,2} Handbook updated\. Open Handbook$/),
   ])
   // The ring is 2 px, offset 2 px. The composer's box shows its own primary border and halo
   // instead (components.spec.ts), so its stop is checked there.

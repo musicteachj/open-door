@@ -41,4 +41,4 @@ Because you receive the full amount at the start of each year, unused hours do n
 
 ## Longer illness
 
-If you need more time than your sick leave covers, see [§CA-5.1 California family and medical leave](handbook:CA-5.1).
+If you need more time than your sick leave covers, see [CA-5.1 California family and medical leave](handbook:CA-5.1).

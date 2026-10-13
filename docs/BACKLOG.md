@@ -63,6 +63,16 @@ should pick it up. When one is done, delete it here and record it in the changel
   router routes. On a Starlette upgrade, check that the two still agree. (Phase 1 close-out
   review.)
 
+## Handbook content
+
+- **A military leave section.** The handbook has none. A company section under the federal
+  reemployment law for service members (USERRA) comes first; state addenda follow, such as
+  Georgia's leave for state guard members (O.C.G.A. §38-2-279, not verified). (Phase 3 stage 6.)
+- **A Georgia persona,** if the owner wants one: a fifth sign-in card for an Atlanta employee,
+  with a design pass on the landing page first and a migration for the new persona key. Georgia is
+  covered today by Atlanta employees in the directory and Georgia askers in the eval. (Phase 3
+  stage 6.)
+
 ## Phase 4: assistant core
 
 - **Map search hits to `search_result` blocks, and open the passage panel on a citation's

@@ -68,11 +68,11 @@ async def test_a_seeded_sandbox_reads_back_exactly_as_built(
     read_back = await rows_read_back(app_engine, company)
 
     assert {name: len(rows) for name, rows in read_back.items()} == {
-        "locations": 3,
+        "locations": 4,
         "departments": 8,
-        "people": 120,
-        "person_private": 120,
-        "holidays": 41,
+        "people": 145,
+        "person_private": 145,
+        "holidays": 54,
     }
     assert read_back == rows_built(company)
 

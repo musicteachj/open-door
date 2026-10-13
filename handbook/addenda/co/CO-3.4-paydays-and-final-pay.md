@@ -28,7 +28,7 @@ When Juniper Row ends your employment, these deadlines are sooner than the compa
 
 Your final wages include all of your unused paid time off, whatever the reason you leave. That is true even if you resign without notice or your employment ends for cause. Earned PTO cannot be forfeited. See [§4.1 Paid time off](handbook:4.1).
 
-Unused sick leave is a separate benefit and is not paid out. See [§CO-4.3 Colorado sick leave](handbook:CO-4.3).
+Unused sick leave is a separate benefit and is not paid out. See [CO-4.3 Colorado sick leave](handbook:CO-4.3).
 
 ## Questions
 
