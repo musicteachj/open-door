@@ -183,8 +183,8 @@ def test_the_directory_pages_through_everyone_in_order(browser: Browser) -> None
             break
 
     people = [person for page in pages for person in page]
-    assert [len(page) for page in pages] == [50, 50, 20]
-    assert len({person["id"] for person in people}) == 120
+    assert [len(page) for page in pages] == [50, 50, 45]
+    assert len({person["id"] for person in people}) == 145
     keys = [(p["familyName"], p["givenName"], p["id"]) for p in people]
     assert keys == sorted(keys)
     assert all(set(person) == CARD_FIELDS for person in people)
@@ -233,7 +233,7 @@ def test_priyas_card_carries_her_locations_timezone(browser: Browser) -> None:
 
 
 def test_a_location_carries_its_handbook_code(browser: Browser) -> None:
-    # The handbook's audiences name locations by code (oak, den, aus), so the page can compare.
+    # The handbook's audiences name locations by code (oak, den, aus, atl), so the page can compare.
     browser.start_sandbox("priya")
     assert browser.client.get("/api/v1/me").json()["location"]["code"] == "oak"
 
@@ -427,7 +427,7 @@ def test_each_filter_narrows_the_list_and_the_facets_agree(browser: Browser) -> 
         facets = get_facets(browser, params)
 
         assert cards, params  # Every case must match someone, or the checks below prove nothing.
-        assert facets["total"] == 120
+        assert facets["total"] == 145
         assert facets["matching"] == len(cards), params
         if "locationId" in params:
             assert {card["location"]["id"] for card in cards} == {location}
@@ -440,8 +440,8 @@ def test_each_filter_narrows_the_list_and_the_facets_agree(browser: Browser) -> 
                     [card["givenName"], card["familyName"], card["title"], card["workEmail"]]
                 )
                 assert needle in text.lower()
-    assert len(get_all(browser, cases[0])) == 120
-    assert len(get_all(browser, cases[2])) < 120
+    assert len(get_all(browser, cases[0])) == 145
+    assert len(get_all(browser, cases[2])) < 145
     # The location menu agrees with the list for each location.
     for option in get_facets(browser, cases[1])["locations"]:
         chosen = get_all(browser, {"q": "manager", "locationId": option["id"]})
@@ -459,11 +459,12 @@ def test_the_facets_have_the_agreed_shape(browser: Browser) -> None:
     assert set(facets) == {"total", "matching", "locations", "departments", "myTeam"}
     assert [set(location) for location in facets["locations"]] == [
         {"id", "name", "state", "count"}
-    ] * 3
+    ] * 4
     assert {tuple(sorted(department)) for department in facets["departments"]} == {
         ("count", "id", "name")
     }
     assert [(loc["name"], loc["count"]) for loc in facets["locations"]] == [
+        ("Atlanta store", 25),
         ("Austin warehouse", 35),
         ("Denver HQ", 40),
         ("Oakland store", 45),
@@ -507,10 +508,10 @@ def test_the_search_is_trimmed_and_limited_to_100_characters(browser: Browser) -
     # The stripped value is what is matched, and a blank search on the facets is no filter.
     marcus = get_all(browser, {"q": "  marcus "})
     assert "Marcus Bell" in {f"{card['givenName']} {card['familyName']}" for card in marcus}
-    assert 0 < len(marcus) < 120
+    assert 0 < len(marcus) < 145
     assert get_all(browser, {"q": "  marcus "}) == get_all(browser, {"q": "marcus"})
     blank_facets = get_facets(browser, {"q": "   "})
-    assert blank_facets["matching"] == blank_facets["total"] == 120
+    assert blank_facets["matching"] == blank_facets["total"] == 145
     assert get_facets(browser, {"q": "  marcus "})["matching"] == len(marcus)
 
 
@@ -553,7 +554,7 @@ def test_another_sandboxs_location_matches_no_one(open_browser: OpenBrowser) -> 
     for params in ({"locationId": their_location}, {"departmentId": their_department}):
         assert get_all(mine, params) == []
         facets = get_facets(mine, params)
-        assert (facets["total"], facets["matching"]) == (120, 0)
+        assert (facets["total"], facets["matching"]) == (145, 0)
         # The foreign ID is no menu option either: every option is this sandbox's own.
         assert their_location not in {loc["id"] for loc in facets["locations"]}
         assert their_department not in {dep["id"] for dep in facets["departments"]}

@@ -57,8 +57,11 @@ def denver_only_claims(text: str) -> list[str]:
     missing = []
     if "Denver HQ also closes the day after Thanksgiving" not in text:
         missing.append("Denver HQ closes the day after Thanksgiving")
-    if "The Oakland store and the Austin warehouse do not close that day" not in text:
-        missing.append("Oakland and Austin do not close that day")
+    if (
+        "The Oakland store, the Austin warehouse, and the Atlanta store do not close that day"
+        not in text
+    ):
+        missing.append("Oakland, Austin, and Atlanta do not close that day")
     return missing
 
 

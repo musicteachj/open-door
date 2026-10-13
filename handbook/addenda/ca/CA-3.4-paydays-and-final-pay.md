@@ -28,7 +28,7 @@ These deadlines replace the company rule of the next regular payday. They are so
 
 Your final wages include all of your unused paid time off. California treats PTO the same as vacation, so it is earned wages and is paid out whatever the reason you leave. See [§4.1 Paid time off](handbook:4.1).
 
-Unused sick leave is a separate benefit and is not paid out. See [§CA-4.3 California sick leave](handbook:CA-4.3).
+Unused sick leave is a separate benefit and is not paid out. See [CA-4.3 California sick leave](handbook:CA-4.3).
 
 ## Planning your last day
 

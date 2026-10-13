@@ -8,7 +8,7 @@ skipping:
 - `cleanup_engine` connects as CLEANUP_DATABASE_URL, the cleanup login (a member of od_cleanup).
 
 `make_tenant` creates a small sandbox company as the API's login, with a row in every table, and
-returns a `SampleTenant`. `seeded_sandbox` creates the full 120-person seed company the same way.
+returns a `SampleTenant`. `seeded_sandbox` creates the full 145-person seed company the same way.
 `browser` and `open_browser` give the HTTP tests a client that behaves
 like the web app in a browser. Every tenant these create is deleted when the test session ends.
 """
@@ -302,7 +302,7 @@ def make_tenant(app_engine: AsyncEngine, created_tenant_ids: list[UUID]) -> Make
 
 @pytest.fixture
 async def seeded_sandbox(app_engine: AsyncEngine, created_tenant_ids: list[UUID]) -> SeedCompany:
-    """A new tenant with the full seed company (120 people), created as the API's login.
+    """A new tenant with the full seed company (145 people), created as the API's login.
 
     Read it back with `tenant_session(app_engine, TenantContext(company.tenant_id, None))`. The
     tenant is deleted when the test session ends, like every tenant `make_tenant` creates.

@@ -20,7 +20,7 @@ every stage.
 | 0 Foundation | Done | `chore/phase-0-ci` | [#2](https://github.com/musicteachj/open-door/pull/2), [#3](https://github.com/musicteachj/open-door/pull/3), [#4](https://github.com/musicteachj/open-door/pull/4) | [phase 0 plan](plans/2026-09-29-phase-0-foundation.md) | 2026-10-03 |
 | 1 Tenancy, identity, permissions | Done. The whole-phase review found nothing high or medium; its fixes are in `fix/phase-1-review`. Released in `v0.1.0`. | `fix/phase-1-review` | [#8](https://github.com/musicteachj/open-door/pull/8), [#9](https://github.com/musicteachj/open-door/pull/9), [#10](https://github.com/musicteachj/open-door/pull/10), [#11](https://github.com/musicteachj/open-door/pull/11), [#14](https://github.com/musicteachj/open-door/pull/14) | [phase 1 plan](plans/2026-10-03-phase-1-tenancy-identity-permissions.md) | 2026-10-04 |
 | 2 Design system, shell, sandbox entry | Done. The whole-phase review found nothing high; its fixes are in `fix/phase-2-review`. Released in `v0.2.0`. | `fix/phase-2-review` | [#23](https://github.com/musicteachj/open-door/pull/23), [#24](https://github.com/musicteachj/open-door/pull/24), [#25](https://github.com/musicteachj/open-door/pull/25), [#26](https://github.com/musicteachj/open-door/pull/26), [#27](https://github.com/musicteachj/open-door/pull/27), [#28](https://github.com/musicteachj/open-door/pull/28), [#29](https://github.com/musicteachj/open-door/pull/29), [#30](https://github.com/musicteachj/open-door/pull/30), [#32](https://github.com/musicteachj/open-door/pull/32) | [phase 2 plan](plans/2026-10-05-phase-2-design-system-shell-sandbox-entry.md) | 2026-10-06 |
-| 3 Handbook and retrieval | In progress: stage 5 of 6 (the handbook pages). The whole-phase review follows stage 6. Its screens are designed ([#36](https://github.com/musicteachj/open-door/pull/36)) | `feat/phase-3-handbook-pages` | [#37](https://github.com/musicteachj/open-door/pull/37), [#38](https://github.com/musicteachj/open-door/pull/38), [#39](https://github.com/musicteachj/open-door/pull/39), [#40](https://github.com/musicteachj/open-door/pull/40), [#41](https://github.com/musicteachj/open-door/pull/41) | [phase 3 plan](plans/2026-10-07-phase-3-handbook-and-retrieval.md) | 2026-10-13 |
+| 3 Handbook and retrieval | In progress: stage 6 of 6 (a Georgia location and addendum). The whole-phase review follows. Its screens are designed ([#36](https://github.com/musicteachj/open-door/pull/36)) | `feat/phase-3-georgia` | [#37](https://github.com/musicteachj/open-door/pull/37), [#38](https://github.com/musicteachj/open-door/pull/38), [#39](https://github.com/musicteachj/open-door/pull/39), [#40](https://github.com/musicteachj/open-door/pull/40), [#41](https://github.com/musicteachj/open-door/pull/41), [#42](https://github.com/musicteachj/open-door/pull/42) | [phase 3 plan](plans/2026-10-07-phase-3-handbook-and-retrieval.md) | 2026-10-13 |
 | 4 Assistant core (read-only) | Not started | — | — | — | — |
 | 5 Time off | Not started | — | — | — | — |
 | 6 Cases and escalation | Not started | — | — | — | — |
@@ -42,11 +42,11 @@ released in `v0.2.0`. Phase 3 is planned: see the
 and fact-checked. Stage 2 loads it into the database with its embeddings, and pins each new
 sandbox to the newest version. Stage 3 adds the search, the retrieval eval (100% hit rate at 5),
 and the handbook API. Stage 4 builds the handbook components, shown in the gallery, and stage 5
-the handbook pages, so anyone in a sandbox can browse, search, and deep-link the handbook. Next:
-Phase 3 stage 6, a Georgia location and a Georgia addendum (the owner's decision, 2026-10-12), at
-effort `medium`, starting with a short plan for the owner's OK. It also removes the § from the
-eleven links to addendum sections. The whole-phase review (`/code-review high`) runs after stage
-6, so one pass covers all of Phase 3. The
+the handbook pages, so anyone in a sandbox can browse, search, and deep-link the handbook. Stage 6
+opens an Atlanta store and adds Georgia's rules and a lactation section for everyone (plan:
+[`plans/2026-10-13-phase-3-stage-6-georgia.md`](plans/2026-10-13-phase-3-stage-6-georgia.md)).
+Next: the whole-phase review (`/code-review high` against `8db9ef5`) at effort `medium`, a small
+fix PR for its findings, then the row marked Done and Phase 4 planning at effort `high`. The
 owner's Voyage account is ready for Phase 4: a payment method, the training opt-out, and a budget
 alert.** Later phases' screens are designed
 shortly before each phase. **Design for Phase 3 is done:** the handbook browser and the passage

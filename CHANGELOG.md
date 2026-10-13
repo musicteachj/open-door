@@ -12,6 +12,22 @@ version (`0.x.y` while the app is being built, `1.0.0` when it is complete).
 
 ### Added
 
+- **Juniper Row opens an Atlanta store, and the handbook gains Georgia's rules** (Phase 3, stage
+  6).
+  - **The company grows to 145 people,** with 25 at the Atlanta store. Everyone who existed before
+    is unchanged, and a test pins that.
+  - **Georgia's addendum (GA-4.5):** court attendance is job-protected, and anyone in Georgia may
+    take up to 2 paid hours to vote on Election Day or an early-voting day, whatever their
+    schedule.
+  - **A lactation section for everyone (5.4):** paid breaks as often and as long as needed,
+    whatever the child's age, and a clean, safe, private space that is never a restroom. A
+    California addendum (CA-5.4) adds the state's premium pay and complaint rights. Each figure
+    was checked against its official source on 2026-10-13.
+  - **Handbook version 2026.10.1.** Links to addendum sections no longer carry a section sign
+    ("CA-5.1", not "§CA-5.1").
+  - **The retrieval eval** gains 16 questions from Georgia staff and about lactation, and still
+    scores 100% at 5, with every negative passing.
+
 - **The handbook browser** (Phase 3, stage 5). Handbook is in everyone's navigation.
   - **The handbook home** lists every section by chapter, then the state addenda, with who each
     applies to, when it was last updated, and an "Applies to you" marker on the restricted

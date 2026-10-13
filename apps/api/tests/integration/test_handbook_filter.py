@@ -36,7 +36,7 @@ async def test_the_sql_filter_agrees_with_applies_for_every_section_and_asker(
         assert len(sections) > 20
         askers = [Asker(*combo) for combo in product(STATES, EMPLOYMENT_TYPES, CODES)]
         # Includes combinations no seed person has, such as a Texan in Denver.
-        assert len(askers) == 18
+        assert len(askers) == 32  # 4 states x 2 employment types x 4 locations
 
         for asker in askers:
             kept = set(

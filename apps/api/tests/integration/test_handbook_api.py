@@ -45,14 +45,22 @@ APPLIES = [
     ("priya", "CO-4.3", False),
     ("priya", "3.2", False),
     ("priya", "4.2", True),
+    ("priya", "GA-4.5", False),
+    ("priya", "5.4", True),
+    ("priya", "CA-5.4", True),
     ("mateo", "CA-4.3", False),
     ("mateo", "CO-4.3", False),
     ("mateo", "3.2", True),
     ("mateo", "4.2", True),
+    ("mateo", "GA-4.5", False),
+    ("mateo", "TX-4.5", True),
+    ("mateo", "CA-5.4", False),
     ("dana", "CA-4.3", False),
     ("dana", "CO-4.3", True),
     ("dana", "3.2", False),
     ("dana", "4.2", True),
+    ("dana", "GA-4.5", False),
+    ("dana", "CA-5.4", False),
 ]
 
 
@@ -141,6 +149,13 @@ def test_a_section_has_its_text_related_sections_sources_and_neighbors(browser: 
     assert set(by_id["CA-4.3"]) == {"id", "title", "groupName", "audienceLabel", "appliesToMe"}
     assert by_id["CA-4.3"]["groupName"] == "California addendum"
     assert by_id["CO-4.3"]["groupName"] == "Colorado addendum"
+
+    voting = browser.client.get("/api/v1/handbook/sections/4.5").json()
+    by_id = {ref["id"]: ref for ref in voting["supplementedBy"]}
+    assert set(by_id) == {"GA-4.5", "TX-4.5"}
+    assert by_id["GA-4.5"]["groupName"] == "Georgia addendum"
+    assert by_id["GA-4.5"]["audienceLabel"] == "Georgia employees"
+    assert by_id["GA-4.5"]["appliesToMe"] is False
 
 
 def test_the_first_and_last_sections_have_one_neighbor(browser: Browser) -> None:

@@ -41,4 +41,4 @@ You apply to the state FAMLI Division, not to Juniper Row. You can file a planne
 
 ## How it fits the company leave
 
-When the reason qualifies for both, FAMLI leave and Juniper Row's own leave in [§5.1 Family and medical leave](handbook:5.1) run at the same time. For sick leave, see [§CO-4.3 Colorado sick leave](handbook:CO-4.3).
+When the reason qualifies for both, FAMLI leave and Juniper Row's own leave in [§5.1 Family and medical leave](handbook:5.1) run at the same time. For sick leave, see [CO-4.3 Colorado sick leave](handbook:CO-4.3).

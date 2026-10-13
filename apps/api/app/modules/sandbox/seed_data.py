@@ -27,6 +27,10 @@ class LocationSpec:
     # For the fictional phone numbers and addresses of the people who work there.
     area_code: str
     zip_codes: tuple[str, ...]
+    # Which random stream draws this location's phone numbers: 0 is the original stream, and each
+    # location opened later takes the next number, drawing from SEED + that number (see seed.py).
+    # A location of its own stream leaves everyone who already existed exactly as they were.
+    seed_stream: int = 0
 
 
 LOCATIONS = (
@@ -36,6 +40,16 @@ LOCATIONS = (
     ),
     LocationSpec(
         "aus", "Austin warehouse", "Austin", "TX", "America/Chicago", "512", ("78702", "78745")
+    ),
+    LocationSpec(
+        "atl",
+        "Atlanta store",
+        "Atlanta",
+        "GA",
+        "America/New_York",
+        "404",
+        ("30308", "30309"),
+        seed_stream=1,
     ),
 )
 
@@ -82,8 +96,10 @@ MATEO = PersonSpec("Mateo", "Alvarez", 520, 10300, persona_key="mateo")
 
 HOURLY = "hourly"
 
-# Each department works at one location here. Denver HQ has 40 people, the Oakland store 45, and
-# the Austin warehouse 35. Managers come before their reports.
+# Each department-and-location pair is one group of seats here; Store Operations runs both stores.
+# Denver HQ has 40 people, the Oakland store 45, the Austin warehouse 35, and the Atlanta store 25.
+# Managers come before their reports. The Atlanta store is last, so it adds people without
+# changing anyone before it.
 ORG: dict[tuple[str, str], tuple[Position, ...]] = {
     ("Executive", "den"): (
         Position("ceo", "Chief Executive Officer", None),
@@ -150,11 +166,26 @@ ORG: dict[tuple[str, str], tuple[Position, ...]] = {
         Position("aus-night-crew", "Warehouse Associate", "aus-nights", HOURLY, seats=12),
         Position("aus-night-forklift", "Forklift Operator", "aus-nights", HOURLY, seats=2),
     ),
+    # Hire dates here reach back before the store opened, so the earliest hires read as transfers
+    # from other stores. The store manager reports to the COO, two shift leads report to the
+    # assistant manager, and the associates and cashiers report to the shift leads.
+    ("Store Operations", "atl"): (
+        Position("atl-manager", "Store Manager", "coo"),
+        Position("atl-assistant-manager", "Assistant Store Manager", "atl-manager"),
+        Position("atl-lead-opening", "Shift Lead, Opening", "atl-assistant-manager"),
+        Position("atl-opening-sales", "Sales Associate", "atl-lead-opening", HOURLY, seats=6),
+        Position("atl-opening-cashier", "Cashier", "atl-lead-opening", HOURLY, seats=4),
+        Position("atl-lead-closing", "Shift Lead, Closing", "atl-assistant-manager"),
+        Position("atl-closing-sales", "Sales Associate", "atl-lead-closing", HOURLY, seats=6),
+        Position("atl-closing-cashier", "Cashier", "atl-lead-closing", HOURLY, seats=4),
+        Position("atl-service", "Customer Service Associate", "atl-assistant-manager", HOURLY),
+    ),
 }
 
-# Everyone else's names. Each list has more names than the company has unnamed people, and no
-# name appears twice, so no two people in a sandbox share a first name. The lists are blocks of
-# words rather than tuples, which ruff would format one name per line.
+# Everyone else's names. The lists here and the Atlanta ones below have more names than the
+# company has unnamed people, and no name appears twice, so no two people in a sandbox share a
+# first name. The lists are blocks of words rather than tuples, which ruff would format one name
+# per line.
 GIVEN_NAMES = """
 Aaliyah Aaron Abigail Adrian Aisha Alejandro Alicia Amara Amir Ana
 Andre Andrea Angela Anjali Arjun Ava Benjamin Bianca Brandon Brian
@@ -183,6 +214,20 @@ Peterson Phillips Price Ramirez Ramos Reddy Reyes Richardson Rivera Robinson
 Rodriguez Romero Ross Russell Saito Sanchez Santos Shah Silva Singh
 Soto Stewart Sullivan Tanaka Taylor Thompson Torres Tran Turner Vargas
 Vasquez Walker Washington Watson Williams Wong Wright Yamamoto Young Zhang
+""".split()  # noqa: SIM905
+
+# Names added when the Atlanta store opened. They are drawn apart from the lists above, so the
+# people who already existed keep their names.
+ATLANTA_GIVEN_NAMES = """
+Amelia Darnell Eleanor Giovanni Harper Ingrid Jerome Kiara Landon Marisol
+Nikhil Odessa Priscilla Quentin Renee Sidney Tobias Uma Vivian Willa
+Yusuf Zaire Cassandra Dmitri Gwen
+""".split()  # noqa: SIM905
+
+ATLANTA_FAMILY_NAMES = """
+Alvarado Beasley Cohen Dawson Estrada Fitzgerald Grant Hamilton Ingram Kimura
+Lawson Maddox Navarro Obi Pruitt Quinn Rhodes Sampson Tate Underwood
+Velasquez Whitaker Yoon Zimmerman Boateng
 """.split()  # noqa: SIM905
 
 STREET_NAMES = """

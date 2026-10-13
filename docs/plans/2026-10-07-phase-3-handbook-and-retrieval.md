@@ -1076,6 +1076,12 @@ eval questions and negatives for a Georgia employee, and the tests that assume t
 - **Tests at the close:** 991 web unit tests, 174 browser tests (19 in `handbook.spec.ts`, one
   per acceptance criterion, steady at one worker), and 868 API tests.
 
+**Stage 6 (Georgia), 2026-10-13:** planned and recorded in its own plan,
+[`2026-10-13-phase-3-stage-6-georgia.md`](2026-10-13-phase-3-stage-6-georgia.md), including its
+changes made during execution. It added the Atlanta store (145 people), GA-4.5, a company
+lactation section (5.4) with CA-5.4, and handbook version 2026.10.1; the eval scores 100% (67 of
+67) over 87 questions.
+
 ## Backlog
 
 New items from planning, added in the tasks named:

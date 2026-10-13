@@ -92,6 +92,7 @@ export function chapterNavHeading(
 const STATE_NAMES: Record<string, string> = {
   CA: 'California',
   CO: 'Colorado',
+  GA: 'Georgia',
   TX: 'Texas',
 }
 

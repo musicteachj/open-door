@@ -26,7 +26,7 @@ export async function openDirectory(page: Page, name: FirstName) {
   await startAs(page, name)
   await page.getByRole('link', { name: 'Directory' }).click()
   await expect(page.getByRole('list', { name: 'People' })).toBeVisible()
-  await expect(page.getByText(/^120 people$/)).toBeVisible()
+  await expect(page.getByText(/^145 people$/)).toBeVisible()
 }
 
 /** Searches for someone and opens their profile from the one matching row. */

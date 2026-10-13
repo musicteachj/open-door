@@ -178,7 +178,7 @@ async function reachScreen(page: Page, row: ScreenRow) {
       break
     }
     case 'directory':
-      await expect(page.getByText('120 people', { exact: true })).toBeVisible()
+      await expect(page.getByText('145 people', { exact: true })).toBeVisible()
       await expect(page.getByRole('list', { name: 'People' }).getByRole('listitem')).toHaveCount(50)
       break
     case 'directory-loading':
@@ -187,14 +187,14 @@ async function reachScreen(page: Page, row: ScreenRow) {
       break
     case 'directory-my-team':
       await page.getByRole('button', { name: /^My team/ }).click()
-      await expect(page.getByText('44 of 120 people', { exact: true })).toBeVisible()
+      await expect(page.getByText('44 of 145 people', { exact: true })).toBeVisible()
       break
     case 'directory-empty':
       await page.getByRole('searchbox').fill('Jordn')
       await expect(page.getByText('No one matches “Jordn”.')).toBeVisible()
       break
     case 'directory-show-more': {
-      await expect(page.getByText('Showing 50 of 120')).toBeVisible()
+      await expect(page.getByText('Showing 50 of 145')).toBeVisible()
       await page.getByRole('button', { name: 'Show more' }).evaluate((el) => el.scrollIntoView({ block: 'end' }))
       break
     }

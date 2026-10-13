@@ -36,7 +36,7 @@ You return to the same or a comparable position. Your health coverage continues 
 
 ## Pay
 
-CFRA leave is unpaid. You may be able to get partial wage replacement from California's Paid Family Leave or State Disability Insurance programs, which the state Employment Development Department runs. You may also use PTO or sick leave. See [§4.1 Paid time off](handbook:4.1) and [§CA-4.3 California sick leave](handbook:CA-4.3).
+CFRA leave is unpaid. You may be able to get partial wage replacement from California's Paid Family Leave or State Disability Insurance programs, which the state Employment Development Department runs. You may also use PTO or sick leave. See [§4.1 Paid time off](handbook:4.1) and [CA-4.3 California sick leave](handbook:CA-4.3).
 
 ## Notice and certification
 
