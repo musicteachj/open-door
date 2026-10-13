@@ -103,9 +103,13 @@ export function useHandbookParams() {
     write({ q: null }, true)
   }, [cancelPending, write])
 
+  // A search still waiting is written first, onto the current entry, so Back undoes only the filter.
   const setShow = useCallback(
-    (next: ShowFilter) => write({ show: next === 'mine' ? 'mine' : null }, false),
-    [write],
+    (next: ShowFilter) => {
+      flushSearch()
+      write({ show: next === 'mine' ? 'mine' : null }, false)
+    },
+    [flushSearch, write],
   )
 
   return {

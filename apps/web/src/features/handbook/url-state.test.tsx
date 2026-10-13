@@ -154,6 +154,17 @@ describe('the Show menu', () => {
     expect(search(r).get('q')).toBe('sick')
     expect(search(r).get('show')).toBe('mine')
   })
+
+  it('writes a pending search before the filter, so Back undoes only the filter', () => {
+    const r = setup()
+    act(() => r.result.current.params.setSearchText('sick'))
+    act(() => r.result.current.params.setShow('mine'))
+    expect(search(r).get('q')).toBe('sick')
+    expect(search(r).get('show')).toBe('mine')
+    act(() => void r.result.current.navigate(-1))
+    expect(search(r).get('q')).toBe('sick')
+    expect(search(r).has('show')).toBe(false)
+  })
 })
 
 describe('clearing the highlight', () => {

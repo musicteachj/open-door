@@ -113,6 +113,21 @@ version (`0.x.y` while the app is being built, `1.0.0` when it is complete).
 
 ### Fixed
 
+- **Fixes from the Phase 3 close-out review** (Phase 3, the whole-phase review).
+  - **A search result's highlighted words now show on its one line at desktop width.** A match
+    that ended past the edge of the line at 1440 px was cut off; the excerpt now starts a few
+    words before any match more than 90 characters in, and never cuts into the match itself. On
+    a phone's narrower line, a later match can still fall past the edge.
+  - **A section page stays up when only the handbook overview fails,** leaving out the chapter
+    navigator instead of showing "Something went wrong". Coming from the list, the navigator
+    still shows at once.
+  - **Changing the Show filter right after typing keeps the search,** so Back undoes only the
+    filter.
+  - **A section or passage ID of "." or ".." no longer reaches another API path;** it shows as
+    missing without a request.
+  - **`make check` loads the handbook, as CI does,** so it no longer tests against an old or
+    missing handbook version.
+
 - **A flaky browser test in CI** (after Phase 2). The check that another person's profile leaks no
   private value read each API response's body after the fact, and on CI's single worker one body
   was gone by then. It now records every body as the response passes through, so none can be

@@ -93,6 +93,29 @@ describe('a company section (4.3 as Priya)', () => {
     )
   })
 
+  it('shows the navigator at once when the handbook home has already loaded the overview', async () => {
+    installFakeApi('priya')
+    installFakeHandbook('priya')
+    const { router } = renderApp({ at: '/handbook' })
+    await screen.findByText('Juniper Row · Version 2026.10 · Updated Sep 12, 2026')
+    // From here on the overview never answers, so only the home's copy can fill the navigator.
+    server.use(http.get(`${window.location.origin}/api/v1/handbook`, () => new Promise(() => {})))
+    await act(() => router.navigate('/handbook/4.3'))
+    await title('Sick leave')
+    expect(screen.getByRole('navigation', { name: 'Chapter 4 · Time off' })).toBeVisible()
+  })
+
+  it('lets the handbook home show at once after a deep link to a section', async () => {
+    const { router } = await openSection('4.3')
+    await screen.findByRole('navigation', { name: 'Chapter 4 · Time off' })
+    // From here on the overview never answers, so only the section's copy can fill the list.
+    server.use(http.get(`${window.location.origin}/api/v1/handbook`, () => new Promise(() => {})))
+    await act(() => router.navigate('/handbook'))
+    expect(
+      await screen.findByText('Juniper Row · Version 2026.10 · Updated Sep 12, 2026'),
+    ).toBeVisible()
+  })
+
   it('has no previous link on the first section and no next on the last', async () => {
     await openSection('1.1')
     await title('About this handbook')
@@ -291,6 +314,27 @@ describe('a section that fails to load', () => {
       screen.queryByText("This section isn't in your handbook version."),
     ).not.toBeInTheDocument()
     expect(screen.getByRole('navigation', { name: 'Main' })).toBeVisible()
+  })
+
+  it('still shows the section when only the handbook overview fails, without the navigator', async () => {
+    installFakeApi('priya')
+    installFakeHandbook('priya')
+    server.use(
+      http.get(`${window.location.origin}/api/v1/handbook`, () =>
+        HttpResponse.json(
+          { type: 'about:blank', title: 'Boom', status: 500, instance: '/x' },
+          { status: 500 },
+        ),
+      ),
+    )
+    renderApp({ at: '/handbook/4.3' })
+    await title('Sick leave')
+    expect(screen.getByText('The second paragraph of 4.3.')).toBeVisible()
+    await act(() => new Promise((resolve) => setTimeout(resolve, 50)))
+    expect(
+      screen.queryByRole('heading', { level: 1, name: 'Something went wrong on our side.' }),
+    ).not.toBeInTheDocument()
+    expect(screen.getByRole('heading', { level: 1, name: 'Sick leave' })).toBeVisible()
   })
 })
 

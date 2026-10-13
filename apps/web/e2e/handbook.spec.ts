@@ -108,6 +108,26 @@ test.describe('the handbook home', () => {
     expect(ids).not.toContain('3.2') // hourly staff only; Priya is salaried
   })
 
+  test('keeps a search typed just before "Applies to me", so Back undoes only the filter', async ({
+    page,
+  }) => {
+    await openList(page, 'Priya')
+    // The clock is paused, so the filter is picked inside the 250 ms pause before the search is
+    // written to the URL.
+    await page.clock.install()
+    await page.clock.pauseAt(Date.now() + 1000)
+    await page.getByRole('searchbox', { name: 'Search the handbook' }).fill('sick')
+    await page.getByRole('combobox', { name: 'Show' }).click()
+    await page.getByRole('option', { name: /^Applies to me, \d+$/ }).click()
+    await page.clock.runFor(1000)
+    await expect(page).toHaveURL(/[?&]show=mine/)
+    await expect(page).toHaveURL(/[?&]q=sick/)
+    await page.goBack()
+    await expect(page).toHaveURL(/[?&]q=sick/)
+    await expect(page).not.toHaveURL(/show=mine/)
+    await expect(page.getByRole('searchbox', { name: 'Search the handbook' })).toHaveValue('sick')
+  })
+
   test('puts the sections that apply first in search, then by relevance, with the matched words emphasized', async ({
     page,
   }) => {

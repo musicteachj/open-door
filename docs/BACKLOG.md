@@ -62,6 +62,28 @@ should pick it up. When one is done, delete it here and record it in the changel
   `starlette._utils.get_route_path`, so the no-store and same-origin rules match the path the
   router routes. On a Starlette upgrade, check that the two still agree. (Phase 1 close-out
   review.)
+- **Search rebuilds passage text on its own.** `passage_texts` in the handbook search module
+  repeats `Passage.text` from the handbook domain over the stored JSON. They agree today; if one
+  changes how a list item reads, the excerpt and the hit's passages drift from the indexed chunk
+  text. Build both from one helper. (Phase 3 close-out review.)
+- **The profile page sends its URL's person ID unencoded.** `/directory/..%2Fme` asks
+  `/api/v1/people/../me`, which the URL parser resolves to `/api/v1/me`, and `/directory/facets`
+  asks the facets route; either way the page renders the wrong response. It's the session's own data, so nothing leaks, but the page breaks. Encode the
+  ID and refuse "." and ".." as the handbook hooks now do, ideally in one shared helper for every
+  ID taken from a URL. (Phase 3 close-out review, in Phase 2 code.)
+- **The directory's filters can lose a search typed just before them.** Picking a location,
+  department, or "My team" within 250 ms of typing pushes an entry without the search, so Back
+  loses it. The handbook's Show filter had the same bug; it now writes the pending search first
+  (`flushSearch`), and the directory's filters should do the same. (Phase 3 close-out review, in
+  Phase 2 code.)
+- **The error page doesn't retry a cached error after navigating away and back.** A query that
+  throws to the route's error page doesn't retry its cached error on mount, and the page resets
+  only from its Retry button. Coming back within the cache time shows the error again with no new
+  request. Resetting on navigation would fix it for every page, and let the handbook's overview
+  use one cache entry. (Phase 3 close-out review, in Phase 2 code.)
+- **State names live in two places.** The API's applicability code and the web's handbook labels
+  each keep a state-code-to-name table, so a new state needs both (Georgia did). Have the API send
+  the names, and drop the web's copy. (Phase 3 close-out review.)
 
 ## Handbook content
 
