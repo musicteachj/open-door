@@ -81,6 +81,9 @@ should pick it up. When one is done, delete it here and record it in the changel
   only from its Retry button. Coming back within the cache time shows the error again with no new
   request. Resetting on navigation would fix it for every page, and let the handbook's overview
   use one cache entry. (Phase 3 close-out review, in Phase 2 code.)
+- **Two small copies to fold together.** The passage panel works out a section's number with its
+  own pattern instead of `sectionNumber()` from the handbook labels, and `formatMonthDay` repeats
+  `formatShortDate`'s date parsing. (v0.3.0 release review.)
 - **State names live in two places.** The API's applicability code and the web's handbook labels
   each keep a state-code-to-name table, so a new state needs both (Georgia did). Have the API send
   the names, and drop the web's copy. (Phase 3 close-out review.)

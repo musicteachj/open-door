@@ -5,10 +5,12 @@ tests/integration/test_retrieval_eval_real.py.
 """
 
 import json
+from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any
 
 import pytest
+from sqlalchemy.exc import DBAPIError
 
 from app.ai.embeddings import EmbeddingCache, FakeEmbedder
 from tests.retrieval_eval import RUN_PATH, load_runner
@@ -360,3 +362,28 @@ def test_the_commit_is_unknown_when_git_is_unavailable() -> None:
         raise FileNotFoundError
 
     assert run.git_commit(git) == "unknown"
+
+
+class _TriggerRefusalError(Exception):
+    """What psycopg raises when migration 0005's trigger finds no published handbook."""
+
+    sqlstate = "OD001"
+
+
+async def test_no_published_handbook_is_unavailable_not_a_traceback(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class RefusingSession:
+        def add(self, _row: object) -> None:
+            pass
+
+        async def flush(self) -> None:
+            raise DBAPIError("INSERT INTO tenants ...", {}, _TriggerRefusalError())
+
+    @asynccontextmanager
+    async def refusing_session(_engine: object, _context: object) -> Any:
+        yield RefusingSession()
+
+    monkeypatch.setattr(run, "tenant_session", refusing_session)
+    with pytest.raises(run.EvalUnavailableError, match="Run `make db` first"):
+        await run.run_searches_on(object(), [], [])

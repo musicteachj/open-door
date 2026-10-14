@@ -60,13 +60,11 @@ SEARCH_ERRORS = problem_responses(
 )
 
 # `ts_headline` marks matches with these private control characters instead of tags. The query
-# is cleaned of them first, and the chunk text is stripped of them in SQL, so neither can forge a
+# is cleaned of them first, and stored passage text is stripped of them, so neither can forge a
 # marker.
 MATCH_START = "\x02"
 MATCH_STOP = "\x03"
-HEADLINE_OPTIONS = (
-    f"StartSel={MATCH_START}, StopSel={MATCH_STOP}, MaxWords=35, MinWords=15, HighlightAll=false"
-)
+NO_MARKERS = str.maketrans("", "", MATCH_START + MATCH_STOP)
 # A passage's whole text with every match marked; the excerpt is cut from it in `_excerpt`.
 PASSAGE_HEADLINE_OPTIONS = f"StartSel={MATCH_START}, StopSel={MATCH_STOP}, HighlightAll=true"
 EXCERPT_MAX_CHARACTERS = 300
@@ -133,10 +131,10 @@ def _ref(section: HandbookSection, context: Context) -> SectionRef:
     )
 
 
-def _refuse_nul(*ids: str) -> None:
-    """Postgres text can't hold NUL, so an ID with one would be a 500 at the query. No section or
-    passage has one, so it is a 404 before any query."""
-    if any("\x00" in value for value in ids):
+def _refuse_nul(section_id: str) -> None:
+    """Postgres text can't hold NUL, so a section ID with one would be a 500 at the query. No
+    section has one, so it is a 404 before any query."""
+    if "\x00" in section_id:
         raise HTTPException(status.HTTP_404_NOT_FOUND, NO_SECTION)
 
 
@@ -215,17 +213,12 @@ async def search_handbook_text(
         .order_by(HandbookChunk.section_id, rank.desc(), HandbookChunk.position)
         .subquery()
     )
-    clean_text = func.translate(HandbookChunk.text, MATCH_START + MATCH_STOP, "")
-    headline = func.ts_headline(
-        ENGLISH, clean_text, tsquery, bindparam("headline_options", HEADLINE_OPTIONS)
-    )
     rows = (
         await context.db.execute(
             select(
                 HandbookSection,
                 best.c.rank,
                 HandbookChunk.passage_ids,
-                headline.label("headline"),
             )
             .join(best, best.c.section_id == HandbookSection.id)
             .join(HandbookChunk, HandbookChunk.id == best.c.chunk_id)
@@ -241,12 +234,15 @@ async def search_handbook_text(
         ),
     )[:MAX_RESULTS]
     # Each result's excerpt comes from one passage, so the deep link and the excerpt agree: the
-    # first passage of the chunk whose own headline has a match. Failing that, the chunk's first
-    # passage with the chunk-level headline.
+    # first passage of the chunk whose own headline has a match. Failing that (the words were only
+    # in a heading or the title), the chunk's first passage, unmarked.
     candidates: list[tuple[int, str, str]] = []
+    first_texts: dict[int, str] = {}
     for index, row in enumerate(ranked):
         texts = passage_texts(row.HandbookSection.blocks)
         candidates.extend((index, pid, texts[pid]) for pid in row.passage_ids if pid in texts)
+        # Stored text can't forge a marker: strip them, as the SQL does for the headlines.
+        first_texts[index] = texts.get(row.passage_ids[0], "").translate(NO_MARKERS)
     headlines = await _passage_headlines(context.db, question, [c[2] for c in candidates])
     picked: dict[int, tuple[str, str]] = {}
     for (index, pid, _), line in zip(candidates, headlines, strict=True):
@@ -259,7 +255,7 @@ async def search_handbook_text(
             pid, whole = picked[index]
             excerpt = _excerpt(whole)
         else:
-            pid, excerpt = row.passage_ids[0], _segments(row.headline)
+            pid, excerpt = row.passage_ids[0], _excerpt(first_texts[index])
         results.append(
             SearchResultOut(
                 section=_summary(row.HandbookSection, context),
@@ -297,14 +293,14 @@ def _excerpt(whole: str) -> list[Segment]:
     word boundary with an ellipsis. A list item is a sentence of its own: its "- " is dropped and
     the items are joined with "; " (a space after an item that ends in punctuation)."""
     whole = re.sub(r"(?m)^- ", "", whole)
-    first = whole.index(MATCH_START)
+    first = max(whole.find(MATCH_START), 0)
     breaks = list(SENTENCE_BREAK.finditer(whole, 0, first))
     cut = whole[breaks[-1].end() :] if breaks else whole
     joined = re.sub(r"\n+", "; ", re.sub(r"(?<=[.!?])\n+", " ", cut))
     segments = _segments(joined)
     visible = "".join(segment.text for segment in segments)
     # A match far into a long sentence would be cut off, so start a few words before it instead.
-    first_match = next(i for i, segment in enumerate(segments) if segment.match)
+    first_match = next((i for i, segment in enumerate(segments) if segment.match), 0)
     match_at = sum(len(segment.text) for segment in segments[:first_match])
     lead: list[Segment] = []
     if match_at > EXCERPT_LEAD_THRESHOLD:
@@ -389,7 +385,7 @@ async def get_section(section_id: str, context: ContextDep) -> SectionDetail:
     responses=LIST_ERRORS,
 )
 async def get_passage(section_id: str, passage_id: str, context: ContextDep) -> PassageView:
-    _refuse_nul(passage_id)
+    # The passage ID is matched here, never sent to Postgres, so a NUL in it is just "not found".
     section = await _section_with_blocks(context, section_id)
     passages = [block for block in section.blocks if block["type"] == "passage"]
     place = next((i for i, block in enumerate(passages) if block["id"] == passage_id), None)

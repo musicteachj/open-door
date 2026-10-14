@@ -205,6 +205,20 @@ def test_unknown_sections_and_passages_are_404_problems(browser: Browser) -> Non
         assert response.json()["status"] == 404
 
 
+def test_a_404_says_whether_the_section_or_the_passage_is_missing(browser: Browser) -> None:
+    signed_in(browser, "priya")
+    section = "This section isn't in your handbook version."
+    passage = "This passage isn't in that section."
+
+    for path, detail in (
+        ("/api/v1/handbook/sections/8.2/passages/p1", section),
+        ("/api/v1/handbook/sections/CA-4.3%00/passages/p1", section),
+        ("/api/v1/handbook/sections/CA-4.3/passages/p999", passage),
+        ("/api/v1/handbook/sections/CA-4.3/passages/p1%00", passage),
+    ):
+        assert browser.client.get(path).json()["detail"] == detail, path
+
+
 @pytest.mark.parametrize(
     "path",
     [
@@ -228,10 +242,11 @@ async def set_pin(engine: AsyncEngine, tenant_id: UUID, version_id: UUID | None)
 
 @asynccontextmanager
 async def second_version(
-    engine: AsyncEngine, body: str = "Zebra crossings are painted."
+    engine: AsyncEngine, body: str = "Zebra crossings are painted.", chunk_text: str | None = None
 ) -> AsyncIterator[UUID]:
     """An unpublished version with one section and one passage
-    (`body`), committed as the owner and removed afterward.
+    (`body`), committed as the owner and removed afterward. The chunk's text is `body` unless
+    `chunk_text` gives another, such as one with a heading.
 
     It is unpublished so no other test's new sandbox is pinned to it. The caller must stop
     pinning a sandbox to it before the block ends, or the delete is refused.
@@ -271,7 +286,7 @@ async def second_version(
                 " 'Zebra crossings', 0, ARRAY['p1'], CAST(:body AS text),"
                 " array_fill(0, ARRAY[1024])::vector)"
             ),
-            {"version": version_id, "section": section_id, "body": body},
+            {"version": version_id, "section": section_id, "body": chunk_text or body},
         )
     try:
         yield version_id
@@ -487,11 +502,11 @@ async def test_stored_text_cannot_forge_a_match_marker(
             await set_pin(owner_engine, tenant, None)
 
 
-async def test_stored_text_cannot_forge_a_marker_in_the_chunk_level_excerpt(
+async def test_stored_text_cannot_forge_a_marker_in_the_fallback_excerpt(
     browser: Browser, owner_engine: AsyncEngine
 ) -> None:
     """The query matches only the section's title, so no passage has a match and the excerpt falls
-    back to the chunk's own text, which holds marker characters."""
+    back to the linked passage's own text, which holds marker characters."""
     sandbox = browser.start_sandbox("priya")
     tenant = UUID(sandbox["tenant"]["id"])
     async with second_version(owner_engine, "Cars \x02stop\x03 here.") as version_id:
@@ -537,6 +552,28 @@ def test_a_list_excerpt_starts_at_the_item_without_its_dash(browser: Browser) ->
     assert "- " not in text_of_excerpt
     assert "after a no; sharing offensive images or messages; threats," in text_of_excerpt
     assert any(s["match"] and s["text"] == "touching" for s in hit["excerpt"])
+
+
+async def test_a_match_in_no_passage_shows_the_linked_passage_unmarked(
+    browser: Browser, owner_engine: AsyncEngine
+) -> None:
+    # The word is only in the chunk's heading, so no passage holds it. The excerpt must still come
+    # from the passage the result links to, not from the heading.
+    body = "Zebra crossings are painted."
+    sandbox = browser.start_sandbox("priya")
+    tenant = UUID(sandbox["tenant"]["id"])
+    chunk_text = f"Pedestrians\n\n{body}"
+    async with second_version(owner_engine, body, chunk_text=chunk_text) as version_id:
+        try:
+            await set_pin(owner_engine, tenant, version_id)
+
+            results = search(browser, "pedestrians")
+
+            assert results[0]["passageId"] == "p1"
+            assert excerpt_text(results[0]) == "Zebra crossings are painted."
+            assert not any(segment["match"] for segment in results[0]["excerpt"])
+        finally:
+            await set_pin(owner_engine, tenant, None)
 
 
 async def test_a_long_excerpt_is_capped_on_a_word_boundary_with_an_ellipsis(
