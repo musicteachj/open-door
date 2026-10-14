@@ -25,6 +25,12 @@ logger = logging.getLogger(__name__)
 # published. A custom code: class OD is ours.
 NO_PUBLISHED_HANDBOOK = "OD001"
 
+
+def is_no_published_handbook(error: DBAPIError) -> bool:
+    """Whether the database refused a new tenant because no handbook version is published."""
+    return getattr(error.orig, "sqlstate", None) == NO_PUBLISHED_HANDBOOK
+
+
 # A sandbox, and every session in it, is deleted 24 hours after it is created (ADR 0007).
 SANDBOX_LIFETIME = timedelta(hours=24)
 
@@ -99,7 +105,7 @@ async def create_sandbox(
                 raise RuntimeError(msg)
             me = await get_me(db, actor, expires_at)
     except DBAPIError as error:
-        if getattr(error.orig, "sqlstate", None) != NO_PUBLISHED_HANDBOOK:
+        if not is_no_published_handbook(error):
             raise
         # The transaction has rolled back, so no tenant exists.
         logger.warning("Sandbox not created: %s", error.orig)

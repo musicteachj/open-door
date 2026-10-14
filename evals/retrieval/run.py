@@ -36,6 +36,7 @@ from uuid import uuid4
 
 import yaml
 from sqlalchemy import select
+from sqlalchemy.exc import DBAPIError
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 from app.ai.embeddings import DIMENSIONS, MODEL, CachedEmbedder, EmbeddingCache
@@ -46,6 +47,7 @@ from app.db.tenancy import TenantContext, tenant_session
 from app.domain.handbook.applicability import Asker
 from app.modules.handbook.search import clean_query, embed_query, pinned_version_id, search_handbook
 from app.modules.sandbox.seed_data import LOCATIONS
+from app.modules.sandbox.service import is_no_published_handbook
 
 EVAL_DIR = Path(__file__).resolve().parent
 DATASET_PATH = EVAL_DIR / "dataset.yaml"
@@ -54,6 +56,7 @@ CACHE_PATH = EVAL_DIR / "embeddings" / f"{MODEL}-{DIMENSIONS}.jsonl"
 TOP_K = 5
 MIN_HIT_RATE = 0.90
 MISS_HINT = "run `make embed` and commit the cache"
+NO_HANDBOOK = "No published handbook in the database. Run `make db` first."
 
 # The four people the demo talks about, as the handbook sees them. Priya and Marcus are salaried
 # in California, Dana is salaried in Colorado, Mateo is hourly in Texas.
@@ -417,7 +420,13 @@ async def run_searches_on(
             db.add(
                 Tenant(id=tenant_id, expires_at=now + timedelta(hours=1), anchor_date=now.date())
             )
-            await db.flush()
+            try:
+                await db.flush()
+            except DBAPIError as error:
+                # Migration 0005's trigger refuses a tenant when no handbook is published.
+                if not is_no_published_handbook(error):
+                    raise
+                raise EvalUnavailableError(NO_HANDBOOK) from error
             db.add_all(
                 Location(
                     id=uuid4(),
@@ -433,8 +442,7 @@ async def run_searches_on(
             await db.flush()
             version_id = await pinned_version_id(db)
             if version_id is None:
-                msg = "No published handbook in the database. Run `make db` first."
-                raise EvalUnavailableError(msg)
+                raise EvalUnavailableError(NO_HANDBOOK)
             label = await db.scalar(
                 select(HandbookVersion.label).where(HandbookVersion.id == version_id)
             )

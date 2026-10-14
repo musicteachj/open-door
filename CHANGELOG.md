@@ -113,6 +113,17 @@ version (`0.x.y` while the app is being built, `1.0.0` when it is complete).
 
 ### Fixed
 
+- **Fixes from the v0.3.0 release review** (Phase 3, before its release).
+  - **A search result's excerpt always comes from the passage it links to.** When the words
+    matched only a heading, or only the meaning matched, the excerpt showed other text from the
+    section while the link highlighted a different passage.
+  - **A search of only invisible characters** (such as a zero-width space) is no search, instead
+    of an error that Retry could never clear.
+  - **A passage ID that can't exist** gets "This passage isn't in that section", not the
+    missing-section message.
+  - **The retrieval eval says "Run `make db` first"** when no handbook is published, instead of
+    ending in a database traceback.
+
 - **Fixes from the Phase 3 close-out review** (Phase 3, the whole-phase review).
   - **A search result's highlighted words now show on its one line at desktop width.** A match
     that ended past the edge of the line at 1440 px was cut off; the excerpt now starts a few

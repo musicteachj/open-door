@@ -8,6 +8,9 @@ export const MAX_SEARCH_LENGTH = 100
 
 export type ShowFilter = 'all' | 'mine'
 
+// The character classes the API's clean_query turns into spaces.
+const DROPPED = /[\p{Cc}\p{Cf}\p{Cs}\p{Co}\p{Cn}]/gu
+
 /**
  * The handbook home's state, kept in the URL so it can be shared and Back works: `q` and
  * `show=mine`. An unset value is absent from the URL.
@@ -19,8 +22,9 @@ export type ShowFilter = 'all' | 'mine'
 export function useHandbookParams() {
   const [searchParams, setSearchParams] = useSearchParams()
   const locationKey = useLocation().key
-  // The API refuses a NUL (Postgres can't store one), so it never goes further than the URL.
-  const q = (searchParams.get('q') ?? '').replaceAll('\0', '').trim()
+  // As the API does, control, format, surrogate, private-use and unassigned characters become
+  // spaces, so a query of nothing else is no search rather than one the API refuses.
+  const q = (searchParams.get('q') ?? '').replace(DROPPED, ' ').replace(/\s+/g, ' ').trim()
   const show: ShowFilter = searchParams.get('show') === 'mine' ? 'mine' : 'all'
 
   // Writes build on the latest URL, not the one this render saw, so a write that follows another

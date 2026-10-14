@@ -48,6 +48,19 @@ describe('reading the URL', () => {
     expect(setup('/handbook?q=%20sick%00%20').result.current.params.q).toBe('sick')
   })
 
+  // The API turns control, format, private-use and unassigned characters into spaces, and refuses
+  // a query with nothing else, so such a query is no search at all.
+  it.each(['%01', '%E2%80%8B', '%EE%80%80', '%01%E2%80%8B%20'])(
+    'reads q=%s, which the API would empty, as no search',
+    (raw) => {
+      expect(setup(`/handbook?q=${raw}`).result.current.params.q).toBe('')
+    },
+  )
+
+  it('reads such a character inside the words as a space, as the API does', () => {
+    expect(setup('/handbook?q=sick%E2%80%8Bleave').result.current.params.q).toBe('sick leave')
+  })
+
   it('shows the text capped at 100 characters, as the query is', () => {
     const r = setup(`/handbook?q=${'a'.repeat(120)}`)
     expect(r.result.current.params.searchText).toBe('a'.repeat(100))
