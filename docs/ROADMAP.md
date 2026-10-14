@@ -20,7 +20,7 @@ every stage.
 | 0 Foundation | Done | `chore/phase-0-ci` | [#2](https://github.com/musicteachj/open-door/pull/2), [#3](https://github.com/musicteachj/open-door/pull/3), [#4](https://github.com/musicteachj/open-door/pull/4) | [phase 0 plan](plans/2026-09-29-phase-0-foundation.md) | 2026-10-03 |
 | 1 Tenancy, identity, permissions | Done. The whole-phase review found nothing high or medium; its fixes are in `fix/phase-1-review`. Released in `v0.1.0`. | `fix/phase-1-review` | [#8](https://github.com/musicteachj/open-door/pull/8), [#9](https://github.com/musicteachj/open-door/pull/9), [#10](https://github.com/musicteachj/open-door/pull/10), [#11](https://github.com/musicteachj/open-door/pull/11), [#14](https://github.com/musicteachj/open-door/pull/14) | [phase 1 plan](plans/2026-10-03-phase-1-tenancy-identity-permissions.md) | 2026-10-04 |
 | 2 Design system, shell, sandbox entry | Done. The whole-phase review found nothing high; its fixes are in `fix/phase-2-review`. Released in `v0.2.0`. | `fix/phase-2-review` | [#23](https://github.com/musicteachj/open-door/pull/23), [#24](https://github.com/musicteachj/open-door/pull/24), [#25](https://github.com/musicteachj/open-door/pull/25), [#26](https://github.com/musicteachj/open-door/pull/26), [#27](https://github.com/musicteachj/open-door/pull/27), [#28](https://github.com/musicteachj/open-door/pull/28), [#29](https://github.com/musicteachj/open-door/pull/29), [#30](https://github.com/musicteachj/open-door/pull/30), [#32](https://github.com/musicteachj/open-door/pull/32) | [phase 2 plan](plans/2026-10-05-phase-2-design-system-shell-sandbox-entry.md) | 2026-10-06 |
-| 3 Handbook and retrieval | Done. The whole-phase review found five real bugs, none high; its fixes are in `fix/phase-3-review`. Its screens are designed ([#36](https://github.com/musicteachj/open-door/pull/36)) | `fix/phase-3-review` | [#37](https://github.com/musicteachj/open-door/pull/37), [#38](https://github.com/musicteachj/open-door/pull/38), [#39](https://github.com/musicteachj/open-door/pull/39), [#40](https://github.com/musicteachj/open-door/pull/40), [#41](https://github.com/musicteachj/open-door/pull/41), [#42](https://github.com/musicteachj/open-door/pull/42), [#43](https://github.com/musicteachj/open-door/pull/43) | [phase 3 plan](plans/2026-10-07-phase-3-handbook-and-retrieval.md) | 2026-10-13 |
+| 3 Handbook and retrieval | Done. The whole-phase review found five real bugs, none high; its fixes are in `fix/phase-3-review`. Released in `v0.3.0`. Its screens are designed ([#36](https://github.com/musicteachj/open-door/pull/36)) | `fix/phase-3-review` | [#37](https://github.com/musicteachj/open-door/pull/37), [#38](https://github.com/musicteachj/open-door/pull/38), [#39](https://github.com/musicteachj/open-door/pull/39), [#40](https://github.com/musicteachj/open-door/pull/40), [#41](https://github.com/musicteachj/open-door/pull/41), [#42](https://github.com/musicteachj/open-door/pull/42), [#43](https://github.com/musicteachj/open-door/pull/43), [#44](https://github.com/musicteachj/open-door/pull/44), [#45](https://github.com/musicteachj/open-door/pull/45) | [phase 3 plan](plans/2026-10-07-phase-3-handbook-and-retrieval.md) | 2026-10-14 |
 | 4 Assistant core (read-only) | Not started | — | — | — | — |
 | 5 Time off | Not started | — | — | — | — |
 | 6 Cases and escalation | Not started | — | — | — | — |
@@ -45,7 +45,8 @@ and the handbook API. Stage 4 builds the handbook components, shown in the galle
 the handbook pages, so anyone in a sandbox can browse, search, and deep-link the handbook. Stage 6
 opens an Atlanta store and adds Georgia's rules and a lactation section for everyone (plan:
 [`plans/2026-10-13-phase-3-stage-6-georgia.md`](plans/2026-10-13-phase-3-stage-6-georgia.md)).
-The whole-phase review is done, and its fixes are in `fix/phase-3-review`. **Phase 3 is done.**
+The whole-phase review's fixes merged in #44, and the release review's in #45. **Phase 3 is done
+and released in `v0.3.0`.**
 Next: plan Phase 4 (the assistant core) at effort `high`, in a fresh session. The
 owner's Voyage account is ready for Phase 4: a payment method, the training opt-out, and a budget
 alert.** Later phases' screens are designed
@@ -65,7 +66,7 @@ The brief records these, and the Phase 2 decisions on the shell, the assistant h
 directory.
 
 **Releases (`dev` → `main`):** `v0.1.0` (2026-10-04): planning, Phase 0, and Phase 1. `v0.2.0`
-(2026-10-06): Phase 2.
+(2026-10-06): Phase 2. `v0.3.0` (2026-10-14): Phase 3.
 
 ---
 

@@ -10,6 +10,17 @@ version (`0.x.y` while the app is being built, `1.0.0` when it is complete).
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-10-14
+
+Phase 3: the handbook and its search. Juniper Row's fictional handbook (23 company sections, plus
+state addenda for California, Colorado, Texas, and Georgia, with every statutory figure checked
+against its official source) is loaded into the database with its embeddings, and each sandbox is
+pinned to one version of it. Hybrid search (full text and embeddings, fused by rank) scores 100%
+at 5 on the retrieval eval, with every negative case passing. Anyone in a sandbox can browse,
+search, and deep-link the handbook, and see which sections apply to them. A new Atlanta store
+brings the company to 145 people. The phase closed with a whole-phase review, a release review,
+and their fixes.
+
 ### Added
 
 - **Juniper Row opens an Atlanta store, and the handbook gains Georgia's rules** (Phase 3, stage
