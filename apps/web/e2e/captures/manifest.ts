@@ -14,6 +14,7 @@ export const AREAS = [
   'directory',
   'feedback',
   'forms',
+  'handbook',
   'landing',
   'navigation',
   'status',
@@ -150,16 +151,75 @@ export const COMPONENT_ROWS: ComponentRow[] = [
   row('directory', 'skeleton-row-default'),
   row('directory', 'detail-list-values'),
   row('directory', 'detail-list-locked'),
+
+  // Not photographed: the chapter navigator (.od-sec-nav has a style but no sketch) and the
+  // handbook blocks (the section screenshots show them, but no sketch does).
+  row('handbook', 'applicability-badge-chip'),
+  row('handbook', 'applicability-badge-text'),
+  row('handbook', 'applies-marker-applies'),
+  row('handbook', 'applies-marker-not'),
+  row('handbook', 'last-updated-default'),
+  row('handbook', 'section-row-default', {
+    variant: 'hover',
+    note: 'Hovered',
+    interaction: { action: 'hover', target: 'a' },
+  }),
+  row('handbook', 'section-row-default', {
+    variant: 'focus',
+    note: 'Keyboard focus',
+    interaction: { action: 'focus', target: 'a' },
+  }),
+  row('handbook', 'section-row-current'),
+  row('handbook', 'section-row-marker'),
+  row('handbook', 'section-row-addendum'),
+  row('handbook', 'section-group-chapter'),
+  row('handbook', 'section-group-addendum'),
+  row('handbook', 'search-result-applies', {
+    variant: 'hover',
+    note: 'Hovered',
+    interaction: { action: 'hover', target: 'a' },
+  }),
+  row('handbook', 'search-result-applies', {
+    variant: 'focus',
+    note: 'Keyboard focus',
+    interaction: { action: 'focus', target: 'a' },
+  }),
+  row('handbook', 'search-result-not'),
+  row('handbook', 'cited-passage-default'),
+  row('handbook', 'cited-passage-compact'),
+  row('handbook', 'link-block-state-rules', {
+    variant: 'hover',
+    note: 'First row hovered',
+    interaction: { action: 'hover', target: 'a' },
+  }),
+  row('handbook', 'link-block-state-rules', {
+    variant: 'focus',
+    note: 'First row focused by keyboard',
+    interaction: { action: 'focus', target: 'a' },
+  }),
+  row('handbook', 'link-block-supplements'),
+  row('handbook', 'sources-block-default'),
+  row('handbook', 'passage-panel-open', {
+    note: 'Opened by pressing the button',
+    interaction: { action: 'click', target: 'button' },
+  }),
+  row('handbook', 'passage-panel-long', {
+    note: 'Opened by pressing the button; the body scrolls inside the panel',
+    interaction: { action: 'click', target: 'button' },
+  }),
+  row('handbook', 'passage-panel-loading'),
+  row('handbook', 'passage-panel-error'),
 ]
 
 /** The screen folders the report compares, in docs/design/screens/. The other folders belong to
- * later phases (06 onward). manifest.test.ts checks that every PNG in these has a row. */
+ * later phases (07 onward). manifest.test.ts checks that every PNG in these has a row. */
 export const SCREEN_FOLDERS = [
   '01-landing',
   '02-app-shell',
   '03-assistant-home',
   '04-directory',
   '05-global-states',
+  '06-handbook',
 ] as const
 
 /** How to reach each state in the build. The capture spec holds the steps for each one; they use
@@ -187,6 +247,16 @@ export type ScreenSetup =
   | 'session-expired'
   | 'not-found'
   | 'server-error'
+  | 'handbook'
+  | 'handbook-search'
+  | 'handbook-no-results'
+  | 'handbook-loading'
+  | 'section'
+  | 'section-loading'
+  | 'cited-passage'
+  | 'not-applicable'
+  | 'missing-section'
+  | 'panel-gallery'
 
 /** What the build photograph shows: the whole viewport, or one region of it. */
 export type ScreenTarget = 'viewport' | 'page' | 'sidebar' | 'main' | 'rail'
@@ -214,6 +284,8 @@ export type ScreenRow = {
 const SCREENS = 'docs/design/screens'
 const DIRECTORY_NAV =
   'Phase 3 and Phase 5: the Time off and Handbook items in the sidebar, and "How it\'s built" in Phase 7'
+const HANDBOOK_NAV =
+  'Phase 5: the Time off item in the sidebar and the at-a-glance figures, and "How it\'s built" in Phase 7'
 const PHASE_5_HOME =
   'Phase 3 and Phase 5: the Time off and Handbook items and the at-a-glance figures'
 
@@ -388,7 +460,7 @@ export const SCREEN_ROWS: ScreenRow[] = [
     route: '/directory',
     persona: 'Priya',
     setup: 'directory-loading',
-    note: 'The list request is held, so the eight skeleton rows stay. The count already reads "120 people", because the counts load apart from the list; the design draws a bar there',
+    note: 'The list request is held, so the eight skeleton rows stay. The count already reads "145 people", because the counts load apart from the list; the design draws a bar there',
     differsUntil: DIRECTORY_NAV,
   },
   {
@@ -467,6 +539,101 @@ export const SCREEN_ROWS: ScreenRow[] = [
     note: "The directory's list request is answered with a 500 and a request ID, so the error shows inside the shell",
     differsUntil:
       'Phase 3 and Phase 5: the Time off and Handbook items, and "How it\'s built" in Phase 7. The build\'s reference is the full 32 characters, where the design draws 8',
+  },
+
+  {
+    title: "06 Handbook: default (Priya's list)",
+    designImage: `${SCREENS}/06-handbook/desktop-default.png`,
+    route: '/handbook',
+    persona: 'Priya',
+    setup: 'handbook',
+    differsUntil: HANDBOOK_NAV,
+    note: 'The real handbook, so the list is longer and the words differ from the design, whose section text is placeholder',
+  },
+  {
+    title: '06 Handbook: search',
+    designImage: `${SCREENS}/06-handbook/desktop-search.png`,
+    route: '/handbook',
+    persona: 'Mateo',
+    setup: 'handbook-search',
+    note: 'Searched for "overtime"',
+    differsUntil: HANDBOOK_NAV,
+  },
+  {
+    title: '06 Handbook: no results',
+    designImage: `${SCREENS}/06-handbook/desktop-no-results.png`,
+    route: '/handbook',
+    persona: 'Priya',
+    setup: 'handbook-no-results',
+    note: 'Searched for "dental plan"',
+    differsUntil: HANDBOOK_NAV,
+  },
+  {
+    title: '06 Handbook: loading',
+    designImage: `${SCREENS}/06-handbook/desktop-loading.png`,
+    route: '/handbook',
+    persona: 'Priya',
+    setup: 'handbook-loading',
+    note: 'The handbook request is held, so the skeleton rows stay',
+    differsUntil: HANDBOOK_NAV,
+  },
+  {
+    title: '06 Handbook: section (Priya on 4.3)',
+    designImage: `${SCREENS}/06-handbook/desktop-section.png`,
+    route: '/handbook/4.3',
+    persona: 'Priya',
+    setup: 'section',
+    differsUntil: HANDBOOK_NAV,
+  },
+  {
+    title: '06 Handbook: section loading',
+    designImage: `${SCREENS}/06-handbook/desktop-section-loading.png`,
+    route: '/handbook/4.3',
+    persona: 'Priya',
+    setup: 'section-loading',
+    note: 'The section request is held, so the skeleton stays',
+    differsUntil: HANDBOOK_NAV,
+  },
+  {
+    title: '06 Handbook: cited passage',
+    designImage: `${SCREENS}/06-handbook/desktop-cited-passage.png`,
+    route: '/handbook/CA-4.3?passage=p2',
+    persona: 'Priya',
+    setup: 'cited-passage',
+    differsUntil: HANDBOOK_NAV,
+  },
+  {
+    title: "06 Handbook: doesn't apply (Mateo on CA-4.3)",
+    designImage: `${SCREENS}/06-handbook/desktop-not-applicable.png`,
+    route: '/handbook/CA-4.3',
+    persona: 'Mateo',
+    setup: 'not-applicable',
+    differsUntil: HANDBOOK_NAV,
+  },
+  {
+    title: '06 Handbook: missing section',
+    designImage: `${SCREENS}/06-handbook/desktop-missing-section.png`,
+    route: '/handbook/8.2',
+    persona: 'Priya',
+    setup: 'missing-section',
+    differsUntil: HANDBOOK_NAV,
+  },
+  {
+    title: '06 Handbook: passage panel states',
+    designImage: `${SCREENS}/06-handbook/desktop-panel-states.png`,
+    route: '/gallery',
+    setup: 'panel-gallery',
+    note: 'The gallery\'s open panel. The loading, error, and long-passage states are the gallery\'s other passage-panel rows above',
+    differsUntil: 'Phase 4: the panel is docked on the assistant home, where its four states can be reached',
+  },
+  {
+    title: '06 Handbook: passage panel docked',
+    designImage: `${SCREENS}/06-handbook/desktop-panel-docked.png`,
+    route: '/ask',
+    persona: 'Priya',
+    setup: 'home',
+    note: "The assistant home without the panel, which is the closest real state",
+    differsUntil: 'Phase 4: the panel docked in the right rail, opened from a citation',
   },
 ]
 

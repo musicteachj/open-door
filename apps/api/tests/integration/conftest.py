@@ -8,7 +8,7 @@ skipping:
 - `cleanup_engine` connects as CLEANUP_DATABASE_URL, the cleanup login (a member of od_cleanup).
 
 `make_tenant` creates a small sandbox company as the API's login, with a row in every table, and
-returns a `SampleTenant`. `seeded_sandbox` creates the full 120-person seed company the same way.
+returns a `SampleTenant`. `seeded_sandbox` creates the full 145-person seed company the same way.
 `browser` and `open_browser` give the HTTP tests a client that behaves
 like the web app in a browser. Every tenant these create is deleted when the test session ends.
 """
@@ -84,6 +84,26 @@ async def sweep_leftover_test_roles(database_settings: Settings) -> None:
                 await connection.exec_driver_sql(str(statement))
     finally:
         await engine.dispose()
+
+
+@pytest_asyncio.fixture(scope="session", loop_scope="session", autouse=True)
+async def handbook_is_published(database_settings: Settings) -> None:
+    """Fail at the start of the session if no handbook version is published.
+
+    A trigger pins every new sandbox to the newest published version and refuses to create one
+    without it, so a forgotten ingest would otherwise show up as dozens of baffling failures.
+    """
+    url = required_url(database_settings.migration_database_url, "MIGRATION_DATABASE_URL")
+    engine = create_engine(url)
+    try:
+        async with engine.connect() as connection:
+            published = await connection.scalar(
+                text("SELECT count(*) FROM handbook_versions WHERE published_at IS NOT NULL")
+            )
+    finally:
+        await engine.dispose()
+    if not published:
+        pytest.fail("No published handbook version: run `make ingest`.")
 
 
 @pytest.fixture
@@ -282,7 +302,7 @@ def make_tenant(app_engine: AsyncEngine, created_tenant_ids: list[UUID]) -> Make
 
 @pytest.fixture
 async def seeded_sandbox(app_engine: AsyncEngine, created_tenant_ids: list[UUID]) -> SeedCompany:
-    """A new tenant with the full seed company (120 people), created as the API's login.
+    """A new tenant with the full seed company (145 people), created as the API's login.
 
     Read it back with `tenant_session(app_engine, TenantContext(company.tenant_id, None))`. The
     tenant is deleted when the test session ends, like every tenant `make_tenant` creates.

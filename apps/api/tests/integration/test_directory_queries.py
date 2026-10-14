@@ -1,4 +1,4 @@
-"""The directory query's search and filters, against a seeded sandbox of 120 people."""
+"""The directory query's search and filters, against a seeded sandbox of 145 people."""
 
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
@@ -210,4 +210,4 @@ async def test_filtered_paging_neither_repeats_nor_skips(
         for limit in (1, 3, 7):
             assert await listed(session, filters, limit=limit) == whole
 
-    assert 10 < len(whole) < 120
+    assert 10 < len(whole) < 145

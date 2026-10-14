@@ -30,14 +30,15 @@ async def test_the_seeds_real_numbers(app_engine: AsyncEngine, seeded_sandbox: S
         team = await reports_of(session, seeded_sandbox, "marcus")
         facets = await directory_facets(session, filters=DirectoryFilters(), team_ids=team)
 
-    assert (facets.total, facets.matching, facets.my_team) == (120, 120, 44)
+    assert (facets.total, facets.matching, facets.my_team) == (145, 145, 44)
     assert [(loc.name, loc.state, loc.count) for loc in facets.locations] == [
+        ("Atlanta store", "GA", 25),
         ("Austin warehouse", "TX", 35),
         ("Denver HQ", "CO", 40),
         ("Oakland store", "CA", 45),
     ]
     assert len(facets.departments) == 8
-    assert sum(department.count for department in facets.departments) == 120
+    assert sum(department.count for department in facets.departments) == 145
     assert [d.name for d in facets.departments] == sorted(d.name for d in facets.departments)
 
 
@@ -55,7 +56,8 @@ async def test_someone_with_no_reports_has_no_team_count(
 async def test_options_at_zero_are_listed_sorted_by_name(
     app_engine: AsyncEngine, seeded_sandbox: SeedCompany
 ) -> None:
-    # A search that only Marcus's store matches, so the other two locations count zero.
+    # "Store Manager" is a title at both stores (Atlanta's manager and assistant manager), but
+    # Marcus's store is chosen, so only he matches. Denver and Austin have no such title.
     filters = DirectoryFilters(
         q="Store Manager", location_id=persona(seeded_sandbox, "marcus").location_id
     )
@@ -64,13 +66,20 @@ async def test_options_at_zero_are_listed_sorted_by_name(
 
     assert facets.matching == 1
     assert [loc.name for loc in facets.locations] == [
+        "Atlanta store",
         "Austin warehouse",
         "Denver HQ",
         "Oakland store",
     ]
-    # The location menu swaps in each location: "Store Manager" exists at one store only.
-    zeros = [loc.name for loc in facets.locations if loc.count == 0]
-    assert zeros
+    # The location menu swaps in each location, so Atlanta counts its two managers and the
+    # locations without the title count zero.
+    counts = {loc.name: loc.count for loc in facets.locations}
+    assert counts == {
+        "Atlanta store": 2,
+        "Austin warehouse": 0,
+        "Denver HQ": 0,
+        "Oakland store": 1,
+    }
     assert len(facets.departments) == 8
     assert [d.name for d in facets.departments] == sorted(d.name for d in facets.departments)
     assert any(d.count == 0 for d in facets.departments)
@@ -100,7 +109,7 @@ async def test_an_options_count_is_the_lists_length_with_that_option_chosen(
         for filters in combinations:
             facets = await directory_facets(session, filters=filters, team_ids=team)
 
-            assert facets.total == 120
+            assert facets.total == 145
             assert facets.matching == len(await listed(session, filters)), filters
             for location in facets.locations:
                 chosen = replace(filters, location_id=location.id)

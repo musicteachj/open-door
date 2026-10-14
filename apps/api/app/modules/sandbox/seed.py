@@ -1,4 +1,4 @@
-"""The seed company: the same fictional company of 120 people in every sandbox.
+"""The seed company: the same fictional company of 145 people in every sandbox.
 
 `build_company` builds it in memory, and `insert_company` writes it into a sandbox. Names come
 from fixed lists and every other choice from a fixed seed. IDs are uuid5 of the tenant ID and a
@@ -21,6 +21,8 @@ from app.db import models  # noqa: F401
 from app.db.base import Base
 from app.domain.holidays import holidays_for
 from app.modules.sandbox.seed_data import (
+    ATLANTA_FAMILY_NAMES,
+    ATLANTA_GIVEN_NAMES,
     FAMILY_NAMES,
     GIVEN_NAMES,
     LOCATIONS,
@@ -171,11 +173,19 @@ def build_company(tenant_id: UUID, anchor_date: date) -> SeedCompany:
         return uuid5(tenant_id, f"{kind}:{key}")
 
     draws = _Draws(SEED)
+    # Each location opened later has its own stream, so the draws of the original three are the
+    # same as before it opened: nobody who already existed changes. Atlanta is stream 1.
+    later_draws = _Draws(SEED + 1)
+    streams = {0: draws, 1: later_draws}
     seats = list(_seats())
     person_ids = {seat.key: make_id("person", seat.key) for seat in seats}
-    given_names = draws.shuffled(GIVEN_NAMES)
-    family_names = draws.shuffled(FAMILY_NAMES)
-    phone_numbers = {spec.code: iter(draws.shuffled(range(100))) for spec in LOCATIONS}
+    # Names are taken from the end, so the older names go first and the Atlanta names are the
+    # last in line.
+    given_names = later_draws.shuffled(ATLANTA_GIVEN_NAMES) + draws.shuffled(GIVEN_NAMES)
+    family_names = later_draws.shuffled(ATLANTA_FAMILY_NAMES) + draws.shuffled(FAMILY_NAMES)
+    phone_numbers = {
+        spec.code: iter(streams[spec.seed_stream].shuffled(range(100))) for spec in LOCATIONS
+    }
     people: list[PersonRow] = []
     private: list[PersonPrivateRow] = []
     for seat in seats:

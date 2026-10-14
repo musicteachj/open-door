@@ -31,7 +31,7 @@ ME_ONLY_FIELDS = {"employmentType", "isManager", "isHrAdmin", "personaKey", "ten
 PRIVATE_FIELDS = {"personalEmail", "phone", "homeAddress", "dateOfBirth"}
 PERSON_REF_FIELDS = {"id", "givenName", "familyName"}
 DEPARTMENT_REF_FIELDS = {"id", "name"}
-LOCATION_REF_FIELDS = {"id", "name", "state", "timezone"}
+LOCATION_REF_FIELDS = {"id", "code", "name", "state", "timezone"}
 
 
 def json_fields(model: type[CamelModel]) -> set[str]:

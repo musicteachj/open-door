@@ -27,6 +27,7 @@ import { Group, Section } from './gallery-parts'
 import { AssistantSections } from './sections/assistant-sections'
 import { DirectorySections } from './sections/directory-sections'
 import { FeedbackSections } from './sections/feedback-sections'
+import { HandbookSections } from './sections/handbook-sections'
 import { FormsSections } from './sections/forms-sections'
 import { CoreSections } from './sections/core-sections'
 import { LandingSections } from './sections/landing-sections'
@@ -271,6 +272,7 @@ export function Gallery() {
         <LandingSections />
         <FormsSections />
         <DirectorySections />
+        <HandbookSections />
       </main>
       <ToastViewport />
     </ToastProvider>

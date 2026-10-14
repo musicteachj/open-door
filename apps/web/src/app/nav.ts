@@ -29,7 +29,7 @@ export const NAV_ITEMS: readonly NavItemConfig[] = [
   { label: 'Ask', to: '/ask', icon: MessageCircle, roles: 'everyone', available: true },
   { label: 'Time off', to: '/time-off', icon: Calendar, roles: 'everyone', available: false },
   { label: 'Directory', to: '/directory', icon: Users, roles: 'everyone', available: true },
-  { label: 'Handbook', to: '/handbook', icon: BookOpen, roles: 'everyone', available: false },
+  { label: 'Handbook', to: '/handbook', icon: BookOpen, roles: 'everyone', available: true },
   {
     label: 'Approvals',
     to: '/approvals',

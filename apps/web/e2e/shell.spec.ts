@@ -22,14 +22,14 @@ const TOAST = 'Now viewing as Marcus Bell.'
 const toast = (page: Page) => page.locator('[data-slot="toast"]')
 
 test.describe('each persona sees exactly the nav items above, and an item appears only once its page exists', () => {
-  // Phase 2 builds Ask and Directory. Approvals (managers), Cases and Console (HR), Time off, and
-  // Handbook arrive in later phases, and "How it's built" in Phase 7.
+  // Phases 2 and 3 build Ask, Directory, and Handbook. Approvals (managers), Cases and Console
+  // (HR), and Time off arrive in later phases, and "How it's built" in Phase 7.
   for (const name of ['Priya', 'Mateo', 'Marcus', 'Dana'] as const) {
     test(name, async ({ page }) => {
       await startAs(page, name)
-      await expect(navLinks(page)).toHaveText(['Ask', 'Directory'])
+      await expect(navLinks(page)).toHaveText(['Ask', 'Directory', 'Handbook'])
       await expect(page.getByRole('link', { name: "How it's built" })).toHaveCount(0)
-      for (const absent of ['Time off', 'Handbook', 'Approvals', 'Cases', 'Console']) {
+      for (const absent of ['Time off', 'Approvals', 'Cases', 'Console']) {
         await expect(page.getByRole('link', { name: new RegExp(`^${absent}`) })).toHaveCount(0)
       }
       expect((await scan(page)).violations).toEqual([])
@@ -46,8 +46,8 @@ test('the persona switcher names the full title, and the persona menu works by k
   )
   const item = (name: string) => page.getByRole('menuitemradio', { name: new RegExp(`^${name} `) })
 
-  // Tab to the switcher: Ask, Directory, then the switcher.
-  for (let i = 0; i < 3; i += 1) await page.keyboard.press('Tab')
+  // Tab to the switcher: Ask, Directory, Handbook, then the switcher.
+  for (let i = 0; i < 4; i += 1) await page.keyboard.press('Tab')
   await expect(switcher(page)).toBeFocused()
   await page.keyboard.press('Enter')
   await expect(page.getByRole('menu')).toBeVisible()

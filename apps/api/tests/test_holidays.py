@@ -59,8 +59,8 @@ def test_denver_closes_seven_days_in_2026() -> None:
     assert list(holidays_for("den", 2026)) == DENVER_2026
 
 
-@pytest.mark.parametrize("location_code", ["oak", "aus"])
-def test_oakland_and_austin_close_six_days_in_2026(location_code: str) -> None:
+@pytest.mark.parametrize("location_code", ["oak", "aus", "atl"])
+def test_oakland_austin_and_atlanta_close_six_days_in_2026(location_code: str) -> None:
     # Everything Denver closes except the day after Thanksgiving.
     assert list(holidays_for(location_code, 2026)) == OAKLAND_AND_AUSTIN_2026
 
@@ -73,7 +73,7 @@ def test_2028_has_no_new_years_day_because_2027_observed_it() -> None:
     assert list(holidays_for("den", 2028)) == DENVER_2028
 
 
-@pytest.mark.parametrize("location_code", ["den", "oak", "aus"])
+@pytest.mark.parametrize("location_code", ["den", "oak", "aus", "atl"])
 def test_an_observed_date_belongs_to_the_year_it_falls_in(location_code: str) -> None:
     in_2027 = holidays_for(location_code, 2027)
     in_2028 = holidays_for(location_code, 2028)

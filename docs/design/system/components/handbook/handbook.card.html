@@ -1,0 +1,45 @@
+<!-- @dsCard group="Components" viewport="980x1180" name="Handbook" -->
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><link rel="stylesheet" href="../../styles.css"><script src="https://unpkg.com/react@18.3.1/umd/react.production.min.js"></script><script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.production.min.js"></script><script src="https://unpkg.com/@babel/standalone@7.24.7/babel.min.js"></script><script src="../../preview/loader.js"></script></head><body style="margin:0;background:var(--surface-raised)"><div id="root"></div>
+<script type="text/babel" data-presets="react">
+loadOpenDoor("../../", OD_FILES).then(function (OD) {
+  const { ApplicabilityBadge, AppliesMarker, LastUpdated, SectionRow, SectionGroup, CitedPassage, LinkBlock, SourcesBlock, SearchResultRow, PassagePanel } = OD;
+  const Lbl = ({ children }) => <div style={{ font: "400 11px/16px var(--font-sans)", color: "var(--ink-muted)", marginBottom: 8 }}>{children}</div>;
+  function Card() {
+    return (
+      <div style={{ padding: "20px 24px", display: "flex", flexDirection: "column", gap: 24 }}>
+        <div><Lbl>Applicability badge: everyone, state, employment type, location, combined</Lbl>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}><ApplicabilityBadge /><ApplicabilityBadge state="CA" /><ApplicabilityBadge type="Hourly staff" /><ApplicabilityBadge location="Denver HQ" /><ApplicabilityBadge type="Hourly staff" state="CA" /></div></div>
+        <div><Lbl>Markers and the last-updated line</Lbl>
+          <div className="od-section-meta"><AppliesMarker applies /><AppliesMarker applies={false} /><LastUpdated date="Sep 12, 2026" /></div></div>
+        <div><Lbl>Section rows: default, hover, focus, current. The marker shows only on restricted sections that cover you</Lbl>
+          <div className="od-sec-cols od-sec-head" aria-hidden="true"><span style={{ gridColumn: "span 2" }}>Section</span><span>Applies to</span><span></span><span>Last updated</span><span></span></div>
+          <SectionGroup num="CA" title="California addendum" note="For California employees" id="cca">
+            <SectionRow num="CA-3.2" title="Overtime" applies="Hourly staff in California" updated="Sep 12, 2026" />
+            <SectionRow num="CA-3.3" title="Meal and rest breaks" applies="Hourly staff in California" updated="Jun 18, 2026" data-state="hover" />
+            <SectionRow num="CA-3.4" title="Final pay" applies="California employees" appliesToYou updated="Jun 18, 2026" data-state="focus" />
+            <SectionRow num="CA-4.3" title="Sick leave" applies="California employees" appliesToYou updated="Sep 12, 2026" current />
+          </SectionGroup>
+        </div>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 24 }}>
+          <LinkBlock title="State rules" note="California and Colorado add to this section." links={[{ label: "California addendum", meta: "CA-4.3", href: "#ca", appliesToYou: true }, { label: "Colorado addendum", meta: "CO-4.3", href: "#co" }]} />
+          <LinkBlock title="Supplements" links={[{ label: "§4.3 Sick leave", meta: "Company handbook", href: "#c" }]} />
+        </div>
+        <div style={{ maxWidth: 720, paddingLeft: 20 }}><Lbl>Cited passage and Sources</Lbl>
+          <CitedPassage onClear={() => {}}>You can use sick leave for your own illness, injury, or preventive care, or to care for a family member. You do not need to give a reason beyond that the time is sick leave.</CitedPassage>
+          <SourcesBlock sources={["California Labor Code §246, read from dir.ca.gov on Oct 6, 2026."]} /></div>
+        <div><Lbl>Search result row</Lbl>
+          <ul role="list" className="od-sec-list"><SearchResultRow num="3.2" title="Overtime" group="Company handbook" excerpt="Hourly staff are paid overtime at 1.5 times their regular rate for hours worked over 40 in a workweek." match="overtime" applies="Hourly staff" appliesToYou updated="Sep 12, 2026" />
+          <SearchResultRow num="CA-3.2" title="Overtime" group="California addendum" excerpt="In California, overtime is owed for hours worked over 8 in a workday or 40 in a workweek." match="overtime" applies="Hourly staff in California" appliesToYou={false} updated="Sep 12, 2026" /></ul></div>
+        <div><Lbl>Passage panel: open, loading, error</Lbl>
+          <div style={{ display: "flex", gap: 16 }}>
+            {["open", "loading", "error"].map((s) => (
+              <div key={s} style={{ width: 300, height: 420, border: "1px solid var(--border)", borderRadius: 16, overflow: "hidden" }}>
+                <PassagePanel state={s} eyebrow="Handbook CA-4.3 · California addendum" title="Sick leave" applies="California employees" appliesToYou updated="Sep 12, 2026" before="California employees receive 40 hours (5 days) of paid sick leave at the start of each calendar year." cited="You can use sick leave for your own illness, injury, or preventive care, or to care for a family member." after="If you know about the need ahead of time, tell your manager in advance." href="#" onRetry={() => {}} />
+              </div>))}
+          </div></div>
+      </div>);
+  }
+  ReactDOM.createRoot(document.getElementById("root")).render(<Card />);
+});
+</script></body></html>

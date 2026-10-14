@@ -5,6 +5,7 @@ import { getGetMeQueryKey } from '@/api/generated'
 import { getSessionStatus } from '@/app/session-status'
 import { useChatStore } from '@/features/chat/store'
 import { installFakeApi } from '@/test/fake-api'
+import { installFakeHandbook } from '@/test/fake-handbook'
 import { DIRECTORY_PEOPLE, installFakeDirectory } from '@/test/fake-directory'
 import { meFor } from '@/test/fixtures'
 import { useShellToast } from './toast-store'
@@ -102,7 +103,7 @@ describe('the shell: layout', () => {
       within(nav)
         .getAllByRole('link')
         .map((a) => a.textContent),
-    ).toEqual(['Ask', 'Directory'])
+    ).toEqual(['Ask', 'Directory', 'Handbook'])
   })
 
   it('marks the page you are on, and Directory for a profile below it', async () => {
@@ -151,12 +152,64 @@ describe('the shell: layout', () => {
     expect(inRail).toHaveClass('max-[760px]:hidden')
   })
 
-  it('puts the rail below the content on a narrow screen, and leaves the glance list empty', async () => {
+  it('puts the rail below the content on a narrow screen', async () => {
     installFakeApi('priya')
     renderApp({ at: '/ask' })
     const rail = await screen.findByRole('complementary', { name: 'Sandbox status' })
     expect(rail.parentElement).toHaveClass('max-[760px]:grid-cols-1')
+  })
+
+  it('shows "Handbook updated" in the at-a-glance list, as a link to the handbook', async () => {
+    installFakeApi('priya')
+    renderApp({ at: '/ask' })
+    const rail = await screen.findByRole('complementary', { name: 'Sandbox status' })
+    const glance = await within(rail).findByRole('region', { name: 'At a glance' })
+    const link = within(glance).getByRole('link', {
+      name: 'Sep 12 Handbook updated. Open Handbook',
+    })
+    expect(link).toHaveAttribute('href', '/handbook')
+    expect(within(link).getByText('Sep 12')).toBeVisible()
+    expect(within(link).getByText('Handbook updated')).toBeVisible()
+  })
+
+  it('shows the Handbook item in the sidebar', async () => {
+    installFakeApi('priya')
+    renderApp({ at: '/ask' })
+    expect(await screen.findByRole('link', { name: 'Handbook' })).toHaveAttribute(
+      'href',
+      '/handbook',
+    )
+  })
+
+  it('leaves the glance list out when the handbook fails, and the page still works', async () => {
+    installFakeApi('priya')
+    let hits = 0
+    server.use(
+      http.get(`${window.location.origin}/api/v1/handbook`, () => {
+        hits += 1
+        return HttpResponse.json(
+          { type: 'about:blank', title: 'Boom', status: 500, instance: '/x' },
+          { status: 500 },
+        )
+      }),
+    )
+    const { queryClient } = renderApp({ at: '/ask' })
+    const rail = await screen.findByRole('complementary', { name: 'Sandbox status' })
+    // Wait until the failing request was made and the query gave up on it.
+    await waitFor(() => expect(hits).toBeGreaterThan(0))
+    await waitFor(() => expect(queryClient.isFetching({ queryKey: ['/api/v1/handbook'] })).toBe(0))
+    await waitFor(() =>
+      expect(queryClient.getQueryState(['/api/v1/handbook', 'glance'])?.status).toBe('error'),
+    )
+    expect(
+      screen.getByRole('heading', {
+        level: 1,
+        name: /^Good (morning|afternoon|evening), Priya\.$/,
+      }),
+    ).toBeVisible()
     expect(within(rail).queryByRole('region', { name: 'At a glance' })).not.toBeInTheDocument()
+    // With nothing to list, the rail is hidden on a narrow screen: the indicator is in the top bar.
+    expect(rail).toHaveClass('max-[760px]:hidden')
   })
 
   it('puts the toast viewport inside the content sheet', async () => {
@@ -565,10 +618,39 @@ describe('the shell: review fixes', () => {
     expect(screen.getByRole('main')).toHaveFocus()
   })
 
-  it('hides the rail below 760 px when it has nothing to show', async () => {
+  it("doesn't leave the rail's failed handbook request for the Handbook page to find", async () => {
+    installFakeApi('priya')
+    let hits = 0
+    const fail = () =>
+      HttpResponse.json(
+        { type: 'about:blank', title: 'Boom', status: 500, instance: '/x' },
+        { status: 500 },
+      )
+    const handler = http.get(`${window.location.origin}/api/v1/handbook`, () => {
+      hits += 1
+      return fail()
+    })
+    server.use(handler)
+    const { queryClient, router } = renderApp({ at: '/ask' })
+    await screen.findByRole('complementary', { name: 'Sandbox status' })
+    await waitFor(() => expect(hits).toBeGreaterThan(0))
+    await waitFor(() => expect(queryClient.isFetching()).toBe(0))
+    // The handbook comes back. Opening the page must ask again, not reuse the rail's failure.
+    server.resetHandlers()
+    installFakeApi('priya')
+    installFakeHandbook('priya')
+    await act(() => router.navigate('/handbook'))
+    expect(
+      await screen.findByRole('heading', { level: 1, name: 'Employee handbook' }),
+    ).toBeVisible()
+    expect(await screen.findByRole('heading', { level: 2, name: 'Welcome' })).toBeVisible()
+  })
+
+  it('hides the rail below 760 px when it has nothing to show, and shows it once there is a figure', async () => {
     installFakeApi('priya')
     renderApp({ at: '/ask' })
     const rail = await screen.findByRole('complementary', { name: 'Sandbox status' })
-    expect(rail).toHaveClass('max-[760px]:hidden')
+    await within(rail).findByRole('region', { name: 'At a glance' })
+    expect(rail).not.toHaveClass('max-[760px]:hidden')
   })
 })

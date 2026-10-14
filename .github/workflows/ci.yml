@@ -75,7 +75,7 @@ jobs:
     services:
       # The same image and credentials as compose.yaml, so CI tests what developers run.
       postgres:
-        image: pgvector/pgvector:pg17
+        image: pgvector/pgvector:0.8.7-pg17
         env:
           POSTGRES_USER: opendoor
           POSTGRES_PASSWORD: opendoor
@@ -105,24 +105,34 @@ jobs:
           cache-dependency-glob: apps/api/uv.lock
       # --locked fails if uv.lock is out of date with pyproject.toml instead of quietly updating it.
       - run: uv sync --locked
-      - run: uv run ruff check .
-      - run: uv run ruff format --check .
+      # ../../evals holds the retrieval eval's runner; --config gives it the API's lint rules.
+      - run: uv run ruff check . ../../evals --config pyproject.toml
+      - run: uv run ruff format --check . ../../evals --config pyproject.toml
       - run: uv run mypy
       - name: Domain and policy code import no framework
         run: uv run lint-imports
       - name: Migrate as the owner
         run: uv run alembic upgrade head
-      # The same sequence as `make migrations-roundtrip`, which the bootstrap below completes.
+      # The same sequence as `make migrations-roundtrip`, which the bootstrap and the ingest below
+      # complete.
       - name: Every migration reverses cleanly
         run: |
           uv run alembic downgrade base
           uv run alembic upgrade head
       - name: Create the login users
         run: uv run python scripts/bootstrap_db_users.py
+      # Loads the handbook from the committed embedding cache. The job has no Voyage key, so a
+      # chunk with no cached vector fails here: run `make embed` and commit the cache.
+      - name: Load the handbook
+        run: uv run python scripts/ingest_handbook.py ingest
       - name: Models and migrations agree
         run: uv run alembic check
       - name: Tests, connected as the API's own login
         run: uv run pytest
+      # Replays the committed query embeddings: no Voyage key, no network. A question with no cached
+      # embedding fails here: run `make embed` and commit the cache.
+      - name: Handbook search finds the right sections (retrieval eval)
+        run: uv run python ../../evals/retrieval/run.py --check
       - name: The committed OpenAPI schema matches the API
         run: uv run python scripts/export_openapi.py --check
 
@@ -166,7 +176,7 @@ jobs:
     services:
       # The same service as the API job.
       postgres:
-        image: pgvector/pgvector:pg17
+        image: pgvector/pgvector:0.8.7-pg17
         env:
           POSTGRES_USER: opendoor
           POSTGRES_PASSWORD: opendoor
@@ -200,6 +210,11 @@ jobs:
         working-directory: apps/api
       - name: Create the login users
         run: uv run python scripts/bootstrap_db_users.py
+        working-directory: apps/api
+      # Loads the handbook from the committed embedding cache. The job has no Voyage key, so a
+      # chunk with no cached vector fails here: run `make embed` and commit the cache.
+      - name: Load the handbook
+        run: uv run python scripts/ingest_handbook.py ingest
         working-directory: apps/api
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:

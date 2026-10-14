@@ -28,7 +28,16 @@ window.OD_FILES = [
   'components/directory/DetailList.jsx',
   'components/feedback/Toast.jsx',
   'components/feedback/Banner.jsx',
-  'components/feedback/FullPageMessage.jsx'
+  'components/feedback/FullPageMessage.jsx',
+  'components/handbook/ApplicabilityBadge.jsx',
+  'components/handbook/AppliesMarker.jsx',
+  'components/handbook/LastUpdated.jsx',
+  'components/handbook/SectionRow.jsx',
+  'components/handbook/CitedPassage.jsx',
+  'components/handbook/LinkBlock.jsx',
+  'components/handbook/SourcesBlock.jsx',
+  'components/handbook/SearchResultRow.jsx',
+  'components/handbook/PassagePanel.jsx'
 ];
 window.loadOpenDoor = async function (root, files) {
   var mods = {};

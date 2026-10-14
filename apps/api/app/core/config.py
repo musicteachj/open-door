@@ -4,7 +4,7 @@ import re
 from functools import lru_cache
 from typing import Literal
 
-from pydantic import Field, PostgresDsn, ValidationInfo, field_validator
+from pydantic import Field, PostgresDsn, SecretStr, ValidationInfo, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # What a browser sends in its Origin header: a lowercase scheme and host, an optional port, and
@@ -38,6 +38,16 @@ class Settings(BaseSettings):
     # The web app's origin, for the same-origin check on requests that change state.
     app_origin: str = "http://localhost:5173"
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR"] = "INFO"
+    # Only `make embed` needs it. An empty value counts as unset.
+    voyage_api_key: SecretStr | None = Field(default=None, repr=False)
+
+    @field_validator("voyage_api_key", mode="before")
+    @classmethod
+    def empty_key_is_none(cls, value: object) -> object:
+        # A shell can export VOYAGE_API_KEY as an empty string, and that would shadow apps/api/.env.
+        if isinstance(value, str) and not value.strip():
+            return None
+        return value
 
     @field_validator("database_url", "migration_database_url", "cleanup_database_url")
     @classmethod

@@ -120,4 +120,17 @@ describe('FilterSelect', () => {
       'focus-visible:outline-focus-ring',
     )
   })
+
+  it('shows a count beside "All" when given one, and names the option with it', async () => {
+    const { user } = setup({ allCount: 119 })
+    await user.click(screen.getByRole('combobox', { name: 'Location' }))
+    expect(await screen.findByRole('option', { name: 'All, 119' })).toBeInTheDocument()
+  })
+
+  it('reports "All" as null even when it shows a count', async () => {
+    const { user, onChange } = setup({ value: 'loc-den', allCount: 119 })
+    await user.click(screen.getByRole('combobox', { name: 'Location' }))
+    await user.click(await screen.findByRole('option', { name: 'All, 119' }))
+    expect(onChange).toHaveBeenCalledWith(null)
+  })
 })

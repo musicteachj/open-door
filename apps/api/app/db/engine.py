@@ -22,6 +22,9 @@ def create_engine(database_url: str) -> AsyncEngine:
     return create_async_engine(
         database_url,
         pool_pre_ping=True,
+        # A failed statement's error and log line name the SQL but not the bound values, which can
+        # be user-written text (a handbook question, later a conversation).
+        hide_parameters=True,
         # asyncpg's connect timeout, in seconds: a dead database fails fast instead of hanging.
         connect_args={"timeout": 5},
     )

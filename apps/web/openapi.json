@@ -90,6 +90,16 @@
                 }
               }
             }
+          },
+          "503": {
+            "description": "Service Unavailable",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
           }
         }
       }
@@ -626,10 +636,279 @@
           }
         }
       }
+    },
+    "/api/v1/handbook": {
+      "get": {
+        "tags": [
+          "handbook"
+        ],
+        "summary": "The handbook: its version and every section, in order",
+        "operationId": "getHandbook",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HandbookOverview"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/handbook/search": {
+      "get": {
+        "tags": [
+          "handbook"
+        ],
+        "summary": "Full-text search of the handbook: every word required, applicable sections first",
+        "operationId": "searchHandbook",
+        "parameters": [
+          {
+            "name": "q",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 100,
+              "title": "Q"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SearchResults"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Unprocessable Content",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/handbook/sections/{section_id}": {
+      "get": {
+        "tags": [
+          "handbook"
+        ],
+        "summary": "One section: its text, related sections, sources, and neighbors",
+        "operationId": "getHandbookSection",
+        "parameters": [
+          {
+            "name": "section_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Section Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SectionDetail"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/handbook/sections/{section_id}/passages/{passage_id}": {
+      "get": {
+        "tags": [
+          "handbook"
+        ],
+        "summary": "One passage with the passages around it: what the passage panel shows",
+        "operationId": "getHandbookPassage",
+        "parameters": [
+          {
+            "name": "section_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Section Id"
+            }
+          },
+          {
+            "name": "passage_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Passage Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PassageView"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
     "schemas": {
+      "AudienceOut": {
+        "properties": {
+          "states": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "States"
+          },
+          "employmentTypes": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Employmenttypes"
+          },
+          "locations": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Locations"
+          }
+        },
+        "type": "object",
+        "required": [
+          "states",
+          "employmentTypes",
+          "locations"
+        ],
+        "title": "AudienceOut"
+      },
       "DepartmentCount": {
         "properties": {
           "id": {
@@ -835,6 +1114,70 @@
         "title": "FieldError",
         "description": "One failed field on a 422: where it was, what was wrong, and the error's kind."
       },
+      "HandbookOverview": {
+        "properties": {
+          "version": {
+            "$ref": "#/components/schemas/VersionInfo"
+          },
+          "chapters": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object",
+            "title": "Chapters"
+          },
+          "addenda": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object",
+            "title": "Addenda"
+          },
+          "sections": {
+            "items": {
+              "$ref": "#/components/schemas/SectionSummary"
+            },
+            "type": "array",
+            "title": "Sections"
+          }
+        },
+        "type": "object",
+        "required": [
+          "version",
+          "chapters",
+          "addenda",
+          "sections"
+        ],
+        "title": "HandbookOverview"
+      },
+      "HeadingBlock": {
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "heading",
+            "title": "Type"
+          },
+          "level": {
+            "type": "integer",
+            "enum": [
+              2,
+              3
+            ],
+            "title": "Level"
+          },
+          "text": {
+            "type": "string",
+            "title": "Text"
+          }
+        },
+        "type": "object",
+        "required": [
+          "type",
+          "level",
+          "text"
+        ],
+        "title": "HeadingBlock"
+      },
       "HealthResponse": {
         "properties": {
           "status": {
@@ -865,6 +1208,82 @@
           "version"
         ],
         "title": "HealthResponse"
+      },
+      "Inline": {
+        "properties": {
+          "text": {
+            "type": "string",
+            "title": "Text"
+          },
+          "bold": {
+            "type": "boolean",
+            "title": "Bold"
+          },
+          "italic": {
+            "type": "boolean",
+            "title": "Italic"
+          },
+          "linkSectionId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Linksectionid"
+          }
+        },
+        "type": "object",
+        "required": [
+          "text",
+          "bold",
+          "italic",
+          "linkSectionId"
+        ],
+        "title": "Inline"
+      },
+      "ListPassage": {
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "passage",
+            "title": "Type"
+          },
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "kind": {
+            "type": "string",
+            "const": "list",
+            "title": "Kind"
+          },
+          "ordered": {
+            "type": "boolean",
+            "title": "Ordered"
+          },
+          "items": {
+            "items": {
+              "items": {
+                "$ref": "#/components/schemas/Inline"
+              },
+              "type": "array"
+            },
+            "type": "array",
+            "title": "Items"
+          }
+        },
+        "type": "object",
+        "required": [
+          "type",
+          "id",
+          "kind",
+          "ordered",
+          "items"
+        ],
+        "title": "ListPassage"
       },
       "LocationCount": {
         "properties": {
@@ -902,6 +1321,10 @@
             "format": "uuid",
             "title": "Id"
           },
+          "code": {
+            "type": "string",
+            "title": "Code"
+          },
           "name": {
             "type": "string",
             "title": "Name"
@@ -918,6 +1341,7 @@
         "type": "object",
         "required": [
           "id",
+          "code",
           "name",
           "state",
           "timezone"
@@ -1016,6 +1440,94 @@
         },
         "type": "object",
         "title": "NewSandboxRequest"
+      },
+      "ParagraphPassage": {
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "passage",
+            "title": "Type"
+          },
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "kind": {
+            "type": "string",
+            "const": "paragraph",
+            "title": "Kind"
+          },
+          "inlines": {
+            "items": {
+              "$ref": "#/components/schemas/Inline"
+            },
+            "type": "array",
+            "title": "Inlines"
+          }
+        },
+        "type": "object",
+        "required": [
+          "type",
+          "id",
+          "kind",
+          "inlines"
+        ],
+        "title": "ParagraphPassage"
+      },
+      "PassageView": {
+        "properties": {
+          "section": {
+            "$ref": "#/components/schemas/SectionSummary"
+          },
+          "passage": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ParagraphPassage"
+              },
+              {
+                "$ref": "#/components/schemas/ListPassage"
+              }
+            ],
+            "title": "Passage"
+          },
+          "previous": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ParagraphPassage"
+              },
+              {
+                "$ref": "#/components/schemas/ListPassage"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Previous"
+          },
+          "next": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ParagraphPassage"
+              },
+              {
+                "$ref": "#/components/schemas/ListPassage"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next"
+          }
+        },
+        "type": "object",
+        "required": [
+          "section",
+          "passage",
+          "previous",
+          "next"
+        ],
+        "title": "PassageView",
+        "description": "What the passage panel shows."
       },
       "PersonRef": {
         "properties": {
@@ -1172,6 +1684,338 @@
         ],
         "title": "SandboxCreated"
       },
+      "SearchResultOut": {
+        "properties": {
+          "section": {
+            "$ref": "#/components/schemas/SectionSummary"
+          },
+          "passageId": {
+            "type": "string",
+            "title": "Passageid"
+          },
+          "excerpt": {
+            "items": {
+              "$ref": "#/components/schemas/Segment"
+            },
+            "type": "array",
+            "title": "Excerpt"
+          }
+        },
+        "type": "object",
+        "required": [
+          "section",
+          "passageId",
+          "excerpt"
+        ],
+        "title": "SearchResultOut"
+      },
+      "SearchResults": {
+        "properties": {
+          "results": {
+            "items": {
+              "$ref": "#/components/schemas/SearchResultOut"
+            },
+            "type": "array",
+            "title": "Results"
+          }
+        },
+        "type": "object",
+        "required": [
+          "results"
+        ],
+        "title": "SearchResults"
+      },
+      "SectionDetail": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "company",
+              "addendum"
+            ],
+            "title": "Kind"
+          },
+          "chapter": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Chapter"
+          },
+          "addendumState": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Addendumstate"
+          },
+          "groupName": {
+            "type": "string",
+            "title": "Groupname"
+          },
+          "audience": {
+            "$ref": "#/components/schemas/AudienceOut"
+          },
+          "audienceLabel": {
+            "type": "string",
+            "title": "Audiencelabel"
+          },
+          "appliesToMe": {
+            "type": "boolean",
+            "title": "Appliestome"
+          },
+          "lastUpdated": {
+            "type": "string",
+            "format": "date",
+            "title": "Lastupdated"
+          },
+          "blocks": {
+            "items": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/HeadingBlock"
+                },
+                {
+                  "$ref": "#/components/schemas/ParagraphPassage"
+                },
+                {
+                  "$ref": "#/components/schemas/ListPassage"
+                }
+              ]
+            },
+            "type": "array",
+            "title": "Blocks"
+          },
+          "sources": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Sources"
+          },
+          "supplements": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SectionRef"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "supplementedBy": {
+            "items": {
+              "$ref": "#/components/schemas/SectionRef"
+            },
+            "type": "array",
+            "title": "Supplementedby"
+          },
+          "previous": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SectionLink"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "next": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SectionLink"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "title",
+          "kind",
+          "chapter",
+          "addendumState",
+          "groupName",
+          "audience",
+          "audienceLabel",
+          "appliesToMe",
+          "lastUpdated",
+          "blocks",
+          "sources",
+          "supplements",
+          "supplementedBy",
+          "previous",
+          "next"
+        ],
+        "title": "SectionDetail"
+      },
+      "SectionLink": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "title"
+        ],
+        "title": "SectionLink",
+        "description": "A neighbor in the handbook's order."
+      },
+      "SectionRef": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "groupName": {
+            "type": "string",
+            "title": "Groupname"
+          },
+          "audienceLabel": {
+            "type": "string",
+            "title": "Audiencelabel"
+          },
+          "appliesToMe": {
+            "type": "boolean",
+            "title": "Appliestome"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "title",
+          "groupName",
+          "audienceLabel",
+          "appliesToMe"
+        ],
+        "title": "SectionRef",
+        "description": "A related section: the one an addendum supplements, or an addendum that supplements one."
+      },
+      "SectionSummary": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "company",
+              "addendum"
+            ],
+            "title": "Kind"
+          },
+          "chapter": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Chapter"
+          },
+          "addendumState": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Addendumstate"
+          },
+          "groupName": {
+            "type": "string",
+            "title": "Groupname"
+          },
+          "audience": {
+            "$ref": "#/components/schemas/AudienceOut"
+          },
+          "audienceLabel": {
+            "type": "string",
+            "title": "Audiencelabel"
+          },
+          "appliesToMe": {
+            "type": "boolean",
+            "title": "Appliestome"
+          },
+          "lastUpdated": {
+            "type": "string",
+            "format": "date",
+            "title": "Lastupdated"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "title",
+          "kind",
+          "chapter",
+          "addendumState",
+          "groupName",
+          "audience",
+          "audienceLabel",
+          "appliesToMe",
+          "lastUpdated"
+        ],
+        "title": "SectionSummary",
+        "description": "A section as the list, the search results, and the section and passage headers show it."
+      },
+      "Segment": {
+        "properties": {
+          "text": {
+            "type": "string",
+            "title": "Text"
+          },
+          "match": {
+            "type": "boolean",
+            "title": "Match"
+          }
+        },
+        "type": "object",
+        "required": [
+          "text",
+          "match"
+        ],
+        "title": "Segment"
+      },
       "TenantInfo": {
         "properties": {
           "id": {
@@ -1191,6 +2035,30 @@
           "expiresAt"
         ],
         "title": "TenantInfo"
+      },
+      "VersionInfo": {
+        "properties": {
+          "label": {
+            "type": "string",
+            "title": "Label"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "updatedOn": {
+            "type": "string",
+            "format": "date",
+            "title": "Updatedon"
+          }
+        },
+        "type": "object",
+        "required": [
+          "label",
+          "title",
+          "updatedOn"
+        ],
+        "title": "VersionInfo"
       }
     }
   }

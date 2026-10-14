@@ -1,0 +1,12 @@
+# Gitleaks configuration, read by the pre-commit hook and the Security workflow.
+# It keeps every default rule and skips only the generated embedding caches.
+
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "Embedding caches: each line is a SHA-256 hash of public handbook text and its vector, never a secret"
+paths = [
+  '''^handbook/embeddings/[^/]+\.jsonl$''',
+  '''^evals/retrieval/embeddings/[^/]+\.jsonl$''',
+]

@@ -53,6 +53,7 @@ automated-decision systems apply that to the data such systems use and produce.
 | `created_at` | When the sandbox was created (UTC), stamped by the database on insert | The lifetime cap counts from it: `expires_at` may be at most 25 hours later. No one can choose it, so no one can stretch a sandbox's life. |
 | `expires_at` | 24 hours after `created_at` | When the sandbox and everything in it are deleted. Copied to each session and to the cookies' `Max-Age`. |
 | `anchor_date` | The UTC date the sandbox was created | The seed data's dates count back from it, so "last week" always means last week. |
+| `handbook_version_id` | The handbook version the sandbox answers from | A database trigger sets it when the sandbox is created, to the newest published version, whatever the caller supplies, and refuses to create a sandbox if none is published. It's empty only for sandboxes created before the handbook existed. A version a sandbox points to can't be deleted. |
 
 Visible to the API only for its own sandbox, and to the cleanup role only once it has expired.
 
@@ -61,7 +62,7 @@ Visible to the API only for its own sandbox, and to the cleanup role only once i
 | Column | Holds | Why |
 |---|---|---|
 | `id`, `tenant_id` | IDs | Identity, and the sandbox it belongs to. |
-| `code`, `name`, `city`, `state` | Denver HQ (CO), the Oakland store (CA), the Austin warehouse (TX) | The directory shows each person's location and state. Each state's handbook addendum applies by location (Phase 3). |
+| `code`, `name`, `city`, `state` | Denver HQ (CO), the Oakland store (CA), the Austin warehouse (TX), the Atlanta store (GA) | The directory shows each person's location and state. Each state's handbook addendum applies by location (Phase 3). |
 | `timezone` | An IANA zone, such as `America/Denver` | Leave dates are calendar dates in the location's time zone (Phase 5). Directory cards and `/me` carry it in their `location`. It describes a place, not a person, so it isn't personal data. |
 
 Visible to everyone in the sandbox. Deleted with the sandbox.
@@ -141,6 +142,22 @@ Append-only: the API can add and read events but never change or delete them. Vi
 within its own sandbox. No endpoint shows them yet. Deleted with the sandbox, which is the demo
 choice described above.
 
+### The handbook: `handbook_versions`, `handbook_sections`, `handbook_chunks`
+
+The fictional Juniper Row employee handbook, loaded from the `handbook/` folder by
+`scripts/ingest_handbook.py`. These three tables are global: they have no `tenant_id` and sit
+outside row-level security. They hold company-public policy text and its search data, with no
+personal data and no sandbox data.
+
+| Table | Holds | Why |
+|---|---|---|
+| `handbook_versions` | One row per loaded edition: its label (`2026.10.1`), a content hash, the embedding model and size, the "Handbook updated" date, its title, its chapter and addendum names (`group_names`), and when it was published | A sandbox is pinned to one version, so its answers never change under it; the names label a hit's group ("Time off", "California addendum"). |
+| `handbook_sections` | One row per section per version: its key (`4.3`, `CA-4.3`), title, who it applies to (states, employment types, locations), its source citations, and its structured text | What the handbook screens show, and what a citation points to. |
+| `handbook_chunks` | The runs of passages that retrieval searches: their text, a full-text search vector, and a 1024-number embedding | Hybrid (keyword and meaning) search over the handbook. |
+
+The API's login can only read these tables. Ingestion writes them as the database owner. They are
+kept while any sandbox uses their version. Phase 8 deletes versions no sandbox uses.
+
 ## Outside the database
 
 ### Cookies
@@ -184,3 +201,14 @@ A request with no session cookie at all, such as a first visit, isn't a refusal 
 it logs nothing here (only a DEBUG line with the method and path). A raw token, a cookie value, or a
 private detail is never logged. How long logs are kept is set
 where they are stored, when Open Door is deployed (Phase 9).
+
+### Voyage (embeddings)
+
+Voyage AI turns text into the vectors that handbook search compares.
+
+- **The handbook's text is sent now,** by `make embed` only, and only for passages that have no
+  vector in the committed cache yet. CI and the tests never call Voyage: they read the cache.
+- **Assistant questions are sent from Phase 4,** so a question can be searched by meaning.
+- **The run-time query cache holds hashes and vectors, never text.**
+- **The committed cache files** (`handbook/embeddings/`) hold vectors keyed by hashes of the
+  model, the size, and the text, not the text itself.

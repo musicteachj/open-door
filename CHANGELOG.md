@@ -10,7 +10,145 @@ version (`0.x.y` while the app is being built, `1.0.0` when it is complete).
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-10-14
+
+Phase 3: the handbook and its search. Juniper Row's fictional handbook (23 company sections, plus
+state addenda for California, Colorado, Texas, and Georgia, with every statutory figure checked
+against its official source) is loaded into the database with its embeddings, and each sandbox is
+pinned to one version of it. Hybrid search (full text and embeddings, fused by rank) scores 100%
+at 5 on the retrieval eval, with every negative case passing. Anyone in a sandbox can browse,
+search, and deep-link the handbook, and see which sections apply to them. A new Atlanta store
+brings the company to 145 people. The phase closed with a whole-phase review, a release review,
+and their fixes.
+
+### Added
+
+- **Juniper Row opens an Atlanta store, and the handbook gains Georgia's rules** (Phase 3, stage
+  6).
+  - **The company grows to 145 people,** with 25 at the Atlanta store. Everyone who existed before
+    is unchanged, and a test pins that.
+  - **Georgia's addendum (GA-4.5):** court attendance is job-protected, and anyone in Georgia may
+    take up to 2 paid hours to vote on Election Day or an early-voting day, whatever their
+    schedule.
+  - **A lactation section for everyone (5.4):** paid breaks as often and as long as needed,
+    whatever the child's age, and a clean, safe, private space that is never a restroom. A
+    California addendum (CA-5.4) adds the state's premium pay and complaint rights. Each figure
+    was checked against its official source on 2026-10-13.
+  - **Handbook version 2026.10.1.** Links to addendum sections no longer carry a section sign
+    ("CA-5.1", not "§CA-5.1").
+  - **The retrieval eval** gains 16 questions from Georgia staff and about lactation, and still
+    scores 100% at 5, with every negative passing.
+
+- **The handbook browser** (Phase 3, stage 5). Handbook is in everyone's navigation.
+  - **The handbook home** lists every section by chapter, then the state addenda, with who each
+    applies to, when it was last updated, and an "Applies to you" marker on the restricted
+    sections that cover you. "Applies to me" narrows the list, and search finds sections by their
+    words, applicable ones first, with the matched words marked. No results offers "Ask the
+    assistant", which puts the search in the chat box without sending it.
+  - **A section page** shows the section with its state rules or the company section it adds to,
+    its sources, previous and next, and the chapter navigator. A deep link such as
+    `/handbook/CA-4.3?passage=p2` highlights the passage and moves focus to it. A section that
+    doesn't apply to you says why and links to the one that does, and a section that isn't in
+    your handbook version says so.
+  - **The assistant home** shows when the handbook was last updated.
+  - Every acceptance criterion in the design notes has a browser test, with axe on every state
+    and a check at phone width.
+
+- **The handbook components** (Phase 3, stage 4), built from the approved design and shown in
+  every state in the gallery: the "Applies to" badge, the "applies to you" marker, the last
+  updated date, section rows and groups, the chapter navigator, search results with the matched
+  words highlighted, the section body, the cited passage with "Clear highlight", the "State
+  rules" and "Supplements" blocks, the Sources block, and the passage panel (open, loading,
+  error, and a long passage that scrolls inside). Everything renders as React elements; a new
+  test fails if any file ever renders raw HTML. Each state has an axe check, and the passage
+  panel's focus behavior is tested in a real browser. The API's references to related sections
+  now carry the addendum's name ("California addendum").
+
+- **Handbook search, its eval, and the handbook API** (Phase 3, stage 3).
+  - **Search for the assistant:** `search_handbook` finds the passages that answer a question by
+    combining keyword search with search by meaning, merged into one ranking, and only over the
+    sections that apply to the person asking, in their sandbox's handbook. If Voyage can't be
+    reached it falls back to keywords alone and says so. Phase 4's assistant will call it.
+  - **The retrieval eval:** 71 questions written in employees' own words, including 14 that must
+    never show someone another state's rules or a section for hourly staff they aren't. CI fails
+    below a 90% hit rate in the top 5 or on any failed negative, with no network. It scores 100%
+    (57 of 57) with a mean reciprocal rank of 0.841. `make eval-retrieval` runs it.
+  - **Four handbook routes** for the browser: the section list with "Applies to", "Last updated",
+    and whether each section applies to you; one section as structured content (never HTML); one
+    passage with its neighbors, for the passage panel; and keyword search that requires every word
+    and marks the matched words. Each reads only the sandbox's own handbook version.
+
+- **The Juniper Row employee handbook** (Phase 3, stage 1). Twenty-two company sections in seven
+  chapters, plus twelve state addendum sections for California, Colorado, and Texas, written as
+  markdown in `handbook/` for the retrieval work that follows. Every statutory figure, such as an
+  overtime threshold, a final-pay deadline, or a sick-leave amount, was checked against the state
+  labor department, the U.S. Department of Labor, or the statute on 2026-10-07, and each section
+  records its sources. The company's own figures (paid time off, sick leave, bereavement, jury
+  pay) are fictional policy chosen to meet or beat all three states. Paid time off has a balance
+  ceiling rather than a year-end carryover cap, because California and Colorado don't allow earned
+  vacation to be forfeited. The handbook is demo content, not legal advice, and says so.
+- **The handbook becomes data** (Phase 3, stage 2), ready for the search that follows.
+  - **Ingestion:** `make ingest` checks every section against a strict markdown subset (no HTML,
+    images, tables, or outside links; links only to other sections), reporting every problem
+    with its file and line. It numbers each paragraph and list as a citable passage, groups
+    passages into chunks for search, and loads the result as one immutable, published version.
+    `make db` now ends with it. Running it again on unchanged files does nothing.
+  - **Embeddings:** each chunk's meaning is captured as a vector from Voyage AI's `voyage-4`
+    model, through a small client that batches, retries, and never logs the key. The vectors are
+    committed in `handbook/embeddings/`, so tests and CI never call Voyage. `make embed` is the
+    only command that does, and it costs nothing within Voyage's free allowance. A version's
+    fingerprint covers the files and the vectors, so a changed vector needs a new version label.
+  - **Each new sandbox is pinned** to the newest published handbook by the database itself, so an
+    answer always cites the handbook the sandbox was created with. With no handbook loaded,
+    starting a sandbox answers "The handbook isn't loaded yet." and creates nothing.
+  - **Who a section applies to** (by state, employment type, and location) is decided by one pure
+    function, with exact expected sections recorded for every persona.
+  - **The API can only read the handbook.** Its database role has `SELECT` on the three new
+    tables and nothing else, and only the ingestion script, connecting as the database owner,
+    can write them.
+
+### Changed
+
+- **Search excerpts start at the beginning of the sentence** with the match, and list items are
+  separated (Phase 3, stage 5).
+- **The development and CI databases use a pinned image,** `pgvector/pgvector:0.8.7-pg17`, rather
+  than whatever `pg17` pointed to on the day (Phase 3, stage 2).
+- **The secret scan skips the generated embedding caches** (Phase 3, stage 2). Each line's key is
+  a hash of public handbook text, which gitleaks mistook for an API key. Every other file is
+  scanned with the default rules, as before.
+
+### Security
+
+- **Failed database statements no longer log their values** (Phase 3, stage 3), so an error can
+  never write a search question or other bound text to the log.
+
 ### Fixed
+
+- **Fixes from the v0.3.0 release review** (Phase 3, before its release).
+  - **A search result's excerpt always comes from the passage it links to.** When the words
+    matched only a heading, or only the meaning matched, the excerpt showed other text from the
+    section while the link highlighted a different passage.
+  - **A search of only invisible characters** (such as a zero-width space) is no search, instead
+    of an error that Retry could never clear.
+  - **A passage ID that can't exist** gets "This passage isn't in that section", not the
+    missing-section message.
+  - **The retrieval eval says "Run `make db` first"** when no handbook is published, instead of
+    ending in a database traceback.
+
+- **Fixes from the Phase 3 close-out review** (Phase 3, the whole-phase review).
+  - **A search result's highlighted words now show on its one line at desktop width.** A match
+    that ended past the edge of the line at 1440 px was cut off; the excerpt now starts a few
+    words before any match more than 90 characters in, and never cuts into the match itself. On
+    a phone's narrower line, a later match can still fall past the edge.
+  - **A section page stays up when only the handbook overview fails,** leaving out the chapter
+    navigator instead of showing "Something went wrong". Coming from the list, the navigator
+    still shows at once.
+  - **Changing the Show filter right after typing keeps the search,** so Back undoes only the
+    filter.
+  - **A section or passage ID of "." or ".." no longer reaches another API path;** it shows as
+    missing without a request.
+  - **`make check` loads the handbook, as CI does,** so it no longer tests against an old or
+    missing handbook version.
 
 - **A flaky browser test in CI** (after Phase 2). The check that another person's profile leaks no
   private value read each API response's body after the fact, and on CI's single worker one body

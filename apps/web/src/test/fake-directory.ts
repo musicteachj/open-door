@@ -18,18 +18,21 @@ const url = (path: string) => `${window.location.origin}${path}`
 const LOCATIONS = [
   {
     id: '00000000-0000-4000-9000-000000000001',
+    code: 'aus',
     name: 'Austin warehouse',
     state: 'TX',
     timezone: 'America/Chicago',
   },
   {
     id: '00000000-0000-4000-9000-000000000002',
+    code: 'den',
     name: 'Denver HQ',
     state: 'CO',
     timezone: 'America/Denver',
   },
   {
     id: '00000000-0000-4000-9000-000000000003',
+    code: 'oak',
     name: 'Oakland store',
     state: 'CA',
     timezone: 'America/Los_Angeles',

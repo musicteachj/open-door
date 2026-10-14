@@ -7,7 +7,11 @@ dependencies = [
     "alembic>=1.20.0",
     "asyncpg>=0.31.0",
     "fastapi>=0.142.1",
+    "httpx>=0.28.1",
+    "markdown-it-py>=4.2.0",
+    "pgvector>=0.5.0",
     "pydantic-settings>=2.15.0",
+    "pyyaml>=6.0.3",
     "sqlalchemy[asyncio]>=2.1.1",
     "uvicorn[standard]>=0.54.0",
 ]
@@ -28,6 +32,7 @@ dev = [
     "pytest>=9.1.1",
     "pytest-asyncio>=1.4.0",
     "ruff>=0.16.9",
+    "types-pyyaml>=6.0.12.20260906",
 ]
 
 [tool.ruff]
@@ -43,7 +48,7 @@ select = ["E", "W", "F", "I", "N", "UP", "B", "SIM", "ASYNC", "DTZ", "S", "PT", 
 [tool.mypy]
 strict = true
 plugins = ["pydantic.mypy"]
-files = ["app", "tests", "scripts", "migrations"]
+files = ["app", "tests", "scripts", "migrations", "../../evals"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
@@ -77,8 +82,19 @@ forbidden_modules = [
     "pydantic",
     "pydantic_settings",
     "anthropic",
+    "pgvector",
+    "yaml",
     "app.api",
     "app.core",
     "app.db",
     "app.modules",
 ]
+
+[[tool.importlinter.contracts]]
+name = "Nothing in the API path writes the handbook"
+type = "forbidden"
+# Only the ingestion script, running as the database owner, may load a handbook version. The API's
+# login can't write these tables either, but a stray import should fail here first.
+source_modules = ["app.api", "app.main"]
+forbidden_modules = ["app.modules.handbook.load"]
+include_external_packages = false

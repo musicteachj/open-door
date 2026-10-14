@@ -290,7 +290,7 @@ These details were checked against the Claude API reference and platform documen
     per question.
 - **Guard: `claude-haiku-4-5`** with structured output. Its support for structured outputs is
   confirmed at build time.
-- **Embeddings: Voyage AI.** Anthropic has no embedding model and recommends Voyage. The model is
+- **Embeddings: Voyage AI.** Anthropic has no embedding model; its embeddings guide uses Voyage as its example provider. The model is
   chosen at build time (`voyage-3.5` or its successor).
 
 ### The loop

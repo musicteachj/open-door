@@ -33,6 +33,6 @@ test('a search keeps the scroll position while it replaces the URL', async ({ pa
   await page.evaluate(() => window.scrollTo(0, 80))
   await page.keyboard.type('a')
   await expect(page).toHaveURL(/\?q=a$/)
-  await expect(page.getByText(/ of 120 people$/)).toBeVisible()
+  await expect(page.getByText(/ of 145 people$/)).toBeVisible()
   expect(await page.evaluate(() => window.scrollY)).toBe(80)
 })

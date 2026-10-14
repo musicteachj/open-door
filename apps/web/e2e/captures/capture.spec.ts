@@ -112,6 +112,10 @@ async function reachScreen(page: Page, row: ScreenRow) {
           }),
         )
       }
+      if (row.setup === 'handbook-loading') await holdRequests(page, '**/api/v1/handbook', 'GET')
+      if (row.setup === 'section-loading') {
+        await holdRequests(page, '**/api/v1/handbook/sections/4.3', 'GET')
+      }
       if (row.route !== '/ask') await page.goto(row.route)
     } else {
       await page.goto(row.route)
@@ -174,7 +178,7 @@ async function reachScreen(page: Page, row: ScreenRow) {
       break
     }
     case 'directory':
-      await expect(page.getByText('120 people', { exact: true })).toBeVisible()
+      await expect(page.getByText('145 people', { exact: true })).toBeVisible()
       await expect(page.getByRole('list', { name: 'People' }).getByRole('listitem')).toHaveCount(50)
       break
     case 'directory-loading':
@@ -183,14 +187,14 @@ async function reachScreen(page: Page, row: ScreenRow) {
       break
     case 'directory-my-team':
       await page.getByRole('button', { name: /^My team/ }).click()
-      await expect(page.getByText('44 of 120 people', { exact: true })).toBeVisible()
+      await expect(page.getByText('44 of 145 people', { exact: true })).toBeVisible()
       break
     case 'directory-empty':
       await page.getByRole('searchbox').fill('Jordn')
       await expect(page.getByText('No one matches “Jordn”.')).toBeVisible()
       break
     case 'directory-show-more': {
-      await expect(page.getByText('Showing 50 of 120')).toBeVisible()
+      await expect(page.getByText('Showing 50 of 145')).toBeVisible()
       await page.getByRole('button', { name: 'Show more' }).evaluate((el) => el.scrollIntoView({ block: 'end' }))
       break
     }
@@ -230,6 +234,43 @@ async function reachScreen(page: Page, row: ScreenRow) {
         page.getByRole('heading', { level: 1, name: 'Something went wrong on our side.' }),
       ).toBeVisible({ timeout: 15_000 })
       await expect(page.getByRole('navigation', { name: 'Main' })).toBeVisible()
+      break
+    case 'handbook':
+      await expect(page.locator('[data-slot="section-row"]').first()).toBeVisible()
+      break
+    case 'handbook-search':
+      await page.getByRole('searchbox', { name: 'Search the handbook' }).fill('overtime')
+      await expect(page.getByText(/sections? match/)).toBeVisible()
+      break
+    case 'handbook-no-results':
+      await page.getByRole('searchbox', { name: 'Search the handbook' }).fill('dental plan')
+      await expect(page.getByText('No sections match “dental plan.”')).toBeVisible()
+      break
+    case 'handbook-loading':
+      await expect(page.getByText('Loading the handbook')).toBeAttached()
+      await expect(page.locator('[aria-busy="true"]')).toBeVisible()
+      break
+    case 'section':
+      await expect(page.getByRole('heading', { level: 1, name: 'Sick leave' })).toBeVisible()
+      break
+    case 'section-loading':
+      await expect(page.getByText('Loading section')).toBeAttached()
+      break
+    case 'cited-passage':
+      await expect(page.getByRole('region', { name: 'Cited passage' })).toBeFocused()
+      break
+    case 'not-applicable':
+      await expect(page.getByRole('note')).toBeVisible()
+      break
+    case 'missing-section':
+      await expect(
+        page.getByRole('heading', { level: 1, name: "This section isn't in your handbook version." }),
+      ).toBeVisible()
+      break
+    case 'panel-gallery':
+      await page
+        .locator('section[aria-labelledby="passage-panel-open"]')
+        .evaluate((el) => el.scrollIntoView({ block: 'center' }))
       break
     case 'home':
     case 'expiry-banner':

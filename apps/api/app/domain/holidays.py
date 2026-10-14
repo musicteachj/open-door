@@ -16,7 +16,7 @@ import calendar
 from dataclasses import dataclass
 from datetime import date, timedelta
 
-LOCATION_CODES = frozenset({"den", "oak", "aus"})
+LOCATION_CODES = frozenset({"den", "oak", "aus", "atl"})
 # The one difference between locations, so the time-off engine has a real one to get right.
 CLOSED_THE_DAY_AFTER_THANKSGIVING = frozenset({"den"})
 
