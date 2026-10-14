@@ -26,7 +26,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { PageSandboxIndicator } from '@/features/shell/page-sandbox-indicator'
 import { cn } from '@/lib/utils'
 import { useClearPassage } from './url-state'
-import { useHandbook } from './use-handbook'
+import { useHandbookForSection } from './use-handbook'
 import { useSection } from './use-section'
 
 // One handbook section at /handbook/:sectionId, from docs/design/screens/06-handbook. The shell
@@ -42,7 +42,7 @@ const LAYOUT =
 export function SectionPage() {
   const { sectionId = '' } = useParams()
   const section = useSection(sectionId)
-  const overview = useHandbook()
+  const overview = useHandbookForSection()
   const [params] = useSearchParams()
   const passageId = params.get('passage') ?? undefined
   const clearPassage = useClearPassage()

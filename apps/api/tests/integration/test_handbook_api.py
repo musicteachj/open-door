@@ -585,7 +585,6 @@ async def test_a_match_far_into_a_long_sentence_is_still_in_the_excerpt(
             assert excerpt[0] == {"text": "…", "match": False}
             assert [s["text"] for s in excerpt if s["match"]] == ["painted"]
             assert len(full) <= 300
-            assert full[1:].startswith("Extraordinarily")  # a whole word, not "xtraordinarily"
-            assert "zebra crossings are" in full
+            assert full[1:].startswith("zebra crossings are painted")  # on a word boundary
         finally:
             await set_pin(owner_engine, tenant, None)

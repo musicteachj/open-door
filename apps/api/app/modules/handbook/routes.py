@@ -70,8 +70,10 @@ HEADLINE_OPTIONS = (
 # A passage's whole text with every match marked; the excerpt is cut from it in `_excerpt`.
 PASSAGE_HEADLINE_OPTIONS = f"StartSel={MATCH_START}, StopSel={MATCH_STOP}, HighlightAll=true"
 EXCERPT_MAX_CHARACTERS = 300
-EXCERPT_LEAD_THRESHOLD = 150  # a first match later than this starts the excerpt mid-sentence
-EXCERPT_LEAD_CHARACTERS = 70  # ... this many characters before the match, on a word boundary
+# A result shows its excerpt on one line, about 118 characters at 1440 px (about 43 at 390 px), so
+# a first match later than the threshold starts the excerpt mid-sentence, a few words before it.
+EXCERPT_LEAD_THRESHOLD = 90
+EXCERPT_LEAD_CHARACTERS = 30  # at most this many characters before the match, on a word boundary
 SENTENCE_BREAK = re.compile(r"(?<=[.!?])\s+|\n+")
 MAX_RESULTS = 50
 
@@ -306,7 +308,9 @@ def _excerpt(whole: str) -> list[Segment]:
     match_at = sum(len(segment.text) for segment in segments[:first_match])
     lead: list[Segment] = []
     if match_at > EXCERPT_LEAD_THRESHOLD:
-        begin = visible.find(" ", match_at - EXCERPT_LEAD_CHARACTERS) + 1
+        # With no space just before the match, the excerpt starts at the match itself.
+        space = visible.find(" ", match_at - EXCERPT_LEAD_CHARACTERS, match_at)
+        begin = space + 1 if space >= 0 else match_at
         segments = _slice(segments, begin, len(visible))
         visible = visible[begin:]
         lead = [Segment(text="…", match=False)]

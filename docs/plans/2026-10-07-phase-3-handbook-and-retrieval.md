@@ -1082,6 +1082,45 @@ changes made during execution. It added the Atlanta store (145 people), GA-4.5, 
 lactation section (5.4) with CA-5.4, and handbook version 2026.10.1; the eval scores 100% (67 of
 67) over 87 questions.
 
+**The whole-phase review, 2026-10-13:** `/code-review high` on `dev` (`09bcaa4`) against
+`8db9ef5`, limited to the paths in Task 38, with the test files left out because they were
+reviewed with each stage's code. It reported ten findings, and the fixes are in
+`fix/phase-3-review`, each test-first:
+- **`make check` never loaded the handbook,** unlike CI, so it could test a stale or missing
+  version. It now runs the ingest after the bootstrap.
+- **A failed overview request replaced a loaded section with the error page.** The section page
+  now reads the overview from its own cache entry and doesn't throw, leaving out the navigator.
+  Each entry starts from the other's copy, so neither page shows a skeleton when moving between
+  them. Sharing the home's
+  entry instead doesn't work: an observer that throws doesn't retry a cached error on mount.
+- **A search excerpt could hide its match,** for two reasons. One line holds about 118 characters
+  at 1440 px (measured in Chromium; about 43 at 390 px), but the excerpt kept the sentence start
+  for any match up to 150 characters in. And with no space just before the match, the cut could
+  land inside it. The threshold is now 90 and the lead 30 characters, and with no space the
+  excerpt starts at the match. At 390 px a later match can still fall past the edge.
+- **Changing the Show filter within 250 ms of typing** pushed an entry without the search, so Back
+  lost it. The filter now writes a pending search first. A browser test proves it under the
+  app's real router, and fails without the fix.
+- **"." and ".." survive `encodeURIComponent`,** and the URL parser resolves them as path steps.
+  `useSection` treats them as missing and `usePassage` asks nothing.
+- **The fix PR's own `/code-review medium`** raised seven points; the two-navigation worry got
+  the browser test above, the navigator delay the seeded cache entry, and the empty ID a test.
+  The rest were the phone width (now stated in the changelog), a prefix lost when no space
+  precedes a match (rare, and the "…" marks the cut), and the navigator failing quietly (the
+  intent).
+- **Its second round** paused the browser test's clock explicitly, seeded the home's entry from the
+  section's too (a deep link, then Back, showed the list's skeleton), and checked the "asks
+  nothing" tests' query state. It also found the directory's profile page sending its URL's ID
+  unencoded: Phase 2 code, so backlogged. A third round found two more in Phase 2 code (the
+  directory's filters drop a just-typed search, and the error page doesn't retry a cached error
+  after navigating back), both backlogged; its other points repeated settled ones.
+- **Tests at the close:** 888 API tests, 1,001 web unit tests, and 175 browser tests.
+- **Backlogged:** search's own copy of the passage text, and the state names kept in both the API
+  and the web app.
+- **Not defects:** "Juniper Row" in the web app is the fictional company's name, not the handbook
+  title, which Phase 4's citations can use. And the rail's separate overview cache entry is the
+  Stage 5 decision above.
+
 ## Backlog
 
 New items from planning, added in the tasks named:

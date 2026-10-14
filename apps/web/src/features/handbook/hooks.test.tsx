@@ -92,6 +92,24 @@ describe('useSection', () => {
     await waitFor(() => expect(result.current.missing).toBe(true))
     expect(seen).toBe('/api/v1/handbook/sections/..%2Fme')
   })
+
+  // Encoding leaves "." and "..", and the URL parser would resolve them as a step up the path. An
+  // empty ID would ask for the section list's own path.
+  it.each(['', '.', '..'])('takes %j as missing, asking nothing', async (id) => {
+    const seen: string[] = []
+    server.use(
+      http.get(url('/api/v1/*'), ({ request }) => {
+        seen.push(new URL(request.url).pathname)
+        return problem(404)
+      }),
+    )
+    const { result } = renderHook(() => useSection(id), { wrapper: wrapper() })
+    expect(result.current.missing).toBe(true)
+    expect(result.current.fetchStatus).toBe('idle')
+    await new Promise((resolve) => setTimeout(resolve, 20))
+    expect(result.current.fetchStatus).toBe('idle')
+    expect(seen).toEqual([])
+  })
 })
 
 describe('usePassage', () => {
@@ -99,6 +117,24 @@ describe('usePassage', () => {
     const { result } = renderHook(() => usePassage('CA-4.3', null), { wrapper: wrapper() })
     await new Promise((resolve) => setTimeout(resolve, 20))
     expect(result.current.fetchStatus).toBe('idle')
+  })
+
+  it.each([
+    ['..', 'p2'],
+    ['CA-4.3', '..'],
+    ['CA-4.3', '.'],
+  ])('asks nothing for %j and %j, which would reach another path', async (section, passage) => {
+    const seen: string[] = []
+    server.use(
+      http.get(url('/api/v1/*'), ({ request }) => {
+        seen.push(new URL(request.url).pathname)
+        return problem(404)
+      }),
+    )
+    const { result } = renderHook(() => usePassage(section, passage), { wrapper: wrapper() })
+    await new Promise((resolve) => setTimeout(resolve, 20))
+    expect(result.current.fetchStatus).toBe('idle')
+    expect(seen).toEqual([])
   })
 
   it('reads the passage with its neighbors', async () => {

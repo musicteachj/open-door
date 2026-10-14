@@ -75,13 +75,14 @@ openapi: ## Regenerate the OpenAPI schema and the web app's API client
 
 check: check-api check-web e2e check-docs check-workflows ## Run everything CI runs (start Postgres first with `make db`)
 
-check-api: ## Lint, type-check, migrate, and test the API; confirm the schema is current
+check-api: ## Lint, type-check, migrate, load the handbook, and test the API; confirm the schema is current
 	cd $(API) && uv run ruff check . ../../evals --config pyproject.toml
 	cd $(API) && uv run ruff format --check . ../../evals --config pyproject.toml
 	cd $(API) && uv run mypy
 	cd $(API) && uv run lint-imports
 	cd $(API) && uv run alembic upgrade head
 	cd $(API) && uv run python scripts/bootstrap_db_users.py
+	cd $(API) && uv run python scripts/ingest_handbook.py ingest
 	cd $(API) && uv run alembic check
 	cd $(API) && uv run pytest
 	cd $(API) && uv run python ../../evals/retrieval/run.py --check
