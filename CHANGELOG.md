@@ -10,8 +10,60 @@ version (`0.x.y` while the app is being built, `1.0.0` when it is complete).
 
 ## [Unreleased]
 
+### Changed
+
+- **No em dashes, anywhere** (Phase 4, stage 2). A new writing rule in `CLAUDE.md`, beside the
+  American English one. `make check-docs` now fails on an em dash in any file except the frozen
+  initial plan, the Claude Design handoff, recorded eval fixtures, and lockfiles. The few in the docs were empty table cells, now "-".
+- **The data inventory names Anthropic as a processor** (Phase 4, stage 2): what each turn sends
+  to it, what is never sent, and Anthropic's retention and training terms, quoted with their
+  source. Voyage now receives the assistant's search queries, not people's whole questions.
+
 ### Added
 
+- **The assistant's turn loop** (Phase 4, stage 2). Nothing is reachable from the web app yet.
+  - **One turn is one stream of typed events** (started, status, text, citation, tool started and
+    finished, escalation, error, completed). The guard reads the question first. Then the model is
+    called at most eight times, tools run at the same time and answer in one message, and every
+    call is reserved before it starts and settled once after it ends.
+  - **History is only ever added to.** A turn goes into history whole, in one write (question,
+    context, every tool round, and the answer), only when it ends with an answer. A stopped,
+    refused, or failed turn leaves just the question, and a crisis or "can't answer right now"
+    turn leaves nothing. Every crisis, sensitive, and "can't answer right now" escalation is
+    audited, and a sensitive turn that ends in an error still shows the HR contact.
+  - **A turn that is stopped, or whose client leaves, still saves** its partial answer and its
+    trace, because the closing writes are shielded from cancellation. A turn is also cut off after
+    eight minutes, inside the ten-minute rule that treats a running turn as abandoned.
+  - **An answer cut off by the output limit** keeps its text and is marked incomplete.
+- **The safety check and the fixed texts** (Phase 4, stage 2).
+  - **The guard reads every message first.** It sends the message (and a short piece of the last
+    answer) to a small model in labeled tags, and routes the verdict: crisis ends the turn with
+    fixed text, sensitive adds a note for the assistant and an HR contact, and anything unclear
+    goes to the safer route. If the check fails, times out (4 seconds), or is refused, the turn
+    ends with "can't answer right now", 911 and 988, and the HR team's details.
+  - **Every message a model must not write is a fixed text:** the crisis text, the sensitive
+    stub, "can't answer right now", and the error messages. The owner approved the
+    crisis text and the "can't answer right now" text (which also gives 911 and 988) on
+    2026-10-15. A test fails if either changes without a new approval. The two budget messages (the
+    sandbox's and the day's) also give 911 and 988, because a budget stop comes before the safety
+    check, and are approved and hashed the same way.
+  - **The HR contact** (names and work emails) is read from the directory.
+- **The assistant's prompts, per-turn context, tools, and citations** (Phase 4, stage 2). Nothing
+  is reachable from the web app yet.
+  - **The prompts are versioned text files** for the assistant and for the safety check that reads
+    each message first. A test pins each prompt's hash to its version, so a prompt can't change
+    without a new version (and the evals rule in `CLAUDE.md`).
+  - **Each turn gets a short context message** with the person's first name, role, location, and
+    employment type, the handbook version, and today's date in their location's timezone, never the
+    sandbox's anchor date.
+  - **Three read-only tools:** `search_handbook` (up to five passages as citable sources, for the
+    asker's office or a named one), `get_my_profile` (the asker's own details, audited as an
+    assistant read), and `find_people` (directory cards only, for everyone or the asker's team).
+    No tool input can name whose data to read, and a bad input comes back as an error the model can
+    correct. A new `escalation.offered` audit action is ready for the escalation offer.
+  - **Citations are mapped to handbook passages.** A citation's result and block numbers become
+    one event per cited passage, with a marker that keeps its number when a passage is cited
+    again. A citation that doesn't match what was sent is dropped and logged without its text.
 - **The assistant's storage, budgets, and model connections** (Phase 4, stage 1). Nothing is
   reachable from the web app yet; stage 2 builds the turn on top of this.
   - **Conversations are stored append-only.** Six new tables hold conversations, messages, turns,
@@ -40,6 +92,13 @@ version (`0.x.y` while the app is being built, `1.0.0` when it is complete).
 
 ### Security
 
+- **The assistant can't be turned against its own server or other visitors** (Phase 4, stage 2).
+  An Opus security review found no high issues and one medium, now fixed: a single model response
+  could start hundreds of tools at once. Now at most 5 run per response, 3 at a time, and 20 per
+  question. The system prompt's canary (a hidden phrase that exposes a leaked prompt) is withheld
+  from everything sent to the browser, even split across messages or padded with invisible
+  characters. The crisis text never waits more than 2 seconds on the HR contacts, and the browser
+  no longer receives cache counts or costs that could hint at another visitor's question.
 - **No one, HR included, can read another person's conversations** (Phase 4, stage 1). Every
   assistant table that holds a sandbox's data has row-level security, which is Postgres hiding
   rows the database session isn't allowed to see. It's scoped to the sandbox, and a second rule

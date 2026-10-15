@@ -43,3 +43,9 @@ output) before the main model sees it:
 Every turn pays a guard call: about $0.0005 and a target of 800 ms at p95. An outage of the guard
 model is an outage of the assistant, by design. Phase 6 replaces the sensitive stub with the
 confidential-case offer and measures the guard's precision and recall in the escalation eval.
+
+Amended 2026-10-15: because a failed guard can't tell a crisis from anything else, the fixed "can't
+answer right now" text also gives 911 and 988. The owner approved it, and it is tied to its hash
+like the crisis text. The two budget messages carry the same 911 and 988 line, for the same
+reason (a budget stop comes before the safety check, so the message was never screened), and are
+approved and hashed the same way.

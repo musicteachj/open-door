@@ -123,6 +123,7 @@ check-docs: ## Check spelling (American English), links between files, and lefto
 	uvx $(TYPOS)
 	git ls-files --cached --others --exclude-standard -- '*.md' | docker run --rm -i -v "$(CURDIR):/input:ro" -w /input $(LYCHEE) --offline --no-progress --include-fragments --files-from -
 	@if git grep --untracked -n -I -w -E 'T[O]DO|TB[D]|FIXM[E]|XX[X]|[Ll]orem [i]psum' -- '*.md'; then echo "Finish or remove the placeholders above."; exit 1; fi
+	@if LC_ALL=C git grep --untracked -n -I -P '\xE2\x80\x94' -- . ':!docs/plans/2026-09-29-open-door-initial-plan.md' ':!docs/design/' ':!evals/**/fixtures/**' ':!*.lock' ':!**/package-lock.json'; then echo "Replace the em dashes above (CLAUDE.md, Writing)."; exit 1; fi
 
 check-workflows: ## Check the GitHub Actions workflows for mistakes (actionlint) and security (zizmor)
 	docker run --rm -v "$(CURDIR):/repo:ro" -w /repo $(ACTIONLINT) -no-color

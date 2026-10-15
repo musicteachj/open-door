@@ -5,6 +5,7 @@ description = "The Open Door API: FastAPI, Postgres, and the assistant."
 requires-python = ">=3.13"
 dependencies = [
     "alembic>=1.20.0",
+    "anyio>=4",
     "anthropic>=1,<2",
     "asyncpg>=0.31.0",
     "fastapi>=0.142.1",
@@ -124,6 +125,7 @@ source_modules = [
     "app.ai.pricing",
     "app.ai.budget",
     "app.ai.conversations",
+    "app.ai.turn",
 ]
 forbidden_modules = ["anthropic"]
 include_external_packages = true

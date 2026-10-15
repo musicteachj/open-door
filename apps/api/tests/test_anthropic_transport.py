@@ -261,6 +261,7 @@ async def test_a_fallback_is_priced_per_model_and_the_echo_rule_is_applied(
     ]
     finished = finished_of(events)
     assert finished.served_by == SONNET
+    assert finished.fell_back is True
     # The top-level usage is the attempt that produced the message. The declined attempt is only in
     # the iterations, so the turn's tokens are their total.
     assert finished.usage == Usage(1000, 120, 0, 0)
@@ -293,6 +294,7 @@ async def test_an_unlabeled_iteration_after_a_fallback_is_priced_at_the_dearer_m
 
     finished = finished_of(events)
     assert finished.served_by == OPUS
+    assert finished.fell_back is True
     assert [item.model for item in finished.iterations] == [OPUS, OPUS, OPUS]
     assert turn_call_cost(finished.iterations) == Decimal("0.0156")
 
@@ -306,6 +308,7 @@ async def test_the_same_model_in_another_form_is_not_a_fallback(
 
     finished = finished_of(events)
     assert finished.served_by == "claude-opus-5-5-20260901"
+    assert finished.fell_back is False
     # With no signal it is priced as asked, not as the unfamiliar ID the API echoed.
     assert [item.model for item in finished.iterations] == [OPUS]
 
@@ -711,6 +714,7 @@ async def test_the_outgoing_request_carries_the_betas_fallbacks_and_opus_setting
     assert body["fallbacks"] == "default"
     assert body["thinking"] == {"type": "adaptive", "display": "updates"}
     assert body["output_config"] == {"effort": "low"}
+    assert body["cache_control"] == {"type": "ephemeral"}
     assert body["system"] == [{"type": "text", "text": "You are Open Door."}]
     (tool,) = body["tools"]
     assert tool["strict"] is True
@@ -949,3 +953,68 @@ async def test_the_production_client_keeps_two_retries_and_a_bounded_timeout() -
 def test_the_factory_refuses_to_build_without_a_key() -> None:
     with pytest.raises(ValueError, match="ANTHROPIC_API_KEY"):
         from_settings(settings_with(None))
+
+
+async def test_canceling_the_stream_still_closes_the_response(
+    make_transport: Callable[[Handler], AnthropicTransport],
+) -> None:
+    import anyio
+
+    body = (FIXTURES / "text_with_citation.sse").read_bytes()
+    cut = body.index(b"event: content_block_stop", body.index(b"text_delta"))
+    closed: list[bool] = []
+    first_chunk_sent = asyncio.Event()
+
+    class HangingBody(httpx2.AsyncByteStream):
+        async def __aiter__(self) -> AsyncIterator[bytes]:
+            yield body[:cut]
+            first_chunk_sent.set()
+            await asyncio.sleep(3600)
+
+        async def aclose(self) -> None:
+            # Closing needs a checkpoint, which a canceled, unshielded close would not get.
+            await anyio.lowlevel.checkpoint()
+            closed.append(True)
+
+    def handler(_request: httpx2.Request) -> httpx2.Response:
+        return httpx2.Response(
+            200, headers={"content-type": "text/event-stream"}, stream=HangingBody()
+        )
+
+    transport = make_transport(handler)
+
+    async def drain() -> None:
+        async for _ in transport.stream(a_request()):
+            pass
+
+    async with asyncio.timeout(5):
+        async with anyio.create_task_group() as group:
+            group.start_soon(drain)
+            await first_chunk_sent.wait()
+            await asyncio.sleep(0.05)
+            group.cancel_scope.cancel()
+
+    assert closed == [True], "the response stays open, and the upstream call keeps generating"
+
+
+async def test_a_normal_completion_closes_the_response_once(
+    make_transport: Callable[[Handler], AnthropicTransport],
+) -> None:
+    body = (FIXTURES / "text_with_citation.sse").read_bytes()
+    closes: list[bool] = []
+
+    class CountingBody(httpx2.AsyncByteStream):
+        async def __aiter__(self) -> AsyncIterator[bytes]:
+            yield body
+
+        async def aclose(self) -> None:
+            closes.append(True)
+
+    def handler(_request: httpx2.Request) -> httpx2.Response:
+        return httpx2.Response(
+            200, headers={"content-type": "text/event-stream"}, stream=CountingBody()
+        )
+
+    await collect(make_transport(handler))
+
+    assert closes == [True]

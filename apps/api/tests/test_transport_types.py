@@ -237,3 +237,12 @@ def test_fallbacks_without_the_fallback_beta_is_refused_at_construction() -> Non
 def test_no_fallbacks_is_allowed_with_or_without_the_beta() -> None:
     assert a_request(fallbacks=None, betas=()).fallbacks is None
     assert a_request(fallbacks=None).betas == BETAS
+
+
+def test_the_request_asks_for_automatic_caching_of_the_conversation() -> None:
+    kwargs = a_request().to_api_kwargs()
+
+    # Top level, so the cache follows the end of the history on every call. The system block keeps
+    # its own breakpoint; both are far under the limit of four.
+    assert kwargs["cache_control"] == {"type": "ephemeral"}
+    assert "cache_control" not in json.dumps(kwargs["messages"])

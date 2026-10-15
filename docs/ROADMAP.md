@@ -21,12 +21,12 @@ every stage.
 | 1 Tenancy, identity, permissions | Done. The whole-phase review found nothing high or medium; its fixes are in `fix/phase-1-review`. Released in `v0.1.0`. | `fix/phase-1-review` | [#8](https://github.com/musicteachj/open-door/pull/8), [#9](https://github.com/musicteachj/open-door/pull/9), [#10](https://github.com/musicteachj/open-door/pull/10), [#11](https://github.com/musicteachj/open-door/pull/11), [#14](https://github.com/musicteachj/open-door/pull/14) | [phase 1 plan](plans/2026-10-03-phase-1-tenancy-identity-permissions.md) | 2026-10-04 |
 | 2 Design system, shell, sandbox entry | Done. The whole-phase review found nothing high; its fixes are in `fix/phase-2-review`. Released in `v0.2.0`. | `fix/phase-2-review` | [#23](https://github.com/musicteachj/open-door/pull/23), [#24](https://github.com/musicteachj/open-door/pull/24), [#25](https://github.com/musicteachj/open-door/pull/25), [#26](https://github.com/musicteachj/open-door/pull/26), [#27](https://github.com/musicteachj/open-door/pull/27), [#28](https://github.com/musicteachj/open-door/pull/28), [#29](https://github.com/musicteachj/open-door/pull/29), [#30](https://github.com/musicteachj/open-door/pull/30), [#32](https://github.com/musicteachj/open-door/pull/32) | [phase 2 plan](plans/2026-10-05-phase-2-design-system-shell-sandbox-entry.md) | 2026-10-06 |
 | 3 Handbook and retrieval | Done. The whole-phase review found five real bugs, none high; its fixes are in `fix/phase-3-review`. Released in `v0.3.0`. Its screens are designed ([#36](https://github.com/musicteachj/open-door/pull/36)) | `fix/phase-3-review` | [#37](https://github.com/musicteachj/open-door/pull/37), [#38](https://github.com/musicteachj/open-door/pull/38), [#39](https://github.com/musicteachj/open-door/pull/39), [#40](https://github.com/musicteachj/open-door/pull/40), [#41](https://github.com/musicteachj/open-door/pull/41), [#42](https://github.com/musicteachj/open-door/pull/42), [#43](https://github.com/musicteachj/open-door/pull/43), [#44](https://github.com/musicteachj/open-door/pull/44), [#45](https://github.com/musicteachj/open-door/pull/45) | [phase 3 plan](plans/2026-10-07-phase-3-handbook-and-retrieval.md) | 2026-10-14 |
-| 4 Assistant core (read-only) | In progress: stage 1 (the conversation store, budgets, and transports) is built and awaiting its PR. Its conversation view isn't designed yet; only stages 5 and 6 wait for it | `feat/phase-4-store` | [#48](https://github.com/musicteachj/open-door/pull/48) | [phase 4 plan](plans/2026-10-14-phase-4-assistant-core.md) | 2026-10-14 |
-| 5 Time off | Not started | — | — | — | — |
-| 6 Cases and escalation | Not started | — | — | — | — |
-| 7 AI Ops console, reviewer experience, model decision | Not started | — | — | — | — |
-| 8 Hardening and deploy-readiness | Not started | — | — | — | — |
-| 9 Deploy to AWS | **Held** until the owner deploys all portfolio apps together | — | — | — | — |
+| 4 Assistant core (read-only) | In progress: stage 1 (the conversation store, budgets, and transports) is merged. Stage 2 (the loop, the guard, and the tools) is built and awaiting its PR. Its conversation view isn't designed yet; only stages 5 and 6 wait for it | `feat/phase-4-loop` | [#48](https://github.com/musicteachj/open-door/pull/48), [#49](https://github.com/musicteachj/open-door/pull/49) | [phase 4 plan](plans/2026-10-14-phase-4-assistant-core.md) | 2026-10-15 |
+| 5 Time off | Not started | - | - | - | - |
+| 6 Cases and escalation | Not started | - | - | - | - |
+| 7 AI Ops console, reviewer experience, model decision | Not started | - | - | - | - |
+| 8 Hardening and deploy-readiness | Not started | - | - | - | - |
+| 9 Deploy to AWS | **Held** until the owner deploys all portfolio apps together | - | - | - | - |
 
 **Design track (owner, in Claude Design):** in progress. The design system ("aubergine and
 cinnamon", Instrument Sans) and all five Phase 2 screens (the landing page, the app shell, the
@@ -52,9 +52,11 @@ Phase 4 is planned: see the
 [plan](plans/2026-10-14-phase-4-assistant-core.md), and ADRs
 [0009](adr/0009-assistant-turn-and-guard.md), [0010](adr/0010-scripted-model-and-replay.md), and
 [0011](adr/0011-insert-only-budget-ledger.md). Phase 4's base commit is `73b4942`. Stage 1, the
-conversation store, budgets, and transports, is built on `feat/phase-4-store`. Next: stage 2, the
-loop, the guard, and the tools (`feat/phase-4-loop`), at effort `medium`, in a fresh session, after
-stage 1's PR merges. The Anthropic API key is in `apps/api/.env`; before stage 3's first live eval
+conversation store, budgets, and transports, merged in #49. Stage 2, the loop, the guard, and the
+tools, is built on `feat/phase-4-loop`; the owner approved the crisis text and the "can't answer
+right now" text on 2026-10-15. Next: stage 3, the evals (`feat/phase-4-evals`), at effort
+`medium`, in a fresh session, after stage 2's PR merges. Its first smoke run is the first live
+evidence for stage 2's prompts. The Anthropic API key is in `apps/api/.env`; before stage 3's first live eval
 run, the owner confirms the $25 monthly spend limit in the Claude Console.** Later phases' screens are designed
 shortly before each phase. **Design for Phase 3 is done:** the handbook browser and the passage
 panel were approved on 2026-10-07 (see [`design/screens/06-handbook/`](design/screens/06-handbook/notes.md)),

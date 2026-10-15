@@ -2956,7 +2956,7 @@ trip reused them, the bootstrap created both logins, `alembic check` was clean, 
 - [ ] **Step 2: Update the Phase 1 row in `docs/ROADMAP.md`,** using today's date
 
 ```markdown
-| 1 Tenancy, identity, permissions | In progress: stage 1 of 4 (roles and tenancy) | `feat/phase-1-tenancy` | — | [phase 1 plan](plans/2026-10-03-phase-1-tenancy-identity-permissions.md) | <today> |
+| 1 Tenancy, identity, permissions | In progress: stage 1 of 4 (roles and tenancy) | `feat/phase-1-tenancy` | - | [phase 1 plan](plans/2026-10-03-phase-1-tenancy-identity-permissions.md) | <today> |
 ```
 
 - [ ] **Step 3: In `docs/BACKLOG.md`, replace the Phase 1 section** with the two items that are

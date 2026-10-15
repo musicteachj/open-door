@@ -136,8 +136,8 @@ row and creates a new one, and signing out deletes it. Deleted with the sandbox 
 | `id`, `tenant_id` | A random UUID, and the sandbox | Random rather than a sequence, so one sandbox can't estimate another's activity. |
 | `occurred_at` | When it happened (UTC) | The record. |
 | `actor_person_id`, `via` | Who acted, and how: `ui`, `assistant`, or `system` | Every action, including the assistant's from Phase 4, is attributed. |
-| `action`, `target_type`, `target_id` | What was done, and to what | Phase 1 records `sandbox.created`, `session.persona_switched`, `session.ended`, and `person_private.read`. |
-| `before`, `after` | Non-private fields only, such as `personaKey`, or the names of the private fields read | Never private values, so a privacy deletion request never means editing this log. |
+| `action`, `target_type`, `target_id` | What was done, and to what | Phase 1 records `sandbox.created`, `session.persona_switched`, `session.ended`, and `person_private.read`. Phase 4 adds `escalation.offered` (target `ai_turn`), written when the assistant shows the crisis, sensitive, or "can't answer right now" panel, and when a budget stop ends a turn before the safety check could run (`kind` `unavailable`, `reason` `budget`: the budget message carries 911 and 988 instead of a panel), and `person_private.read` with `via` `assistant` when `get_my_profile` runs. |
+| `before`, `after` | Non-private fields only, such as `personaKey`, the names of the private fields read, or an escalation's `kind` | Never private values, so a privacy deletion request never means editing this log. |
 | `proposal_id` | The confirmed proposal, from Phase 5 | Ties an executed action to what the person confirmed. |
 | `request_id` | The request's ID | Matches the event with that request's log lines. |
 
@@ -181,11 +181,11 @@ Every ID below is a random UUID, so one sandbox can't estimate another's activit
 |---|---|---|
 | `id`, `tenant_id`, `person_id`, `conversation_id` | IDs: the turn, its sandbox, its owner, and its conversation | Identity and ownership. |
 | `question` | What the person asked | Shown after a reload. |
-| `status`, `error_code` | `running`, `completed`, `stopped`, `failed`, `crisis`, or `guard_unavailable`; and the error code of a failed turn | One turn runs at a time per conversation. The code explains a failure. |
+| `status`, `error_code` | `running`, `completed`, `stopped`, `failed`, `crisis`, or `guard_unavailable`; and a code. A failed turn's code is the one its error event sent (`refusal`, `model-unavailable`, `budget-sandbox`, `budget-daily`, `too-many-calls`, `internal`), or a more exact one the client sees as `internal`: `prompt-leak` (the system prompt's canary was caught and withheld), `guard-error` (the safety check couldn't run), or `abandoned`. A completed turn cut off by the output limit has `max-tokens`. | One turn runs at a time per conversation. The code explains a failure or an incomplete answer. |
 | `started_at`, `ended_at` | When the turn began and ended (UTC) | The record. |
 | `answer_text`, `citations` | The answer (a stopped turn keeps its partial text) and its citations as JSON | What the person sees after a reload. |
 | `guard_verdict` | The guard's verdict as JSON; null if the guard did not run | Phase 7's console shows why a turn was routed. |
-| `tool_calls`, `sections_retrieved` | Each tool call (name, a short summary of its input, success, duration), and the handbook sections the search returned | What the assistant did. The summaries never hold private values. |
+| `tool_calls`, `sections_retrieved` | Each tool call (name, a short summary of its input, success, duration), and the handbook sections the search returned | What the assistant did. A search's summary holds up to 60 characters of its query (and `find_people`'s up to 40), after control characters are removed. Tool calls past the limits (5 per response, 20 per question) aren't run, and a round records them as one `skipped` entry with a `count`. The summaries never hold private values. |
 | `served_by_models`, `effort`, `prompt_version`, `toolset_version` | The model IDs that served the turn, and the settings in effect | Explains a result, and shows when a fallback happened. |
 | `input_tokens`, `output_tokens`, `cache_read_tokens`, `cache_write_tokens`, `cost_usd` | Token counts and the cost at list price | Measures cost and caching. |
 | `first_event_ms`, `total_ms` | Milliseconds to the first visible event, and in total | Measures latency. |
@@ -298,7 +298,45 @@ Voyage AI turns text into the vectors that handbook search compares.
 
 - **The handbook's text is sent now,** by `make embed` only, and only for passages that have no
   vector in the committed cache yet. CI and the tests never call Voyage: they read the cache.
-- **Assistant questions are sent from Phase 4,** so a question can be searched by meaning.
+- **The assistant's search queries are sent from Phase 4.** When the assistant calls
+  `search_handbook`, its query (written by the model from the person's question, up to 500
+  characters) is turned into a vector before the database is read. The person's whole question
+  isn't sent to Voyage, only that query.
 - **The run-time query cache holds hashes and vectors, never text.**
 - **The committed cache files** (`handbook/embeddings/`) hold vectors keyed by hashes of the
   model, the size, and the text, not the text itself.
+
+### Anthropic (the assistant's models)
+
+Anthropic runs the models behind the assistant: Claude Opus 5.5 answers, and Claude Haiku 5.5 is
+the safety check that reads each message first. Anthropic is the data processor for the Claude API.
+
+- **What is sent, on each turn:**
+  - to the safety check: the person's new message, and up to 1,000 characters of the assistant's
+    last answer
+  - to the assistant: the system prompt, the tool definitions, the conversation so far, the new
+    question, and a short context message (the person's first name, role, location, employment
+    type, today's date, and the handbook version)
+  - the tools' results, which include handbook passages, directory cards, and, when someone asks
+    the assistant about themselves, their own private details (personal email, phone, home
+    address, and date of birth)
+- **What isn't sent:** a crisis message, or a message the safety check couldn't read, never
+  reaches the assistant model. A crisis message does go to the safety check, which is what
+  recognizes it.
+- **Nothing is sent from tests, CI, or `make dev`.** They use the scripted stand-in. Only a
+  deliberate `AI_TRANSPORT=anthropic` run or a live eval calls the API.
+- **Anthropic's terms, quoted:**
+  - Retention: "we automatically delete inputs and outputs on our backend within 30 days of
+    receipt or generation". Exceptions: inputs and outputs flagged for a usage policy violation
+    are kept "for up to 2 years and trust and safety classification scores for up to 7 years",
+    and data may be kept "as required by law".
+  - Training: "Retained data is never used for model training without your express permission."
+  - Open Door gives no such permission, sends no feedback to Anthropic, and doesn't use zero data
+    retention (ZDR), which needs a separate agreement.
+
+> Source: Anthropic, "How long do you store my organization's data?" (privacy.claude.com, last
+> updated 2026-07-01), and "API and data retention" (platform.claude.com/docs), both read on
+> 2026-10-15.
+
+- **Logs hold no conversation content.** The API logs IDs, timings, exception types, and stop
+  reasons, never a question, an answer, a tool result, or the system prompt.

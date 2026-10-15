@@ -18,6 +18,7 @@ from pathlib import Path
 from typing import Any, Final
 
 from app.ai.pricing import SCRIPTED_MODEL, IterationUsage, Usage
+from app.ai.text import one_line
 from app.ai.transport import (
     GUARD_NEW_MESSAGE_TAG,
     Finished,
@@ -197,7 +198,7 @@ def _index_of_first_result(messages: Sequence[dict[str, Any]]) -> int:
 
 
 def _sentences(text: str) -> list[str]:
-    return [part for part in re.split(r"(?<=[.!?])\s+", " ".join(text.split())) if part]
+    return [part for part in re.split(r"(?<=[.!?])\s+", one_line(text)) if part]
 
 
 def _excerpt(text: str) -> str:
