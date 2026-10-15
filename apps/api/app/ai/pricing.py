@@ -124,6 +124,11 @@ class IterationUsage:
     usage: Usage
 
 
+def is_priced(model: str) -> bool:
+    """Whether a price is pinned for this exact model name (the scripted stand-in included)."""
+    return model in PRICES
+
+
 def price_of(model: str, prompt_tokens: int = 0) -> Price:
     """The pinned price of a model for a prompt of this many tokens. Raises for an unknown model."""
     try:

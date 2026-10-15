@@ -1461,7 +1461,7 @@ Then run `make db-stop`, re-run the curl, and expect `503` with
 
 ```markdown
 | Planning (repo, spec, roadmap, design brief) | Done | `docs/initial-planning` | [#1](https://github.com/musicteachj/open-door/pull/1) | [initial plan](plans/2026-09-29-open-door-initial-plan.md) | 2026-09-29 |
-| 0 Foundation | In progress: stage 1 of 3 (API foundation) | `feat/phase-0-api-foundation` | — | [phase 0 plan](plans/2026-09-29-phase-0-foundation.md) | 2026-09-29 |
+| 0 Foundation | In progress: stage 1 of 3 (API foundation) | `feat/phase-0-api-foundation` | - | [phase 0 plan](plans/2026-09-29-phase-0-foundation.md) | 2026-09-29 |
 ```
 
 - [ ] **Step 3: Run `/code-review medium`** on the uncommitted diff, and fix anything real it

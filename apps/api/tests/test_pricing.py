@@ -272,7 +272,7 @@ def test_the_first_calls_estimate_covers_the_whole_serialized_request() -> None:
         "system": [
             {
                 "type": "text",
-                "text": "人事のアシスタントです。Café — naïve résumé. " * 200,
+                "text": "人事のアシスタントです。Café … naïve résumé. " * 200,
             }
         ],
         "tools": [
@@ -394,3 +394,11 @@ def test_models_priced_alike_give_the_first() -> None:
 def test_a_model_with_no_pinned_price_is_the_dearer_as_it_is_when_settling() -> None:
     assert dearer_model(OPUS, "claude-future-9") == "claude-future-9"
     assert dearer_model("claude-future-9", OPUS) == "claude-future-9"
+
+
+def test_a_pinned_name_is_priced_and_a_dated_snapshot_is_not() -> None:
+    from app.ai.pricing import is_priced
+
+    assert is_priced("claude-haiku-5-5")
+    assert is_priced("scripted")
+    assert not is_priced("claude-haiku-5-5-20261001")

@@ -10,9 +10,11 @@ must come from httpx2.
 
 import asyncio
 import json
+import logging
 from collections.abc import AsyncIterator, Awaitable
 from typing import Any, cast
 
+import anyio
 import httpx2
 from anthropic import (
     APIConnectionError,
@@ -68,6 +70,10 @@ MODEL_CONNECT_TIMEOUT_SECONDS = 10
 MODEL_READ_TIMEOUT_SECONDS = 90
 MODEL_WRITE_TIMEOUT_SECONDS = 30
 MODEL_POOL_TIMEOUT_SECONDS = 10
+# Closing the stream is shielded from cancellation (see `_close_quietly`); this bounds the wait.
+STREAM_CLOSE_TIMEOUT_SECONDS = 5
+
+logger = logging.getLogger(__name__)
 
 _GUARD_OUTPUT_CONFIG: OutputConfigParam = {
     "effort": "low",
@@ -101,27 +107,35 @@ class AnthropicTransport:
         # written by the model that declined, and it is not in the message we store (see
         # `_echoable_content`), so running it would answer a call the history never made.
         pending_tools: list[ToolCall] = []
+        final: ParsedBetaMessage[Any] | None = None
         try:
             async with self.client.beta.messages.stream(**request.to_api_kwargs()) as stream:
                 events = aiter(stream)
-                while True:
-                    try:
-                        raw = await _sdk_read(anext(events))
-                    except StopAsyncIteration:
-                        break
-                    except ValueError as error:
-                        # This try wraps only the SDK reading the stream, so every ValueError here
-                        # is the SDK's, never ours. Unparsable tool JSON is the one the loop can
-                        # recover from; any other (an event that fails to decode, say) means the
-                        # stream was not readable, and the typed API errors are caught below.
-                        if str(error).startswith(UNPARSABLE_TOOL_INPUT_PREFIX):
-                            raise InvalidToolInput(INVALID_TOOL_INPUT_TEXT) from error
-                        raise ModelUnavailable(
-                            f"{UNREADABLE_RESPONSE_TEXT} ({type(error).__name__})"
-                        ) from error
-                    for event in _translate(raw, pending_tools):
-                        yield event
-                final = await _sdk_read(stream.get_final_message())
+                try:
+                    while True:
+                        try:
+                            raw = await _sdk_read(anext(events))
+                        except StopAsyncIteration:
+                            break
+                        except ValueError as error:
+                            # This try wraps only the SDK reading the stream, so every
+                            # ValueError here is the SDK's, never ours. Unparsable tool JSON is
+                            # the one the loop can recover from; any other (an event that fails
+                            # to decode, say) means the stream was not readable, and the typed
+                            # API errors are caught below.
+                            if str(error).startswith(UNPARSABLE_TOOL_INPUT_PREFIX):
+                                raise InvalidToolInput(INVALID_TOOL_INPUT_TEXT) from error
+                            raise ModelUnavailable(
+                                f"{UNREADABLE_RESPONSE_TEXT} ({type(error).__name__})"
+                            ) from error
+                        for event in _translate(raw, pending_tools):
+                            yield event
+                    final = await _sdk_read(stream.get_final_message())
+                finally:
+                    # Closed here, shielded: a cancel unwinding this generator would otherwise cut
+                    # the SDK's own close short, and the upstream call would keep generating (and
+                    # billing) tokens nobody reads.
+                    await _close_quietly(stream, completed=final is not None)
         except APIStatusError as error:
             raise _unavailable_or_spend_limit(error) from error
         except APIConnectionError as error:
@@ -204,6 +218,22 @@ def from_settings(settings: Settings) -> AnthropicTransport:
             ),
         )
     )
+
+
+async def _close_quietly(stream: Any, *, completed: bool) -> None:
+    """Close the SDK's stream, shielded from cancellation and with a short bound. After a normal
+    completion the SDK has closed its response itself, so that is all there is to do."""
+    try:
+        with anyio.CancelScope(shield=True), anyio.move_on_after(STREAM_CLOSE_TIMEOUT_SECONDS):
+            await stream.close()
+            if completed:
+                return
+            # The SDK closes its response when a read is canceled, but that close is itself
+            # canceled partway (the response is marked closed first, so `close()` above does
+            # nothing then). Closing the response's byte stream again, shielded, finishes it.
+            await stream.response.stream.aclose()
+    except Exception as error:
+        logger.warning("Closing the model stream failed (%s)", type(error).__name__)
 
 
 async def _sdk_read[T](read: Awaitable[T]) -> T:
@@ -342,6 +372,7 @@ def _finished(final: ParsedBetaMessage[Any], *, requested_model: str) -> Finishe
         usage=usage,
         iterations=iterations,
         served_by=serving_model,
+        fell_back=fell_back,
     )
 
 

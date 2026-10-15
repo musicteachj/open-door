@@ -23,6 +23,7 @@ type AuditAction = Literal[
     "session.persona_switched",
     "session.ended",
     "person_private.read",
+    "escalation.offered",
 ]
 type Via = Literal["ui", "assistant", "system"]
 

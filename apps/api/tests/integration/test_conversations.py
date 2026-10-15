@@ -113,7 +113,7 @@ TRICKY_ASSISTANT_CONTENT: list[dict[str, Any]] = [
     },
     {
         "type": "text",
-        "text": "Café ☕ — 40 hours 🙂",
+        "text": "Café ☕ … 40 hours 🙂",
         "citations": [
             {
                 "type": "search_result_location",

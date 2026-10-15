@@ -230,10 +230,10 @@ idle → sending → streaming → (awaiting_confirmation) → idle
 | Data | Employee (self) | Employee (others) | Manager (their reports, direct and indirect) | HR |
 |---|---|---|---|---|
 | Directory: name, title, department, manager, location, work email | Read | Read | Read | Read |
-| Private: personal email, phone, home address, date of birth | Read own | — | — | Read |
-| Time-off balances | Own | — | Read | Read |
-| Time-off requests | Own: read, create, cancel while pending | — | Read, approve or deny; **type only, never the private reason** | Read |
-| Cases | Own: open, read status | — | — | Read, update status |
+| Private: personal email, phone, home address, date of birth | Read own | - | - | Read |
+| Time-off balances | Own | - | Read | Read |
+| Time-off requests | Own: read, create, cancel while pending | - | Read, approve or deny; **type only, never the private reason** | Read |
+| Cases | Own: open, read status | - | - | Read, update status |
 | Handbook | Browse everything | | | |
 
 The handbook is company-public. Anyone can browse any section, including other states' addenda.

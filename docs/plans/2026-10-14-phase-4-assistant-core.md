@@ -1638,6 +1638,162 @@ the installed `anthropic` 1.13.0.
 browser tests (both unchanged). About 2,900 lines of application code, migration, and config,
 above the plan's estimate of 1,300 and the 1,500 guideline, so the PR gives a reading guide.
 
+### Stage 2 (`feat/phase-4-loop`, 2026-10-15)
+
+Run in four batches (A: Tasks 10 and 11, B: 12 and 13, C: 14 and 15, D: 16), each with one Sonnet
+implementer and one combined Sonnet review. No batch had a high finding. Every fix was written test
+first and mutation-proved. Nothing called a paid API: the scripted model and httpx2's
+`MockTransport` stand in, and the first live evidence for these prompts is Stage 3's smoke run.
+
+**API facts checked this stage** (the claude-api skill and Anthropic's docs, 2026-10-15):
+- Strict tool schemas reject `minLength`, `maxLength`, `minimum`, and `maximum` with a 400. The
+  schemas state their limits in the descriptions, and our own validation enforces them before a
+  tool runs (inputs stream eagerly, so the API doesn't check them).
+- A `tool_result` can't mix `search_result` blocks with other blocks, so "no passages matched" is
+  a lone text block. Citations must be enabled on every search result or none.
+- A mid-conversation `system` message must follow a user message and be last or followed by an
+  assistant message. So the per-turn context is stored only together with the turn's first
+  complete answer, and a turn with no complete answer stores its question alone.
+
+**Prompts and context (Tasks 10 and 11).**
+- **The prompt also covers invariants 2 and 3:** it doesn't calculate time-off balances or how long
+  a leave lasts, and it can't book, change, or cancel anything. The plan's list had neither.
+- **The golden hashes are a history table** keyed by prompt and version, so a hash can't be edited
+  in place to hide a change. The tool definitions' hash joined it in Task 12.
+- **The canary is read from the prompt's last line** and is written nowhere else.
+- **`actor_view` needs only `Me`.** `get_me` already carries the name, location, timezone,
+  employment type, and role, so there's no loader. The context collapses whitespace in every
+  value and uses fixed English weekday names.
+
+**Tools and citations (Tasks 12 and 13).**
+- `ToolContext`, `ToolOutcome`, and the input checks live in `app/ai/tools/base.py`, to avoid an
+  import cycle between the registry and the tools.
+- `find_people` returns `{"people": [...], "truncated": ...}`, so the model can't claim there are
+  only ten people, and it cleans its query with `clean_query`.
+- A trace summary holds up to 60 characters of the cleaned search query (40 for `find_people`).
+- A multi-block citation's events all carry the range's whole `cited_text`: `SourceEntry` holds no
+  passage texts.
+- `escalation.offered` needed no migration: nothing in the database constrains audit actions.
+
+**The guard and the fixed texts (Tasks 14 and 15).**
+- **Contradictory verdicts route safer,** as Stage 1 asked, and every pairing is tested.
+- **The guard defuses its own tags** in the person's text and the previous answer, so neither can
+  close a tag early.
+- **`screen` never raises** except `SpendLimitReached`, or a cancellation, which propagates.
+- **The owner approved two fixed texts on 2026-10-15,** each tied to its SHA-256 by a test:
+  - the crisis text, with 911 first
+  - the "can't answer right now" text, which now also gives 911 and 988 because a failed guard
+    can't tell a crisis from anything else (ADR 0009 amended)
+
+  988lifeline.org was read again the same day.
+- `hr_contact` orders by family name, as the directory does. `Person` has no active flag.
+
+**The loop (Task 16).** The implementer wrote the code before the tests; nine rules were then
+mutation-proved, and the review hunted for tests that pass against broken code.
+- **Stage 1's five rules each have a named test:** the whole-turn deadline (8 minutes, a fixed end
+  time, below the 10-minute abandoned-turn rule), `settle` never retried and an unknown cost
+  keeping its reservation, no empty message stored, contradictory verdicts through `run_turn`, and
+  estimates from `Finished.usage` with tokens from `total_usage`.
+- **Decisions where the spec was silent:**
+  - An answer cut off by `max_tokens` is `completed` with `error_code = "max-tokens"`, and
+    `turn.completed` carries `incomplete: true`. A cut-off `tool_use` is never stored.
+  - The deadline ends the turn as `model-unavailable`; the spec has no timeout code.
+  - A stop in the middle of a call keeps that call's reservation (its cost is unknown until the
+    call ends), so the plan's "budget settled" holds for every finished call, not the in-flight one.
+  - A refused turn stores only its question and clears its text and citations.
+  - Unparsable tool JSON re-issues the same request once, only if the person saw none of that
+    call's text; it counts toward the eight calls (narrowed in review rounds 2 and 3).
+  - Crisis and guard-unavailable turns end with their escalation, without `turn.completed`.
+  - The tools run from the finished message's `tool_use` blocks, not the `ToolCall` events.
+  - A turn's cost includes the guard and any kept reservation, matching the ledger.
+- **`Finished.fell_back`** is new, set only from the API's own fallback signal, because the
+  fallback blocks are stripped from the stored message.
+- **The shielded cleanup gives up after 10 seconds** (`CLEANUP_TIMEOUT`) and leaves the turn for
+  `recover_abandoned`, so a hung database can't hang the request. A role-level
+  `statement_timeout` is backlogged for Phase 8.
+- **Citation offsets count UTF-16 code units,** as the browser does, so an emoji can't shift a
+  marker. The spec says "characters"; this is what the client will index.
+- `anyio` is a declared dependency now.
+
+**The close's `/code-review medium`: eleven rounds.** Rounds 1 to 10 each found at least one
+medium; round 11 found only lows (and repeats), so the loop stopped there, per the stopping rule.
+Every fix was written test first and mutation-proved. What changed the design:
+- **A turn goes into history whole, in one write, only when it ends with an answer** (round 2).
+  Rounds are held in memory until then; any other ending stores the question alone. This makes the
+  spec's "a stopped turn contributes only its question" true, and replaces the plan's
+  "append each round as it completes".
+- **Escalations:** a sensitive turn routes to HR on every ending, not only a completed answer
+  (round 1). Crisis, "can't answer right now", and budget stops are audited too (rounds 2 and 6),
+  before `finish_turn` (rounds 4 and 5).
+- **Unscreened messages still get 911 and 988:** if the guard can't run, the turn ends with the
+  "can't answer right now" text (round 4). The owner chose to give the two budget messages the same
+  line instead of a second panel, and approved and hashed them on 2026-10-15 (round 6).
+- **The guard's previous answer** is the turn just before, its last 1,000 characters, or the fixed
+  text that turn showed (crisis, "can't answer right now", a budget message, a refusal) (rounds 5,
+  9, 10, and 11). The guard uses the conversation's pinned model (round 1), priced at the name the
+  API echoes back when it has a pinned price, else at the pin (round 10).
+- **Cancellation and time:** the deadline bounds each read, never across a `yield` (round 5, which
+  undid round 3's single timer); every shielded step is time-bounded (rounds 1, 5); the transport
+  closes the SDK stream shielded, reaching one level into the SDK's response (round 5, pinned by a
+  test); tools have a 30-second timeout (round 3); no reservation for a call after the deadline
+  (round 6).
+- **The canary** is checked once where every event leaves, with the last 22 characters of answer
+  text held back so a split canary is caught; a hit ends the turn as `prompt-leak` (rounds 7 to 9).
+- **Other fixes:** top-level automatic prompt caching (round 6, first live proof in Stage 3);
+  `start_turn_run` raises its checks before streaming, for Stage 4's status codes (round 7); a cut-off
+  thinking block is never stored (round 7); `offsetUtf16` replaces `offset` in the citation event,
+  and the spec says so (round 3); the em-dash check pins `LC_ALL=C` (it matched nothing under CI's
+  locale) and skips recorded eval fixtures and lockfiles (rounds 2 and 5).
+- **Accepted and backlogged:** a stopped call keeps its whole reservation until Stage 4 can settle
+  it from streamed usage; the stream route must bound its writes (time paused at a `yield` isn't
+  counted by the deadline); a conversation past the context window; a role-level
+  `statement_timeout`.
+- **Dismissed, with the reason:** an empty text block on `max_tokens` (the transport strips them);
+  reading history and sources in two queries, and parsing tool input twice (negligible, and the
+  agreement is tested); the two close layers (they close different objects); the guard's timeout in
+  both `guard.py` and the transport (identical outcome); the first call's serialized estimate
+  (negligible beside the model call); reaching back past a blank turn for the guard's context
+  (stale); storing the question of a turn stopped during the guard (it was never screened).
+- **The round-11 lows, fixed without another round:** a Console spend-limit refusal settles its
+  reservation at $0; every tool task always reports its end; a refused turn gives the next guard
+  the refusal text; the search query's length is checked after cleaning; the guard's tag names
+  are escaped in its regex.
+
+**The Opus security review (owner's choice, effort high, 2026-10-15).** The plan gave Stage 2 only
+Sonnet reviews; the owner added one Opus reviewer, briefed with the invariants and the spec's
+security seams. No high findings. Fixed, each test first and mutation-proved:
+- **Medium: unbounded tool fan-out.** One response could start about 300 tools at once, filling
+  the connection pool, sending 150 unreserved embedding calls, and slowing another person's crisis
+  text about 20 times. Now at most 5 tools per response, 3 at a time, and 20 per turn; the rest get
+  an `is_error` result without running.
+- **The canary check** also catches a canary split across progress notes, and ignores invisible
+  format characters.
+- **`find_people`'s `truncated`** is the cursor only again, so it can't hint that a hidden person
+  exists (round 1 had added the policy filter to it).
+- **The crisis text never waits** more than 2 seconds on the HR-contact lookup.
+- **`turn.completed` no longer sends `cacheReadTokens` or `costUsd`** to the browser (a possible
+  cross-visitor side channel through the shared prompt cache: the cost reveals the cached share);
+  the trace keeps both, and the spec says so.
+- **The re-check** found the canary could still be split between a progress note and the answer
+  (now one shared tail across both), and skipped tools flooded the events and trace (now one count
+  per round).
+- **Backlogged:** quote directory values in the per-turn context before names become editable.
+- **Not proven, noted:** look-alike guard tags (only a live run would tell, and a person could only
+  skip their own screening); a question the API always rejects leaves that conversation stuck, and
+  a new conversation recovers.
+
+**Writing rules (owner, 2026-10-15).** No em dashes anywhere: `make check-docs` fails on one,
+except in the frozen initial plan and `docs/design/`. American English was already enforced.
+
+**A process lesson.** A mutation proof that restores a file with `cp -p` after a same-length
+change leaves a stale `.pyc` that Python keeps running. Restore with plain `cp`, then `touch`, and
+clear `__pycache__`.
+
+**Final counts (Stage 2):** 1,611 API tests (639 against the database), 1,006 web unit tests, and
+175 browser tests (both unchanged), with four import contracts kept. About 2,650 lines of
+application code and config, above the plan's estimate of 1,200 and the 1,500 guideline, so the PR
+gives a reading guide.
+
 ## Backlog
 
 Deferrals found during execution go in `docs/BACKLOG.md` under the phase that should pick them up,

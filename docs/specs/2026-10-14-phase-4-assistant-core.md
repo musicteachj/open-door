@@ -269,15 +269,16 @@ dropped and the mismatch is logged.
 **The `citation` event** is sent when the cited text block ends:
 
 ```json
-{ "marker": 1, "offset": 214, "sectionId": "CA-4.3", "passageId": "p2",
+{ "marker": 1, "offsetUtf16": 214, "sectionId": "CA-4.3", "passageId": "p2",
   "title": "Sick leave", "groupName": "California addendum", "audienceLabel": "California",
   "lastUpdated": "2026-09-12", "deepLink": "/handbook/CA-4.3?passage=p2", "citedText": "…" }
 ```
 
 - `marker` numbers the distinct passages in this answer, from 1. A passage cited twice keeps its
   number.
-- `offset` is the answer's length in characters where the cited block ends. That's where the
-  marker goes.
+- `offsetUtf16` is the answer's length where the cited block ends, counted in UTF-16 code units
+  as the browser indexes strings, so an emoji earlier in the answer can't shift the marker. That's
+  where the marker goes. (Changed in Stage 2 from `offset` in characters.)
 - A citation spanning several blocks becomes one event per passage.
 
 ### 6. Ending a turn
@@ -344,7 +345,7 @@ or the CSRF header.
 | `tool.finished` | `{ id, ok, summary, durationMs }` |
 | `escalation` | `{ kind: "sensitive" \| "crisis" \| "unavailable", message, hrContact, offerCase: false }`. `message` is fixed text, never generated |
 | `error` | `{ code, message, requestId }`. The codes: `refusal`, `model-unavailable`, `budget-sandbox`, `budget-daily`, `too-many-calls`, `internal` |
-| `turn.completed` | `{ turnId, servedBy, usage: { inputTokens, outputTokens, cacheReadTokens, costUsd } }` |
+| `turn.completed` | `{ turnId, servedBy, usage: { inputTokens, outputTokens } }`, plus `incomplete: true` when the output limit cut the answer off. The cache counts and the cost stay in the trace, not the browser: the prompt cache is shared across the account, so a cache hit (or the cost, which reveals it) could hint that another visitor asked the same question (Stage 2 security review) |
 
 - **A heartbeat comment** (`: keep-alive`) after every 15 seconds without an event.
 - **Headers:** `Cache-Control: no-store, no-transform`, `X-Accel-Buffering: no`, and no
@@ -540,7 +541,7 @@ An item passes only if every line is yes. The uncited-claim count is reported on
 
 | Run | What | Cost (Opus 5.5, low effort) | Hard cap | When |
 |---|---|---|---|---|
-| Offline replay | Everything, from fixtures | $0 | — | CI, every PR touching `apps/api`, `evals`, or `handbook` |
+| Offline replay | Everything, from fixtures | $0 | - | CI, every PR touching `apps/api`, `evals`, or `handbook` |
 | Smoke | 25 items, 1 trial | about $1.20 | $2 | Before each PR that changes a prompt, a tool, or the guard |
 | Full | about 100 items, 3 trials, variance reported | about $14 | $16 | Before a release |
 | Effort comparison | The smoke set at `low` and at `medium` | about $2 | $3 | Once, in the evals stage |

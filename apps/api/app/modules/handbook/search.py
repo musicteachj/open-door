@@ -74,14 +74,16 @@ async def pinned_version_id(db: AsyncSession) -> UUID | None:
     return (await db.scalars(select(Tenant.handbook_version_id))).first()
 
 
-def clean_query(query: str) -> str:
+def clean_query(query: str, *, max_characters: int | None = MAX_QUERY_CHARACTERS) -> str:
     """The question with control, format, surrogate, private-use and unassigned characters turned
-    into spaces (the excerpt markers among them), whitespace collapsed, and the length capped. An
-    empty result is refused."""
+    into spaces (the excerpt markers among them), whitespace collapsed, and the length capped (not
+    with `max_characters=None`, for a caller that checks the length itself). An empty result is
+    refused."""
     spaced = "".join(
         " " if unicodedata.category(char) in _DROPPED_CATEGORIES else char for char in query
     )
-    cleaned = " ".join(spaced.split())[:MAX_QUERY_CHARACTERS].strip()
+    collapsed = " ".join(spaced.split())
+    cleaned = (collapsed if max_characters is None else collapsed[:max_characters]).strip()
     if not cleaned:
         msg = "The search query is empty."
         raise ValueError(msg)

@@ -59,6 +59,13 @@ class ModelRequest:
             "betas": list(self.betas),
             "thinking": {"type": "adaptive", "display": "updates"},
             "output_config": {"effort": self.effort},
+            # Automatic caching: the API puts a breakpoint at the end of the conversation on every
+            # call, so a tool loop and a later turn read the history from the cache, not at the
+            # full input rate. It is a request parameter, never part of a message, so the stored
+            # history stays byte for byte as written. The system block keeps its own breakpoint.
+            # The first live proof is Stage 3's smoke run (`usage.cache_read_input_tokens` above
+            # zero on later calls).
+            "cache_control": {"type": "ephemeral"},
             "system": copy.deepcopy(list(self.system)),
             "tools": [
                 {**copy.deepcopy(tool), "strict": True, "eager_input_streaming": True}
@@ -187,6 +194,9 @@ class Finished:
     # This is the source of truth for what the call spent (see `pricing.total_usage`).
     iterations: tuple[IterationUsage, ...]
     served_by: str
+    # True when the API itself signaled a fallback (a `fallback_message` iteration or a `fallback`
+    # block), never from comparing model names. The loop records it on the turn.
+    fell_back: bool = False
 
 
 ModelEvent = StatusNote | TextDelta | TextBlockEnd | ToolCall | Finished

@@ -108,7 +108,12 @@ effort costs more on every step, so match it to the work:
 ## Writing
 
 - **American English everywhere:** docs, UI copy, code comments, identifiers, and commit and PR
-  text. Write "color", "organization", "canceled", "labeled", "behavior".
+  text. Write "color", "organization", "canceled", "labeled", "behavior". `make check-docs` fails
+  on British spellings.
+- **No em dashes anywhere:** UI copy, fixed texts, prompts, the handbook, docs, code comments,
+  and commit and PR text. Use a comma, a colon, parentheses, or two sentences. An empty table cell
+  is "-". `make check-docs` fails on an em dash, except in the frozen initial plan, the Claude
+  Design handoff in `docs/design/`, recorded eval fixtures (model output), and lockfiles.
 - **Commits and pull requests must be human readable.** Someone who never saw the session should
   understand what changed and why from the message alone.
   - **Commit subject:** one plain sentence in the imperative, at most 72 characters. Say what

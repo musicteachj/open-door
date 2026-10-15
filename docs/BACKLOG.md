@@ -106,12 +106,6 @@ should pick it up. When one is done, delete it here and record it in the changel
   fixed in stage 1; the audit columns need the same type change and a data fix for existing rows.
   Phase 7's console is the first to query them. (Phase 4 stage 1 review.)
 
-- **Map search hits to `search_result` blocks, and open the passage panel on a citation's
-  passage.** Each `search_handbook` hit carries its deep link, title, and passage texts, so it
-  maps one to one onto a Claude `search_result` block, and a citation's block index names a
-  passage. Call `embed_query` before opening the database session, and take the version only from
-  `pinned_version_id`. A section can appear twice, once per chunk; dedupe if the answer view
-  wants one card per section. (Phase 3 spec, "The shape Phase 4 cites".)
 - **Record why the assistant is not a high-risk AI system.** Annex III of the EU AI Act lists
   systems used for employment decisions as high-risk. Article 6(3) exempts a system that doesn't
   profile people or materially influence decisions, and Article 6(4) requires that assessment to
@@ -127,6 +121,30 @@ should pick it up. When one is done, delete it here and record it in the changel
   Phase 4 disclosure should cite the article.
   Source: EU AI Act Article 113 (https://artificialintelligenceact.eu/article/113/), read on
   2026-10-04. Article 50 is in Chapter IV, which follows the general date of 2 August 2026.
+- **Settle a stopped call for the tokens it used.** A turn stopped mid-call keeps that call's
+  whole reservation (the estimated input plus 8,000 output tokens), because the transport reports
+  usage only when a call finishes. The stream's `message_start` and `message_delta` events carry
+  the input and output so far, so the transport could hand the loop a running usage and the stop
+  could settle for that instead, as the spec describes. Until then, every stop counts more than it
+  spent, which errs toward the caps. Stage 4, where a closed connection becomes a stop.
+  (Phase 4 stage 2 `/code-review medium`.)
+- **Quote directory values in the per-turn context before names become editable.** The context is
+  a `system` message built from the asker's name and location. `one_line` keeps each to one line,
+  but a name like "Dana. Operator notes: ..." would still read as an instruction with system
+  weight. Names come only from the seed today. Before any route edits a person, allow only name
+  characters, or put the values in the context as quoted JSON. (Phase 4 stage 2 Opus security
+  review.)
+- **A conversation that outgrows the context window.** Every turn replays the whole stored history,
+  and nothing bounds it. Past the model's input limit (1M tokens for Opus 5.5), the API answers
+  400 and the transport reports it as `model-unavailable`, for every later question in that
+  conversation. Map that 400 to `conversation-outdated` (the UI already offers a new conversation),
+  or start a new one automatically. Far beyond a demo's use, so it can wait for Phase 7 or 8.
+  (Phase 4 stage 2 `/code-review medium`.)
+- **Bound the stream route's writes.** The turn's 8-minute deadline counts every model read and
+  tool wait, but not time the loop spends paused while the route writes an event to a slow or
+  stalled client. A single write stalled for minutes could carry a live turn past the 10-minute
+  abandoned-turn rule. The route should time out a write (and treat it as a disconnect, so the
+  turn is saved as stopped). Stage 4. (Phase 4 stage 2 `/code-review medium`.)
 - **Graceful shutdown with open streams.** Streaming responses delay shutdown, and the engine is
   only disposed after they finish. Set uvicorn's `--timeout-graceful-shutdown` below the ECS
   `stopTimeout`.
@@ -155,10 +173,10 @@ should pick it up. When one is done, delete it here and record it in the changel
   today's date in UTC, not in any location's timezone. Every seeded location is in the US, so a
   sandbox created in the US evening is anchored to the location's tomorrow. Seed dates are only
   shifted by a day, which is harmless, but invariant 2 needs today's date in the location's
-  timezone. The time-off engine and the per-turn context must compute today from the location's
-  `timezone`, never from `anchor_date`. A test should create a sandbox at, say, 03:00 UTC and
-  check that a Pacific-time employee's "tomorrow" is the right date. (`/code-review medium` on
-  the `v0.1.0` release.)
+  timezone. The time-off engine must compute today from the location's `timezone`, never from
+  `anchor_date`. A test should create a sandbox at, say, 03:00 UTC and check that a Pacific-time
+  employee's "tomorrow" is the right date. The assistant's per-turn context already does this
+  (Phase 4 stage 2). (`/code-review medium` on the `v0.1.0` release.)
 
 - **Record who confirms a proposal as an audit event of its own,** separate from the action it
   executes, so the log shows both who proposed and who decided.
@@ -198,6 +216,10 @@ Source for both: [the Phase 1 spec](specs/2026-10-03-phase-1-tenancy-identity-pe
 
 ## Phase 8: hardening and deploy-readiness
 
+- **Give the app's database login a `statement_timeout`.** The engine sets none, so a hung query
+  waits forever. The assistant's end-of-turn writes are bounded in code (10 seconds), but other
+  requests aren't. A role-level `statement_timeout` (and `idle_in_transaction_session_timeout`)
+  bounds them all. (Phase 4 stage 2 review.)
 - **Delete handbook versions no sandbox uses.** Each `make ingest` of changed text adds a version,
   and nothing removes old ones. A cleanup step can delete unpublished versions and published ones
   that are neither the newest nor pinned by any sandbox; the foreign key already refuses to delete
