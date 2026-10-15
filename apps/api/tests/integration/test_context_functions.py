@@ -60,8 +60,9 @@ async def test_the_app_schema_holds_only_the_known_functions_none_leakproof_or_d
         ("current_is_hr", "s", False, False),
         ("current_person_id", "s", False, False),
         ("current_tenant_id", "s", False, False),
-        # The trigger functions (migrations 0003 and 0005) write, so they are volatile.
+        # The trigger functions (migrations 0003, 0005, and 0008) are volatile.
         ("pin_tenant_handbook_version", "v", False, False),
+        ("refuse_finished_turn_update", "v", False, False),
         ("stamp_tenant_created_at", "v", False, False),
     ]
 
@@ -83,5 +84,6 @@ async def test_public_cannot_execute_the_trigger_functions(app_engine: AsyncEngi
 
     assert functions == [
         ("pin_tenant_handbook_version", False),
+        ("refuse_finished_turn_update", False),
         ("stamp_tenant_created_at", False),
     ]

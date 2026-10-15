@@ -5,9 +5,11 @@ description = "The Open Door API: FastAPI, Postgres, and the assistant."
 requires-python = ">=3.13"
 dependencies = [
     "alembic>=1.20.0",
+    "anthropic>=1,<2",
     "asyncpg>=0.31.0",
     "fastapi>=0.142.1",
     "httpx>=0.28.1",
+    "httpx2>=2.13.1",
     "markdown-it-py>=4.2.0",
     "pgvector>=0.5.0",
     "pydantic-settings>=2.15.0",
@@ -26,7 +28,6 @@ module-root = ""
 
 [dependency-groups]
 dev = [
-    "httpx2>=2.13.1",
     "import-linter>=2.15",
     "mypy>=2.3.1",
     "pytest>=9.1.1",
@@ -98,3 +99,31 @@ type = "forbidden"
 source_modules = ["app.api", "app.main"]
 forbidden_modules = ["app.modules.handbook.load"]
 include_external_packages = false
+
+[[tool.importlinter.contracts]]
+name = "Only the AI package imports the Anthropic SDK"
+type = "forbidden"
+# Everything that talks to Claude goes through app.ai's transport interface, so the rest of the API
+# stays testable with the scripted and replay transports and never depends on the SDK.
+# Direct imports only: app.main and the routes must still reach the SDK indirectly, through the
+# transport that app.ai builds.
+source_modules = ["app.api", "app.core", "app.db", "app.modules", "app.main"]
+forbidden_modules = ["anthropic"]
+include_external_packages = true
+allow_indirect_imports = true
+
+[[tool.importlinter.contracts]]
+name = "Inside the AI package, only the Anthropic transport reaches the SDK"
+type = "forbidden"
+# The interface, the scripted model, and the store must run with no SDK at all, directly or through
+# another module: that is what lets the scripted and replay transports stand in for it. A new module
+# in app.ai that should stay SDK-free is added here.
+source_modules = [
+    "app.ai.transport",
+    "app.ai.scripted",
+    "app.ai.pricing",
+    "app.ai.budget",
+    "app.ai.conversations",
+]
+forbidden_modules = ["anthropic"]
+include_external_packages = true

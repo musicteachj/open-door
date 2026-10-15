@@ -43,8 +43,8 @@ bootstrap-db: ## Create or update the login users named in DATABASE_URL and CLEA
 ingest: ## Load and publish the handbook from handbook/ and its committed embeddings (needs `make db`)
 	cd $(API) && uv run python scripts/ingest_handbook.py ingest
 
-# The only command that calls Voyage. If a key in apps/api/.env seems ignored, an empty
-# VOYAGE_API_KEY in your shell is shadowing it: run `env -u VOYAGE_API_KEY make embed`.
+# The only command that calls Voyage. It reads VOYAGE_API_KEY from apps/api/.env; an empty value
+# exported in the shell is ignored, so it can't hide the key.
 embed: ## Fetch missing handbook and eval embeddings from Voyage (needs VOYAGE_API_KEY); commit the result
 	cd $(API) && uv run python scripts/ingest_handbook.py embed
 

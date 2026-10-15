@@ -20,6 +20,7 @@ from collections.abc import AsyncIterator, Iterator
 from contextlib import ExitStack
 from dataclasses import dataclass
 from datetime import UTC, date, datetime, timedelta
+from decimal import Decimal
 from typing import Any, Protocol
 from uuid import UUID, uuid4
 
@@ -29,11 +30,16 @@ import pytest_asyncio
 from fastapi.testclient import TestClient
 from pydantic import PostgresDsn
 from sqlalchemy import delete, select, text
-from sqlalchemy.ext.asyncio import AsyncEngine
+from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 
 from app.core.config import Settings
 from app.db.engine import create_engine
 from app.db.models import (
+    AiConversation,
+    AiFeedback,
+    AiMessage,
+    AiSpend,
+    AiTurn,
     AuditEvent,
     Department,
     Holiday,
@@ -143,6 +149,78 @@ class SampleTenant:
     colleague_id: UUID
     # The HR partner (is_hr_admin), and the other two people's manager.
     hr_id: UUID
+
+
+@dataclass(frozen=True)
+class AssistantRows:
+    """The IDs of the assistant rows `add_assistant_rows` wrote for one person."""
+
+    conversation_id: UUID
+    turn_id: UUID
+
+
+async def write_assistant_rows(
+    session: AsyncSession, tenant_id: UUID, person_id: UUID
+) -> AssistantRows:
+    """Write a conversation, a completed turn with its two messages and a thumbs-up, and a spend
+    row, and flush them.
+
+    The session must be scoped to `person_id`: Postgres shows a person's conversations only to
+    that person, and refuses to write one for anyone else.
+    """
+    rows = AssistantRows(conversation_id=uuid4(), turn_id=uuid4())
+    session.add(
+        AiConversation(
+            id=rows.conversation_id,
+            tenant_id=tenant_id,
+            person_id=person_id,
+            model="claude-opus-5-5",
+            guard_model="claude-haiku-5-5",
+            effort="medium",
+            prompt_version="test",
+            toolset_version="test",
+        )
+    )
+    await session.flush()
+    session.add(
+        AiTurn(
+            id=rows.turn_id,
+            tenant_id=tenant_id,
+            person_id=person_id,
+            conversation_id=rows.conversation_id,
+            question="How much sick leave do I get?",
+            status="completed",
+            answer_text="You get 40 hours.",
+        )
+    )
+    await session.flush()
+    session.add_all(
+        [
+            AiMessage(
+                tenant_id=tenant_id,
+                person_id=person_id,
+                conversation_id=rows.conversation_id,
+                turn_id=rows.turn_id,
+                position=position,
+                role=role,
+                content=[{"type": "text", "text": text_}],
+            )
+            for position, role, text_ in (
+                (0, "user", "How much sick leave do I get?"),
+                (1, "assistant", "You get 40 hours."),
+            )
+        ]
+    )
+    session.add(
+        AiFeedback(tenant_id=tenant_id, person_id=person_id, turn_id=rows.turn_id, helpful=True)
+    )
+    session.add(
+        AiSpend(
+            tenant_id=tenant_id, turn_id=rows.turn_id, kind="reserve", amount_usd=Decimal("0.05")
+        )
+    )
+    await session.flush()
+    return rows
 
 
 class MakeTenant(Protocol):
@@ -295,6 +373,10 @@ def make_tenant(app_engine: AsyncEngine, created_tenant_ids: list[UUID]) -> Make
                     target_id=tenant_id,
                 )
             )
+        # The assistant's rows are visible only to the person they belong to, so the employee
+        # writes them in a transaction of their own.
+        async with tenant_session(app_engine, TenantContext(tenant_id, employee.id)) as session:
+            await write_assistant_rows(session, tenant_id, employee.id)
         return SampleTenant(tenant_id, employee.id, colleague.id, hr.id)
 
     return make

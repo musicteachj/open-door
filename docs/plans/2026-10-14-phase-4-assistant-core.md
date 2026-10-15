@@ -1329,7 +1329,314 @@ Screen 07 isn't designed yet. Stage 5's first step fills this table from
 Record here anything that differs from this plan, with the reason, each stage's final test counts,
 and the commit `dev` was at before Stage 1 (the phase review's base).
 
-- **Base commit:** recorded at Stage 1's start.
+- **Base commit:** `73b4942`, `dev` after the planning PR (#48) merged. Task 44's phase review
+  diffs against it.
+
+### Stage 1 (`feat/phase-4-store`, 2026-10-14)
+
+**Schema (Task 2), changed by the reviews.** The Opus security reviewer and the Sonnet compliance
+reviewer found nothing high. Their findings were fixed in migration 0008 before it merged.
+- **Keys that point at a conversation or turn carry `person_id`** (three columns, named by hand
+  because the generated names pass 63 characters). Postgres checks a foreign key without
+  row-level security, so a two-column key would have let one person add a turn to another's
+  conversation by knowing its ID.
+- **Only `tenants` cascades.** The keys between the assistant tables are `NO ACTION`, matching
+  the existing tables, not "cascade from parent rows" as Task 2 said; nothing deletes a parent
+  on its own.
+- **`ai_turns` can be updated only on its outcome and trace columns** (a column grant), and a
+  trigger, `app.refuse_finished_turn_update`, refuses any update once the status isn't
+  `running`. The spec's table-wide `UPDATE` grant would have let a finished turn be rewritten.
+- **`ai_messages.content` is `json`, not `jsonb`,** so the stored text never changes. A new
+  nullable `sources` column (`jsonb`) holds the source entries for each message's
+  `search_result` blocks, in block order, written in the same insert. `search_sources` reads it,
+  so failed and stopped turns are covered too, and `append_messages` refuses a message whose
+  sources don't match its blocks.
+- **The ledgers refuse nonsense:**
+  - a `reserve` can't be negative, and no row is beyond ±$10
+  - `ai_spend_daily` gains a `kind` column, a `created_at` stamped by a trigger, and a check
+    that ties `day` to it; only a `settle` may be dated the day before, so a turn that crosses
+    midnight UTC settles on its reservation's day
+- **Accepted, and documented in the migration:**
+  - `ai_spend.turn_id` lets people in one sandbox see each other's turn IDs and timings, but no
+    content
+  - the ±$10 bound is per row, so a direct database writer could still add many rows
+- **Nullable JSON columns store SQL `NULL`,** not the JSON value `null`.
+
+**Pricing and budgets (Tasks 3–4).**
+- **The reservation prices the estimated input at the cache-write rate** when that is higher
+  ($5.00 against $4.00 on Opus 5.5). At the plain input rate, a fully cache-written prompt would
+  cost more than was reserved.
+- **`estimate_input_tokens` counts UTF-8 bytes,** not characters, so CJK and emoji text isn't
+  undercounted.
+- **`budget_state` refuses a session with no sandbox.** It reports remaining amounts for both
+  caps; Stage 4 decides the "room for a guard and one call" threshold.
+- **The budget tests must not run concurrently with another run.** They delete the
+  `ai_spend_daily` rows they add, through the owner login.
+
+**Conversations (Task 5).**
+- **The functions return the ORM classes** (`AiConversation`, `AiTurn`).
+- **`finish_turn` stamps `ended_at` itself,** and raises `TurnFinished` for an ended turn.
+- **`recover_abandoned` sets `error_code = "abandoned"`.**
+
+**Transports (Tasks 6–8).** The API facts came from the claude-api skill (dated 2026-10-06) and
+the installed `anthropic` 1.13.0.
+- **A citation's `end_block_index` is exclusive:** a citation of block 0 alone is `0` to `1`.
+  Task 13's mapping must read it that way.
+- **The top-level `usage` covers only the attempt that produced the message;**
+  `usage.iterations` is the per-attempt record.
+  - `pricing.total_usage(iterations)` sums the attempts. Task 16 records a turn's tokens from it
+    and takes the next reservation's `previous_input_tokens` from `Finished.usage`.
+- **`ToolCall` events are emitted only when `stop_reason` is `tool_use`,** and only after the
+  call ends, so a cut-off input is never run.
+  - For `refusal` and `max_tokens`, `Finished.message` can be empty or hold a dangling
+    `tool_use`. Task 16 decides what to store.
+- **`Finished.message` already has the echo rule for fallbacks applied** (thinking and tool-use
+  blocks before the last `fallback` block removed), so it is stored and sent back as it is.
+- **The guard's 4-second limit, its 1,024-token cap, and its `<new_message>` tag live in
+  `transport.py`.** `GuardUnavailable` carries the call's usage when there was a response, so
+  Task 14 can settle it.
+  - The scripted slow guard only sleeps, so Task 14's own timeout is what gets tested.
+- **The scripted model's "refusal" is split in two:**
+  - "Leo's home address" gets a text answer declining to share another employee's private
+    details, which is the design's refusal state
+  - "scripted safety refusal" gives the API's `stop_reason: "refusal"`, which is the spec's
+    `refusal` error
+- **The scripted model is priced at $0** through a `scripted` entry in `PRICES`.
+- **A network error mid-stream** (which the SDK doesn't wrap) becomes `ModelUnavailable`.
+
+**The close's `/code-review medium`.**
+- **Fixed:**
+  - Claude Opus 5 and Claude Opus 4.8, Opus 5.5's fallback targets, are now priced (pricing page
+    read again on 2026-10-14). An unknown served model is priced at the most expensive pinned
+    row and logged, so settling never crashes after a call was billed.
+  - `classify` reports the Console spend limit as `SpendLimitReached`, not as an unavailable
+    guard.
+  - Money parameters and price fields carry their unit (`amount_usd`, `input_usd_per_mtok`).
+- **Accepted:** a call that falls back runs a second attempt, so it can cost more than its
+  reservation, by up to one attempt at the fallback model's price. Reserving for two attempts
+  on every call would halve how many questions fit under the sandbox cap, for a safety
+  decline that HR questions should almost never trigger. The settle records the real cost, and
+  the Console's monthly limit is the hard backstop.
+- **Dismissed, with the reason:**
+  - **"Sonnet 5.5 cache reads cost $0.20."** The pricing page says $0.10, as pinned.
+  - **"Keeping the declined model's text before a fallback duplicates the answer."** The API
+    passes that partial text to the fallback model as continuation context, so the fallback
+    continues it rather than starting over.
+  - **"Don't strip thinking blocks before a fallback."** The fallback echo rule says to omit
+    them, and that rule is specific to fallback turns.
+- **The second `/code-review medium`:**
+  - **Fixed:**
+    - `estimate_input_tokens` takes the previous call's `Usage` and reads its whole prompt,
+      cached tokens included. The input count alone would undercount a cached history badly.
+    - Haiku 5.5's long-prompt tier (over 100,000 tokens: $0.50, $0.625, $0.05, and $2.50) is
+      priced rather than refused, so nothing in pricing raises after a call was billed. This
+      replaces the earlier rule that raised.
+    - `classify` and `stream` map malformed responses, and network errors partway through a
+      read, to their typed errors.
+    - `GuardUnavailable` and `ModelUnavailable` say plainly that `usage` is None when the cost
+      is unknown, and that the caller then keeps the reservation instead of settling it to zero.
+    - The scripted guard reads up to the last closing tag.
+    - `conversations.iter_search_results` is the one walk over search results, shared with the
+      scripted model.
+  - **Accepted again:** the fallback overshoot above.
+  - **Dismissed:** "a stored `system` message breaks the API." Opus 5.5 accepts mid-conversation
+    `role: "system"` messages, and the spec's per-turn context is one.
+- **The third `/code-review medium`:**
+  - **Fixed:**
+    - The next call's estimate adds the previous call's output, which comes back as input.
+    - Every non-tool `ValueError` from the stream iterator is the SDK's, and becomes
+      `ModelUnavailable`.
+    - `append_messages` refuses a turn from another conversation.
+    - `finish_turn` builds its update from the `TurnOutcome` dataclass.
+    - `.env.example` says plainly that an empty key exported in the shell overrides the file.
+  - **Accepted again:** the fallback overshoot. The changelog now says it plainly.
+  - **Dismissed again:** "Sonnet 5.5 cache reads cost $0.20." The skill's cached table says so,
+    but the official page says $0.10. A comment on the price now says which source wins.
+- **The fourth `/code-review medium`:**
+  - **Fixed:**
+    - **The import rule forbids only direct imports of `anthropic`** (`allow_indirect_imports`).
+      It had also forbidden `app.main → app.ai → anthropic`, which Stage 4's wiring needs.
+      A probe module proved both halves.
+    - `append_messages` locks the turn row and refuses a turn that is no longer `running`, so a
+      late task can't write into the next turn's history.
+    - The frozen-turn trigger raises its own SQLSTATE, `OD002`, and the code matches on it rather
+      than on the message text.
+    - The search-result walk lives in `transport.py`, so the scripted model needs no database
+      code.
+    - The first call's estimate is documented: with no previous call, the whole serialized
+      request is counted.
+    - The transport's catch-all for unreadable streams wraps only the SDK's reads, so a bug in
+      our own code isn't reported as the model being unavailable.
+  - **Accepted again:** the fallback overshoot.
+  - **Dismissed:**
+    - **"`recover_abandoned` can fail a live turn."** The spec chose the 10-minute rule, a turn is
+      bounded well below that, and the new `running` check stops the late task from writing.
+    - **"`to_api_kwargs` deep-copies the history."** A history is at most a few hundred kilobytes,
+      negligible beside the model call, and the copy keeps `ModelRequest` truly immutable.
+- **The fifth `/code-review medium`:**
+  - **Fixed:**
+    - **The "anthropic needs a key" rule moved out of `Settings`** and into
+      `anthropic_transport.from_settings`. In `Settings` it made alembic, the bootstrap and
+      ingest scripts, and pytest demand an Anthropic key they never use. This changes Task 1's
+      test "`AI_TRANSPORT=anthropic` without a key refuses to start": the API still refuses,
+      when Stage 4 builds the transport at startup. The production refusal of `scripted` and
+      `replay` stayed in `Settings` until round ten moved it out too.
+    - `append_messages` refuses an assistant `tool_use` stored without the matching
+      `tool_result` message in the same call, which would leave the conversation stuck for good.
+    - `finish_turn` refuses `status="running"`.
+    - `ModelRequest` refuses `fallbacks` without the fallback beta.
+    - One `has_sqlstate` helper in `app/db` serves both the handbook pin and the frozen turn.
+  - **Dismissed again:** the deep copy, as above.
+- **The sixth `/code-review medium`:**
+  - **Fixed:**
+    - `append_messages` refuses an empty assistant message, which a refusal before any output
+      produces.
+    - The SDK client has a 90-second read and a 10-second connect timeout, so three attempts
+      end in about five minutes, well inside the 10-minute abandoned-turn rule.
+    - A message whose `content` is a plain string has no search results.
+    - Reservations round up and costs round to the ledgers' six decimals, so reserve plus settle
+      sums exactly to the recorded cost.
+    - An unknown served model is priced at the dearest of each rate, not the dearest output row.
+    - `ended_at` is the moment of the write (`clock_timestamp()`).
+    - The driver-error helpers live together in `app/db/errors.py`.
+  - **Dismissed:** "three queries per append." It's one transaction per tool round, and each
+    query states one check plainly.
+- **The seventh `/code-review medium`:**
+  - **Fixed:**
+    - **`Settings` ignores empty environment variables** (`env_ignore_empty=True`), so an
+      agent shell's empty `ANTHROPIC_API_KEY` or `VOYAGE_API_KEY` no longer shadows
+      `apps/api/.env`, whatever starts the process. This fixes `CLAUDE.md`'s "Environment
+      gotcha" at its cause. *Replaced in round ten:* `env_ignore_empty` applied to every
+      setting, so now a settings source ignores only the two keys.
+    - After a fallback, an iteration with no model is priced at the dearer of the requested
+      and serving models.
+    - `settle` refuses a context for another sandbox.
+    - The docstrings agree: a turn changes only while it runs, through `finish_turn` and
+      `recover_abandoned`.
+  - **For Stage 2 (Task 16):** the loop must bound the whole turn below `ABANDONED_AFTER` (10
+    minutes), with a turn-level deadline. Each call is bounded (about five minutes at worst), but
+    several slow calls in one turn could pass ten, and recovery would then fail a live turn.
+  - **Accepted again:** the fallback overshoot.
+  - **Dismissed:** "`AI_TRANSPORT=replay` validates though nothing builds it." It's the spec's
+    planned value; Stage 3 builds it, and Stage 4's factory refuses anything it can't build.
+- **The eighth `/code-review medium`:**
+  - **Fixed:**
+    - **`append_messages` locks the turn `FOR NO KEY UPDATE`, not `FOR UPDATE`.** The stronger
+      lock conflicts with the foreign-key checks on that turn, so a spend or feedback insert for
+      it from another connection would have waited on the append's transaction. Stage 2's loop
+      could have blocked on itself.
+    - `reserve` refuses an amount the ledger's ±$10 row check can't hold.
+    - Comments now match the code: the turn update rule in the migration, `ai_spend_daily.day`,
+      and the client timeout. The timeout bounds a stall, not a long, steady answer; Stage 2's
+      turn deadline bounds the turn.
+  - **Dismissed:** "a shell can no longer blank a key." That is the deliberate trade-off of
+    ignoring empty variables, and paid calls need `AI_TRANSPORT=anthropic` as well.
+- **The ninth `/code-review medium`:**
+  - **Fixed:**
+    - A reservation larger than the ledger's $10 row is refused as `BudgetExceeded`, not with a
+      `ValueError`, so an oversized first call ends with the budget message.
+    - `make dev-api`'s `env -u` is removed, as above.
+    - The settings comments now say that `env_ignore_empty` also ignores an empty value in
+      `.env`, and that the validator only catches a value of spaces.
+    - The changelog now says a settle may be dated the day before.
+  - **Dismissed:** "a settle more than a day late fails the date check." Stage 2's turn deadline,
+    under 10 minutes, makes that impossible.
+- **The tenth `/code-review medium`:**
+  - **Fixed:**
+    - **Only the two API keys skip an empty environment variable.** The round-seven
+      `env_ignore_empty` applied to every setting, so an empty `APP_ENV` from a deploy template
+      would have become `development` and skipped the production checks. A settings source now
+      drops only an empty `ANTHROPIC_API_KEY` or `VOYAGE_API_KEY`, and an empty `APP_ENV` fails
+      again.
+    - **The production transport rule moved out of `Settings`,** as the key rule did, into a
+      function in `transport.py` that Stage 4's startup calls. Migrations, scripts, and the
+      cleanup job don't need the assistant's settings in production. This changes Task 1's test
+      "production with `scripted` refuses to start": the API still refuses, at startup.
+    - `httpx2` is a runtime dependency, not a dev one, since application code imports it.
+    - The transport's errors carry fixed text, never the tool input or the response body, which
+      can hold the person's words.
+  - **Accepted again:** the fallback overshoot.
+  - **Dismissed:**
+    - "An abandoned turn's reservation is never settled." The spec chose that: it errs toward
+      spending less.
+    - "A reservation over $10 is called a sandbox overrun." Round nine chose that, so the
+      person sees the budget message.
+    - "A late settle can fail the date check." Stage 2's deadline rules it out.
+    - "`ai_turns` has a redundant unique index." Each one is a foreign-key target.
+- **The eleventh `/code-review medium`:**
+  - **Fixed:**
+    - A fallback is detected only from the API's own signals (a `fallback_message` iteration or
+      a `fallback` block), never from comparing model IDs as strings.
+    - The changelog says which empty variables are ignored.
+    - The spell check allows only the identifier `settings_customise_sources`, pydantic-settings'
+      own spelling; the British spelling still fails anywhere else.
+  - **For Stage 2 (Task 14):** `parse_guard_output` accepts a verdict whose category and kind
+    disagree (crisis with no kind, ordinary tagged `self_harm`). The guard's routing resolves
+    them toward the safer path: a crisis category or a crisis kind (`self_harm`,
+    `threat_of_violence`) routes as crisis, and any other non-null kind on an ordinary verdict
+    routes as sensitive. Failing such a verdict closed would withhold the crisis text from a real
+    crisis with a sloppy label.
+  - **For Stage 4:** `budget_state` reports a cap as reached only at zero, while `reserve`
+    refuses any call larger than what's left. The banner's threshold ("room for the guard and
+    one call") is Stage 4's, as planned, and must use the same reservation size `reserve` will
+    see.
+- **The twelfth `/code-review medium`:**
+  - **Fixed:**
+    - `append_messages` also refuses an orphan `tool_result`, one that doesn't answer a
+      `tool_use` in the assistant message just before it in the same batch.
+    - Indexes on `ai_messages (tenant_id, turn_id)` and `ai_spend (tenant_id, turn_id)`, so the
+      foreign-key checks when a sandbox is deleted are lookups, not scans.
+    - The connection-error text is fixed, like every other transport error.
+    - The changelog's security note, the inventory's `day` column, and stale notes above (now
+      marked where a later round replaced them).
+  - **Accepted:** a reservation whose transaction began just before midnight UTC is charged to
+    the day before, because `now()` is the transaction's start; it can carry the new day past its
+    cap by at most one call.
+- **The thirteenth `/code-review medium`:**
+  - **Fixed:**
+    - `append_messages` refuses a user message whose `tool_result` blocks don't come first, and
+      any empty or blank `text` block, both of which the API rejects in history for good.
+    - Opening the stream maps any other SDK error to `ModelUnavailable`.
+    - The "dearer model" comparison lives in `pricing.py`.
+    - The changelog: Stage 4 runs the transport checks, and the fallback overshoot is priced at
+      the fallback model.
+  - **For Stage 2 (Task 16):** never retry `settle`. A settle row has no tie to its reservation,
+    so a second one would count the difference twice.
+  - **Dismissed again:** "a reservation over $10 is called a sandbox overrun" (round nine's
+    choice).
+- **The fourteenth `/code-review medium`:**
+  - **Fixed:**
+    - **The transport drops blank text blocks from `Finished.message`.** Round thirteen made the
+      store refuse them, and the model can emit one (`"\n\n"` before a tool call), which would
+      have failed a paid turn.
+    - A call with no `usage.iterations` is priced at the requested model, so a dated model ID
+      echoed back isn't charged at the dearest rates.
+    - **A fourth import contract:** inside `app.ai`, the interface, the scripted model, pricing,
+      budgets, and the store can't reach `anthropic`, even indirectly. A probe proved it.
+    - Two small cleanups in the search-result helpers.
+  - **For Stage 2 (Task 16):** after blank text is dropped, a `Finished.message` can have empty
+    content (a refusal, or an answer that was only whitespace). The store refuses that, so the
+    loop must not append it.
+  - **Dismissed:** "one query for history and sources instead of two" (a small gain, at the
+    cost of two clear functions), and the parenthesized imports, which are the formatter's.
+
+**Settings and tooling (Task 1).**
+- **The empty-key gotcha is fixed in `Settings`, not in `make dev`.** The plan said `make dev`
+  already ran under `env -u ANTHROPIC_API_KEY`; it didn't. Stage 1 added it, then removed it
+  again (it would also have removed a real key exported in the shell). The final fix: a settings
+  source, `EnvWithoutBlankKeys`, drops an empty or blank `ANTHROPIC_API_KEY` or
+  `VOYAGE_API_KEY` from the environment, so `apps/api/.env` wins; every other setting still
+  fails when it's empty. Only the browser tests' server keeps its earlier `env -u`, which is
+  harmless.
+- **Neither transport rule lives in `Settings`.** `anthropic_transport.from_settings` refuses a
+  missing key, and `transport.require_a_transport_fit_for(settings)` refuses `scripted` or
+  `replay` in production. **Stage 4's startup must call both**; until then nothing enforces
+  them.
+- **A new import-linter contract keeps `anthropic` inside `app.ai`.**
+
+**Final counts:** 1,296 API tests (484 against the database), 1,006 web unit tests, and 175
+browser tests (both unchanged). About 2,900 lines of application code, migration, and config,
+above the plan's estimate of 1,300 and the 1,500 guideline, so the PR gives a reading guide.
 
 ## Backlog
 

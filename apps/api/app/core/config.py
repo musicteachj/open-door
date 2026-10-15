@@ -1,11 +1,23 @@
 """Application settings, read from the environment and validated once at startup."""
 
 import re
+from decimal import Decimal
 from functools import lru_cache
-from typing import Literal
+from typing import Any, Literal
 
-from pydantic import Field, PostgresDsn, SecretStr, ValidationInfo, field_validator
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic import (
+    Field,
+    PostgresDsn,
+    SecretStr,
+    ValidationInfo,
+    field_validator,
+)
+from pydantic.fields import FieldInfo
+from pydantic_settings import (
+    BaseSettings,
+    PydanticBaseSettingsSource,
+    SettingsConfigDict,
+)
 
 # What a browser sends in its Origin header: a lowercase scheme and host, an optional port, and
 # nothing after them. The same-origin check compares that header with APP_ORIGIN character for
@@ -14,6 +26,32 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 ORIGIN_PATTERN = re.compile(r"(https?)://[a-z0-9.-]+(?::([0-9]{1,5}))?")
 # Browsers leave the default port out of the Origin header, so it can never appear in APP_ORIGIN.
 DEFAULT_PORTS = {"http": 80, "https": 443}
+
+
+# The settings whose empty or blank value in the environment is ignored, so that the value in .env
+# is used. A shell can export a key as an empty string (a claude agent shell exports
+# ANTHROPIC_API_KEY that way), and that would otherwise shadow .env for every entry point: alembic,
+# the scripts, pytest, and uvicorn by hand. No other setting gets this: an empty APP_ENV or
+# AI_TRANSPORT must still fail validation, not quietly become the default.
+KEY_SETTINGS = ("anthropic_api_key", "voyage_api_key")
+
+
+class EnvWithoutBlankKeys(PydanticBaseSettingsSource):
+    """The environment source, minus any API key whose value is empty or only spaces."""
+
+    def __init__(self, environment: PydanticBaseSettingsSource) -> None:
+        super().__init__(environment.settings_cls)
+        self.environment = environment
+
+    def get_field_value(self, field: FieldInfo, field_name: str) -> tuple[Any, str, bool]:
+        raise NotImplementedError  # Only __call__ is used.
+
+    def __call__(self) -> dict[str, Any]:
+        return {
+            name: value
+            for name, value in self.environment().items()
+            if not (name in KEY_SETTINGS and isinstance(value, str) and not value.strip())
+        }
 
 
 class Settings(BaseSettings):
@@ -41,10 +79,43 @@ class Settings(BaseSettings):
     # Only `make embed` needs it. An empty value counts as unset.
     voyage_api_key: SecretStr | None = Field(default=None, repr=False)
 
-    @field_validator("voyage_api_key", mode="before")
+    # Only the anthropic transport needs it, and it checks for the key when it is built
+    # (anthropic_transport.from_settings), not here: Settings is also built by alembic, the setup
+    # scripts, and the tests, which never call the model. An empty value counts as unset.
+    anthropic_api_key: SecretStr | None = Field(default=None, repr=False)
+    # What answers the assistant's questions. `scripted` is a rule-based stand-in and `replay` plays
+    # back recorded runs; neither makes a paid call. Production must use `anthropic`, which the API
+    # checks when it starts (app.ai.transport.require_a_transport_fit_for), not here: alembic and
+    # the setup scripts build Settings too, and never call the model.
+    ai_transport: Literal["anthropic", "scripted", "replay"] = "scripted"
+    # What one sandbox may spend on the assistant, and what all sandboxes may spend per UTC day.
+    ai_sandbox_budget_usd: Decimal = Field(default=Decimal("1.00"), gt=0)
+    ai_daily_budget_usd: Decimal = Field(default=Decimal("3.00"), gt=0)
+    # Seconds of silence before a stream sends a keep-alive comment. 0 turns it off, which the
+    # proxy check uses as its control run.
+    ai_heartbeat_seconds: int = Field(default=15, ge=0)
+
+    @classmethod
+    def settings_customise_sources(
+        cls,
+        settings_cls: type[BaseSettings],
+        init_settings: PydanticBaseSettingsSource,
+        env_settings: PydanticBaseSettingsSource,
+        dotenv_settings: PydanticBaseSettingsSource,
+        file_secret_settings: PydanticBaseSettingsSource,
+    ) -> tuple[PydanticBaseSettingsSource, ...]:
+        return (
+            init_settings,
+            EnvWithoutBlankKeys(env_settings),
+            dotenv_settings,
+            file_secret_settings,
+        )
+
+    @field_validator("voyage_api_key", "anthropic_api_key", mode="before")
     @classmethod
     def empty_key_is_none(cls, value: object) -> object:
-        # A shell can export VOYAGE_API_KEY as an empty string, and that would shadow apps/api/.env.
+        # An empty value written in .env itself means no key. (An empty one in the environment never
+        # gets here: `EnvWithoutBlankKeys` drops it, so .env's value is used.)
         if isinstance(value, str) and not value.strip():
             return None
         return value

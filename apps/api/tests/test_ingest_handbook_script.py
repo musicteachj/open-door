@@ -117,19 +117,25 @@ async def test_embed_validates_the_handbook_first(handbook_dir: Path, tmp_path: 
         )
 
 
-def test_embed_without_a_key_exits_with_the_empty_variable_hint() -> None:
-    environment = {**os.environ, "VOYAGE_API_KEY": ""}
-    result = subprocess.run(
-        [sys.executable, "scripts/ingest_handbook.py", "embed"],
-        cwd=API_DIR,
+def test_embed_without_a_key_exits_with_a_hint(tmp_path: Path) -> None:
+    # Run where there is no .env, so no key is found anywhere. An empty VOYAGE_API_KEY in the shell
+    # is ignored (it can no longer shadow the key in .env), so it counts as unset too.
+    environment = {
+        **os.environ,
+        "VOYAGE_API_KEY": "",
+        "DATABASE_URL": "postgresql+asyncpg://od_app_login:od_app_dev@127.0.0.1:1/opendoor",
+    }
+    result = subprocess.run(  # noqa: S603
+        [sys.executable, str(API_DIR / "scripts" / "ingest_handbook.py"), "embed"],
+        cwd=tmp_path,
         env=environment,
         capture_output=True,
         text=True,
         check=False,
     )
     assert result.returncode == 1
-    assert "VOYAGE_API_KEY" in result.stderr
-    assert "env -u VOYAGE_API_KEY" in result.stderr
+    assert "VOYAGE_API_KEY is not set" in result.stderr
+    assert "apps/api/.env" in result.stderr
 
 
 def test_publishing_text_that_matches_an_older_version_warns_and_carries_on(

@@ -29,8 +29,55 @@ EXPECTED_TABLE_GRANTS = {
         ("od_app", table, "SELECT")
         for table in ("handbook_versions", "handbook_sections", "handbook_chunks")
     ),
+    # The assistant's tables (Phase 4) are insert-only, with one exception: a turn is added as
+    # `running` and updated once, to its end. Nothing is deleted: the rows go with their sandbox
+    # when its tenant is deleted, which runs as the table owner, and the cleanup login needs no
+    # grant for that.
+    *(
+        ("od_app", table, privilege)
+        for table in (
+            "ai_conversations",
+            "ai_messages",
+            "ai_feedback",
+            "ai_spend",
+            "ai_spend_daily",
+        )
+        for privilege in ("SELECT", "INSERT")
+    ),
+    # A turn is updated only through the columns below, and a trigger refuses once it has ended.
+    *(("od_app", "ai_turns", privilege) for privilege in ("SELECT", "INSERT")),
     ("od_cleanup", "tenants", "SELECT"),
     ("od_cleanup", "tenants", "DELETE"),
+}
+# The one table with column grants: the columns of a turn that change when it ends. The turn's
+# identity (id, tenant_id, person_id, conversation_id), its question, and started_at are never
+# updatable. Nothing else in the schema has a column grant.
+UPDATABLE_TURN_COLUMNS = {
+    "status",
+    "error_code",
+    "ended_at",
+    "answer_text",
+    "citations",
+    "guard_verdict",
+    "tool_calls",
+    "sections_retrieved",
+    "served_by_models",
+    "effort",
+    "prompt_version",
+    "toolset_version",
+    "input_tokens",
+    "output_tokens",
+    "cache_read_tokens",
+    "cache_write_tokens",
+    "cost_usd",
+    "first_event_ms",
+    "total_ms",
+    "refusal",
+    "fallback",
+    "injection_suspected",
+}
+EXPECTED_COLUMN_GRANTS = {
+    ("od_app", "ai_turns", column, "UPDATE") for column in UPDATABLE_TURN_COLUMNS
 }
 EXPECTED_SCHEMA_GRANTS = {
     # Postgres's own default: everyone may use the public schema.
@@ -101,8 +148,10 @@ async def test_the_roles_have_exactly_the_planned_table_privileges(
     assert await grants(app_engine, TABLE_GRANTS) == EXPECTED_TABLE_GRANTS
 
 
-async def test_no_role_has_privileges_on_single_columns(app_engine: AsyncEngine) -> None:
-    assert await grants(app_engine, COLUMN_GRANTS) == set()
+async def test_the_only_column_grants_are_the_updatable_columns_of_a_turn(
+    app_engine: AsyncEngine,
+) -> None:
+    assert await grants(app_engine, COLUMN_GRANTS) == EXPECTED_COLUMN_GRANTS
 
 
 def direct_grants(rows: set[tuple[str, ...]], roles: tuple[str, ...]) -> set[tuple[str, ...]]:

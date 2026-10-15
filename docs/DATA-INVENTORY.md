@@ -13,7 +13,8 @@ sandbox.
 
 **Everything in a sandbox lives for 24 hours.** `tenants.expires_at` is set to 24 hours after
 creation. Every other row belongs to a tenant and is deleted with it, through the foreign keys'
-`ON DELETE CASCADE`. A session is refused as soon as it expires, even before its row is deleted.
+`ON DELETE CASCADE`, except the handbook tables and `ai_spend_daily`, which have no tenant (see
+their sections below). A session is refused as soon as it expires, even before its row is deleted.
 The scheduled cleanup job that deletes expired sandboxes arrives in Phase 8. Until then, the
 `od_cleanup` role can delete only expired sandboxes, and tests prove it.
 
@@ -35,6 +36,8 @@ automated-decision systems apply that to the data such systems use and produce.
   transaction belongs to. The API's database login can't skip that rule. The one exception is
   `sessions`, described below.
 - **Directory fields** are visible to everyone in the same sandbox.
+- **The assistant's conversations** (messages, turns, and feedback) are visible only to the person
+  they belong to, with no HR exception. A second, restrictive Postgres rule enforces it.
 - **Private details** are visible only to the person themselves and to HR. Both the policy layer
   (`app/policy`) and a second, database-level rule enforce this.
 - **The `/me` fields** (`employmentType`, `isManager`, `isHrAdmin`, `personaKey`, and
@@ -141,6 +144,93 @@ row and creates a new one, and signing out deletes it. Deleted with the sandbox 
 Append-only: the API can add and read events but never change or delete them. Visible to the API
 within its own sandbox. No endpoint shows them yet. Deleted with the sandbox, which is the demo
 choice described above.
+
+### The assistant: `ai_conversations`, `ai_messages`, `ai_turns`, `ai_feedback`, `ai_spend`, `ai_spend_daily`
+
+Added in Phase 4 (migration 0008). Nothing writes to them until the assistant's turn code arrives
+later in Phase 4.
+
+**Questions and answers are stored unencrypted in Phase 4, and so are the ones the guard flagged
+as sensitive or as a crisis.** Phase 6 encrypts case narratives and flagged content together. The
+sandbox is fictional, the landing page asks visitors not to enter real personal information, and
+everything is deleted with the sandbox after 24 hours.
+
+Every ID below is a random UUID, so one sandbox can't estimate another's activity.
+
+### `ai_conversations`
+
+| Column | Holds | Why |
+|---|---|---|
+| `id`, `tenant_id`, `person_id` | IDs: the conversation, its sandbox, and the person who owns it | Identity, and the one person who may read it. |
+| `created_at` | When it began (UTC) | Finds a person's newest conversation. |
+| `model`, `guard_model`, `effort`, `prompt_version`, `toolset_version` | The pins: the assistant's model, the guard's model, the effort setting, and the prompt and tool-set versions at the start | A conversation keeps its model, prompt, and tools for its whole life, so its history stays valid and replayable. |
+
+### `ai_messages`
+
+| Column | Holds | Why |
+|---|---|---|
+| `id`, `tenant_id`, `person_id`, `conversation_id`, `turn_id` | IDs: the message, its sandbox, its owner, its conversation, and the turn that produced it | Identity and ownership. |
+| `position`, `role` | The message's place in the conversation (from 0), and `user`, `assistant`, or `system` | The model has no memory: each turn sends the history back in order. |
+| `content` | The message exactly as the model API takes it, as JSON kept byte for byte. It includes the person's question, the model's replies, and tool results such as handbook passages and the person's own directory card or private details | The history for the next turn. It is `json`, not `jsonb`, because the model's signed thinking blocks must come back unchanged. |
+| `sources` | For each handbook search result in the message, in order: the section ID, the passage IDs, the title, the group name, the audience label, the last-updated date, and the link. Null when the message has none | The conversation's list of sources, rebuilt for citations, including from turns that were stopped or failed. The result text alone can't give these back reliably. |
+| `created_at` | When it was stored (UTC) | The record. |
+
+### `ai_turns`
+
+| Column | Holds | Why |
+|---|---|---|
+| `id`, `tenant_id`, `person_id`, `conversation_id` | IDs: the turn, its sandbox, its owner, and its conversation | Identity and ownership. |
+| `question` | What the person asked | Shown after a reload. |
+| `status`, `error_code` | `running`, `completed`, `stopped`, `failed`, `crisis`, or `guard_unavailable`; and the error code of a failed turn | One turn runs at a time per conversation. The code explains a failure. |
+| `started_at`, `ended_at` | When the turn began and ended (UTC) | The record. |
+| `answer_text`, `citations` | The answer (a stopped turn keeps its partial text) and its citations as JSON | What the person sees after a reload. |
+| `guard_verdict` | The guard's verdict as JSON; null if the guard did not run | Phase 7's console shows why a turn was routed. |
+| `tool_calls`, `sections_retrieved` | Each tool call (name, a short summary of its input, success, duration), and the handbook sections the search returned | What the assistant did. The summaries never hold private values. |
+| `served_by_models`, `effort`, `prompt_version`, `toolset_version` | The model IDs that served the turn, and the settings in effect | Explains a result, and shows when a fallback happened. |
+| `input_tokens`, `output_tokens`, `cache_read_tokens`, `cache_write_tokens`, `cost_usd` | Token counts and the cost at list price | Measures cost and caching. |
+| `first_event_ms`, `total_ms` | Milliseconds to the first visible event, and in total | Measures latency. |
+| `refusal`, `fallback`, `injection_suspected` | Yes or no | Phase 7's console counts these. |
+
+### `ai_feedback`
+
+| Column | Holds | Why |
+|---|---|---|
+| `id`, `tenant_id`, `person_id`, `turn_id` | IDs: the feedback, its sandbox, its owner, and the answer it rates | One per answer. |
+| `helpful`, `reason` | A thumbs up or down, and an optional reason of at most 500 characters | So the owner can see which answers helped. |
+| `created_at` | When it was given (UTC) | The record. |
+
+### `ai_spend`
+
+| Column | Holds | Why |
+|---|---|---|
+| `id`, `tenant_id`, `turn_id` | IDs: the row, its sandbox, and the turn it belongs to | Identity. There is no person: the budget is the whole sandbox's. |
+| `kind`, `amount_usd` | `reserve` (the most a call could cost, never negative) or `settle` (the actual cost minus the reservation, so it can be negative); and the dollar amount, between -10 and 10 | The sandbox's AI budget (`AI_SANDBOX_BUDGET_USD`) is the sum. |
+| `created_at` | When it was added (UTC) | The record. |
+
+### `ai_spend_daily`
+
+Global: no sandbox, no person, no text, and outside row-level security.
+
+| Column | Holds | Why |
+|---|---|---|
+| `id` | A random UUID | Identity. |
+| `day` | The UTC date the row is added; a settle may instead carry its reservation's day, the day before | The demo's daily cap (`AI_DAILY_BUDGET_USD`) is the sum for a day across all sandboxes. |
+| `kind`, `amount_usd` | `reserve` or `settle`, and a dollar amount, with the same limits as `ai_spend` | The same reserve-then-settle ledger. |
+| `created_at` | When it was added (UTC), always the server's clock | The record, and what `day` must match. |
+
+**Who sees them.** `ai_conversations`, `ai_messages`, `ai_turns`, and `ai_feedback` are visible to the
+person they belong to and to no one else, HR included: Postgres enforces a second, restrictive rule
+on top of the sandbox rule. Phase 7 decides what the console may show. `ai_spend` is the sandbox's
+own ledger: its sum covers everyone in the sandbox, so people in one sandbox can see each other's
+turn IDs and the timing of their calls there, though never a question or an answer. A sandbox is one
+visitor playing fictional personas, so that is accepted, and no route returns these rows.
+`ai_spend_daily` holds amounts only, so it is visible to every sandbox's API session.
+
+**How long.** The first five are deleted with the sandbox, 24 hours after it is created.
+`ai_spend_daily` has no sandbox to be deleted with: its rows older than 30 days are deleted by
+Phase 8's cleanup job. The API can add rows but not change or delete them, except that a turn's
+outcome and trace columns can be updated while it is `running`. Once it ends, a trigger refuses any
+further change.
 
 ### The handbook: `handbook_versions`, `handbook_sections`, `handbook_chunks`
 

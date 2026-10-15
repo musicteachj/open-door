@@ -10,6 +10,50 @@ version (`0.x.y` while the app is being built, `1.0.0` when it is complete).
 
 ## [Unreleased]
 
+### Added
+
+- **The assistant's storage, budgets, and model connections** (Phase 4, stage 1). Nothing is
+  reachable from the web app yet; stage 2 builds the turn on top of this.
+  - **Conversations are stored append-only.** Six new tables hold conversations, messages, turns,
+    feedback, and two spending ledgers. Messages come back exactly as they were stored, because
+    Claude Opus 5.5 refuses a history whose earlier turns have changed. A turn can be updated
+    only while it runs; once it ends, it is frozen.
+  - **AI spending is capped:** $1.00 per sandbox and $3.00 a day across every sandbox, set by
+    `AI_SANDBOX_BUDGET_USD` and `AI_DAILY_BUDGET_USD`. Before each model call, the server reserves
+    what one attempt at the call could cost, under a database lock, and settles the difference
+    afterward, so two questions at once can't both slip under a cap. If a safety decline makes a
+    call fall back to another model, the declined attempt and the fallback attempt are both
+    billed, at the fallback model's higher price for the second, which can carry the total past
+    the cap by about one attempt at that price. Prices are pinned per model, with their source.
+  - **Three ways to answer, chosen by `AI_TRANSPORT`:**
+    - `anthropic`: the real API, with server-side fallbacks and the model's progress notes
+    - `scripted`: a rule-based stand-in for Claude, and the default, which costs nothing and
+      drives the crisis, sensitive, refusal, not-found, slow, and failing paths on demand
+    - `replay`: reserved for stage 3's offline evals
+
+    A transport check refuses `scripted` or `replay` in production, and the `anthropic` transport
+    refuses to start without `ANTHROPIC_API_KEY`. Stage 4 runs both when the API starts; until
+    then nothing builds a transport. Migrations and scripts need neither.
+  - **The Anthropic Python SDK** (`anthropic` 1.13), which only the `app.ai` package may import,
+    and `httpx2`, the HTTP library it is built on, as a runtime dependency rather than a test-only
+    one.
+
+### Security
+
+- **No one, HR included, can read another person's conversations** (Phase 4, stage 1). Every
+  assistant table that holds a sandbox's data has row-level security, which is Postgres hiding
+  rows the database session isn't allowed to see. It's scoped to the sandbox, and a second rule
+  scopes the conversation tables to the person. The one global table, the demo's daily spending
+  total, holds only dates and amounts.
+  Keys that point at a conversation or turn also name its owner, so no one can attach a row to
+  someone else's conversation even by knowing its ID. The spending ledgers refuse negative
+  reservations, out-of-range amounts, and forward-dated days; only a settlement may be dated
+  the day before, so a question that crosses midnight UTC settles on the day it reserved.
+- **An empty API key in the shell no longer hides the one in `apps/api/.env`** (Phase 4, stage
+  1). The settings ignore `ANTHROPIC_API_KEY` or `VOYAGE_API_KEY` when the shell sets it to an
+  empty string, so an agent shell that exports one empty can't shadow the real key, whatever
+  starts the process. Every other setting still fails when it's empty.
+
 ## [0.3.0] - 2026-10-14
 
 Phase 3: the handbook and its search. Juniper Row's fictional handbook (23 company sections, plus

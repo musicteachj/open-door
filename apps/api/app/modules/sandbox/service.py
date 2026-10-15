@@ -9,6 +9,7 @@ from sqlalchemy import insert
 from sqlalchemy.exc import DBAPIError
 from sqlalchemy.ext.asyncio import AsyncEngine
 
+from app.db.errors import has_sqlstate
 from app.db.models import Tenant
 from app.db.tenancy import NO_TENANT, TenantContext, tenant_session
 from app.modules.audit.service import record_event
@@ -28,7 +29,7 @@ NO_PUBLISHED_HANDBOOK = "OD001"
 
 def is_no_published_handbook(error: DBAPIError) -> bool:
     """Whether the database refused a new tenant because no handbook version is published."""
-    return getattr(error.orig, "sqlstate", None) == NO_PUBLISHED_HANDBOOK
+    return has_sqlstate(error, NO_PUBLISHED_HANDBOOK)
 
 
 # A sandbox, and every session in it, is deleted 24 hours after it is created (ADR 0007).
