@@ -12,7 +12,28 @@ NOT_A_TENANT_TABLE = "sessions"
 
 # The catalog queries below find the tables on their own, so a new table is covered without being
 # listed. These names only stop a broken query from passing by finding nothing.
-KNOWN_TABLES = {"tenants", "locations", "departments", "people", "person_private", "holidays"}
+KNOWN_TABLES = {
+    "tenants",
+    "locations",
+    "departments",
+    "people",
+    "person_private",
+    "holidays",
+    "ai_conversations",
+    "ai_messages",
+    "ai_turns",
+    "ai_feedback",
+    "ai_spend",
+}
+# Global tables: no tenant_id, so they sit outside row-level security. The handbook is read-only to
+# the API. ai_spend_daily holds only a day and an amount, so every sandbox's spending can be summed
+# into the demo's daily cap; it carries no tenant and no personal data.
+GLOBAL_TABLES = {
+    "handbook_versions",
+    "handbook_sections",
+    "handbook_chunks",
+    "ai_spend_daily",
+}
 KNOWN_UNIQUE_INDEXES = {"uq_people_tenant_id_work_email", "pk_person_private"}
 
 # Ordinary and partitioned tables, plus materialized views ('m') and foreign tables ('f'). Row-level
@@ -88,6 +109,25 @@ async def test_every_tenant_table_has_row_level_security_enabled_and_forced(
     assert set(tables) >= KNOWN_TABLES
     unprotected = {name for name, flags in tables.items() if flags != (True, True)}
     assert unprotected == {NOT_A_TENANT_TABLE}
+
+
+async def test_the_global_tables_have_no_tenant_id(app_engine: AsyncEngine) -> None:
+    # They are outside row-level security on purpose. A tenant_id on one would also put it in the
+    # test above, which would then demand row-level security on it.
+    async with app_engine.connect() as connection:
+        rows = (await connection.execute(text(TABLES_WITH_A_TENANT))).all()
+        existing = set(
+            await connection.scalars(
+                text(
+                    "SELECT table_name FROM information_schema.tables"
+                    " WHERE table_schema = 'public' AND table_name = ANY(:names)"
+                ),
+                {"names": sorted(GLOBAL_TABLES)},
+            )
+        )
+
+    assert existing == GLOBAL_TABLES
+    assert {name for name, *_ in rows}.isdisjoint(GLOBAL_TABLES)
 
 
 async def test_unique_indexes_on_tenant_tables_start_with_tenant_id(

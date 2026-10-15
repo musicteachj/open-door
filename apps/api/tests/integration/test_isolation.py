@@ -25,6 +25,12 @@ TENANT_TABLES = [
     for table in Base.metadata.sorted_tables
     if "tenant_id" in table.c and table.name != "sessions"
 ]
+# The assistant's tables a person owns. A second, restrictive rule shows each row only to that
+# person, HR included, so a read as HR finds none of them. ai_spend is the sandbox's own ledger and
+# has no such rule.
+PERSON_OWNED = [
+    table for table in TENANT_TABLES if table.name.startswith("ai_") and "person_id" in table.c
+]
 
 
 async def tenants_seen(session: AsyncSession | AsyncConnection, table: Table) -> set[UUID]:
@@ -58,9 +64,16 @@ async def test_a_tenant_sees_its_own_rows_and_none_of_another_tenants(
         # As HR, so the private-details rule shows every private row in the tenant.
         await set_is_hr(session, True)
         seen = {
-            table.name: await tenants_seen(session, table) for table in [TENANTS, *TENANT_TABLES]
+            table.name: await tenants_seen(session, table)
+            for table in [TENANTS, *TENANT_TABLES]
+            if table not in PERSON_OWNED
         }
+    # The assistant's rows belong to the employee who wrote them, so only they can read them.
+    async with tenant_session(app_engine, TenantContext(mine.id, mine.employee_id)) as session:
+        for table in PERSON_OWNED:
+            seen[table.name] = await tenants_seen(session, table)
 
+    assert len(PERSON_OWNED) == 4
     # Seeing its own rows at all proves the od_app policies reach the login through its
     # membership: with row-level security forced and no policy that applies, Postgres shows nothing.
     assert seen == {name: {mine.id} for name in seen}

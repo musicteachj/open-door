@@ -150,9 +150,8 @@ def main(argv: list[str] | None = None) -> None:
     if command == "embed":
         if settings.voyage_api_key is None:
             raise SystemExit(
-                "VOYAGE_API_KEY is not set. Add it to apps/api/.env. If it is in .env but still "
-                "missing, your shell may export it as an empty string, which wins over .env: "
-                "run `env -u VOYAGE_API_KEY make embed`."
+                "VOYAGE_API_KEY is not set. Add it to apps/api/.env (an empty value there means no "
+                "key)."
             )
         embedder = VoyageEmbedder(settings.voyage_api_key)
         print(

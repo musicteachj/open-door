@@ -1,6 +1,6 @@
 """The tables. Migration 0003 creates the tenant tables, with their row-level security and grants.
-Migration 0004 adds the handbook tables at the end of this file, which are global and read-only to
-the API.
+Migration 0004 adds the handbook tables, which are global and read-only to the API, and migration
+0008 adds the assistant's tables at the end of this file.
 
 Every table except `tenants` and `sessions` is a tenant table: it has a tenant_id, and Postgres
 shows the API only the rows of the tenant its transaction is scoped to (see app/db/tenancy.py).
@@ -16,15 +16,18 @@ Three rules keep tenants apart inside the schema:
 
 import uuid
 from datetime import date, datetime
+from decimal import Decimal
 from typing import Any
 
 from pgvector.sqlalchemy import Vector
 from sqlalchemy import (
+    JSON,
     CheckConstraint,
     Computed,
     ForeignKey,
     ForeignKeyConstraint,
     Index,
+    Numeric,
     Text,
     UniqueConstraint,
     false,
@@ -302,3 +305,246 @@ class HandbookChunk(Base):
     )
     # voyage-4 at 1024 dimensions. No approximate index: an exact scan over a few hundred rows.
     embedding: Mapped[list[float]] = mapped_column(Vector(1024))
+
+
+class AiConversation(Base):
+    """One person's conversation with the assistant, pinned to the models and prompts it began
+    with. Postgres shows a row only to its person, HR included (migration 0008)."""
+
+    __tablename__ = "ai_conversations"
+    __table_args__ = (
+        # The target of the children's ownership keys: a turn or message can point only at a
+        # conversation that belongs to the same person (see AiTurn).
+        UniqueConstraint("tenant_id", "id", "person_id"),
+        ForeignKeyConstraint(["tenant_id", "person_id"], ["people.tenant_id", "people.id"]),
+        # The newest conversation for a person.
+        Index(None, "tenant_id", "person_id", "created_at"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, server_default=func.gen_random_uuid())
+    tenant_id: Mapped[uuid.UUID] = mapped_column(ForeignKey(TENANT_FK, ondelete="CASCADE"))
+    person_id: Mapped[uuid.UUID]
+    created_at: Mapped[datetime] = mapped_column(server_default=func.now())
+    # The pins. A conversation keeps its model, system prompt, and tool list for its whole life,
+    # so the cached prefix stays valid and an old conversation never changes under the person.
+    model: Mapped[str]
+    guard_model: Mapped[str]
+    effort: Mapped[str]
+    prompt_version: Mapped[str]
+    toolset_version: Mapped[str]
+
+
+class AiTurn(Base):
+    """One question and its answer, and the trace of how the assistant produced it.
+
+    The only assistant row that changes, and only while it is `running`: `finish_turn` records its
+    end, and `recover_abandoned` fails one whose task died. Once it has ended, a trigger freezes it.
+    """
+
+    __tablename__ = "ai_turns"
+    __table_args__ = (
+        # Targets of the keys from messages, feedback (with the person), and spend (without).
+        UniqueConstraint("tenant_id", "id", "person_id"),
+        UniqueConstraint("tenant_id", "id"),
+        # Ownership keys. Postgres checks a foreign key without row-level security, so a plain
+        # (tenant_id, conversation_id) key would let one person add a turn to another's
+        # conversation, if they knew its random ID. Carrying person_id makes that impossible.
+        ForeignKeyConstraint(
+            ["tenant_id", "conversation_id", "person_id"],
+            ["ai_conversations.tenant_id", "ai_conversations.id", "ai_conversations.person_id"],
+            name="fk_ai_turns_conversation_owner",
+        ),
+        CheckConstraint(
+            "status IN ('running', 'completed', 'stopped', 'failed', 'crisis',"
+            " 'guard_unavailable')",
+            name="status",
+        ),
+        # One turn at a time per conversation.
+        Index(
+            "uq_ai_turns_one_running_per_conversation",
+            "tenant_id",
+            "conversation_id",
+            unique=True,
+            postgresql_where=text("status = 'running'"),
+        ),
+        # A conversation's turns, oldest first.
+        Index(None, "tenant_id", "conversation_id", "started_at"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, server_default=func.gen_random_uuid())
+    tenant_id: Mapped[uuid.UUID] = mapped_column(ForeignKey(TENANT_FK, ondelete="CASCADE"))
+    person_id: Mapped[uuid.UUID]
+    conversation_id: Mapped[uuid.UUID]
+    question: Mapped[str]
+    status: Mapped[str]
+    # Set when status is `failed`: the stream's error code, such as `model-unavailable`.
+    error_code: Mapped[str | None]
+    started_at: Mapped[datetime] = mapped_column(server_default=func.now())
+    ended_at: Mapped[datetime | None]
+    # What the person sees after a reload. A stopped turn keeps its partial answer here.
+    answer_text: Mapped[str] = mapped_column(server_default=text("''"))
+    citations: Mapped[list[dict[str, Any]]] = mapped_column(JSONB, server_default=text("'[]'"))
+
+    # The trace, filled in when the turn ends (docs/specs/2026-10-14-phase-4-assistant-core.md,
+    # "Ending a turn"). Phase 7's console reads these columns as they are.
+    # The guard's verdict, or null if the guard didn't run (a budget refusal, say).
+    # none_as_null: Python None is SQL NULL, not the JSON value null, so `IS NULL` finds it.
+    guard_verdict: Mapped[dict[str, Any] | None] = mapped_column(JSONB(none_as_null=True))
+    # [{name, inputSummary, ok, durationMs}], in call order.
+    tool_calls: Mapped[list[dict[str, Any]]] = mapped_column(JSONB, server_default=text("'[]'"))
+    # The handbook sections the search tool returned, as [{sectionId, passageIds}].
+    sections_retrieved: Mapped[list[dict[str, Any]]] = mapped_column(
+        JSONB, server_default=text("'[]'")
+    )
+    # The model IDs that served the turn. More than one if a fallback happened.
+    served_by_models: Mapped[list[str]] = mapped_column(
+        ARRAY(Text), server_default=text("'{}'::text[]")
+    )
+    effort: Mapped[str | None]
+    prompt_version: Mapped[str | None]
+    toolset_version: Mapped[str | None]
+    input_tokens: Mapped[int] = mapped_column(server_default=text("0"))
+    output_tokens: Mapped[int] = mapped_column(server_default=text("0"))
+    cache_read_tokens: Mapped[int] = mapped_column(server_default=text("0"))
+    cache_write_tokens: Mapped[int] = mapped_column(server_default=text("0"))
+    # The turn's cost at list price, guard included.
+    cost_usd: Mapped[Decimal] = mapped_column(Numeric(12, 6), server_default=text("0"))
+    # Milliseconds from the start of the turn to the first event the person could see.
+    first_event_ms: Mapped[int | None]
+    total_ms: Mapped[int | None]
+    refusal: Mapped[bool] = mapped_column(server_default=false())
+    fallback: Mapped[bool] = mapped_column(server_default=false())
+    injection_suspected: Mapped[bool] = mapped_column(server_default=false())
+
+
+class AiMessage(Base):
+    """One message of the conversation's history, stored exactly as the Messages API takes it.
+
+    Insert-only. `content` is `json`, not `jsonb`: Postgres keeps `json` as the exact text it was
+    given, while `jsonb` reorders keys and drops whitespace. The model's thinking blocks are signed
+    over their exact bytes, so the history must go back to the API unchanged.
+    """
+
+    __tablename__ = "ai_messages"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["tenant_id", "conversation_id", "person_id"],
+            ["ai_conversations.tenant_id", "ai_conversations.id", "ai_conversations.person_id"],
+            name="fk_ai_messages_conversation_owner",
+        ),
+        ForeignKeyConstraint(
+            ["tenant_id", "turn_id", "person_id"],
+            ["ai_turns.tenant_id", "ai_turns.id", "ai_turns.person_id"],
+            name="fk_ai_messages_turn_owner",
+        ),
+        UniqueConstraint("tenant_id", "conversation_id", "position"),
+        CheckConstraint("role IN ('user', 'assistant', 'system')", name="role"),
+        # For the foreign key to the turn: deleting a turn looks here for messages that refer to it.
+        Index(None, "tenant_id", "turn_id"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, server_default=func.gen_random_uuid())
+    tenant_id: Mapped[uuid.UUID] = mapped_column(ForeignKey(TENANT_FK, ondelete="CASCADE"))
+    person_id: Mapped[uuid.UUID]
+    conversation_id: Mapped[uuid.UUID]
+    turn_id: Mapped[uuid.UUID]
+    # The message's place in the conversation, from 0.
+    position: Mapped[int]
+    role: Mapped[str]
+    content: Mapped[list[dict[str, Any]]] = mapped_column(JSON)
+    # One entry per `search_result` block in `content`, in block order, written with the message:
+    # the section ID, the passage IDs of each text block, the title, the group name, the audience
+    # label, the last-updated date, and the deep link. The block's own text can't give those back
+    # reliably. Null for a message with no search results.
+    sources: Mapped[list[dict[str, Any]] | None] = mapped_column(JSONB(none_as_null=True))
+    created_at: Mapped[datetime] = mapped_column(server_default=func.now())
+
+
+class AiFeedback(Base):
+    """A person's thumbs up or down on one answer. One per turn."""
+
+    __tablename__ = "ai_feedback"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["tenant_id", "turn_id", "person_id"],
+            ["ai_turns.tenant_id", "ai_turns.id", "ai_turns.person_id"],
+            name="fk_ai_feedback_turn_owner",
+        ),
+        UniqueConstraint("tenant_id", "turn_id"),
+        CheckConstraint("char_length(reason) <= 500", name="reason_length"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, server_default=func.gen_random_uuid())
+    tenant_id: Mapped[uuid.UUID] = mapped_column(ForeignKey(TENANT_FK, ondelete="CASCADE"))
+    person_id: Mapped[uuid.UUID]
+    turn_id: Mapped[uuid.UUID]
+    helpful: Mapped[bool]
+    reason: Mapped[str | None]
+    created_at: Mapped[datetime] = mapped_column(server_default=func.now())
+
+
+class AiSpend(Base):
+    """The sandbox's budget ledger: the most a call could cost, reserved before it, and the
+    difference to its real cost, settled after it. Insert-only; the sandbox's spend is the sum.
+
+    It has no person_id, and the per-person rule doesn't apply to it: the budget is the whole
+    sandbox's, whoever asked.
+    """
+
+    __tablename__ = "ai_spend"
+    __table_args__ = (
+        # No person_id here, so this key is the plain (tenant_id, turn_id) one. It still keeps a
+        # spend row inside its own tenant.
+        ForeignKeyConstraint(
+            ["tenant_id", "turn_id"],
+            ["ai_turns.tenant_id", "ai_turns.id"],
+            name="fk_ai_spend_turn",
+        ),
+        CheckConstraint("kind IN ('reserve', 'settle')", name="kind"),
+        CheckConstraint("kind <> 'reserve' OR amount_usd >= 0", name="reserve_not_negative"),
+        CheckConstraint("amount_usd BETWEEN -10 AND 10", name="amount_range"),
+        # The sum of a sandbox's rows, under the budget lock, uses the prefix (tenant_id). The whole
+        # index serves the foreign key to the turn: deleting a turn looks here for its rows.
+        Index(None, "tenant_id", "turn_id"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, server_default=func.gen_random_uuid())
+    tenant_id: Mapped[uuid.UUID] = mapped_column(ForeignKey(TENANT_FK, ondelete="CASCADE"))
+    turn_id: Mapped[uuid.UUID]
+    kind: Mapped[str]
+    # A settle row is the actual cost minus the reservation, so it can be negative.
+    amount_usd: Mapped[Decimal] = mapped_column(Numeric(12, 6))
+    created_at: Mapped[datetime] = mapped_column(server_default=func.now())
+
+
+class AiSpendDaily(Base):
+    """What all sandboxes together have spent on the assistant, by UTC day. Global: no tenant_id.
+
+    It holds amounts only, so the demo's daily cap can sum every sandbox. Insert-only, with the
+    same kinds and checks as AiSpend, plus a day that must be today: a trigger stamps created_at
+    with the current time, and a check ties `day` to it. Only a settle may be dated yesterday.
+    """
+
+    __tablename__ = "ai_spend_daily"
+    __table_args__ = (
+        CheckConstraint("kind IN ('reserve', 'settle')", name="kind"),
+        CheckConstraint("kind <> 'reserve' OR amount_usd >= 0", name="reserve_not_negative"),
+        CheckConstraint("amount_usd BETWEEN -10 AND 10", name="amount_range"),
+        # A reserve is pinned to today. A settle may also land on yesterday, the day its reservation
+        # was made, when the two straddle midnight.
+        CheckConstraint(
+            "day = (created_at AT TIME ZONE 'UTC')::date"
+            " OR (kind = 'settle' AND day = (created_at AT TIME ZONE 'UTC')::date - 1)",
+            name="day_matches_created_at",
+        ),
+        # The sum for one day, under the budget lock.
+        Index(None, "day"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, server_default=func.gen_random_uuid())
+    # The UTC date of the spend. It defaults to today (UTC). A settle is written with its
+    # reservation's day, which the check allows to be yesterday.
+    day: Mapped[date] = mapped_column(server_default=text("(now() AT TIME ZONE 'UTC')::date"))
+    kind: Mapped[str]
+    amount_usd: Mapped[Decimal] = mapped_column(Numeric(12, 6))
+    created_at: Mapped[datetime] = mapped_column(server_default=func.now())

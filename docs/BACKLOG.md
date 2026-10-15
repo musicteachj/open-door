@@ -100,6 +100,12 @@ should pick it up. When one is done, delete it here and record it in the changel
 
 ## Phase 4: assistant core
 
+- **The audit log stores `None` as the JSON value `null`.** `AuditEvent.before` and `after` are
+  nullable `jsonb` columns without `none_as_null=True`, so an event with no before or after state
+  holds JSON `null`, not SQL `NULL`, and an `IS NULL` query misses it. The assistant tables were
+  fixed in stage 1; the audit columns need the same type change and a data fix for existing rows.
+  Phase 7's console is the first to query them. (Phase 4 stage 1 review.)
+
 - **Map search hits to `search_result` blocks, and open the passage panel on a citation's
   passage.** Each `search_handbook` hit carries its deep link, title, and passage texts, so it
   maps one to one onto a Claude `search_result` block, and a citation's block index names a
