@@ -158,8 +158,10 @@ the owner's explicit agreement first.
 
 ## AI development rules
 
-- **A change to a prompt, tool schema, or the guard needs the offline evals green and a live eval
-  run before the PR.** Put the scoreboard change in the PR description.
+- **A change to a prompt, a tool description or schema, or the guard needs the offline evals green
+  and a smoke run before its PR** (`make eval-live YES=1`, about $1.20, cap $2). Put the scoreboard
+  change in the PR description. **A release gets the full run** (`make eval-live SET=full YES=1`,
+  about $14, cap $16).
 - **Model IDs are pinned.** A new model is adopted only after an eval comparison.
 - **No paid AI calls on push or PR.** CI replays recorded fixtures. Live evals are a manual
   workflow with a budget cap.
@@ -229,6 +231,8 @@ make db         start Postgres (127.0.0.1:5433), migrate, then create the login 
 make ingest     load and publish the handbook from handbook/ and its committed embeddings
 make embed      fetch missing embeddings from Voyage (needs VOYAGE_API_KEY); commit the cache
 make eval-retrieval  score handbook search against the labeled questions (needs `make db`; no network)
+make eval-offline  replay the recorded assistant evals (needs `make db`; no network)
+make eval-live  paid; smoke by default, `SET=full` or `SET=effort`, and `YES=1` to run
 make dev        Postgres, migrations, API (:8000) and web app (:5173) together
 make check      everything CI runs; needs `make db` first
 make e2e        the browser tests (Playwright, Chromium) against the real API on :8100
@@ -274,11 +278,7 @@ wipes the data.
 
 ## Environment gotcha
 
-**In a Claude agent shell, `ANTHROPIC_API_KEY` may be exported as an empty string**, and
-`pydantic-settings` gives real environment variables precedence over `.env`. The empty value then
-silently shadows the key in `apps/api/.env`. This was learned the hard way on the owner's EMS
-project. When running the API from an agent shell, unset it first:
-
-```
-env -u ANTHROPIC_API_KEY uv run uvicorn app.main:app --reload
-```
+**A Claude agent shell may export `ANTHROPIC_API_KEY` as an empty string.** The settings now ignore
+an empty or blank `ANTHROPIC_API_KEY` or `VOYAGE_API_KEY` in the environment (a settings source
+drops only those two when blank), so the key in `apps/api/.env` wins and no `env -u` is needed. It
+was learned on the owner's EMS project and fixed in Phase 4, stage 1.

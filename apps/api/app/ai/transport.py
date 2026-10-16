@@ -109,6 +109,13 @@ GUARD_OUTPUT_SCHEMA: dict[str, Any] = {
     "additionalProperties": False,
 }
 
+# Low effort and a JSON answer on the schema above. Part of the request body, so it is part of the
+# fingerprint a replay keys the guard call by.
+GUARD_OUTPUT_CONFIG: dict[str, Any] = {
+    "effort": "low",
+    "format": {"type": "json_schema", "schema": GUARD_OUTPUT_SCHEMA},
+}
+
 
 @dataclass(frozen=True)
 class GuardRequest:
@@ -118,6 +125,22 @@ class GuardRequest:
     model: str
     system: str
     messages: tuple[dict[str, Any], ...]
+
+
+def guard_api_kwargs(request: GuardRequest) -> dict[str, Any]:
+    """The keyword arguments for the guard's `client.messages.create`, as plain JSON-able data.
+
+    Pure, like `ModelRequest.to_api_kwargs`, and the one place the guard's call is spelled out: the
+    Anthropic transport sends exactly this, and a replay fingerprints exactly this, so a recorded
+    guard call is the call that was sent.
+    """
+    return {
+        "model": request.model,
+        "max_tokens": GUARD_MAX_TOKENS,
+        "output_config": copy.deepcopy(GUARD_OUTPUT_CONFIG),
+        "system": request.system,
+        "messages": copy.deepcopy(list(request.messages)),
+    }
 
 
 @dataclass(frozen=True)

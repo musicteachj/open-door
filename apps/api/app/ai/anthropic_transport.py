@@ -12,7 +12,7 @@ import asyncio
 import json
 import logging
 from collections.abc import AsyncIterator, Awaitable
-from typing import Any, cast
+from typing import Any
 
 import anyio
 import httpx2
@@ -26,7 +26,6 @@ from anthropic import (
     Timeout,
 )
 from anthropic.lib.streaming import ParsedBetaMessageStreamEvent
-from anthropic.types import MessageParam, OutputConfigParam
 from anthropic.types import Usage as ApiUsage
 from anthropic.types.beta import (
     BetaFallbackMessageIterationUsage,
@@ -37,8 +36,6 @@ from anthropic.types.beta.parsed_beta_message import ParsedBetaMessage
 
 from app.ai.pricing import IterationUsage, Usage, dearer_model
 from app.ai.transport import (
-    GUARD_MAX_TOKENS,
-    GUARD_OUTPUT_SCHEMA,
     GUARD_TIMEOUT_SECONDS,
     Finished,
     GuardRequest,
@@ -54,6 +51,7 @@ from app.ai.transport import (
     TextBlockEnd,
     TextDelta,
     ToolCall,
+    guard_api_kwargs,
     parse_guard_output,
 )
 from app.core.config import Settings
@@ -74,11 +72,6 @@ MODEL_POOL_TIMEOUT_SECONDS = 10
 STREAM_CLOSE_TIMEOUT_SECONDS = 5
 
 logger = logging.getLogger(__name__)
-
-_GUARD_OUTPUT_CONFIG: OutputConfigParam = {
-    "effort": "low",
-    "format": {"type": "json_schema", "schema": GUARD_OUTPUT_SCHEMA},
-}
 
 # A spend limit set in the Console arrives as a 400 whose message starts like this.
 SPEND_LIMIT_MESSAGE_PREFIX = "You have reached your specified API usage limits"
@@ -162,19 +155,14 @@ class AnthropicTransport:
     async def classify(self, request: GuardRequest) -> GuardResult:
         try:
             async with asyncio.timeout(GUARD_TIMEOUT_SECONDS):
-                response = await self.client.messages.create(
-                    model=request.model,
-                    max_tokens=GUARD_MAX_TOKENS,
-                    output_config=_GUARD_OUTPUT_CONFIG,
-                    system=request.system,
-                    # Plain role/content dicts, which is what the API takes.
-                    messages=cast(list[MessageParam], list(request.messages)),
-                )
+                # The same plain data a replay fingerprints (`guard_api_kwargs`), so the call that
+                # is recorded is the call that is sent.
+                response = await self.client.messages.create(**guard_api_kwargs(request))
         except TimeoutError:
             raise GuardUnavailable("the guard did not answer in time") from None
         except APIStatusError as error:
             # The same limit the assistant call reports, so it isn't hidden as a broken guard.
-            if isinstance(error, BadRequestError) and _is_spend_limit(error.body):
+            if isinstance(error, BadRequestError) and is_spend_limit(error.body):
                 raise SpendLimitReached(SPEND_LIMIT_TEXT) from error
             raise GuardUnavailable(
                 f"the guard's call failed (status {error.status_code}, {error.type})"
@@ -186,7 +174,7 @@ class AnthropicTransport:
         try:
             # Haiku has no fallback, so a refusal is final. A response can begin with thinking
             # blocks, so the answer is found by type, never by position.
-            usage = _usage(response.usage)
+            usage = usage_from_sdk(response.usage)
             if response.stop_reason != "end_turn":
                 raise GuardUnavailable(
                     f"the guard stopped with {response.stop_reason!r}", usage=usage
@@ -256,7 +244,7 @@ async def _sdk_read[T](read: Awaitable[T]) -> T:
 
 
 def _unavailable_or_spend_limit(error: APIStatusError) -> Exception:
-    if isinstance(error, BadRequestError) and _is_spend_limit(error.body):
+    if isinstance(error, BadRequestError) and is_spend_limit(error.body):
         return SpendLimitReached(SPEND_LIMIT_TEXT)
     # An `event: error` partway through a stream is raised with the stream's own 200 status, which
     # says nothing about the failure, so only a real error status is reported.
@@ -268,7 +256,8 @@ def _unavailable_or_spend_limit(error: APIStatusError) -> Exception:
     )
 
 
-def _is_spend_limit(body: object) -> bool:
+def is_spend_limit(body: object) -> bool:
+    """Whether an API error body is the Anthropic Console's spend limit (a 400)."""
     if not isinstance(body, dict):
         return False
     detail = body.get("error")
@@ -332,7 +321,7 @@ def _finished(final: ParsedBetaMessage[Any], *, requested_model: str) -> Finishe
     blocks = [
         block.model_dump(mode="json", exclude_none=True, by_alias=True) for block in final.content
     ]
-    usage = _usage(final.usage)
+    usage = usage_from_sdk(final.usage)
     entries = [
         item
         for item in final.usage.iterations or ()
@@ -351,7 +340,7 @@ def _finished(final: ParsedBetaMessage[Any], *, requested_model: str) -> Finishe
     # little.
     unlabeled = dearer_model(requested_model, serving_model) if fell_back else requested_model
     iterations = tuple(
-        IterationUsage(item.model or unlabeled, _usage(item)) for item in entries
+        IterationUsage(item.model or unlabeled, usage_from_sdk(item)) for item in entries
     ) or (
         # No breakdown: the whole call is one attempt. It is priced as asked unless the API
         # signaled a fallback, because the model name it echoes can be a dated ID that has no
@@ -398,9 +387,10 @@ def _echoable_content(blocks: list[dict[str, Any]]) -> list[dict[str, Any]]:
     ]
 
 
-def _usage(
+def usage_from_sdk(
     usage: ApiUsage | BetaUsage | BetaMessageIterationUsage | BetaFallbackMessageIterationUsage,
 ) -> Usage:
+    """The tokens a response used, with cache counts the API leaves out (None) as zero."""
     return Usage(
         input_tokens=usage.input_tokens,
         output_tokens=usage.output_tokens,

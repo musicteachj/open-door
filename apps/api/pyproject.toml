@@ -122,6 +122,7 @@ type = "forbidden"
 source_modules = [
     "app.ai.transport",
     "app.ai.scripted",
+    "app.ai.replay",
     "app.ai.pricing",
     "app.ai.budget",
     "app.ai.conversations",

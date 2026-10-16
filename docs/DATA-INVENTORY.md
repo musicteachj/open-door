@@ -338,5 +338,32 @@ the safety check that reads each message first. Anthropic is the data processor 
 > updated 2026-07-01), and "API and data retention" (platform.claude.com/docs), both read on
 > 2026-10-15.
 
+### The assistant evals (`evals/assistant/`)
+
+The evals run real turns against a fictional sandbox and keep what they need to replay them. No
+real person's data is involved: every name, address, phone, email, and birth date comes from the
+seed generator.
+
+- **The eval sandbox** is a normal sandbox with a fixed ID, created at the start of a run and
+  deleted at the end through the owner login (the cascade removes its people, conversations,
+  turns, spend, and audit rows). The run also deletes the `ai_spend_daily` rows it added, and
+  only those. A crashed run's sandbox is removed at the next run's start.
+- **The recorded fixtures** (`fixtures/*.jsonl.gz`, committed): each model, guard, and judge call
+  as a hash of its request and the response the model gave (the answer text, tool calls, usage,
+  and citations). The responses can include the fictional asker's own private details, when an
+  item asks the assistant about themselves. They change only when a live run re-records them.
+- **The query embeddings** (`fixtures/embeddings.jsonl`, committed): vectors keyed by a hash of
+  the model, the size, and the text. The text itself isn't stored.
+- **The hand grades** (`hand-grades.yaml` and `hand-grades-key.yaml`, committed): 34 recorded
+  answers with their questions, cited passages, and a yes or no on each rubric line, and which 4
+  answers were planted with flaws.
+- **Each run's scoreboard and traces** (`runs/`, git-ignored, on the machine that ran it): the
+  scores, costs, and every item's answer, tool results, and guard verdict.
+- **Who receives what in a live run:** Anthropic receives the eval questions and the fictional
+  sandbox's tool results (Opus 5.5 and Haiku 5.5), and the judge (Sonnet 5.5) receives each
+  answer with its question, reference answer, and cited passages. Voyage receives the eval
+  questions' and the model's search queries, to embed them. Live runs happen only on the owner's
+  machine, with `make eval-live YES=1`; CI replays the fixtures with no network.
+
 - **Logs hold no conversation content.** The API logs IDs, timings, exception types, and stop
   reasons, never a question, an answer, a tool result, or the system prompt.
