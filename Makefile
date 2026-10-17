@@ -14,7 +14,7 @@ ZIZMOR := zizmor@1.30.1
 GITLEAKS := ghcr.io/gitleaks/gitleaks:v8.30.1
 
 .DEFAULT_GOAL := help
-.PHONY: help setup db db-stop migrate bootstrap-db ingest embed eval-retrieval eval-offline eval-live migrations-roundtrip dev dev-api dev-web openapi check check-api check-web e2e captures check-docs check-workflows audit
+.PHONY: help setup db db-stop migrate bootstrap-db ingest embed eval-retrieval eval-offline eval-live migrations-roundtrip dev dev-api dev-web openapi check check-api check-web e2e proxy-check captures check-docs check-workflows audit
 
 help: ## List the available commands
 	@grep -E '^[a-zA-Z_-]+:.*## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*## "}; {printf "  %-22s %s\n", $$1, $$2}'
@@ -101,7 +101,7 @@ openapi: ## Regenerate the OpenAPI schema and the web app's API client
 	cd $(API) && uv run python scripts/export_openapi.py
 	cd $(WEB) && npm run generate:api
 
-check: check-api check-web e2e check-docs check-workflows ## Run everything CI runs (start Postgres first with `make db`)
+check: check-api check-web e2e proxy-check check-docs check-workflows ## Run everything CI runs (start Postgres first with `make db`)
 
 check-api: ## Lint, type-check, migrate, load the handbook, and test the API; confirm the schema is current
 	cd $(API) && uv run ruff check . ../../evals --config pyproject.toml
@@ -131,6 +131,14 @@ check-web: ## Lint, format-check, type-check, test, and build the web app; confi
 e2e: ## Run the browser tests in Chromium, against the real API and a build with the gallery
 	cd $(WEB) && npx playwright install chromium
 	cd $(WEB) && npm run e2e
+
+# Runs the turn stream through nginx with a 20-second read timeout: the pass run (a 45-second
+# silence that the heartbeat must carry), the control run (heartbeat off; nginx must cut it), and
+# the shutdown run (SIGTERM mid-stream; the turn must be saved as stopped). It starts the API on
+# :8200 and nginx on :8201 itself, with the scripted model, and needs Docker and the seeded
+# database (`make db`). About two minutes; don't run it beside other database-heavy work.
+proxy-check: ## Run the turn stream through a strict nginx: the pass, control, and shutdown runs (needs `make db` and Docker)
+	cd $(API) && uv run python ../../scripts/proxy-check/check.py
 
 # Local only: `make check` and CI never run it. The specimen pages load React and Babel from
 # unpkg.com, so it needs a network. The screens start real sandboxes, so it needs Postgres up with

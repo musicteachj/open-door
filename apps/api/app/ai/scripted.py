@@ -57,6 +57,7 @@ MODEL_BEHAVIORS: Final = (
     "long_answer",
     "silence",
     "mid_stream_error",
+    "working_note",
 )
 BEHAVIORS: Final = GUARD_BEHAVIORS + MODEL_BEHAVIORS
 
@@ -76,6 +77,9 @@ DECLINE_TEXT: Final = (
     "I can't share another employee's private details, like a home address. If you need to reach"
     " someone for work, the people directory lists their work contact details."
 )
+# Written before the search by the working-note scenario. The turn takes it back and shows it as a
+# status line, so the browser tests and Stage 6 can see a retraction.
+WORKING_NOTE_TEXT: Final = "Let me look that up in the handbook first."
 MID_STREAM_TEXT: Final = "Let me check the handbook for that. "
 # The long answer cites the passage this many times, once per block.
 LONG_ANSWER_BLOCKS: Final = 12
@@ -327,13 +331,23 @@ class ScriptedTransport:
         if behavior == "silence":
             await asyncio.sleep(self.silence_seconds)
 
-        # The default, not_found, long_answer, and silence all begin by searching.
+        # The default, not_found, long_answer, silence, and working_note all begin by searching.
         digest = hashlib.sha256(f"{question}|{_tool_calls_so_far(messages)}".encode()).hexdigest()
         call = ToolCall(f"toolu_scripted_{digest[:12]}", "search_handbook", {"query": question})
-        yield StatusNote(SEARCH_NOTE)
+        content: list[dict[str, Any]] = []
+        if behavior == "working_note":
+            # Text before the search: the turn streams it, then takes it back at the tool call.
+            async for event in self._say([(WORKING_NOTE_TEXT, None)], finish=False):
+                yield event
+            content.append({"type": "text", "text": WORKING_NOTE_TEXT})
+        else:
+            yield StatusNote(SEARCH_NOTE)
         yield call
         yield _finished(
-            [{"type": "tool_use", "id": call.id, "name": call.name, "input": call.input}],
+            [
+                *content,
+                {"type": "tool_use", "id": call.id, "name": call.name, "input": call.input},
+            ],
             "tool_use",
         )
 

@@ -13,6 +13,7 @@ from app.ai.pricing import SCRIPTED_MODEL, Usage, turn_call_cost
 from app.ai.scripted import (
     BEHAVIORS,
     SCENARIOS_PATH,
+    WORKING_NOTE_TEXT,
     ScriptedTransport,
     load_scenarios,
 )
@@ -373,6 +374,27 @@ async def check_mid_stream_error(transport: ScriptedTransport, question: str) ->
     assert not any(isinstance(event, Finished) for event in seen)
 
 
+async def check_working_note(transport: ScriptedTransport, question: str) -> None:
+    # It writes a short note first, then searches: the text is taken back by the turn.
+    first, second = await first_then_second(
+        transport,
+        question,
+        search_result("/handbook/4.3?passage=p1", "4.3 Sick leave", PASSAGE_ONE),
+    )
+    assert text_of(first) == WORKING_NOTE_TEXT
+    assert any(isinstance(event, ToolCall) for event in first)
+    assert [type(event) for event in first].index(TextBlockEnd) < [
+        type(event) for event in first
+    ].index(ToolCall)
+    done = finished_of(first)
+    assert done.stop_reason == "tool_use"
+    assert [block["type"] for block in done.message["content"]] == ["text", "tool_use"]
+    assert done.message["content"][0]["text"] == WORKING_NOTE_TEXT
+    # The second call answers as the default does: cited, ending the turn.
+    assert finished_of(second).stop_reason == "end_turn"
+    assert any(event.citations for event in second if isinstance(event, TextBlockEnd))
+
+
 async def check_slow_guard(transport: ScriptedTransport, question: str) -> None:
     started = time.monotonic()
     result = await transport.classify(guard_request(question))
@@ -415,6 +437,7 @@ CHECKS: dict[str, Check] = {
     "long_answer": check_long_answer,
     "silence": check_silence,
     "mid_stream_error": check_mid_stream_error,
+    "working_note": check_working_note,
     "slow_guard": check_slow_guard,
     "guard_failure": check_guard_failure,
     "guard_crisis": check_guard_crisis,

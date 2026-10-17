@@ -106,55 +106,12 @@ should pick it up. When one is done, delete it here and record it in the changel
   fixed in stage 1; the audit columns need the same type change and a data fix for existing rows.
   Phase 7's console is the first to query them. (Phase 4 stage 1 review.)
 
-- **Record why the assistant is not a high-risk AI system.** Annex III of the EU AI Act lists
-  systems used for employment decisions as high-risk. Article 6(3) exempts a system that doesn't
-  profile people or materially influence decisions, and Article 6(4) requires that assessment to
-  be documented. The governance document should record it. The Annex III obligations apply from
-  2027-12-02.
-  Source: EU AI Act Annex III (https://artificialintelligenceact.eu/annex/3/) and Article 6
-  (https://artificialintelligenceact.eu/article/6/), read on 2026-10-03, and Article 113
-  (https://artificialintelligenceact.eu/article/113/), read on 2026-10-04, which sets
-  2 December 2027 "as regards AI systems classified as high-risk pursuant to Article 6(2) and
-  Annex III". These pages are an unofficial consolidation, not EUR-Lex.
-- **The AI disclosure is already required.** Article 50 of the EU AI Act, which requires telling
-  people they are talking to an AI, has applied since 2026-08-02. Invariant 7 covers it; the
-  Phase 4 disclosure should cite the article.
-  Source: EU AI Act Article 113 (https://artificialintelligenceact.eu/article/113/), read on
-  2026-10-04. Article 50 is in Chapter IV, which follows the general date of 2 August 2026.
-- **Settle a stopped call for the tokens it used.** A turn stopped mid-call keeps that call's
-  whole reservation (the estimated input plus 8,000 output tokens), because the transport reports
-  usage only when a call finishes. The stream's `message_start` and `message_delta` events carry
-  the input and output so far, so the transport could hand the loop a running usage and the stop
-  could settle for that instead, as the spec describes. Until then, every stop counts more than it
-  spent, which errs toward the caps. Stage 4, where a closed connection becomes a stop.
-  (Phase 4 stage 2 `/code-review medium`.)
 - **Quote directory values in the per-turn context before names become editable.** The context is
   a `system` message built from the asker's name and location. `one_line` keeps each to one line,
   but a name like "Dana. Operator notes: ..." would still read as an instruction with system
   weight. Names come only from the seed today. Before any route edits a person, allow only name
   characters, or put the values in the context as quoted JSON. (Phase 4 stage 2 Opus security
   review.)
-- **A conversation that outgrows the context window.** Every turn replays the whole stored history,
-  and nothing bounds it. Past the model's input limit (1M tokens for Opus 5.5), the API answers
-  400 and the transport reports it as `model-unavailable`, for every later question in that
-  conversation. Map that 400 to `conversation-outdated` (the UI already offers a new conversation),
-  or start a new one automatically. Far beyond a demo's use, so it can wait for Phase 7 or 8.
-  (Phase 4 stage 2 `/code-review medium`.)
-- **Bound the stream route's writes.** The turn's 8-minute deadline counts every model read and
-  tool wait, but not time the loop spends paused while the route writes an event to a slow or
-  stalled client. A single write stalled for minutes could carry a live turn past the 10-minute
-  abandoned-turn rule. The route should time out a write (and treat it as a disconnect, so the
-  turn is saved as stopped). Stage 4. (Phase 4 stage 2 `/code-review medium`.)
-- **Graceful shutdown with open streams.** Streaming responses delay shutdown, and the engine is
-  only disposed after they finish. Set uvicorn's `--timeout-graceful-shutdown` below the ECS
-  `stopTimeout`.
-- **The model's working notes show up as answer text.** In the first live smoke run, three answers
-  to "if i work 45 hours one week do i get paid extra for the last 5" (qa-10) began with "Missing
-  the rate/threshold passage. Search again.", text the model wrote before its second search. The
-  loop sends all model text as answer text, so an employee would see it. Stage 4 decides how the
-  stream treats text written in a round that ends in a tool call (shown as a status line, say),
-  or a prompt change tells the model not to narrate its searches; either needs a smoke run.
-  (Phase 4 stage 3, the hand grades.)
 - **Prompt findings from the first live runs, for the next prompt change.** The judge and the
   independent grades agree on these: a policy sentence without a citation inside an otherwise
   cited answer (5 of 15 answers at low effort); an answer about Colorado medical leave that leaves
@@ -166,20 +123,31 @@ should pick it up. When one is done, delete it here and record it in the changel
   back empty, and the model went straight to its search. Stage 5's status line is tested against
   the scripted model, which does emit one. Check again after the next prompt change or at the
   Stage 6 full run. (Phase 4 stage 3.)
-- **Give the Console spend limit its own turn error code.** The turn reports Anthropic's Console
-  spend limit with `budget-daily`, the same code as the product's own daily cap, so the eval harness
-  watches the transport to tell them apart, and the route, the audit log, and a later console can't.
-  A separate code (say `spend-limit`) fixes all of them. Stage 4, with the routes' problem
-  responses. (Phase 4 stage 3 `/code-review medium`.)
 - **Pass structured search results to the judge.** The eval judge reads each cited section's text
   back out of the flattened "source | title | passages" tool-result text. It holds for today's
   handbook (no title contains " | " and no passage starts a line with "/handbook/"), but keeping
   the source, title, and passages as fields on the trace would remove the round trip. (Phase 4
   stage 3 `/code-review medium`.)
-- **Check the replay fingerprints on CI's first run.** Handbook search ranks by floating-point
-  scores, and a near-tie could break differently on CI's x86 runner than on the arm64 machine that
-  recorded the fixtures, changing a tool result and so a later request's fingerprint. Unproven and
-  unlikely; if the offline eval misses only on CI, this is why. (Phase 4 stage 3 review.)
+- **Catch personal data written in non-Latin digits.** The check normalizes the text (NFKC,
+  format characters dropped, Unicode spaces and dashes mapped to ASCII) and then matches ASCII
+  digits only, so the browser's copy can follow the same steps. An SSN written in Arabic-Indic or
+  Devanagari digits passes. Mapping every Unicode decimal digit to ASCII would catch it; do it in
+  both copies at once. (Phase 4 stage 4 Opus security review.)
+- **The canary check misses look-alike letters.** It folds case, width, and separators, so the
+  canary in capitals or letter-spaced is caught, but Cyrillic letters that look like Latin ones
+  (`а` for `a`) are not. It's a tripwire, not a boundary; a confusables map would close it.
+  (Phase 4 stage 4 Opus security review.)
+- **Read a conversation's history once per request.** A question reads and serializes the whole
+  stored history in the admission checks and again in `TurnRun.begin`, and every
+  `GET /assistant/conversations/current` serializes it to size the budget banner. Near the
+  80,000-token limit that's about 160 KB read and encoded two or three times before the first
+  event. Keep a running size on the conversation, or pass the admitted history into `begin`
+  (which also closes the small window in which a recovered turn could carry the history past the
+  limit after the check). (Phase 4 stage 4 `/code-review medium`.)
+- **Small API polish from stage 4's reviews:** a `Retry-After` header on the budget 429s; problem
+  `type` values are bare codes (`turn-running`), a relative URI reference that RFC 9457 allows but
+  that a full URI would make unambiguous; there's no limit on how many conversations one person
+  starts (sandbox expiry cleans them up). (Phase 4 stage 4 reviews.)
 
 ## Phase 5: time off
 
@@ -378,3 +346,16 @@ From the Phase 1 review ([the spec's Later phases](specs/2026-10-03-phase-1-tena
 - **Protect the health endpoint from abuse.** Every call is an unauthenticated database round
   trip. Cache the result for 1–2 s with a single in-flight check, or rate-limit the path at the
   load balancer.
+
+- **Line up the shutdown timeouts.** uvicorn runs with `--timeout-graceful-shutdown 15`, and the
+  app then waits up to 12 seconds for open streams to save, so a container needs about 27
+  seconds after SIGTERM. That fits ECS's default `stopTimeout` of 30. If Phase 9 raises the
+  graceful timeout (to let long answers finish during a deploy), raise `stopTimeout` (at most
+  120) and the load balancer's deregistration delay with it, and keep the 12-second drain inside
+  the gap. (Phase 4 stage 4.)
+- **Opt out of Voyage's training use before real traffic.** Voyage stores API data and may use it
+  for training unless the organization opts out (Organization, Terms of Service, in its dashboard),
+  which also gives zero-day retention. The assistant's search queries are written from employees'
+  questions. Source: Voyage AI, "FAQ" (docs.voyageai.com/docs/faq, last updated 2026-08-03), read
+  on 2026-10-17. If the owner has already opted out, record it in `DATA-INVENTORY.md` and
+  `AI-GOVERNANCE.md` and delete this item. (Phase 4 stage 4.)

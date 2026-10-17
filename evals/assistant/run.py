@@ -64,7 +64,7 @@ from app.ai import anthropic_transport
 from app.ai.anthropic_transport import AnthropicTransport
 from app.ai.budget import DAY_SUM, Caps
 from app.ai.context import actor_view
-from app.ai.conversations import Pins, create_conversation
+from app.ai.conversations import CURRENT_PINS, Pins, create_conversation
 from app.ai.embeddings import (
     CachedEmbedder,
     Embedder,
@@ -74,7 +74,7 @@ from app.ai.embeddings import (
     InputType,
     VoyageEmbedder,
 )
-from app.ai.pricing import HAIKU
+from app.ai.pricing import IterationUsage, is_priced, turn_call_cost
 from app.ai.prompts.versions import GUARD_PROMPT_VERSION, PROMPT_VERSION, TOOLSET_VERSION
 from app.ai.replay import (
     RE_RECORD_HINT,
@@ -89,13 +89,22 @@ from app.ai.transport import (
     Finished,
     GuardRequest,
     GuardResult,
+    GuardUnavailable,
     ModelEvent,
     ModelRequest,
-    SpendLimitReached,
     Transport,
     iter_search_results,
 )
-from app.ai.turn import Citation, Error, Escalation, Status, TurnDeps, run_turn
+from app.ai.turn import (
+    Citation,
+    Error,
+    Escalation,
+    Status,
+    TextRetracted,
+    TurnDeps,
+    TurnEvent,
+    run_turn,
+)
 from app.ai.turn import TextDelta as AnswerText
 from app.core.config import Settings, get_settings
 from app.db.engine import create_engine
@@ -142,9 +151,10 @@ logger = logging.getLogger(__name__)
 # So large that the product's caps ($1 a sandbox, $3 a day) never stop an eval.
 EVAL_CAPS = Caps(sandbox_usd=Decimal(1000), daily_usd=Decimal(1000))
 
-# The pinned models for every eval conversation (ADR 0005: model IDs are pinned).
-MODEL_ID = "claude-opus-5-5"
-GUARD_MODEL_ID = HAIKU
+# The pinned models for every eval conversation (ADR 0005: model IDs are pinned). They are the
+# app's own pins, so the evals always test what a new conversation gets.
+MODEL_ID = CURRENT_PINS.model
+GUARD_MODEL_ID = CURRENT_PINS.guard_model
 
 Mode = Literal["scripted", "live", "replay"]
 Effort = Literal["low", "medium"]
@@ -425,9 +435,6 @@ class ObservingTransport:
         self.guard_results: list[GuardResult] = []
         # Every call in the order it was made: the kind and its fingerprint.
         self.calls: list[tuple[Literal["model", "guard"], str]] = []
-        # Whether the Anthropic Console's spend limit was raised. The turn reports it with the same
-        # code as a refusal by the ledger, so only the transport's own error tells them apart.
-        self.spend_limit_reached = False
 
     async def stream(self, request: ModelRequest) -> AsyncIterator[ModelEvent]:
         self.requests.append(request)
@@ -438,9 +445,6 @@ class ObservingTransport:
                 if isinstance(event, Finished):
                     self.finished.append(event)
                 yield event
-        except SpendLimitReached:
-            self.spend_limit_reached = True
-            raise
         finally:
             close = getattr(events, "aclose", None)
             if close is not None:
@@ -449,12 +453,49 @@ class ObservingTransport:
     async def classify(self, request: GuardRequest) -> GuardResult:
         self.guard_requests.append(request)
         self.calls.append(("guard", guard_fingerprint(request)))
+        result = await self.inner.classify(request)
+        self.guard_results.append(result)
+        return result
+
+
+class LiveCallMeter:
+    """Wraps the real transport, under the `RecordingTransport`, and prices every call that reaches
+    it. A call answered from a recording never gets here, so the total is what the run really paid
+    for the assistant and the guard (the sandbox ledger prices recorded calls too, which is right
+    for the cap but not for a report of money spent).
+
+    A call that bills nothing it reports (an error, a timeout) adds nothing; a guard answer that was
+    unusable reports its usage and is counted. No stream error reports usage. Priced like the
+    turn prices it: each attempt at the model that served it."""
+
+    def __init__(self, inner: Transport) -> None:
+        self.inner = inner
+        self.total_usd = Decimal(0)
+
+    async def stream(self, request: ModelRequest) -> AsyncIterator[ModelEvent]:
+        events = self.inner.stream(request)
+        try:
+            async for event in events:
+                if isinstance(event, Finished):
+                    self.total_usd += turn_call_cost(event.iterations)
+                yield event
+        finally:
+            close = getattr(events, "aclose", None)
+            if close is not None:
+                await close()
+
+    async def classify(self, request: GuardRequest) -> GuardResult:
         try:
             result = await self.inner.classify(request)
-        except SpendLimitReached:
-            self.spend_limit_reached = True
+        except GuardUnavailable as error:
+            # An answer that was unusable (a refusal, a cut-off, bad JSON) was still billed, and
+            # reports its usage. An error or a timeout reports none: the cost is unknown.
+            if error.usage is not None:
+                self.total_usd += turn_call_cost([IterationUsage(request.model, error.usage)])
             raise
-        self.guard_results.append(result)
+        # As the turn prices it: the model that served the call when it has a pinned price.
+        model = result.served_by if is_priced(result.served_by) else request.model
+        self.total_usd += turn_call_cost([IterationUsage(model, result.usage)])
         return result
 
 
@@ -671,13 +712,14 @@ async def _run_item(
         # canary leak (model behavior, recorded) or something else (a gap).
         transport.settle(prompt_leak=turn_error_code == graders.PROMPT_LEAK)
 
+    shown = answer_as_shown(events)
     return ItemTrace(
         item_id=item.id,
         persona=item.persona,
         question=item.question,
         person_id=person_id,
-        answer_text="".join(e.text for e in events if isinstance(e, AnswerText)),
-        citations=tuple(e.to_json() for e in events if isinstance(e, Citation)),
+        answer_text=shown[0],
+        citations=shown[1],
         tool_uses=_tool_uses(observer),
         tool_results=_tool_results(observer),
         guard=_guard_verdict(observer),
@@ -695,9 +737,25 @@ async def _run_item(
         cost_usd=cost_usd,
         recording_gaps=_recording_gaps(transport, observer),
         used=_used_keys(observer),
-        console_limit=observer.spend_limit_reached,
+        console_limit=turn_error_code == CONSOLE_LIMIT_CODE,
         requests=tuple(observer.requests),
     )
+
+
+def answer_as_shown(events: Sequence[TurnEvent]) -> tuple[str, tuple[dict[str, Any], ...]]:
+    """The answer text and citations a person is left with: what the stream sent, minus anything a
+    `text.retracted` took back (a working note written before a tool call)."""
+    text: list[str] = []
+    citations: list[dict[str, Any]] = []
+    for event in events:
+        if isinstance(event, TextRetracted):
+            text.clear()
+            citations.clear()
+        elif isinstance(event, AnswerText):
+            text.append(event.text)
+        elif isinstance(event, Citation):
+            citations.append(event.to_json())
+    return "".join(text), tuple(citations)
 
 
 def _used_keys(observer: ObservingTransport) -> tuple[tuple[str, int], ...]:
@@ -964,15 +1022,17 @@ class RunEnv:
 class SpendCap:
     """Tracks what a run has spent and says when the next item could pass the cap.
 
-    The assistant's spend is the sum of the sandbox's ledger, which starts at zero in each sandbox,
-    so the spend of finished sandboxes is carried (`start_segment`). The judge's spend is its priced
-    usage. Before each item the run stops if the spend so far plus the largest single-item cost seen
-    so far would pass the cap. The first item always runs: nothing is known about its cost. With no
-    cap (an offline run) it never stops.
+    The assistant's spend, for the cap, is the sum of the sandbox's ledger, which starts at zero in
+    each sandbox, so the spend of finished sandboxes is carried (`start_segment`). The judge's spend
+    is its priced usage. Before each item the run stops if the spend so far plus the largest
+    single-item cost seen so far would pass the cap. The first item always runs: nothing is known
+    about its cost. With no cap (an offline run) it never stops.
     """
 
     def __init__(self, cap_usd: Decimal | None) -> None:
         self.cap_usd = cap_usd
+        self._live_usd = Decimal(0)
+        self.judge_recorded_usd = Decimal(0)
         self._carried_usd = Decimal(0)
         self._measured_usd = Decimal(0)
         self.judge_total_usd = Decimal(0)
@@ -986,6 +1046,22 @@ class SpendCap:
     @property
     def total_usd(self) -> Decimal:
         return self.assistant_total_usd + self.judge_total_usd
+
+    # The ledger prices a call answered from a recording at its recorded usage, so the cap counts
+    # it (safe: the cap can only stop a run sooner). The report splits that total into what the
+    # run paid now, which the live meter counts, and what the reused recordings cost when made.
+
+    @property
+    def assistant_live_usd(self) -> Decimal:
+        return self._live_usd
+
+    @property
+    def assistant_recorded_usd(self) -> Decimal:
+        return max(self.assistant_total_usd - self._live_usd, Decimal(0))
+
+    def note_live_assistant(self, total: Decimal) -> None:
+        """What the live meter has counted so far: the calls that reached the real transport."""
+        self._live_usd = total
 
     def start_segment(self) -> None:
         """A new sandbox begins: its ledger starts at zero, so keep what the last one spent."""
@@ -1022,6 +1098,9 @@ class SpendCap:
 
 
 BUDGET_CODES = ("budget-sandbox", "budget-daily")
+# What the turn reports when the Anthropic Console's spend limit refuses a call. It is not in
+# BUDGET_CODES: it is not the run's own cap, and no setting here lifts it.
+CONSOLE_LIMIT_CODE = "spend-limit"
 
 
 def _refused_by_the_ledger(trace: ItemTrace) -> bool:
@@ -1304,6 +1383,8 @@ class EvalRun:
             for gap in r.trace.recording_gaps
         ]
         judge_store = self.judge_store or FixtureStore(self.fixtures_dir / JUDGE_FIXTURE)
+        if isinstance(self.inner, LiveCallMeter):
+            self.cap.note_live_assistant(self.inner.total_usd)
         if self.live:
             _, skipped = recordable_qa_items(self.records, judge_store)
             with_gaps = {r.item_id for r in self.records if r.trace.recording_gaps}
@@ -1330,8 +1411,8 @@ class EvalRun:
         async def after_item(trace: ItemTrace) -> None:
             item = by_id[trace.item_id]
             if trace.console_limit:
-                # The turn reports this with the code of a ledger refusal, but it is not the run's
-                # cap and no setting here lifts it.
+                # The turn's own `spend-limit` code. It is not the run's cap and no setting here
+                # lifts it.
                 await self._count_what_was_billed()
                 raise ConsoleSpendLimit
             if _refused_by_the_ledger(trace):
@@ -1443,8 +1524,10 @@ class EvalRun:
         ):
             return None
         record.judge = await judge_for.judge(item.id, record.judge_input, prepared)
-        # A live run pays only for calls it made now. (Offline, the recorded cost is shown.)
-        if self.live and not record.judge.called:
+        # Only a call made now is spent now. A verdict served from a recording (and every verdict
+        # in an offline run) cost that much when it was recorded; that is reported apart.
+        if not (self.live and record.judge.called):
+            self.cap.judge_recorded_usd += record.judge.cost_usd
             return Decimal(0)
         return record.judge.cost_usd
 
@@ -1792,8 +1875,10 @@ async def eval_command(args: argparse.Namespace, env: RunEnv) -> int:
     inner: Transport | None = None
     caller: judge.JudgeCaller | None = None
     if live:
-        inner = env.transport_factory(settings)
-        caller = env.judge_caller_factory(inner)
+        real = env.transport_factory(settings)
+        caller = env.judge_caller_factory(real)
+        # The judge counts its own calls; the meter counts the assistant's and the guard's.
+        inner = LiveCallMeter(real)
         seed_embeddings(args.fixtures_dir, env.committed_fixtures_dir)
     embeddings = open_query_embedder(
         "live" if live else "replay",
@@ -1878,8 +1963,10 @@ def report(
         },
         dataset_sha256=dataset_hashes(env.paths),
         cap_usd=result.cap.cap_usd,
-        assistant_cost_usd=result.cap.assistant_total_usd,
+        assistant_cost_usd=result.cap.assistant_live_usd,
         judge_cost_usd=result.cap.judge_total_usd,
+        assistant_recorded_cost_usd=result.cap.assistant_recorded_usd,
+        judge_recorded_cost_usd=result.cap.judge_recorded_usd,
         partial=bool(result.items_not_run) or aborted is not None,
         items_not_run=result.items_not_run,
         agreement=_agreement_block(env, hand_grade_store, system),

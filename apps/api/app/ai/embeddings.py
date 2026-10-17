@@ -303,10 +303,21 @@ class QueryEmbeddingLru:
     def __len__(self) -> int:
         return len(self._vectors)
 
-    async def embed(self, texts: Sequence[str], *, input_type: InputType) -> list[list[float]]:
+    def scoped(self, scope: str) -> "ScopedQueryEmbedder":
+        """A view of this memory for one sandbox. A hit skips the embedding service's round trip,
+        and a tool's duration reaches the browser, so a hit shared across sandboxes would tell one
+        visitor that another asked the same question. Each scope has its own keys; the one bounded
+        memory is shared, so memory stays bounded."""
+        return ScopedQueryEmbedder(self, scope)
+
+    async def embed(
+        self, texts: Sequence[str], *, input_type: InputType, scope: str = ""
+    ) -> list[list[float]]:
         if input_type != "query" or len(texts) != 1:
             return await self._inner.embed(texts, input_type=input_type)
         key = EmbeddingCache.key(input_type, texts[0])
+        if scope:
+            key = hashlib.sha256(f"{scope}\n{key}".encode()).hexdigest()
         remembered = self._vectors.get(key)
         if remembered is not None:
             self._vectors.move_to_end(key)
@@ -316,3 +327,21 @@ class QueryEmbeddingLru:
         while len(self._vectors) > self._max_entries:
             self._vectors.popitem(last=False)
         return [vector]
+
+
+class ScopedQueryEmbedder:
+    """`QueryEmbeddingLru` for one sandbox (see `QueryEmbeddingLru.scoped`)."""
+
+    def __init__(self, memory: QueryEmbeddingLru, scope: str) -> None:
+        self._memory = memory
+        self._scope = scope
+
+    async def embed(self, texts: Sequence[str], *, input_type: InputType) -> list[list[float]]:
+        return await self._memory.embed(texts, input_type=input_type, scope=self._scope)
+
+
+def for_sandbox(embedder: Embedder | None, tenant_id: object) -> Embedder | None:
+    """The embedder a sandbox's turns use: its own view of the shared query memory."""
+    if isinstance(embedder, QueryEmbeddingLru):
+        return embedder.scoped(str(tenant_id))
+    return embedder

@@ -219,6 +219,10 @@ evals/                 datasets, offline replay and live runners, scoreboard
 docs/                  roadmap, spec, plans, ADRs, design handoff, governance docs
 ```
 
+`AI_TRANSPORT` picks the model transport: `anthropic`, `scripted`, or `replay`. `scripted` is the
+default for development, the browser tests, and the proxy check. `replay` is for the eval harness
+only: the app refuses it everywhere. Production refuses anything but `anthropic`.
+
 ---
 
 ## Commands
@@ -236,6 +240,7 @@ make eval-live  paid; smoke by default, `SET=full` or `SET=effort`, and `YES=1` 
 make dev        Postgres, migrations, API (:8000) and web app (:5173) together
 make check      everything CI runs; needs `make db` first
 make e2e        the browser tests (Playwright, Chromium) against the real API on :8100
+make proxy-check  the turn stream through a strict nginx (needs `make db` and Docker)
 make captures   a local report of each design beside the build (needs `make db` and a network; not in CI)
 make openapi    after changing an API route: regenerate the schema and the web client
 make audit      scan for leaked secrets and vulnerable dependencies

@@ -1,5 +1,6 @@
 """The three tools against the real database, for the seed company's people."""
 
+import dataclasses
 import json
 from collections.abc import Sequence
 from typing import Any
@@ -107,6 +108,23 @@ async def test_a_question_with_no_match_is_one_text_block(
     assert outcome.is_error is False
     assert outcome.content == [{"type": "text", "text": "No handbook passages matched."}]
     assert outcome.sources == []
+
+
+async def test_no_embedder_means_full_text_search_only(
+    app_engine: AsyncEngine, seeded_sandbox: SeedCompany, caplog: pytest.LogCaptureFixture
+) -> None:
+    class Forbidden:
+        async def embed(self, texts: Sequence[str], *, input_type: InputType) -> list[list[float]]:
+            raise AssertionError("an embedder was called")
+
+    with_one = await context_for(app_engine, seeded_sandbox, "priya", Forbidden())
+    without = dataclasses.replace(with_one, embedder=None)
+    outcome = await run_tool("search_handbook", {"query": SICK}, without)
+
+    assert outcome.is_error is False
+    assert outcome.sources, "full-text search should still find sick leave"
+    # Skipped on purpose, not an embedding failure that was caught and logged.
+    assert "Query embedding failed" not in caplog.text
 
 
 async def test_a_location_searches_that_places_policy_with_the_askers_type(

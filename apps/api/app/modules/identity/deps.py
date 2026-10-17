@@ -97,6 +97,39 @@ async def signed_in(
         yield SignedIn(actor, db, record)
 
 
+@dataclass(frozen=True, slots=True)
+class Caller:
+    """The signed-in actor and session, with no transaction open. For a route that takes several
+    database connections one after another (the assistant's turn stream), so it must not hold the
+    request's own while it waits for another: with enough such requests at once, every one would
+    hold a connection and wait for a second, and the pool would never free."""
+
+    actor: Actor
+    session: SessionRecord
+
+
+async def signed_in_caller(
+    request: Request,
+    engine: Annotated[AsyncEngine, Depends(get_engine)],
+    record: Annotated[SessionRecord, Depends(current_session)],
+) -> Caller:
+    context = TenantContext(record.tenant_id, record.person_id)
+    async with tenant_session(engine, context) as db:
+        actor = await load_actor(db, record.tenant_id, record.person_id)
+    if actor is None:
+        log_security_event(
+            SecurityEvent.SESSION_INVALID,
+            request,
+            "the sandbox is gone",
+            tenant_id=record.tenant_id,
+            actor_id=record.person_id,
+        )
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, NOT_SIGNED_IN)
+    return Caller(actor, record)
+
+
+CallerDep = Annotated[Caller, Depends(signed_in_caller)]
+
 # scope="function" ends the dependency, and so commits the transaction, before the response is
 # sent. A failed commit is then a 500, not a success the client was already told about.
 SignedInDep = Annotated[SignedIn, Depends(signed_in, scope="function")]

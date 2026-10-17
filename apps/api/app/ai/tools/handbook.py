@@ -157,7 +157,7 @@ async def run(raw_input: dict[str, Any], ctx: ToolContext) -> ToolOutcome:
     question, location, summary = parsed.question, parsed.location, parsed.summary
     try:
         # Embedded first: a slow Voyage call never holds a transaction or a connection.
-        vector = await embed_query(ctx.embedder, question)
+        vector = None if ctx.embedder is None else await embed_query(ctx.embedder, question)
         async with tenant_session(ctx.engine, ctx.tenant_ctx) as db:
             result = await search_handbook(
                 db,

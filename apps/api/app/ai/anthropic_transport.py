@@ -33,6 +33,7 @@ from anthropic.types.beta import (
     BetaUsage,
 )
 from anthropic.types.beta.parsed_beta_message import ParsedBetaMessage
+from pydantic import SecretStr
 
 from app.ai.pricing import IterationUsage, Usage, dearer_model
 from app.ai.transport import (
@@ -189,14 +190,25 @@ class AnthropicTransport:
         return parse_guard_output(answer, usage=usage, served_by=served_by)
 
 
-def from_settings(settings: Settings) -> AnthropicTransport:
+def _api_key(settings: Settings) -> SecretStr:
     if settings.anthropic_api_key is None:
         raise ValueError("the anthropic transport needs ANTHROPIC_API_KEY")
+    return settings.anthropic_api_key
+
+
+def require_an_api_key(settings: Settings) -> None:
+    """Refuse a missing key. The app calls this at boot, so a missing key fails there and not at
+    the first request. Raises ValueError."""
+    _api_key(settings)
+
+
+def from_settings(settings: Settings) -> AnthropicTransport:
+    key = _api_key(settings)
     # Two retries is the SDK's default, spelled out: it covers 408, 409, 429, 5xx, and connection
     # errors, so a transient failure never reaches the person asking.
     return AnthropicTransport(
         AsyncAnthropic(
-            api_key=settings.anthropic_api_key.get_secret_value(),
+            api_key=key.get_secret_value(),
             max_retries=MODEL_MAX_RETRIES,
             timeout=Timeout(
                 connect=MODEL_CONNECT_TIMEOUT_SECONDS,

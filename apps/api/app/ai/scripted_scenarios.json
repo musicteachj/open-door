@@ -54,6 +54,12 @@
     "note": "Some text, then the model becomes unavailable."
   },
   {
+    "id": "working-note",
+    "trigger": "scripted working note",
+    "behavior": "working_note",
+    "note": "It writes a short note, then searches, then answers with a citation. The note streams and is then taken back, so it shows as a status line and not as part of the answer."
+  },
+  {
     "id": "slow-guard",
     "trigger": "scripted slow guard",
     "behavior": "slow_guard",

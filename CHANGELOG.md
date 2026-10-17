@@ -12,6 +12,25 @@ version (`0.x.y` while the app is being built, `1.0.0` when it is complete).
 
 ### Changed
 
+- **The model's working notes no longer show up as answer text** (Phase 4, stage 4). When a model
+  call that wrote text ends in a tool call (as in "Missing the rate passage. Search again."), a
+  new `text.retracted` event takes that text and its citations back, and the note is shown as a
+  progress line instead. If the model then ends with nothing more to say, the taken-back text
+  returns as the answer. Nothing sent to the model changes, so the recorded evals still replay;
+  only one judge call was re-recorded ($0.01).
+- **The Anthropic Console's spend limit has its own error code,** `spend-limit` (Phase 4, stage
+  4). It shared `budget-daily` with the demo's own daily cap, so nothing after the turn could tell
+  them apart. The person still sees the daily-limit text, already approved, and the eval harness
+  reads the code instead of watching the transport.
+- **A live eval run reports what it actually paid** (Phase 4, stage 4). Calls answered from a
+  reused recording used to be counted as spend, so a run that re-recorded one $0.01 judge call
+  printed $0.40. The scoreboard's cost is now the live spend, with the reused recordings' cost
+  shown on its own line; the run's cap still counts both, which can only stop a run sooner.
+- **The app builds its model transport and embedder at startup** (Phase 4, stage 4), and refuses
+  to boot with a setup it can't serve: `scripted` in production, `replay` anywhere, or
+  `anthropic` without a key. Voyage is used only when `AI_TRANSPORT=anthropic`, so `make dev`
+  and the browser tests make no paid calls even with a Voyage key in `.env`.
+
 - **The live-eval rule names its runs** (Phase 4, stage 3). In `CLAUDE.md`, a change to a prompt,
   a tool, or the guard needs the offline evals green and a smoke run (`make eval-live YES=1`,
   about $1.20, cap $2) before its PR, and a release gets the full run (`SET=full`, about $14, cap
@@ -28,6 +47,53 @@ version (`0.x.y` while the app is being built, `1.0.0` when it is complete).
   source. Voyage now receives the assistant's search queries, not people's whole questions.
 
 ### Added
+
+- **The assistant's conversation routes and its streamed answers** (Phase 4, stage 4). The API
+  can now start a conversation, stream an answer to a question, show the current conversation
+  after a reload, and take "Was this right?" feedback, all under `/api/v1/assistant`. An answer
+  streams as server-sent events: progress notes, tool steps, the answer's text, each citation,
+  any escalation to HR, and the end of the turn.
+  - **Checks before anything is sent,** each its own error response: the conversation must be
+    the person's own (404 otherwise, never 403) and current, the question 1 to 2,000 characters,
+    no Social Security or card number in it, one question at a time, and room left in the
+    sandbox's and the day's AI budget. The budget check and the page's banner use one
+    calculation, so they agree.
+  - **A closed tab counts as Stop.** The partial answer is saved as "Stopped", every finished
+    model call is settled, and the next question can start. A client that stalls for 30 seconds
+    is treated the same way. A call cut off mid-stream keeps its whole reservation, because the
+    API reports output tokens only at the end of a stream.
+  - **A keep-alive comment every 15 seconds** of silence keeps proxies and load balancers from
+    cutting a slow answer, and the stream is never cached or compressed.
+  - **A deploy ends streams cleanly.** The app waits up to 12 seconds for open answers to save
+    before it closes the database, since uvicorn stops waiting for requests at its own
+    graceful-shutdown timeout.
+  - **Long conversations:** a new conversation is offered past about 60,000 tokens of history, and
+    a question is refused past 80,000, with its own error code, `history-too-long`.
+- **`make proxy-check`** (Phase 4, stage 4), also run by `make check` and in CI's browser-test
+  job. It puts a deliberately strict nginx (a 20-second read timeout, buffering on, and gzip on
+  for event streams) in front of the API with the scripted model, and makes four runs: a
+  45-second silent answer must arrive whole, uncompressed, and spread over time, kept alive by
+  the heartbeat; a second nginx that compresses anyway must hold the events back, which proves
+  the timing checks can fail; the answer with the heartbeat off must be cut at 20 seconds; and an
+  API stopped with SIGTERM mid-answer must save the turn as stopped. It takes under two minutes.
+  The API runs with `--timeout-graceful-shutdown 15`, which with the app's 12-second drain fits
+  ECS's default 30-second stop timeout.
+  - **The stream now says `Content-Encoding: identity`.** The check found that an nginx set to
+    gzip event streams compresses this one and holds every event back, despite
+    `Cache-Control: no-transform`. A proxy leaves a response alone when it already names its
+    encoding. RFC 9110 discourages `identity` in this header, but browsers accept it, and it's
+    the common way to keep proxies (CloudFront included) from compressing a stream.
+- **The personal-data check** (Phase 4, stage 4), `apps/api/app/ai/personal_data.py`. A question
+  or feedback reason that holds something shaped like a Social Security number or a card number
+  (13 to 19 digits grouped like a real card, passing the Luhn checksum) is refused before it's
+  stored or sent. Text pasted from a PDF or Word, with non-breaking spaces, Unicode dashes, or
+  full-width digits, is normalized first. Its test cases live in
+  `evals/assistant/personal-data-cases.json`, which the web app's copy will read too.
+- **`docs/AI-GOVERNANCE.md`** (Phase 4, stage 4): the AI disclosure under Article 50 of the EU AI
+  Act, the documented assessment of why the assistant isn't a high-risk system (Annex III,
+  Article 6(3) and (4), with the Digital Omnibus's new date of 2 December 2027), the models and
+  how they're pinned, the guard, and what goes to Anthropic and Voyage under which terms. Every
+  source was read on 2026-10-17.
 
 - **The assistant evals** (Phase 4, stage 3), in `evals/assistant/`. They measure what the
   assistant does with real questions, run through the real turn loop, tools, and database.
@@ -132,6 +198,18 @@ version (`0.x.y` while the app is being built, `1.0.0` when it is complete).
     one.
 
 ### Security
+
+- **One visitor can't stall the API, and a question can't get stuck** (Phase 4, stage 4). An Opus
+  security review of the routes and the stream found one high issue, now fixed: about 15
+  questions sent at once each held a database connection while waiting for a second one, which
+  froze every request in the process for 30 seconds. The stream route now never holds one
+  connection while it takes another. A failure or a cancel right after a question was saved can
+  no longer leave it "running" for 10 minutes, and the prompt's canary check now also catches
+  the canary in capitals, spaced out, or split by Markdown. The cache of embedded search queries
+  is kept per sandbox, so a fast search can't tell a visitor that someone in another sandbox
+  asked the same thing. The review confirmed the rest: every
+  route answers 404 for another person's conversation or turn, the stream needs the CSRF token
+  and the same-origin check, and many conversations at once can't spend past the sandbox's cap.
 
 - **The assistant can't be turned against its own server or other visitors** (Phase 4, stage 2).
   An Opus security review found no high issues and one medium, now fixed: a single model response

@@ -37,11 +37,17 @@ from app.ai.conversations import (
     start_turn,
 )
 from app.ai.embeddings import FakeEmbedder
-from app.ai.fixed_texts import CRISIS_TEXT, ERROR_TEXTS, SENSITIVE_TEXT, UNAVAILABLE_TEXT
+from app.ai.fixed_texts import (
+    BUDGET_DAILY_TEXT,
+    CRISIS_TEXT,
+    ERROR_TEXTS,
+    SENSITIVE_TEXT,
+    UNAVAILABLE_TEXT,
+)
 from app.ai.guard import INJECTION_NOTE, build_guard_request, guard_reservation_usd
 from app.ai.pricing import IterationUsage, Usage, estimate_input_tokens, turn_call_cost
 from app.ai.prompts.versions import CANARY, PROMPT_VERSION, TOOLSET_VERSION
-from app.ai.scripted import DECLINE_TEXT, MODEL_USAGE, ScriptedTransport
+from app.ai.scripted import DECLINE_TEXT, MODEL_USAGE, WORKING_NOTE_TEXT, ScriptedTransport
 from app.ai.tools.base import ToolContext, ToolOutcome
 from app.ai.tools.registry import run_tool as registry_run_tool
 from app.ai.transport import (
@@ -66,11 +72,13 @@ from app.ai.turn import (
     MAX_MODEL_CALLS,
     TURN_DEADLINE,
     Citation,
+    ConversationNotFound,
     ConversationOutdated,
     Error,
     Escalation,
     Status,
     TextDelta,
+    TextRetracted,
     ToolFinished,
     ToolStarted,
     TurnCompleted,
@@ -723,7 +731,7 @@ async def test_the_ninth_model_call_is_never_made(
     assert await env.spend_kinds(turn.id) == Counter(reserve=1 + 8, settle=1 + 8)
 
 
-async def test_an_invalid_tool_input_after_text_ends_the_turn_instead_of_repeating_it(
+async def test_an_invalid_tool_input_after_text_retracts_it_and_the_call_is_reissued(
     app_engine: AsyncEngine, seeded_sandbox: SeedCompany
 ) -> None:
     transport = PlanTransport(
@@ -738,9 +746,48 @@ async def test_an_invalid_tool_input_after_text_ends_the_turn_instead_of_repeati
     env = await make_env(app_engine, seeded_sandbox, transport=transport)
     events = await env.ask()
 
-    assert transport.calls == 1, "a retry would show the person the same text twice"
+    assert transport.calls == 2
+    assert isinstance(events[-1], TurnCompleted)
+    # The aborted call's text was taken back, so the person is not shown it twice.
+    (retracted_at,) = [i for i, e in enumerate(events) if isinstance(e, TextRetracted)]
+    first_try = sent_text(events[:retracted_at])  # The last few characters stay held back.
+    assert first_try
+    assert "part of an answer that was already sent".startswith(first_try)
+    assert sent_text(events[retracted_at:]) == "Fine."
+    turn = await env.last_turn()
+    assert (turn.status, turn.answer_text) == ("completed", "Fine.")
+    # An aborted call is not a working note: no status line carries its text.
+    assert not any(isinstance(e, Status) and "already sent" in e.text for e in events)
+
+
+async def test_a_second_invalid_tool_input_after_text_still_ends_the_turn(
+    app_engine: AsyncEngine, seeded_sandbox: SeedCompany
+) -> None:
+    broken = raw_plan(
+        [], "end_turn", ModelText("part of an answer that was already sent"), InvalidToolInput("x")
+    )
+    transport = PlanTransport(broken, broken, text_plan("Fine."))
+    env = await make_env(app_engine, seeded_sandbox, transport=transport)
+    events = await env.ask()
+
+    assert transport.calls == 2
     assert events[-1] == Error("internal", ERROR_TEXTS["internal"])
-    assert roles(await env.messages()) == ["user"]
+
+
+async def test_an_aborted_call_does_not_lose_the_answer_saved_before_it(
+    app_engine: AsyncEngine, seeded_sandbox: SeedCompany
+) -> None:
+    answer = "Sick leave is 40 hours."
+    aborted = raw_plan(
+        [], "end_turn", ModelText("an aborted attempt that was sent"), InvalidToolInput("x")
+    )
+    transport = PlanTransport(note_then_search_plan(answer), aborted, raw_plan([], "end_turn"))
+    env = await make_env(app_engine, seeded_sandbox, transport=transport)
+    events = await env.ask()
+
+    assert isinstance(events[-1], TurnCompleted)
+    last_retraction = max(i for i, e in enumerate(events) if isinstance(e, TextRetracted))
+    assert sent_text(events[last_retraction:]) == answer
 
 
 async def test_an_invalid_tool_input_before_any_text_is_reissued_and_counts_toward_the_eight(
@@ -1262,7 +1309,7 @@ async def test_another_persons_conversation_is_not_found(
 ) -> None:
     mine = await make_env(app_engine, seeded_sandbox, persona="priya")
     theirs = await make_env(app_engine, seeded_sandbox, persona="mateo")
-    with pytest.raises(LookupError):
+    with pytest.raises(ConversationNotFound):
         _ = [
             e
             async for e in run_turn(
@@ -1554,7 +1601,7 @@ async def test_a_guard_unavailable_turn_is_audited(
     assert [r.after for r in rows] == [{"kind": "unavailable"}]
 
 
-async def test_text_from_separate_calls_is_separated(
+async def test_text_from_a_call_that_ends_in_a_tool_call_is_not_part_of_the_answer(
     app_engine: AsyncEngine, seeded_sandbox: SeedCompany
 ) -> None:
     def first(request: ModelRequest, number: int) -> list[Item]:
@@ -1575,12 +1622,14 @@ async def test_text_from_separate_calls_is_separated(
     )
     events = await env.ask()
 
-    shown = "".join(e.text for e in of_type(events, TextDelta))
-    assert shown == "Let me check.\n\nSick leave is 40."
-    assert (await env.last_turn()).answer_text == shown
+    # The first call's text streamed live, then was taken back; nothing runs into the answer.
+    (retracted_at,) = [i for i, e in enumerate(events) if isinstance(e, TextRetracted)]
+    assert sent_text(events[:retracted_at]) == "Let me check."
+    assert sent_text(events[retracted_at:]) == "Sick leave is 40."
+    assert (await env.last_turn()).answer_text == "Sick leave is 40."
 
 
-async def test_text_that_already_ends_in_whitespace_gets_no_extra_separator(
+async def test_a_note_that_ends_in_whitespace_is_taken_back_and_the_answer_is_clean(
     app_engine: AsyncEngine, seeded_sandbox: SeedCompany
 ) -> None:
     def first(request: ModelRequest, number: int) -> list[Item]:
@@ -1600,7 +1649,9 @@ async def test_text_that_already_ends_in_whitespace_gets_no_extra_separator(
         app_engine, seeded_sandbox, transport=PlanTransport(first, text_plan("Done."))
     )
     events = await env.ask()
-    assert "".join(e.text for e in of_type(events, TextDelta)) == "Let me check.\nDone."
+    (retracted_at,) = [i for i, e in enumerate(events) if isinstance(e, TextRetracted)]
+    assert sent_text(events[retracted_at:]) == "Done."
+    assert Status("Let me check.") in events
 
 
 async def test_the_guard_sees_a_stopped_turns_partial_answer_as_the_previous_answer(
@@ -1799,7 +1850,7 @@ async def test_a_console_spend_limit_on_the_guard_still_gives_the_emergency_text
     )
     events = await env.ask()
 
-    assert events[-1] == Error("budget-daily", ERROR_TEXTS["budget-daily"])
+    assert events[-1] == Error("spend-limit", ERROR_TEXTS["spend-limit"])
     assert not of_type(events, Escalation)
     assert [r.after for r in await audit_rows(app_engine, seeded_sandbox)] == [BUDGET_AUDIT]
 
@@ -2116,7 +2167,7 @@ async def test_the_up_front_checks_raise_when_the_turn_is_started_not_when_it_is
         await start_turn_run(env.deps, conversation=env.conversation, question="  ", now=NOW)
 
     other = await make_env(app_engine, seeded_sandbox, persona="mateo")
-    with pytest.raises(LookupError):
+    with pytest.raises(ConversationNotFound):
         await start_turn_run(env.deps, conversation=other.conversation, question=SICK, now=NOW)
 
     old = Pins(OPUS, "claude-haiku-5-5", "low", "2025-01.1", TOOLSET_VERSION)
@@ -2384,6 +2435,24 @@ async def test_a_reply_after_a_budget_stop_is_screened_with_the_budget_text(
     assert f"<previous_answer>{ERROR_TEXTS['budget-sandbox']}</previous_answer>" in sent
 
 
+async def test_a_reply_after_a_console_spend_limit_is_screened_with_the_daily_text(
+    app_engine: AsyncEngine, seeded_sandbox: SeedCompany
+) -> None:
+    def limit() -> GuardResult:
+        raise SpendLimitReached
+
+    env = await make_env(
+        app_engine, seeded_sandbox, transport=PlanTransport(text_plan(), guard_result=limit)
+    )
+    await env.ask("I want to hurt myself")
+    assert (await env.last_turn()).error_code == "spend-limit"
+    env.transport.inner = PlanTransport(text_plan())
+    await env.ask("yes, tonight")
+
+    sent = env.transport.guard_requests[1].messages[0]["content"]
+    assert f"<previous_answer>{BUDGET_DAILY_TEXT}</previous_answer>" in sent
+
+
 async def test_a_canary_used_as_a_search_query_never_leaves_in_an_event_or_the_trace(
     app_engine: AsyncEngine, seeded_sandbox: SeedCompany
 ) -> None:
@@ -2415,7 +2484,7 @@ async def test_a_tool_summary_holding_the_canary_is_dropped_from_the_stored_trac
     assert CANARY[:8] not in json.dumps(turn.tool_calls)
 
 
-async def test_the_separator_between_calls_waits_for_real_text_and_a_retry_still_works(
+async def test_a_retry_after_a_taken_back_note_still_works(
     app_engine: AsyncEngine, seeded_sandbox: SeedCompany
 ) -> None:
     def first(request: ModelRequest, number: int) -> list[Item]:
@@ -2441,7 +2510,8 @@ async def test_the_separator_between_calls_waits_for_real_text_and_a_retry_still
     events = await env.ask()
 
     assert isinstance(events[-1], TurnCompleted)
-    assert sent_text(events) == "Let me check.\n\nSick leave is 40."
+    (retracted_at,) = [i for i, e in enumerate(events) if isinstance(e, TextRetracted)]
+    assert sent_text(events[retracted_at:]) == "Sick leave is 40."
 
 
 # --- Round 10 of the branch review -------------------------------------------------------------
@@ -2516,9 +2586,11 @@ async def test_a_spend_limit_on_the_guard_settles_its_reservation_at_zero(
     env = await make_env(
         app_engine, seeded_sandbox, transport=PlanTransport(text_plan(), guard_result=limit)
     )
-    await env.ask()
+    events = await env.ask()
 
+    assert events[-1] == Error("spend-limit", BUDGET_DAILY_TEXT)
     turn = await env.last_turn()
+    assert turn.error_code == "spend-limit"
     assert await env.spend_kinds(turn.id) == Counter(reserve=1, settle=1)
     assert await env.spend_total(turn.id) == 0
     assert turn.cost_usd == 0
@@ -2534,8 +2606,10 @@ async def test_a_spend_limit_on_the_model_settles_its_reservation_at_zero(
     )
     events = await env.ask()
 
-    assert events[-1] == Error("budget-daily", ERROR_TEXTS["budget-daily"])
+    assert events[-1] == Error("spend-limit", ERROR_TEXTS["spend-limit"])
+    assert ERROR_TEXTS["spend-limit"] == BUDGET_DAILY_TEXT
     turn = await env.last_turn()
+    assert turn.error_code == "spend-limit"
     assert await env.spend_kinds(turn.id) == Counter(reserve=2, settle=2)
     assert await env.spend_total(turn.id) == 0
     assert turn.cost_usd == 0
@@ -2770,3 +2844,450 @@ async def test_a_canary_split_between_the_answer_and_a_status_note_ends_the_turn
     assert events[-1] == Error("internal", ERROR_TEXTS["internal"])
     assert nothing_leaked(events, CANARY[half:][:6])
     assert (await env.last_turn()).error_code == "prompt-leak"
+
+
+# --- Stream, then take back: a note written before a search ------------------------------------
+
+NOTE = "Missing the rate passage. Search again."
+
+
+def cited_last_result(request: ModelRequest) -> tuple[SearchResultCitation, ...]:
+    result = next(iter_search_results(request.messages[-1]["content"]))
+    index = sum(count_search_results(m["content"]) for m in request.messages[:-1])
+    return (SearchResultCitation(index, 0, 1, result["source"], result.get("title"), "cited"),)
+
+
+def note_then_search_plan(
+    note: str = NOTE, query: str = SICK, *, cite: bool = False, in_deltas: int = 1
+) -> Plan:
+    """A model call that writes `note`, then searches."""
+
+    def plan(request: ModelRequest, number: int) -> list[Item]:
+        size = max(1, len(note) // in_deltas)
+        deltas = [note[i : i + size] for i in range(0, len(note), size)]
+        call = ToolCall(f"toolu_{number}_0", "search_handbook", {"query": query})
+        return [
+            *(ModelText(delta) for delta in deltas),
+            TextBlockEnd(cited_last_result(request) if cite else ()),
+            call,
+            finished(
+                [
+                    {"type": "text", "text": note},
+                    {"type": "tool_use", "id": call.id, "name": call.name, "input": call.input},
+                ],
+                "tool_use",
+            ),
+        ]
+
+    return plan
+
+
+def test_the_retraction_event_has_no_payload_and_is_not_a_first_visible_event() -> None:
+    assert TextRetracted.name == "text.retracted"
+    assert TextRetracted().to_json() == {}
+    assert not isinstance(TextRetracted(), turn_module._VISIBLE)
+
+
+async def test_a_note_before_a_search_is_taken_back_and_shown_as_a_status_line(
+    app_engine: AsyncEngine, seeded_sandbox: SeedCompany
+) -> None:
+    transport = PlanTransport(note_then_search_plan(in_deltas=3), text_plan("Done.", cite=True))
+    env = await make_env(app_engine, seeded_sandbox, transport=transport)
+    events = await env.ask()
+
+    (retracted_at,) = [i for i, e in enumerate(events) if isinstance(e, TextRetracted)]
+    # Everything before the retraction in this turn is this call's text, streamed live.
+    assert sent_text(events[:retracted_at]).strip() == NOTE
+    # Then the note as one status line, then the tools, in that order.
+    assert events[retracted_at + 1] == Status(NOTE)
+    assert isinstance(events[retracted_at + 2], ToolStarted)
+    assert sent_text(events[retracted_at:]) == "Done."
+    assert isinstance(events[-1], TurnCompleted)
+
+
+async def test_the_answer_after_a_taken_back_note_starts_fresh_in_text_offsets_and_markers(
+    app_engine: AsyncEngine, seeded_sandbox: SeedCompany
+) -> None:
+    # The note cites the first search's passage (marker 1). The final answer cites another
+    # search's passage, and with the note gone it is marker 1, at an offset that counts only itself.
+    transport = PlanTransport(
+        tool_use_plan(("search_handbook", {"query": "overtime"})),
+        note_then_search_plan(cite=True),
+        text_plan("Done 😀.", cite=True),
+    )
+    env = await make_env(app_engine, seeded_sandbox, transport=transport)
+    events = await env.ask()
+
+    (retracted_at,) = [i for i, e in enumerate(events) if isinstance(e, TextRetracted)]
+    before = of_type(events[:retracted_at], Citation)
+    after = of_type(events[retracted_at:], Citation)
+    assert [c.citation.marker for c in before] == [1]
+    assert before[0].citation.offset_utf16 == len(NOTE)
+    assert [c.citation.marker for c in after] == [1]
+    assert after[0].citation.offset_utf16 == 8, "an emoji counts as two UTF-16 units"
+    assert after[0].citation.section_id != before[0].citation.section_id or (
+        after[0].citation.passage_id != before[0].citation.passage_id
+    )
+
+
+async def test_the_stored_turn_leaves_out_the_taken_back_note_but_history_keeps_the_message(
+    app_engine: AsyncEngine, seeded_sandbox: SeedCompany
+) -> None:
+    transport = PlanTransport(
+        tool_use_plan(("search_handbook", {"query": "overtime"})),
+        note_then_search_plan(cite=True),
+        text_plan("Done.", cite=True),
+    )
+    env = await make_env(app_engine, seeded_sandbox, transport=transport)
+    events = await env.ask()
+
+    turn = await env.last_turn()
+    assert turn.answer_text == "Done."
+    retracted_at = next(i for i, e in enumerate(events) if isinstance(e, TextRetracted))
+    assert turn.citations == [
+        c.citation.to_json() for c in of_type(events[retracted_at:], Citation)
+    ]
+    assert len(turn.citations) == 1
+    # The model's own message is stored exactly as the API sent it, note included.
+    rows = await env.messages()
+    stored = [b for row in rows if row.role == "assistant" for b in row.content]
+    assert {"type": "text", "text": NOTE} in stored
+
+
+async def test_the_next_request_carries_the_note_in_the_model_history_unchanged(
+    app_engine: AsyncEngine, seeded_sandbox: SeedCompany
+) -> None:
+    transport = PlanTransport(note_then_search_plan(), text_plan("Done.", cite=True))
+    env = await make_env(app_engine, seeded_sandbox, transport=transport)
+    await env.ask()
+
+    second = env.transport.requests[1]
+    assistant = second.messages[-2]
+    assert assistant["role"] == "assistant"
+    assert assistant["content"][0] == {"type": "text", "text": NOTE}
+
+
+async def test_a_tool_round_with_no_text_takes_nothing_back(
+    app_engine: AsyncEngine, seeded_sandbox: SeedCompany
+) -> None:
+    env = await make_env(app_engine, seeded_sandbox)
+    events = await env.ask()
+
+    assert of_type(events, TextRetracted) == []
+    assert of_type(events, Status) == [Status("Searching the handbook…")]
+
+
+@pytest.mark.parametrize("stop_reason", ["end_turn", "max_tokens"])
+async def test_a_call_that_does_not_end_in_a_tool_call_keeps_its_text(
+    app_engine: AsyncEngine, seeded_sandbox: SeedCompany, stop_reason: str
+) -> None:
+    transport = PlanTransport(text_plan("Answer text.", stop_reason))
+    env = await make_env(app_engine, seeded_sandbox, transport=transport)
+    events = await env.ask()
+
+    assert of_type(events, TextRetracted) == []
+    assert sent_text(events) == "Answer text."
+    turn = await env.last_turn()
+    assert turn.answer_text == "Answer text."
+    assert turn.status == "completed"
+    assert (turn.error_code == "max-tokens") == (stop_reason == "max_tokens")
+
+
+async def test_a_long_note_becomes_a_status_line_cut_on_a_word_with_an_ellipsis(
+    app_engine: AsyncEngine, seeded_sandbox: SeedCompany
+) -> None:
+    note = "Checking the\nhandbook " + "carefully and slowly " * 40
+    env = await make_env(
+        app_engine,
+        seeded_sandbox,
+        transport=PlanTransport(note_then_search_plan(note), text_plan("Done.")),
+    )
+    events = await env.ask()
+
+    (status,) = [e for e in of_type(events, Status) if e.text.startswith("Checking")]
+    assert "\n" not in status.text
+    assert len(status.text) <= turn_module.WORKING_NOTE_MAX_CHARACTERS
+    assert status.text.endswith("…")
+    assert status.text.startswith("Checking the handbook carefully")
+    assert status.text[:-1].rstrip().endswith(("carefully", "and", "slowly"))
+
+
+async def test_a_short_note_is_shown_whole_without_an_ellipsis(
+    app_engine: AsyncEngine, seeded_sandbox: SeedCompany
+) -> None:
+    env = await make_env(
+        app_engine,
+        seeded_sandbox,
+        transport=PlanTransport(note_then_search_plan("  One\n\nline.  "), text_plan("Done.")),
+    )
+    events = await env.ask()
+
+    assert Status("One line.") in events
+
+
+async def test_the_status_line_made_from_a_taken_back_note_is_checked_for_the_canary(
+    app_engine: AsyncEngine, seeded_sandbox: SeedCompany, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # The streamed text passed its own check. This makes the status line the only place the canary
+    # could appear, and proves it never reaches a person (the turn's per-event check and the
+    # take-back's own check both stand behind that).
+    monkeypatch.setattr(turn_module, "one_line", lambda text: "Checking " + CANARY)
+    env = await make_env(
+        app_engine,
+        seeded_sandbox,
+        transport=PlanTransport(note_then_search_plan(), text_plan("Done.")),
+    )
+    events = await env.ask()
+
+    assert events[-1] == Error("internal", ERROR_TEXTS["internal"])
+    assert nothing_leaked(events, CANARY[:6])
+    assert (await env.last_turn()).error_code == "prompt-leak"
+    assert of_type(events, ToolStarted) == []
+
+
+async def test_an_answer_written_before_the_last_tool_call_comes_back_when_the_last_call_is_silent(
+    app_engine: AsyncEngine, seeded_sandbox: SeedCompany
+) -> None:
+    # The text was taken back as a note, but the model then had nothing more to say, so it is the
+    # answer after all: sent again as the answer, and stored as the turn's answer.
+    answer = "Sick leave is 40 hours."
+    transport = PlanTransport(note_then_search_plan(answer), raw_plan([], "end_turn"))
+    env = await make_env(app_engine, seeded_sandbox, transport=transport)
+    events = await env.ask()
+
+    assert isinstance(events[-1], TurnCompleted)
+    (retracted_at,) = [i for i, e in enumerate(events) if isinstance(e, TextRetracted)]
+    assert sent_text(events[retracted_at:]) == answer
+    turn = await env.last_turn()
+    assert (turn.status, turn.answer_text) == ("completed", answer)
+    assert roles(await env.messages()) == ["user", "system", "assistant", "user"]
+
+
+async def test_a_restored_answer_brings_back_its_citations_from_zero(
+    app_engine: AsyncEngine, seeded_sandbox: SeedCompany
+) -> None:
+    answer = "Sick leave is 40 hours 😀."
+    transport = PlanTransport(
+        tool_use_plan(("search_handbook", {"query": "overtime"})),
+        note_then_search_plan(answer, cite=True),
+        raw_plan([], "end_turn"),
+    )
+    env = await make_env(app_engine, seeded_sandbox, transport=transport)
+    events = await env.ask()
+
+    (retracted_at,) = [i for i, e in enumerate(events) if isinstance(e, TextRetracted)]
+    first = of_type(events[:retracted_at], Citation)
+    again = of_type(events[retracted_at:], Citation)
+    assert [c.citation for c in again] == [c.citation for c in first]
+    assert again[0].citation.marker == 1
+    assert again[0].citation.offset_utf16 == len(answer) + 1  # the emoji counts two
+    turn = await env.last_turn()
+    assert turn.citations == [c.citation.to_json() for c in again]
+    assert turn.answer_text == answer
+
+
+async def test_only_the_last_taken_back_text_comes_back(
+    app_engine: AsyncEngine, seeded_sandbox: SeedCompany
+) -> None:
+    transport = PlanTransport(
+        note_then_search_plan("First note."),
+        note_then_search_plan("Second note."),
+        raw_plan([], "end_turn"),
+    )
+    env = await make_env(app_engine, seeded_sandbox, transport=transport)
+    events = await env.ask()
+
+    last_retraction = max(i for i, e in enumerate(events) if isinstance(e, TextRetracted))
+    assert sent_text(events[last_retraction:]) == "Second note."
+    assert (await env.last_turn()).answer_text == "Second note."
+
+
+async def test_a_silent_call_cut_off_by_max_tokens_does_not_bring_the_text_back(
+    app_engine: AsyncEngine, seeded_sandbox: SeedCompany
+) -> None:
+    # The text before the last tool call is usually a working note ("Let me look that up"), not an
+    # answer, so a call cut off before writing anything is a failure, not a complete answer.
+    note = "Let me look that up first."
+    transport = PlanTransport(note_then_search_plan(note), raw_plan([], "max_tokens"))
+    env = await make_env(app_engine, seeded_sandbox, transport=transport)
+    events = await env.ask()
+
+    assert events[-1] == Error("internal", ERROR_TEXTS["internal"])
+    last_retraction = max(i for i, e in enumerate(events) if isinstance(e, TextRetracted))
+    assert sent_text(events[last_retraction:]) == ""
+    turn = await env.last_turn()
+    assert (turn.status, turn.error_code, turn.answer_text) == ("failed", "internal", "")
+
+
+async def test_a_silent_final_call_with_no_taken_back_text_is_still_an_internal_error(
+    app_engine: AsyncEngine, seeded_sandbox: SeedCompany
+) -> None:
+    env = await make_env(
+        app_engine, seeded_sandbox, transport=PlanTransport(search_plan(), raw_plan([], "end_turn"))
+    )
+    events = await env.ask()
+
+    assert events[-1] == Error("internal", ERROR_TEXTS["internal"])
+
+
+async def test_a_restored_answer_is_checked_for_the_canary_again(
+    app_engine: AsyncEngine, seeded_sandbox: SeedCompany, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # The note passes while it streams. The canary changes before the silent call, so the restored
+    # text is the first place it shows up, and it must not go out again.
+    note = "Sick leave is zzcanaryzz hours."
+
+    def silent_call_with_a_new_canary(request: ModelRequest, number: int) -> list[Item]:
+        monkeypatch.setattr(turn_module, "FOLDED_CANARY", "zzcanaryzz")
+        return [finished([], "end_turn")]
+
+    transport = PlanTransport(note_then_search_plan(note), silent_call_with_a_new_canary)
+    env = await make_env(app_engine, seeded_sandbox, transport=transport)
+    events = await env.ask()
+
+    assert events[-1] == Error("internal", ERROR_TEXTS["internal"])
+    last_retraction = max(i for i, e in enumerate(events) if isinstance(e, TextRetracted))
+    assert "zzcanaryzz" not in sent_text(events[last_retraction:])
+    assert (await env.last_turn()).error_code == "prompt-leak"
+
+
+async def test_a_note_on_the_call_that_runs_out_of_calls_is_taken_back_too(
+    app_engine: AsyncEngine, seeded_sandbox: SeedCompany
+) -> None:
+    # Every call writes a note and searches, so the last allowed call ends in a tool call that the
+    # turn can't follow. Its note must not stay as the answer.
+    env = await make_env(
+        app_engine, seeded_sandbox, transport=PlanTransport(note_then_search_plan(cite=False))
+    )
+    events = await env.ask()
+
+    assert events[-1] == Error("too-many-calls", ERROR_TEXTS["too-many-calls"])
+    assert len(of_type(events, TextRetracted)) == MAX_MODEL_CALLS
+    last_retraction = max(i for i, e in enumerate(events) if isinstance(e, TextRetracted))
+    assert sent_text(events[last_retraction:]) == ""
+    turn = await env.last_turn()
+    assert turn.answer_text == ""
+    assert turn.citations == []
+
+
+async def test_the_scripted_working_note_scenario_is_taken_back_and_then_answers_with_a_citation(
+    app_engine: AsyncEngine, seeded_sandbox: SeedCompany
+) -> None:
+    env = await make_env(app_engine, seeded_sandbox)
+    events = await env.ask("scripted working note: " + SICK)
+
+    (retracted_at,) = [i for i, e in enumerate(events) if isinstance(e, TextRetracted)]
+    assert sent_text(events[:retracted_at]) == WORKING_NOTE_TEXT
+    assert events[retracted_at + 1] == Status(WORKING_NOTE_TEXT)
+    answer = sent_text(events[retracted_at:])
+    assert answer
+    assert WORKING_NOTE_TEXT not in answer
+    assert of_type(events[retracted_at:], Citation)
+    turn = await env.last_turn()
+    assert turn.answer_text == answer
+    assert turn.status == "completed"
+
+
+async def test_a_final_call_that_streams_only_whitespace_still_brings_the_answer_back(
+    app_engine: AsyncEngine, seeded_sandbox: SeedCompany
+) -> None:
+    answer = "Sick leave is 40 hours."
+    blank = raw_plan(
+        [{"type": "text", "text": "\n\n"}], "end_turn", ModelText("\n\n"), TextBlockEnd(())
+    )
+    env = await make_env(
+        app_engine,
+        seeded_sandbox,
+        transport=PlanTransport(note_then_search_plan(answer), blank),
+    )
+    events = await env.ask()
+
+    assert isinstance(events[-1], TurnCompleted)
+    last_retraction = max(i for i, e in enumerate(events) if isinstance(e, TextRetracted))
+    # The blank text is taken back too, so the answer starts from zero for the page.
+    assert sent_text(events[last_retraction:]) == answer
+    turn = await env.last_turn()
+    assert (turn.status, turn.answer_text) == ("completed", answer)
+
+
+async def test_a_canary_across_the_note_end_and_the_restored_answer_start_ends_the_turn(
+    app_engine: AsyncEngine, seeded_sandbox: SeedCompany
+) -> None:
+    first, second, third, fourth = CANARY.split("-")
+    # Neither half is contiguous in the text, so it streams. The note is the text cut at 120
+    # characters on a word, so it ends in "first-second-" and what was just sent ends there. The
+    # restored answer then begins "third-fourth", which completes the canary across the two.
+    text = f"{third}-{fourth} " + "word " * 19 + f"{first}-{second}- and so on and on."
+    env = await make_env(
+        app_engine,
+        seeded_sandbox,
+        transport=PlanTransport(note_then_search_plan(text), raw_plan([], "end_turn")),
+    )
+    events = await env.ask()
+
+    assert events[-1] == Error("internal", ERROR_TEXTS["internal"])
+    last_retraction = max(i for i, e in enumerate(events) if isinstance(e, TextRetracted))
+    assert not any(isinstance(e, TextDelta) for e in events[last_retraction + 1 :])
+    assert (await env.last_turn()).error_code == "prompt-leak"
+
+
+async def test_a_call_that_showed_only_blank_text_before_a_tool_keeps_the_saved_answer(
+    app_engine: AsyncEngine, seeded_sandbox: SeedCompany
+) -> None:
+    answer = "Sick leave is 40 hours."
+    transport = PlanTransport(
+        note_then_search_plan(answer),
+        note_then_search_plan("\n"),
+        raw_plan([], "end_turn"),
+    )
+    env = await make_env(app_engine, seeded_sandbox, transport=transport)
+    events = await env.ask()
+
+    assert isinstance(events[-1], TurnCompleted)
+    last_retraction = max(i for i, e in enumerate(events) if isinstance(e, TextRetracted))
+    assert sent_text(events[last_retraction:]) == answer
+    assert (await env.last_turn()).answer_text == answer
+
+
+async def test_a_saved_answer_survives_a_call_whose_text_was_held_and_then_reissued(
+    app_engine: AsyncEngine, seeded_sandbox: SeedCompany
+) -> None:
+    answer = "Sick leave is 40 hours."
+
+    def held_then_broken(request: ModelRequest, number: int) -> list[Item]:
+        # Short enough to stay in the canary hold-back buffer: never sent.
+        return [ModelText("Hmm"), InvalidToolInput("broken")]
+
+    transport = PlanTransport(
+        note_then_search_plan(answer), held_then_broken, raw_plan([], "end_turn")
+    )
+    env = await make_env(app_engine, seeded_sandbox, transport=transport)
+    events = await env.ask()
+
+    assert isinstance(events[-1], TurnCompleted)
+    last_retraction = max(i for i, e in enumerate(events) if isinstance(e, TextRetracted))
+    assert sent_text(events[last_retraction:]) == answer
+    assert "Hmm" not in sent_text(events)
+
+
+async def test_citations_on_blank_text_that_is_taken_back_before_a_restore_are_dropped(
+    app_engine: AsyncEngine, seeded_sandbox: SeedCompany
+) -> None:
+    answer = "Sick leave is 40 hours."
+
+    def blank_with_a_citation(request: ModelRequest, number: int) -> list[Item]:
+        return [
+            ModelText("\n"),
+            TextBlockEnd(cited_last_result(request)),
+            finished([{"type": "text", "text": "\n"}], "end_turn"),
+        ]
+
+    transport = PlanTransport(note_then_search_plan(answer), blank_with_a_citation)
+    env = await make_env(app_engine, seeded_sandbox, transport=transport)
+    events = await env.ask()
+
+    assert isinstance(events[-1], TurnCompleted)
+    last_retraction = max(i for i, e in enumerate(events) if isinstance(e, TextRetracted))
+    assert of_type(events[last_retraction:], Citation) == []
+    turn = await env.last_turn()
+    assert (turn.answer_text, turn.citations) == (answer, [])

@@ -79,6 +79,7 @@ class RunFacts:
     versions: Mapping[str, str]
     dataset_sha256: Mapping[str, str]
     cap_usd: Decimal | None
+    # What the run spent now, on calls it actually made.
     assistant_cost_usd: Decimal
     judge_cost_usd: Decimal
     partial: bool
@@ -86,6 +87,9 @@ class RunFacts:
     agreement: Mapping[str, Any] | None
     # Why the run stopped early, when it did: "the spend cap", and so on.
     stop_cause: str | None = None
+    # What the recordings the run reused cost when they were made. Not spent now.
+    assistant_recorded_cost_usd: Decimal = Decimal(0)
+    judge_recorded_cost_usd: Decimal = Decimal(0)
 
 
 # --- Metrics ----------------------------------------------------------------------------------
@@ -291,6 +295,7 @@ def build_scoreboard(
     metrics = metrics_of(records, facts.trials)
     metrics["judge_agreement"] = None if facts.agreement is None else dict(facts.agreement)
     total = facts.assistant_cost_usd + facts.judge_cost_usd
+    recorded_total = facts.assistant_recorded_cost_usd + facts.judge_recorded_cost_usd
     return {
         "mode": facts.mode,
         "set": facts.set_name,
@@ -312,6 +317,12 @@ def build_scoreboard(
             "judge": _money(facts.judge_cost_usd),
             "total": _money(total),
             "cap": None if facts.cap_usd is None else _money(facts.cap_usd),
+            # Not spent now: what the reused recordings cost when they were recorded.
+            "recorded": {
+                "assistant": _money(facts.assistant_recorded_cost_usd),
+                "judge": _money(facts.judge_recorded_cost_usd),
+                "total": _money(recorded_total),
+            },
         },
         "metrics": metrics,
         "failures": failures_of(records),
@@ -394,6 +405,12 @@ def render(result: Mapping[str, Any]) -> str:
         f" {_dollars(cost['assistant'])}, judge {_dollars(cost['judge'])});"
         f" cap {_dollars(cost['cap'])}.",
     ]
+    recorded = cost.get("recorded")
+    if recorded is not None and Decimal(recorded["total"]) > 0:
+        lines.append(
+            f"Reused recordings cost {_dollars(recorded['total'])} when they were made, not now"
+            f" (assistant {_dollars(recorded['assistant'])}, judge {_dollars(recorded['judge'])})."
+        )
     if result["aborted"] is not None:
         lines += ["", f"ABORTED: {result['aborted']}. These numbers cover only what finished."]
     if result["partial"]:

@@ -181,10 +181,10 @@ Every ID below is a random UUID, so one sandbox can't estimate another's activit
 |---|---|---|
 | `id`, `tenant_id`, `person_id`, `conversation_id` | IDs: the turn, its sandbox, its owner, and its conversation | Identity and ownership. |
 | `question` | What the person asked | Shown after a reload. |
-| `status`, `error_code` | `running`, `completed`, `stopped`, `failed`, `crisis`, or `guard_unavailable`; and a code. A failed turn's code is the one its error event sent (`refusal`, `model-unavailable`, `budget-sandbox`, `budget-daily`, `too-many-calls`, `internal`), or a more exact one the client sees as `internal`: `prompt-leak` (the system prompt's canary was caught and withheld), `guard-error` (the safety check couldn't run), or `abandoned`. A completed turn cut off by the output limit has `max-tokens`. | One turn runs at a time per conversation. The code explains a failure or an incomplete answer. |
+| `status`, `error_code` | `running`, `completed`, `stopped`, `failed`, `crisis`, or `guard_unavailable`; and a code. A failed turn's code is the one its error event sent (`refusal`, `model-unavailable`, `budget-sandbox`, `budget-daily`, `spend-limit` (Anthropic's Console spend limit), `too-many-calls`, `internal`), or a more exact one the client sees as `internal`: `prompt-leak` (the system prompt's canary was caught and withheld), `guard-error` (the safety check couldn't run), or `abandoned`. A completed turn cut off by the output limit has `max-tokens`. | One turn runs at a time per conversation. The code explains a failure or an incomplete answer. |
 | `started_at`, `ended_at` | When the turn began and ended (UTC) | The record. |
 | `answer_text`, `citations` | The answer (a stopped turn keeps its partial text) and its citations as JSON | What the person sees after a reload. |
-| `guard_verdict` | The guard's verdict as JSON; null if the guard did not run | Phase 7's console shows why a turn was routed. |
+| `guard_verdict` | The guard's verdict as JSON; null if the guard did not run | Phase 7's console shows why a turn was routed. The browser gets the category and kind only (`GET /assistant/conversations/current`), never `injectionSuspected`, the cost, or the cache counts. |
 | `tool_calls`, `sections_retrieved` | Each tool call (name, a short summary of its input, success, duration), and the handbook sections the search returned | What the assistant did. A search's summary holds up to 60 characters of its query (and `find_people`'s up to 40), after control characters are removed. Tool calls past the limits (5 per response, 20 per question) aren't run, and a round records them as one `skipped` entry with a `count`. The summaries never hold private values. |
 | `served_by_models`, `effort`, `prompt_version`, `toolset_version` | The model IDs that served the turn, and the settings in effect | Explains a result, and shows when a fallback happened. |
 | `input_tokens`, `output_tokens`, `cache_read_tokens`, `cache_write_tokens`, `cost_usd` | Token counts and the cost at list price | Measures cost and caching. |
@@ -302,6 +302,17 @@ Voyage AI turns text into the vectors that handbook search compares.
   `search_handbook`, its query (written by the model from the person's question, up to 500
   characters) is turned into a vector before the database is read. The person's whole question
   isn't sent to Voyage, only that query.
+- **The API calls Voyage only when `AI_TRANSPORT=anthropic`.** With the scripted model (`make
+  dev`, the browser tests, the proxy check), search is full text only, even with a key in `.env`.
+- **Voyage's terms:** it stores API data and may use it for training unless the organization opts
+  out, which also gives zero-day retention: "customers can opt-out from Voyage storing and using
+  their data for future model training so that there is a zero-day retention of the data."
+  Whether Open Door has opted out isn't recorded yet (a Phase 9 backlog item, before real
+  traffic).
+
+> Source: Voyage AI, "FAQ" (docs.voyageai.com/docs/faq, last updated 2026-08-03), read on
+> 2026-10-17.
+
 - **The run-time query cache holds hashes and vectors, never text.**
 - **The committed cache files** (`handbook/embeddings/`) hold vectors keyed by hashes of the
   model, the size, and the text, not the text itself.
@@ -366,4 +377,7 @@ seed generator.
   machine, with `make eval-live YES=1`; CI replays the fixtures with no network.
 
 - **Logs hold no conversation content.** The API logs IDs, timings, exception types, and stop
-  reasons, never a question, an answer, a tool result, or the system prompt.
+  reasons, never a question, an answer, a tool result, or the system prompt. The turn stream adds
+  two fixed warnings with no fields: a client that stopped reading a stream, and streams still
+  open at shutdown (with a count). A refused question (too long, or a Social Security or card
+  number) is a problem response; the text is never logged, stored, or echoed back.

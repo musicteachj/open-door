@@ -76,7 +76,8 @@ class Settings(BaseSettings):
     # The web app's origin, for the same-origin check on requests that change state.
     app_origin: str = "http://localhost:5173"
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR"] = "INFO"
-    # Only `make embed` needs it. An empty value counts as unset.
+    # `make embed` and the API with AI_TRANSPORT=anthropic use it (the API embeds each handbook
+    # question). Without it the search is full-text only. An empty value counts as unset.
     voyage_api_key: SecretStr | None = Field(default=None, repr=False)
 
     # Only the anthropic transport needs it, and it checks for the key when it is built
