@@ -353,9 +353,3 @@ From the Phase 1 review ([the spec's Later phases](specs/2026-10-03-phase-1-tena
   graceful timeout (to let long answers finish during a deploy), raise `stopTimeout` (at most
   120) and the load balancer's deregistration delay with it, and keep the 12-second drain inside
   the gap. (Phase 4 stage 4.)
-- **Opt out of Voyage's training use before real traffic.** Voyage stores API data and may use it
-  for training unless the organization opts out (Organization, Terms of Service, in its dashboard),
-  which also gives zero-day retention. The assistant's search queries are written from employees'
-  questions. Source: Voyage AI, "FAQ" (docs.voyageai.com/docs/faq, last updated 2026-08-03), read
-  on 2026-10-17. If the owner has already opted out, record it in `DATA-INVENTORY.md` and
-  `AI-GOVERNANCE.md` and delete this item. (Phase 4 stage 4.)
