@@ -307,8 +307,8 @@ Voyage AI turns text into the vectors that handbook search compares.
 - **Voyage's terms:** it stores API data and may use it for training unless the organization opts
   out, which also gives zero-day retention: "customers can opt-out from Voyage storing and using
   their data for future model training so that there is a zero-day retention of the data."
-  Whether Open Door has opted out isn't recorded yet (a Phase 9 backlog item, before real
-  traffic).
+  **Open Door's Voyage organization has opted out** (the owner, confirmed on 2026-10-17), so
+  Voyage keeps none of the text it embeds.
 
 > Source: Voyage AI, "FAQ" (docs.voyageai.com/docs/faq, last updated 2026-08-03), read on
 > 2026-10-17.

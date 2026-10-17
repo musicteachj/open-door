@@ -154,7 +154,8 @@ the crisis item as crisis. Phase 6's escalation eval measures precision and reca
 - **Voyage** stores data and may use it for training unless the organization opts out: "customers
   can opt-out from Voyage storing and using their data for future model training so that there is
   a zero-day retention of the data." The opt-out is a toggle in Voyage's dashboard (Organization,
-  Terms of Service), set by an organization admin.
+  Terms of Service), set by an organization admin. **Open Door's organization has opted out**
+  (the owner, confirmed on 2026-10-17).
 
 > Source: Anthropic, "How long do you store my organization's data?" (privacy.claude.com, last
 > updated 2026-07-01) and "Is my data used for model training?" (privacy.claude.com, last updated
