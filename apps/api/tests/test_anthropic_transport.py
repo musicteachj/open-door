@@ -41,6 +41,7 @@ from app.ai.transport import (
     TextBlockEnd,
     TextDelta,
     ToolCall,
+    guard_api_kwargs,
 )
 from app.core.config import Settings
 
@@ -1018,3 +1019,21 @@ async def test_a_normal_completion_closes_the_response_once(
     await collect(make_transport(handler))
 
     assert closes == [True]
+
+
+async def test_the_guard_call_sends_exactly_what_the_replay_fingerprints(
+    make_transport: Callable[[Handler], AnthropicTransport],
+) -> None:
+    """The replay keys a guard call by `guard_api_kwargs`, so the SDK must be sent that and nothing
+    else: a recording of one request has to be the request that was sent."""
+    captured: list[httpx2.Request] = []
+
+    def handler(request: httpx2.Request) -> httpx2.Response:
+        captured.append(request)
+        return httpx2.Response(200, json=guard_message())
+
+    guard_request = a_guard_request()
+    await make_transport(handler).classify(guard_request)
+
+    (request,) = captured
+    assert json.loads(request.content) == guard_api_kwargs(guard_request)

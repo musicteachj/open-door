@@ -1794,6 +1794,147 @@ clear `__pycache__`.
 application code and config, above the plan's estimate of 1,200 and the 1,500 guideline, so the PR
 gives a reading guide.
 
+### Stage 3 (`feat/phase-4-evals`, 2026-10-15 to 2026-10-16)
+
+Run in four build batches (A: Tasks 18 and 19, B: 20 and 21, C: 22 and 23, D: 24, the live runs),
+each with one Sonnet implementer and one combined Sonnet review. Every fix was written test first
+and mutation-proved. Only Batch D called Anthropic or Voyage.
+
+**API facts checked this stage** (the claude-api skill, 2026-10-15):
+- Everything that changes a response is in the request body, so the fingerprint covers exactly
+  the kwargs sent; the version header, retries, and timeouts don't change the output. There is no
+  seed, and Opus 5.5, Sonnet 5.5, and Haiku 5.5 reject sampling parameters, so identical requests
+  aren't deterministic and replay must return recorded responses.
+- The judge sends `output_config` with `effort` and a `json_schema` format, and no `thinking`,
+  sampling parameters, or fallbacks. Its answer is read from the text block by type, because a
+  response can begin with thinking blocks.
+
+**Replay and the harness (Tasks 18 and 19).**
+- **Replay works at the transport level:** the recorder stores the normalized events and typed
+  errors each call produced. Offline replay doesn't exercise the SDK parsing in
+  `anthropic_transport.py`, which its own tests cover.
+- **The guard's request is one pure function,** `guard_api_kwargs`, used by the real call and by
+  replay. The fingerprint hashes `{kind, request}` with sorted keys.
+- **A recording is keyed by fingerprint and occurrence** (the nth identical request within an
+  item), because the loop re-issues a byte-identical request after unparsable tool input, and the
+  second answer differs from the first (review round, Batch A).
+- **Temporary failures are never recorded** (a timeout, an outage, the spend limit), and a live
+  item lists any call left without a recording. An unreadable recording counts as a miss.
+- **The eval sandbox is real, not rolled back:** `run_turn` commits through its own sessions, so
+  Phase 3's single rolled-back transaction can't hold a turn. A fixed tenant ID, anchor date
+  (2026-10-05), and "today" (2026-10-15, 17:00 UTC) make the requests repeat. The run deletes the
+  sandbox and only the `ai_spend_daily` rows it added, through the owner login, shielded from
+  cancellation; a crashed run's sandbox goes at the next start. One run at a time, never alongside
+  `make check`.
+- **A swallowed failure still fails the item.** The guard fails closed and search falls back to
+  full text when an embedding is missing, so the harness checks for replay misses and embedding
+  misses after every item.
+
+**The datasets and graders (Tasks 20 and 21).**
+- 42 red-team items and 61 Q&A questions; the owner reviewed both and approved changes on
+  2026-10-16 (qa-09 replaced, it duplicated rt-42; qa-37 reworded as a manager's process question,
+  since an injury routes as sensitive; qa-54 and qa-56 replaced, the handbook partly answered
+  them; qa-40 also accepts 2.3; three questions loosened).
+- **Dana, the HR admin, can read private details in the product** (an audited page), but no
+  assistant tool reaches them, so the private-data scan is the same for her.
+- **The birthday scan flags a bare month and day only near a birth word** ("born", "birthday",
+  "turns", "age"), because the 145 seeded people cover a third of the calendar and every ordinary
+  date failed (review, Batch B). The scan also covers ages, partial addresses, Unicode dashes, and
+  spaced-out emails; its blind spots (numbers in words, translations) are in its docstring.
+- **The unanswerable check was loosened after the first live run** (owner's choice, 2026-10-16):
+  it accepts a paraphrase of "I couldn't find that in the handbook", and allows a citation of a
+  nearby passage when the answer says it couldn't find the answer and offers HR. qa-52's answer
+  did exactly that and failed the exact-phrase rule.
+
+**The judge and the runner (Tasks 22 and 23).**
+- **No fallbacks for the judge:** a fallback would grade with another model and undermine the
+  agreement figure.
+- **The cap is enforced call by call:** the run hands the budget ledger what's left of its cap,
+  so a call that can't fit is refused, and each judge call is checked first (review, Batch C). A
+  stopped run is marked partial and fails `--check`.
+- **`make eval-live` runs only with `YES=1`** (the first version treated `YES=0` as yes).
+- **The hand-graded answers' judge verdicts have their own store,** which later runs never prune.
+  The judge is accepted only when every graded answer has a verdict.
+- **Offline replay covers the smoke set** until Stage 6's full run records the rest; then
+  `make eval-offline` and CI switch to `--set full`.
+
+**The live runs (Task 24), with the owner, 2026-10-16.** The owner confirmed the $25 monthly
+limit in the Claude Console and allowed `make eval-live` in the permission settings.
+
+| Run | Cost | Result |
+|---|---|---|
+| Smoke, low effort (recorded) | $0.55 | Red team 100%; deterministic Q&A and unanswerable 100% after the grader change; judge 10 of 15 |
+| Effort comparison, medium | $0.66 | The same deterministic results; judge 8 of 15. Not committed |
+| Judge on the 34 graded answers | $0.39 | 188 of 204 lines agree (92.2%), accepted |
+
+- **The effort decision: keep `low`.** Medium cost 20% more and fixed none of low's misses; the
+  judge's verdicts moved both ways between runs.
+- **Stage 2's live evidence:**
+  - top-level prompt caching works: from the second item on, every first Opus call read 1,521
+    cached tokens, and calls later in a tool loop read 2,228 and then 3,467
+  - the guard's structured output on Haiku 5.5: 25 valid verdicts of 25; crisis came back as
+    `self_harm`, harassment as sensitive, and a suspected injection on all 8 attack items and no
+    plain question
+  - mid-conversation `system` messages: accepted on every call; all 24 non-crisis turns completed
+  - the thinking-display status notes: none. The beta is accepted, but all 24 thinking blocks
+    were empty at low effort, and none appeared at medium (backlogged)
+  - citations: 80 of 80 quoted texts are found in the section they point to
+- **The hand grades were not the owner's** (a change to the planning decision "the owner grades
+  all 30"). The owner chose not to grade. A fresh Claude Opus grader, given only the answers, the
+  rubric, and the handbook, graded all 34 blind to the judge and the key, and caught all four
+  planted flaws on the right lines; a script confirmed its faithfulness grades. The scoreboard,
+  the README, and the changelog say the judge is validated against another model's grades, a
+  weaker check than a person's.
+- **A product bug the grades found:** three answers to qa-10 opened with the model's working note
+  "Missing the rate/threshold passage. Search again." (backlogged for Stage 4).
+
+**The close's `/code-review medium`: eight rounds.** Rounds 1 to 7 each found at least one medium;
+round 8 found only lows, so the loop stopped there (the stopping rule), and its cheap lows were
+fixed without another round. Every fix was written test first and mutation-proved. What changed
+the design:
+- **Re-recording reuses what hasn't changed** (rounds 2 to 5). A live run answers any request
+  already in the committed store from that recording, so an unchanged request costs nothing and a
+  record two items share can't be replaced under one that didn't run. Only new requests are called
+  live. `FRESH=1` re-records everything, and `PRUNE=1` (a full run only, and only when every item
+  finished) also drops recordings nothing used. A `--fresh` run that stops early saves nothing.
+- **Items that share a request are saved all or nothing** (rounds 3 and 4): an item is re-recorded
+  only when it finished and no request it used was also used by an item that kept its old
+  recordings, computed to a fixed point.
+- **An answer and its judge verdict are saved together** (round 1), and the hand-graded answers'
+  verdicts live in their own store (Batch C).
+- **A canary leak the loop withholds is recorded and fails the grade** (rounds 1 and 2): the harness
+  commits the closed stream when the turn ends in `prompt-leak`, and the canary grader fails any
+  such turn ("the model wrote the canary; the loop withheld it").
+- **Money:** the ledger is given what's left of the run's cap, so other sandboxes' spend that day
+  doesn't count against it (round 1); spend already billed is counted on every stop (round 3);
+  the Console's spend limit is reported as itself, for the model, the guard, and the judge
+  (rounds 1 and 4); `--agreement` checks a reservation before each call (round 1).
+- **The cleanup deletes only the eval's own daily-ledger rows** (round 7), matched one to one
+  against the eval sandbox's `ai_spend` rows on kind, amount, and instant (both tables stamp
+  `now()`, the transaction's start). It had deleted every row since the run began, from every
+  sandbox, which `make check` could do during a dev session. The tenant and ledger deletes each
+  have their own time limit, and a cleanup failure never hides the run's own error (round 4).
+- **Graders:** the not-found statement accepts the common paraphrases and ignores dots inside
+  numbers (rounds 5 and 6); the email check needs an address form (round 5); "is 26" is an age only
+  with an age cue or right after the name (round 6).
+- **Dismissed, with the reason:** the double fingerprint in the observing wrapper (every round;
+  negligible beside a model call, and it keeps the observer independent of what it wraps); "the
+  live run's spend is removed from the daily cap" (round 8; deliberate: the daily cap guards the
+  demo's day, evals run only against the dev database, and the Console's monthly limit is the
+  backstop for eval spend).
+- **Recorded as low, not fixed:** the judge reads each cited section's text back out of the
+  flattened tool-result text (it holds for today's handbook; backlogged); `_preflight` seeds and
+  deletes one extra sandbox per run (about a second); the git and dataset-hash helpers repeat the
+  retrieval eval's.
+
+**Final counts (Stage 3):** 2,451 API tests (up from 1,611), 1,006 web unit tests, and 175 browser
+tests (both unchanged), with four import contracts kept. `make db && make check` is green,
+including the offline assistant evals (red team, deterministic Q&A, and unanswerable all 100%;
+judge agreement 92%, accepted). Live spend: $1.60. About 6,000 lines of application code, eval
+code, and config (2,055 of them the runner in `evals/assistant/run.py`), four times the plan's
+estimate of 1,000 and the 1,500 guideline: most of the growth is the review rounds' re-record
+and cleanup rules. The PR gives a reading guide.
+
 ## Backlog
 
 Deferrals found during execution go in `docs/BACKLOG.md` under the phase that should pick them up,

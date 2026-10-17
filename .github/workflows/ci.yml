@@ -133,6 +133,11 @@ jobs:
       # embedding fails here: run `make embed` and commit the cache.
       - name: Handbook search finds the right sections (retrieval eval)
         run: uv run python ../../evals/retrieval/run.py --check
+      # Replays the recorded smoke answers and judge verdicts: no Anthropic or Voyage key, no
+      # network. A request with no recording (a prompt, tool, or retrieval change) fails here: run
+      # `make eval-live YES=1` and commit the fixtures.
+      - name: Assistant evals replay the recorded answers (offline)
+        run: uv run python ../../evals/assistant/run.py --mode offline --set smoke --check
       - name: The committed OpenAPI schema matches the API
         run: uv run python scripts/export_openapi.py --check
 

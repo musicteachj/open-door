@@ -39,6 +39,12 @@ apps/web/captures/
 # Live eval runs write here. Recorded fixtures and the committed scoreboard live
 # elsewhere under evals/ and are tracked.
 evals/runs/
+# `make eval-live` writes each run's scoreboard and traces here, and the effort comparison's
+# recordings (kept only if medium effort is adopted) in fixtures-effort/.
+evals/assistant/runs/
+evals/assistant/fixtures-effort/
+# A save writes a dotted temporary file beside a fixture first; a crash could leave it.
+evals/assistant/fixtures*/.*.tmp
 
 # --- OS and editors --------------------------------------------------------
 .DS_Store

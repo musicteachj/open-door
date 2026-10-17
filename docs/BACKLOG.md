@@ -148,6 +148,38 @@ should pick it up. When one is done, delete it here and record it in the changel
 - **Graceful shutdown with open streams.** Streaming responses delay shutdown, and the engine is
   only disposed after they finish. Set uvicorn's `--timeout-graceful-shutdown` below the ECS
   `stopTimeout`.
+- **The model's working notes show up as answer text.** In the first live smoke run, three answers
+  to "if i work 45 hours one week do i get paid extra for the last 5" (qa-10) began with "Missing
+  the rate/threshold passage. Search again.", text the model wrote before its second search. The
+  loop sends all model text as answer text, so an employee would see it. Stage 4 decides how the
+  stream treats text written in a round that ends in a tool call (shown as a status line, say),
+  or a prompt change tells the model not to narrate its searches; either needs a smoke run.
+  (Phase 4 stage 3, the hand grades.)
+- **Prompt findings from the first live runs, for the next prompt change.** The judge and the
+  independent grades agree on these: a policy sentence without a citation inside an otherwise
+  cited answer (5 of 15 answers at low effort); an answer about Colorado medical leave that leaves
+  out FAMLI's partial pay; an answer about Denver's sick leave that doesn't say it differs from
+  the asker's California rule; and "Since you work in HR yourself", inferred from the per-turn
+  context. Each is a prompt change, so each needs a smoke run (about $0.55). (Phase 4 stage 3.)
+- **The thinking-display progress notes have no live evidence yet.** The beta is sent and
+  accepted, but neither live run (low or medium effort) produced a note: every thinking block came
+  back empty, and the model went straight to its search. Stage 5's status line is tested against
+  the scripted model, which does emit one. Check again after the next prompt change or at the
+  Stage 6 full run. (Phase 4 stage 3.)
+- **Give the Console spend limit its own turn error code.** The turn reports Anthropic's Console
+  spend limit with `budget-daily`, the same code as the product's own daily cap, so the eval harness
+  watches the transport to tell them apart, and the route, the audit log, and a later console can't.
+  A separate code (say `spend-limit`) fixes all of them. Stage 4, with the routes' problem
+  responses. (Phase 4 stage 3 `/code-review medium`.)
+- **Pass structured search results to the judge.** The eval judge reads each cited section's text
+  back out of the flattened "source | title | passages" tool-result text. It holds for today's
+  handbook (no title contains " | " and no passage starts a line with "/handbook/"), but keeping
+  the source, title, and passages as fields on the trace would remove the round trip. (Phase 4
+  stage 3 `/code-review medium`.)
+- **Check the replay fingerprints on CI's first run.** Handbook search ranks by floating-point
+  scores, and a near-tie could break differently on CI's x86 runner than on the arm64 machine that
+  recorded the fixtures, changing a tool result and so a later request's fingerprint. Unproven and
+  unlikely; if the offline eval misses only on CI, this is why. (Phase 4 stage 3 review.)
 
 ## Phase 5: time off
 

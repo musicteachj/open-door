@@ -14,7 +14,7 @@ ZIZMOR := zizmor@1.30.1
 GITLEAKS := ghcr.io/gitleaks/gitleaks:v8.30.1
 
 .DEFAULT_GOAL := help
-.PHONY: help setup db db-stop migrate bootstrap-db ingest embed eval-retrieval migrations-roundtrip dev dev-api dev-web openapi check check-api check-web e2e captures check-docs check-workflows audit
+.PHONY: help setup db db-stop migrate bootstrap-db ingest embed eval-retrieval eval-offline eval-live migrations-roundtrip dev dev-api dev-web openapi check check-api check-web e2e captures check-docs check-workflows audit
 
 help: ## List the available commands
 	@grep -E '^[a-zA-Z_-]+:.*## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*## "}; {printf "  %-22s %s\n", $$1, $$2}'
@@ -53,6 +53,34 @@ embed: ## Fetch missing handbook and eval embeddings from Voyage (needs VOYAGE_A
 eval-retrieval: ## Score handbook search against the labeled questions (needs `make db`); see evals/README.md
 	cd $(API) && uv run python ../../evals/retrieval/run.py
 
+# Replays the recorded assistant answers through the real loop, tools, graders, and judge reading, so
+# it needs no key and no network. A prompt, tool, or retrieval change makes a request miss its
+# recording: re-record with `make eval-live YES=1`. Until the full run is recorded (Phase 4, Stage 6),
+# only the smoke set has recordings. One run at a time.
+eval-offline: ## Replay the recorded assistant evals (needs `make db`); no network. See evals/README.md
+	cd $(API) && uv run python ../../evals/assistant/run.py --mode offline --set smoke --check
+
+# PAID. Without YES=1 (exactly 1: YES=0 or YES=no still only prints) it prints the set, the item count, the estimated cost, and the cap, and calls
+# nothing. SET=smoke (about $1.20, cap $2), SET=full (about $14, cap $16), or SET=effort (the smoke
+# items at medium effort, about $1.50, cap $2; its recordings go to a git-ignored folder, and
+# COMPARE=<a low-effort scoreboard> prints the two side by side). A run reuses the recordings it
+# already has and calls only requests that changed. FRESH=1 calls everything live again. PRUNE=1
+# (SET=full only) also drops the old recordings no item asked for, and implies FRESH=1: with
+# `SET=full FRESH=1 PRUNE=1` the whole fixture set is replaced. Each run writes its scoreboard and
+# traces into the git-ignored evals/assistant/runs/. The key is read from apps/api/.env (an empty
+# one exported in the shell is ignored). One run at a time; don't start it in the middle of `make check`.
+SET ?= smoke
+STAMP := $(shell date -u +%Y%m%dT%H%M%SZ)
+RUNS := ../../evals/assistant/runs
+eval-live: ## PAID: record the assistant evals. SET=smoke|full|effort, YES=1 to run, COMPARE=<scoreboard.json>
+	cd $(API) && uv run python ../../evals/assistant/run.py --mode live --set $(SET) \
+		$(if $(filter effort,$(SET)),--fixtures-dir ../../evals/assistant/fixtures-effort) \
+		$(if $(COMPARE),--compare $(abspath $(COMPARE))) \
+		--json $(RUNS)/$(STAMP)-$(SET).json --traces $(RUNS)/$(STAMP)-$(SET)-traces.json \
+		$(if $(or $(filter 1,$(FRESH)),$(filter 1,$(PRUNE))),--fresh) \
+		$(if $(filter 1,$(PRUNE)),--prune) \
+		$(if $(filter 1,$(YES)),--yes)
+
 # Not part of check-api: it deletes every row, including the sandboxes you're working in.
 migrations-roundtrip: ## Undo every migration, apply them again, recreate the logins, and reload the handbook (wipes data)
 	cd $(API) && uv run alembic downgrade base
@@ -86,6 +114,7 @@ check-api: ## Lint, type-check, migrate, load the handbook, and test the API; co
 	cd $(API) && uv run alembic check
 	cd $(API) && uv run pytest
 	cd $(API) && uv run python ../../evals/retrieval/run.py --check
+	cd $(API) && uv run python ../../evals/assistant/run.py --mode offline --set smoke --check
 	cd $(API) && uv run python scripts/export_openapi.py --check
 
 check-web: ## Lint, format-check, type-check, test, and build the web app; confirm the client

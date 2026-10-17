@@ -12,6 +12,14 @@ version (`0.x.y` while the app is being built, `1.0.0` when it is complete).
 
 ### Changed
 
+- **The live-eval rule names its runs** (Phase 4, stage 3). In `CLAUDE.md`, a change to a prompt,
+  a tool, or the guard needs the offline evals green and a smoke run (`make eval-live YES=1`,
+  about $1.20, cap $2) before its PR, and a release gets the full run (`SET=full`, about $14, cap
+  $16). The "Environment gotcha" note now says `env -u` is no longer needed: the settings have
+  ignored an empty exported key since stage 1.
+- **The guard's request is built in one place** (Phase 4, stage 3), a pure function that both the
+  real call and replay use, so a recording is keyed by exactly what is sent.
+
 - **No em dashes, anywhere** (Phase 4, stage 2). A new writing rule in `CLAUDE.md`, beside the
   American English one. `make check-docs` now fails on an em dash in any file except the frozen
   initial plan, the Claude Design handoff, recorded eval fixtures, and lockfiles. The few in the docs were empty table cells, now "-".
@@ -21,6 +29,39 @@ version (`0.x.y` while the app is being built, `1.0.0` when it is complete).
 
 ### Added
 
+- **The assistant evals** (Phase 4, stage 3), in `evals/assistant/`. They measure what the
+  assistant does with real questions, run through the real turn loop, tools, and database.
+  - **Two question sets,** written in employees' own words before any tuning: 42 red-team items
+    (other people's private details, injection and impersonation, prompt extraction, and crisis
+    and sensitive routing) and 61 Q&A questions (10 the handbook doesn't answer, 6 about another
+    state, 4 asking for an employment decision, and "am I talking to a real person?"). A smoke set
+    of 25 covers each kind.
+  - **Graders by program:** a scan for anyone else's address, phone, personal email, birth date,
+    or age, in the many forms a model might write them; the prompt's canary; tool calls outside
+    the three tools; crisis and sensitive routing; cited sections that apply to the asker; and
+    "couldn't find that in the handbook" with an offer of HR.
+  - **A judge,** Claude Sonnet 5.5, answers yes or no on six lines for each Q&A answer: correct,
+    faithful to its passages, no uncited policy claim, says whose policy, no employment decision,
+    and says it's an AI when asked. It agrees with independent grades on 92% of lines (188 of
+    204). Those grades were written by a separate Claude Opus grader that never saw the judge's
+    verdicts, and they caught all four deliberately flawed answers. The owner chose not to grade
+    by hand, so the judge is validated against another model, not a person: a weaker check, and
+    labeled that way.
+  - **Offline replay in CI and `make check`.** Live runs record each call's response, keyed by a
+    hash of the request, and CI plays them back with no key and no network. A prompt, tool, or
+    retrieval change makes a request miss, and the run says to re-record with `make eval-live`.
+  - **`make eval-live`** runs the paid evals: smoke by default, `SET=full` or `SET=effort`, and
+    only with `YES=1`. Each run has a hard cap ($2, $16, $2) that the budget ledger enforces call
+    by call, and writes a scoreboard with the model, versions, dataset hashes, cost, and every
+    metric's spread across trials. A re-record calls the model only for requests that changed and
+    reuses every other recording; `FRESH=1` re-records everything, and `PRUNE=1` (a full run)
+    also drops recordings nothing uses. The run deletes its temporary sandbox and only its own
+    daily-ledger rows afterward.
+  - **The first live runs:** the smoke set at low effort cost $0.55 and passes every check (red
+    team, deterministic Q&A, and unanswerable all at 100%). Medium effort cost $0.66 and fixed
+    nothing, so the assistant stays at low effort. They are the first live evidence for stage 2's
+    prompts: prompt caching works, the guard's structured output never failed, and every citation
+    quotes its passage.
 - **The assistant's turn loop** (Phase 4, stage 2). Nothing is reachable from the web app yet.
   - **One turn is one stream of typed events** (started, status, text, citation, tool started and
     finished, escalation, error, completed). The guard reads the question first. Then the model is
