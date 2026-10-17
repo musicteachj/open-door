@@ -28,7 +28,8 @@ Sources: everything here was designed in this project. The decision record is `A
 - `Global States.dc.html`: screen 05, session expired, not found, something went wrong.
 - `Directory.dc.html`: screen 04, Directory list and profile pages with their states.
 - `Handbook.dc.html`: screen 06, handbook home, section page, cited passage deep link, search, states, and the passage panel docked on the assistant home.
-- `Passage Panel.dc.html`: the shared passage panel (open, loading, error), imported by Handbook and, next phase, the conversation view.
+- `Passage Panel.dc.html`: the shared passage panel (open, loading, error), imported by Handbook and Conversation.
+- `Conversation.dc.html`: screen 07, the conversation view (/ask): cited answers, source panel, streaming, feedback, escalation and crisis panels, errors, budget banners, composer notices. Screenshots and notes are in `screen-07-conversation/`.
 - `Landing.dc.html`: screen 01, Try Open Door (landing page with persona picker and its states).
 - `guidelines/`: foundation specimen cards (colors, type, spacing, radius, shadows, focus, logo, icons).
 - `assets/`: `logo-mark.svg` (32 px master), favicons (`favicon.svg`, `favicon-16.svg`, `favicon-16.png`, `favicon-32.png`, `apple-touch-icon.png` at 180, `icon-512.png`), `logo-explorations/` (round 1 candidates), `fonts/` (Instrument Sans, Geist Mono, self-hosted woff2).

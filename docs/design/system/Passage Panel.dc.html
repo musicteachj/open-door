@@ -76,7 +76,7 @@ class Component extends DCLogic {
       after: 'If you know about the need ahead of time, such as a scheduled appointment, tell your manager in advance. Otherwise, tell them as soon as you can.',
       href: '/handbook/CA-4.3?passage=p2'
     };
-    const v = k => p[k] || D[k];
+    const v = k => (p[k] ?? D[k]);
     const path = decodeURIComponent((typeof location !== 'undefined' && location.pathname) || '');
     const solo = /Passage Panel\.dc\.html$/.test(path);
     const marker = p.marker == null ? 'yes' : p.marker;
@@ -86,7 +86,7 @@ class Component extends DCLogic {
       isOpen: st === 'open', isLoading: st === 'loading', isError: st === 'error', busy: st === 'loading' ? 'true' : 'false',
       eyebrow: v('eyebrow'), title: v('title'), applies: v('applies'), updated: v('updated'),
       yes: marker === 'yes', no: marker === 'no',
-      before: v('before'), after: v('after'), hasBefore: true, hasAfter: true, cited: v('cited'), href: v('href'),
+      before: v('before'), after: v('after'), hasBefore: !!v('before'), hasAfter: !!v('after'), cited: v('cited'), href: v('href'),
       close: () => { if (p.onClose) p.onClose(); },
       open: (e) => { if (p.onOpen) { e.preventDefault(); p.onOpen(); } },
       retry: () => { if (p.onRetry) p.onRetry(); }
