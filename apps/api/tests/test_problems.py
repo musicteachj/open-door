@@ -4,7 +4,7 @@ import pytest
 from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
 
-from app.core.problems import install_problem_handlers
+from app.core.problems import ProblemError, install_problem_handlers
 from app.core.request_id import RequestIdMiddleware
 
 
@@ -29,6 +29,10 @@ def client() -> Iterator[TestClient]:
     @app.get("/managers-only")
     async def managers_only() -> None:
         raise HTTPException(403, detail="Managers only.")
+
+    @app.get("/coded")
+    async def coded() -> None:
+        raise ProblemError(409, "turn-running", "Still answering the last question.")
 
     @app.get("/nonstandard-status")
     async def nonstandard_status() -> None:
@@ -133,3 +137,18 @@ def test_a_nonstandard_status_code_still_returns_problem_details(client: TestCli
     assert body["title"] == "Error"
     assert body["status"] == 499
     assert "detail" not in body
+
+
+def test_a_problem_error_carries_its_code_as_the_problem_type(client: TestClient) -> None:
+    response = client.get("/coded")
+
+    assert response.status_code == 409
+    assert response.headers["content-type"] == "application/problem+json"
+    assert response.json() == {
+        "type": "turn-running",
+        "title": "Conflict",
+        "status": 409,
+        "instance": "/coded",
+        "detail": "Still answering the last question.",
+        "requestId": response.headers["X-Request-ID"],
+    }

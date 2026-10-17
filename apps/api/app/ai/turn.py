@@ -58,6 +58,7 @@ from app.ai.conversations import (
     StoredMessage,
     TurnOutcome,
     append_messages,
+    conversation_is_outdated,
     finish_turn,
     model_history,
     recover_abandoned,
@@ -83,7 +84,7 @@ from app.ai.pricing import (
     total_usage,
     turn_call_cost,
 )
-from app.ai.prompts.versions import CANARY, PROMPT_VERSION, TOOLSET_VERSION, system_prompt
+from app.ai.prompts.versions import CANARY, system_prompt
 from app.ai.text import error_name, one_line
 from app.ai.tools.base import ToolContext, ToolOutcome, failure, text_block
 from app.ai.tools.registry import TOOL_DEFINITIONS, describe_call, run_tool
@@ -137,15 +138,24 @@ HR_CONTACT_TIMEOUT = timedelta(seconds=2)
 # upstream request stops and no more billed tokens are generated); this bounds the wait.
 SHIELDED_STEP_TIMEOUT = timedelta(seconds=5)
 
+# The most characters of a taken-back working note shown as a status line.
+WORKING_NOTE_MAX_CHARACTERS = 120
+
 ErrorCode = Literal[
     "refusal",
     "model-unavailable",
     "budget-sandbox",
     "budget-daily",
+    "spend-limit",
     "too-many-calls",
     "internal",
 ]
 EndStatus = Literal["completed", "stopped", "failed", "crisis", "guard_unavailable"]
+
+
+class ConversationNotFound(Exception):  # noqa: N818
+    """The conversation is not the actor's. The route answers 404. A dedicated type, so a lookup
+    error from a bug elsewhere (a `KeyError` is a `LookupError`) is never taken for it."""
 
 
 class ConversationOutdated(Exception):  # noqa: N818
@@ -181,6 +191,20 @@ class TextDelta:
 
     def to_json(self) -> dict[str, Any]:
         return {"text": self.text}
+
+
+@dataclass(frozen=True)
+class TextRetracted:
+    """Tells the client to drop all answer text and citations shown so far in this turn.
+
+    Sent when a model call that showed text ends in a tool call: that text was a working note, not
+    the answer. Every earlier tool round was already taken back, so what is shown at that moment is
+    only that call's text. The note itself follows as a `status` event."""
+
+    name: ClassVar[str] = "text.retracted"
+
+    def to_json(self) -> dict[str, Any]:
+        return {}
 
 
 @dataclass(frozen=True)
@@ -291,6 +315,7 @@ TurnEvent = (
     TurnStarted
     | Status
     | TextDelta
+    | TextRetracted
     | Citation
     | ToolStarted
     | ToolFinished
@@ -298,7 +323,8 @@ TurnEvent = (
     | Error
     | TurnCompleted
 )
-# What a person can see, for the time to the first visible event.
+# What a person can see, for the time to the first visible event. A retraction is not one: the text
+# it takes back was already shown.
 _VISIBLE = (Status, TextDelta, ToolStarted, Escalation)
 
 
@@ -316,7 +342,7 @@ class TurnDeps:
 
     engine: AsyncEngine
     transport: Transport
-    embedder: Embedder
+    embedder: Embedder | None
     actor: Actor
     tenant_ctx: TenantContext
     caps: Caps
@@ -368,22 +394,50 @@ def _serialize(value: Any) -> str:
     return json.dumps(value, ensure_ascii=False)
 
 
-def _strip_format(text: str) -> str:
-    """The text without Unicode format characters (category Cf: zero-width spaces and joiners,
-    directional marks), which can hide a phrase from an exact match and are invisible anyway."""
-    return "".join(char for char in text if unicodedata.category(char) != "Cf")
+def _fold(text: str) -> str:
+    """The text as the canary check compares it: NFKC, case-folded, and only its letters and
+    digits. So other case, full-width letters, other hyphens or spaces, markdown inside the phrase,
+    and invisible characters all fold to the same string as the plain canary."""
+    return "".join(
+        char for char in unicodedata.normalize("NFKC", text).casefold() if char.isalnum()
+    )
+
+
+FOLDED_CANARY = _fold(CANARY)
+
+
+# The most characters of model text held back, or kept as the tail of what was sent, for the canary
+# check. The folded count alone does not bound it: characters that fold to nothing (spaces,
+# punctuation, Markdown, emoji) do not count, so a long run of them would be held and re-folded on
+# every delta. This is generous: a canary with up to 20 separator characters after each of its
+# letters (19 held letters x 21 = 399) is still caught. One spread wider is not recognizable to a
+# person either, and its start is released.
+MAX_HELD_CHARACTERS = 512
+
+
+def _has_canary(text: str) -> bool:
+    """Whether `text` holds the canary in any writing `_fold` sees through. A boolean, so nothing
+    that checks it ever prints the canary."""
+    return FOLDED_CANARY in _fold(text)
 
 
 def _keep_from(text: str, count: int) -> int:
-    """The index from which `text` ends in `count` characters that are not format characters (0 if
-    it holds fewer), so what is held back counts the characters a person would see."""
+    """The index from which `text` ends in at least `count` folded characters (0 if it holds
+    fewer), so what is held back counts the characters the check compares, not the ones a person
+    sees: a canary that ends in text still to come starts within the last `len(canary) - 1` of
+    them, however many separators sit between."""
     seen = 0
     for index in range(len(text) - 1, -1, -1):
-        if unicodedata.category(text[index]) != "Cf":
-            seen += 1
-            if seen == count:
-                return index
+        seen += len(_fold(text[index]))
+        if seen >= count:
+            return index
     return 0
+
+
+def _tail_start(text: str) -> int:
+    """Where the held tail of `text` starts: far enough back to cover `len(FOLDED_CANARY) - 1`
+    folded characters, but never more than `MAX_HELD_CHARACTERS` back."""
+    return max(_keep_from(text, len(FOLDED_CANARY) - 1), len(text) - MAX_HELD_CHARACTERS, 0)
 
 
 def _strings(value: Any) -> Iterator[str]:
@@ -400,7 +454,7 @@ def _strings(value: Any) -> Iterator[str]:
 def _holds_the_canary(event: TurnEvent) -> bool:
     """Whether any string an event would send holds the prompt's canary. A boolean, so nothing
     that checks it ever prints the canary."""
-    return any(CANARY in _strip_format(text) for text in _strings(event.to_json()))
+    return any(_has_canary(text) for text in _strings(event.to_json()))
 
 
 def _previous_answer(previous: Sequence[Any] | None) -> str | None:
@@ -418,9 +472,22 @@ def _previous_answer(previous: Sequence[Any] | None) -> str | None:
         return UNAVAILABLE_TEXT
     if status == "failed" and error_code == "refusal":
         return ERROR_TEXTS["refusal"]
-    if status == "failed" and error_code in ("budget-sandbox", "budget-daily"):
+    if status == "failed" and error_code in ("budget-sandbox", "budget-daily", "spend-limit"):
         return ERROR_TEXTS[error_code]
     return None
+
+
+def _shortened_on_a_word(text: str, limit: int) -> str:
+    """`text` if it fits in `limit` characters, else cut on a word boundary with an ellipsis, the
+    ellipsis included in the limit."""
+    if len(text) <= limit:
+        return text
+    cut = text[: limit - 1]
+    if not text[limit - 1].isspace():
+        space = cut.rfind(" ")
+        if space > 0:
+            cut = cut[:space]
+    return cut.rstrip() + "…"
 
 
 def _budget_code(scope: str) -> ErrorCode:
@@ -439,6 +506,43 @@ def utf16_length(text: str) -> int:
 
 
 # --- The turn ---------------------------------------------------------------------------------
+
+
+def model_request(*, model: str, effort: str, messages: Sequence[dict[str, Any]]) -> ModelRequest:
+    """The request every main-model call of a conversation has the same shape for: the frozen
+    system prompt and tools, and the messages so far. The stream route builds the first call's
+    request with this to size its budget check, so it can't drift from the loop's."""
+    return ModelRequest(
+        model=model,
+        system=(
+            {
+                "type": "text",
+                "text": system_prompt(),
+                "cache_control": {"type": "ephemeral"},
+            },
+        ),
+        tools=tuple(TOOL_DEFINITIONS),
+        messages=tuple(messages),
+        effort=effort,
+        max_tokens=MAX_TOKENS,
+        betas=BETAS,
+        fallbacks="default",
+    )
+
+
+def first_call_input_tokens(request: ModelRequest) -> int:
+    """The estimate of a turn's first model call's input: the whole request serialized, because
+    nothing measured covers the system prompt and the tools yet (`estimate_input_tokens`)."""
+    return estimate_input_tokens(
+        None,
+        _serialize(
+            {
+                "system": list(request.system),
+                "tools": list(request.tools),
+                "messages": list(request.messages),
+            }
+        ),
+    )
 
 
 class TurnRun:
@@ -483,12 +587,12 @@ class TurnRun:
         # in one append, only when the turn ends with a storable answer.
         self.rounds: list[StoredMessage] = []
         self.final: StoredMessage | None = None
-        self.last_shown_char = ""
         self.shown: list[str] = []
         # The shown text's length in UTF-16 units, kept running so a block end is not a re-scan.
         self.shown_units = 0
-        # Model text not yet sent: the last `len(CANARY) - 1` characters are held back, so a canary
-        # split across deltas is still caught before any part that completes it goes out.
+        # Model text not yet sent: the last `len(FOLDED_CANARY) - 1` folded characters are held
+        # back, so a canary split across deltas is still caught before any part that completes
+        # it goes out.
         self.held = ""
         # The last characters of everything sent, answer text and progress notes alike, so a canary
         # split across the two channels is still caught. A half already sent stays sent (a known
@@ -504,6 +608,11 @@ class TurnRun:
         # stored, its empty last message is not.
         self.answer_without_final = False
         self.citations: list[dict[str, Any]] = []
+        # The same citations as events, so a taken-back text can be sent again with them.
+        self.citation_events: list[CitationEvent] = []
+        # The last text taken back as a note, with its citations. If the model then ends with
+        # nothing more to say, that text was the answer after all (see `_restore_the_answer`).
+        self.taken_back_answer: tuple[str, tuple[CitationEvent, ...]] | None = None
         self.tool_trace: list[dict[str, Any]] = []
         self.tool_runs = 0  # Tools actually run this turn, against MAX_TOOL_RUNS_PER_TURN.
         self.sections: list[dict[str, Any]] = []
@@ -563,10 +672,10 @@ class TurnRun:
         """Take model text in. Returns what is safe to send now and whether the canary showed up
         (in the text already sent, the text held, and this text together). Nothing is sent after
         a leak."""
-        if CANARY in _strip_format(self.sent_tail + self.held + text):
+        if _has_canary(self.sent_tail + self.held + text):
             return "", True
         buffer = self.held + text
-        cut = _keep_from(buffer, len(CANARY) - 1)
+        cut = _tail_start(buffer)
         send = buffer[:cut]
         self.held = buffer[cut:]
         return send, False
@@ -576,6 +685,70 @@ class TurnRun:
         offsets count it."""
         text, self.held = self.held, ""
         return self._shown_text(text) if text else None
+
+    def _forget_what_was_shown(self) -> None:
+        """Reset the answer's text, its offsets, its citations, and the marker numbering: what the
+        client was told to drop with a `text.retracted` event. (`search_result_index` counts across
+        the whole conversation, so the mapper keeps its results.)"""
+        self.shown.clear()
+        self.shown_units = 0
+        self.citations.clear()
+        self.citation_events.clear()
+        self.mapper.restart_markers()
+
+    def _take_back_the_note(self) -> list[TurnEvent] | None:
+        """A call that showed text has ended in a tool call, so that text was a working note.
+
+        Returns the events that take it back (a retraction, then the note as one status line), and
+        resets what the turn counts as shown, so the stored answer, the offsets, and the markers
+        of what follows start fresh. The mapper keeps its results: `search_result_index` counts
+        across the whole conversation. `sent_tail` keeps the taken-back text, which is
+        conservative.
+
+        Returns None when the status line holds the canary (the caller ends the turn as a leak)."""
+        written = "".join(self.shown)
+        note = _shortened_on_a_word(one_line(written), WORKING_NOTE_MAX_CHARACTERS)
+        if _has_canary(self.sent_tail + self.held + note):
+            return None
+        tail = self.sent_tail + note
+        self.sent_tail = tail[_tail_start(tail) :]
+        if written.strip():
+            self.taken_back_answer = (written, tuple(self.citation_events))
+        # Blank text is taken back (so the offsets restart) but is never an answer, and it does
+        # not wipe an earlier one.
+        self._forget_what_was_shown()
+        events: list[TurnEvent] = [self._seen(TextRetracted())]
+        if note:
+            events.append(self._seen(Status(note)))
+        return events
+
+    def _restore_the_answer(self) -> list[TurnEvent] | None:
+        """The last taken-back text, sent again as the answer, for a final call that said nothing.
+
+        Returns its events (the text, then its citations; the offsets and markers are the ones it
+        had, which already count from zero), and puts it back in `shown` and `citations`. Returns
+        an empty list when there is nothing to bring back, and None when the text holds the canary
+        (it passed once; it is checked again because it is sent again)."""
+        if self.taken_back_answer is None:
+            return []
+        text, citations = self.taken_back_answer
+        self.taken_back_answer = None
+        # Checked with what was just sent, like every send: the note (a prefix of this text) ended
+        # a moment ago, and a canary can straddle its end and this text's start.
+        if _has_canary(self.sent_tail + text):
+            return None
+        events: list[TurnEvent] = []
+        if self.shown:
+            # Only blank text was shown since the note was taken back. Take it back too, so the
+            # answer and its citation offsets start from zero.
+            events.append(self._seen(TextRetracted()))
+            self._forget_what_was_shown()
+        events.append(self._shown_text(text))
+        for cited in citations:
+            self.citations.append(cited.to_json())
+            self.citation_events.append(cited)
+            events.append(self._seen(Citation(cited)))
+        return events
 
     def _prompt_leak(self) -> None:
         """The model repeated the prompt's canary. Nothing of it was sent; the person gets the
@@ -589,10 +762,14 @@ class TurnRun:
         """Add text the person is about to see to the answer, and return its event."""
         self.shown.append(text)
         self.shown_units += utf16_length(text)
+        if text.strip():
+            # This call has its own text now, so an earlier call's is not the one to bring back.
+            # Cleared when the text is sent, not when it arrives: text still held back, or from a
+            # call that is re-issued, was never shown. (Blank text is not an answer.)
+            self.taken_back_answer = None
         if text:
-            self.last_shown_char = text[-1]
             tail = self.sent_tail + text
-            self.sent_tail = tail[_keep_from(tail, len(CANARY) - 1) :]
+            self.sent_tail = tail[_tail_start(tail) :]
         return self._seen(TextDelta(text))
 
     def _keep(self, reservation: Reservation) -> None:
@@ -709,7 +886,7 @@ class TurnRun:
             # The API refused the request, so nothing was billed.
             await self._settle(reservation, lambda: Decimal(0))
             self.budget_stopped = True
-            self.fail("budget-daily")
+            self.fail("spend-limit")
             return None, []
         usage = outcome.usage
         # Priced at the model that served it when that has a pinned price (the scripted stand-in
@@ -738,21 +915,10 @@ class TurnRun:
 
     def _request(self, turn_messages: list[dict[str, Any]]) -> ModelRequest:
         conversation = self.conversation
-        return ModelRequest(
+        return model_request(
             model=conversation.model,
-            system=(
-                {
-                    "type": "text",
-                    "text": system_prompt(),
-                    "cache_control": {"type": "ephemeral"},
-                },
-            ),
-            tools=tuple(TOOL_DEFINITIONS),
-            messages=(*self.history, *turn_messages),
             effort=conversation.effort,
-            max_tokens=MAX_TOKENS,
-            betas=BETAS,
-            fallbacks="default",
+            messages=(*self.history, *turn_messages),
         )
 
     async def _loop(self) -> AsyncGenerator[TurnEvent]:
@@ -790,16 +956,7 @@ class TurnRun:
                 return
             request = self._request(turn_messages)
             if previous_usage is None:
-                estimate = estimate_input_tokens(
-                    None,
-                    _serialize(
-                        {
-                            "system": list(request.system),
-                            "tools": list(request.tools),
-                            "messages": list(request.messages),
-                        }
-                    ),
-                )
+                estimate = first_call_input_tokens(request)
             else:
                 estimate = estimate_input_tokens(previous_usage, added_text)
             try:
@@ -814,8 +971,8 @@ class TurnRun:
             calls += 1
 
             finished: Finished | None = None
-            call_has_text = False
             shown_before = len(self.shown)
+            saved_answer = self.taken_back_answer
             stream = self.deps.transport.stream(request)
             try:
                 while True:
@@ -826,22 +983,17 @@ class TurnRun:
                         break
                     if isinstance(event, StatusNote):
                         text_of_note = one_line(event.text)
-                        if CANARY in _strip_format(self.sent_tail + self.held + text_of_note):
+                        if _has_canary(self.sent_tail + self.held + text_of_note):
                             # The prompt's canary must never reach a person, even split across
                             # notes. By type only; the turn ends like any prompt leak.
                             logger.warning("status note withheld")
                             self._prompt_leak()
                             return
                         tail = self.sent_tail + text_of_note
-                        self.sent_tail = tail[_keep_from(tail, len(CANARY) - 1) :]
+                        self.sent_tail = tail[_tail_start(tail) :]
                         yield self._seen(Status(event.text))
                     elif isinstance(event, ModelText):
                         text = event.text
-                        if text and not call_has_text and self.last_shown_char.strip():
-                            # Earlier text would run into this call's first word. It travels
-                            # with that text, so it is neither sent nor counted before it is.
-                            text = "\n\n" + text
-                        call_has_text = call_has_text or bool(event.text)
                         send, leaked = self._hold(text)
                         if leaked:
                             self._prompt_leak()
@@ -856,6 +1008,7 @@ class TurnRun:
                         length = self.shown_units
                         for cited in self.mapper.on_block_end(length, event.citations):
                             self.citations.append(cited.to_json())
+                            self.citation_events.append(cited)
                             yield self._seen(Citation(cited))
                     elif isinstance(event, ToolCall):
                         pass  # The tool_use blocks of the finished message are what is run.
@@ -866,16 +1019,21 @@ class TurnRun:
                         finished = event
             except InvalidToolInput:
                 # Nothing of this call is complete or stored, and its reservation stays (the cost is
-                # unknown). If it showed no text, the same request goes out again as the next call.
-                # If it showed some, a retry would show the person the same words twice and a
-                # stream can't take text back, so the turn ends instead.
+                # unknown). The same request goes out again as the next call. Text it had already
+                # shown is taken back first, so the person is not shown the same words twice; it is
+                # an aborted call's, not a working note, so it is not kept as an answer, and the
+                # answer saved before the call is kept.
                 self._keep(reservation)
                 self.held = ""  # Held text was never sent; the retry starts clean.
                 reissues += 1
                 # One re-issue per turn: a model that keeps producing broken input won't mend.
-                if len(self.shown) > shown_before or reissues > 1:
+                if reissues > 1:
                     self.fail("internal")
                     return
+                if len(self.shown) > shown_before:
+                    self._forget_what_was_shown()
+                    self.taken_back_answer = saved_answer
+                    yield self._seen(TextRetracted())
                 continue
             except ModelUnavailable as error:
                 self._keep(reservation)
@@ -883,7 +1041,7 @@ class TurnRun:
                 return
             except SpendLimitReached:
                 await self._settle(reservation, lambda: Decimal(0))  # Refused, so not billed.
-                self.fail("budget-daily")
+                self.fail("spend-limit")
                 return
             except _DeadlineExceeded:
                 self._keep(reservation)
@@ -919,6 +1077,17 @@ class TurnRun:
 
             if finished.stop_reason == "tool_use":
                 blocks = [b for b in message.get("content", []) if b.get("type") == "tool_use"]
+                if self.shown:
+                    # Streamed live, then taken back: it was a note before a tool call, not the
+                    # answer. First, so a turn that fails just below does not keep it as its
+                    # answer, and before the round's `tool.started` events.
+                    taken_back = self._take_back_the_note()
+                    if taken_back is None:
+                        logger.warning("status note withheld")
+                        self._prompt_leak()
+                        return
+                    for taken_back_event in taken_back:
+                        yield taken_back_event
                 if not blocks:
                     self.fail("internal")
                     return
@@ -979,17 +1148,32 @@ class TurnRun:
                 if _has_text(message):
                     self.final = StoredMessage("assistant", message["content"])
                 elif "".join(self.shown).strip():
-                    # The answer was already shown (before the last tool call); the model ended
-                    # with nothing more to say. The empty message can't be stored.
+                    # This call streamed text that its finished message doesn't hold, so there is
+                    # no message to store. What was shown stands as the answer.
                     self.answer_without_final = True
                 else:
-                    self.fail("internal")
-                    return
+                    # The model ended with nothing more to say, so the text it wrote before its
+                    # last tool call was the answer after all. It was taken back as a note; send
+                    # it again as the answer. The empty message can't be stored.
+                    restored = self._restore_the_answer()
+                    if restored is None:
+                        self._prompt_leak()
+                        return
+                    if not restored:
+                        self.fail("internal")
+                        return
+                    for restored_event in restored:
+                        yield restored_event
+                    self.answer_without_final = True
                 self.status = "completed"
             elif finished.stop_reason == "max_tokens":
                 if not "".join(self.shown).strip():
-                    # Nothing was written (the thinking used the whole budget). There is no
-                    # answer to mark incomplete.
+                    # Nothing was written in this call (the thinking used the whole budget). What
+                    # was taken back before the last tool call is usually a working note ("Let me
+                    # look that up first"), not an answer, so it is not brought back here (only
+                    # a call that ends cleanly with nothing more to say does that). Nothing is
+                    # shown, so there is no answer to mark incomplete.
+                    self.taken_back_answer = None
                     self.fail("internal")
                     return
                 if _ends_cleanly(message):
@@ -1006,8 +1190,8 @@ class TurnRun:
                 self.refusal = True
                 self.shown.clear()
                 self.shown_units = 0
-                self.last_shown_char = ""
                 self.citations.clear()
+                self.taken_back_answer = None
                 self.fail("refusal")
                 return
             else:
@@ -1255,9 +1439,9 @@ class TurnRun:
         # What is stored is checked like what is sent: a tool summary or citation holding the
         # canary is dropped, never written to the turn.
         for entry in self.tool_trace:
-            if CANARY in entry["inputSummary"]:
+            if _has_canary(entry["inputSummary"]):
                 entry["inputSummary"] = ""
-        self.citations = [c for c in self.citations if not any(CANARY in t for t in _strings(c))]
+        self.citations = [c for c in self.citations if not any(_has_canary(t) for t in _strings(c))]
         usage = total_usage(self.iterations)
         outcome = TurnOutcome(
             status=self.status,
@@ -1335,8 +1519,9 @@ async def start_turn_run(
     the response is sent: the checks raise here, not on the first event.
 
     Raises `ValueError` for a question that isn't 1 to 2,000 characters after trimming,
-    `LookupError` for a conversation that isn't the actor's, `ConversationOutdated` for a prompt
-    or tool set that has moved on, and `TurnRunning` (from the store) when a turn is in progress.
+    `ConversationNotFound` for a conversation that isn't the actor's, `ConversationOutdated` for a
+    prompt or tool set that has moved on, and `TurnRunning` (from the store) when a turn is in
+    progress.
     The route maps them to 422, 404, 409, and 409. The personal-data check is the route's. Then
     iterate `TurnRun.events()` right away.
     """
@@ -1347,11 +1532,8 @@ async def start_turn_run(
         conversation.person_id != deps.actor.person_id
         or conversation.tenant_id != deps.actor.tenant_id
     ):
-        raise LookupError("no such conversation")
-    if (
-        conversation.prompt_version != PROMPT_VERSION
-        or conversation.toolset_version != TOOLSET_VERSION
-    ):
+        raise ConversationNotFound
+    if conversation_is_outdated(conversation):
         raise ConversationOutdated
     return await TurnRun.begin(deps, conversation, trimmed, now)
 

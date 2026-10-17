@@ -130,7 +130,9 @@ In order, each refusing with a problem response before the stream opens:
 
 1. **The session** (401) and **CSRF** (403), as every state-changing route.
 2. **The conversation** belongs to the asker (404 otherwise, never 403), and its pinned versions
-   are current (409 `conversation-outdated`, and the UI offers a new conversation).
+   are current (409 `conversation-outdated`, and the UI offers a new conversation). A history
+   past 80,000 tokens, estimated the way the budget estimates input, is refused with 409
+   `history-too-long`, and the UI offers a new conversation the same way (added in Stage 4).
 3. **The question:** 1 to 2,000 characters after trimming (422). **The personal-data check:**
    something that looks like a Social Security number or a card number is refused (422
    `personal-data`), so it's never stored or sent.
@@ -240,7 +242,8 @@ leaks.
 - **Anthropic errors:** the SDK retries 429s and 5xx twice. If it still fails, the user gets an
   honest `error` event, code `model-unavailable`, with the HR offer. A spend limit set in the
   Anthropic Console (a 400 whose message begins "You have reached your specified API usage
-  limits") is reported as `budget-daily`.
+  limits") is reported as `spend-limit`, shown with the daily budget's fixed text. (Changed in
+  Stage 4: it shared `budget-daily` before, so nothing after the turn could tell the two apart.)
 
 ### 5. Citations
 
@@ -340,29 +343,37 @@ or the CSRF header.
 | `turn.started` | `{ turnId }` |
 | `status` | `{ text }`: a progress note from the model, or the server's own ("Searching the handbook…") |
 | `text.delta` | `{ text }` |
+| `text.retracted` | `{}`: drop the answer text and citations shown so far in this turn. Sent when a model call that wrote text ends in a tool call, so a working note ("Missing the rate passage. Search again.") isn't left in the answer; the note follows as a `status` line. If the last call then writes nothing, the taken-back text comes back as the answer. (Added in Stage 4, the owner's choice) |
 | `citation` | as above |
 | `tool.started` | `{ id, name, summary }` |
 | `tool.finished` | `{ id, ok, summary, durationMs }` |
 | `escalation` | `{ kind: "sensitive" \| "crisis" \| "unavailable", message, hrContact, offerCase: false }`. `message` is fixed text, never generated |
-| `error` | `{ code, message, requestId }`. The codes: `refusal`, `model-unavailable`, `budget-sandbox`, `budget-daily`, `too-many-calls`, `internal` |
+| `error` | `{ code, message, requestId }`. The codes: `refusal`, `model-unavailable`, `budget-sandbox`, `budget-daily`, `spend-limit` (the Anthropic Console's own spend limit; added in Stage 4), `too-many-calls`, `internal` |
 | `turn.completed` | `{ turnId, servedBy, usage: { inputTokens, outputTokens } }`, plus `incomplete: true` when the output limit cut the answer off. The cache counts and the cost stay in the trace, not the browser: the prompt cache is shared across the account, so a cache hit (or the cost, which reveals it) could hint that another visitor asked the same question (Stage 2 security review) |
 
 - **A heartbeat comment** (`: keep-alive`) after every 15 seconds without an event.
-- **Headers:** `Cache-Control: no-store, no-transform`, `X-Accel-Buffering: no`, and no
-  compression.
+- **Headers:** `Cache-Control: no-store, no-transform`, `X-Accel-Buffering: no`, and
+  `Content-Encoding: identity`. The last was added in Stage 4: the proxy check found that an
+  nginx set to gzip event streams compresses this one despite `no-transform`, and holds every
+  event back. A proxy leaves a response alone when it already names its encoding. RFC 9110
+  discourages `identity` here, but browsers accept it.
 - **Writes during the stream** each use their own short transaction. The request's session
   transaction ends before the body is sent, so the stream never holds a database connection
   while it waits on the model.
 - **Stop:** when the client disconnects, Starlette cancels the response. The turn's cleanup runs
   shielded from that cancellation, in a fresh transaction: it cancels the Anthropic stream,
-  settles the budget for the tokens used so far, and saves the partial answer with status
-  `stopped`.
+  settles every call that finished, and saves the partial answer with status `stopped`. The
+  call cut off mid-stream keeps its whole reservation: the API reports output tokens only in
+  `message_delta`, after the last content block, so a cut call's cost is never known (Stage 4,
+  from Anthropic's streaming docs, read 2026-10-17). That errs toward the caps. A client that
+  stalls a write for 30 seconds is treated as a disconnect.
 - **One turn at a time:** a partial unique index allows one `running` turn per conversation. A
   `running` turn older than 10 minutes is treated as abandoned (its task died). The next turn
   marks it `failed` before starting.
-- **Graceful shutdown:** uvicorn's `--timeout-graceful-shutdown` is set below the container's
-  stop timeout, so a deploy ends open streams cleanly. A stream cut that way is saved as
-  `stopped`.
+- **Graceful shutdown:** uvicorn's `--timeout-graceful-shutdown` is 15 seconds, below ECS's
+  default 30-second stop timeout. When it passes, uvicorn cancels the open requests without
+  waiting for them, so the app's own shutdown waits up to 12 seconds for open streams to save
+  before it closes the database. A stream cut that way is saved as `stopped` (Stage 4).
 
 ### The other routes
 
@@ -727,16 +738,23 @@ Load Balancer, with managed Postgres and Secrets Manager. Phase 4 is built for t
    settings:
    - `proxy_read_timeout 20s`: shorter than any real load balancer, so the check is quick
    - `proxy_buffering on`
-   - `gzip on`, with its default types
+   - `gzip on`, for `text/event-stream` too (its default types skip it, which would make the
+     compression check unable to fail)
 2. **The pass run** asks the scripted model's 45-second-silence question. It asserts:
    - the stream completes with `turn.completed`
    - the first event arrives within 2 seconds, and the events arrive spread over time, not in one
      burst
-   - the response has no `Content-Encoding`
+   - the response isn't compressed: its `Content-Encoding` is `identity` (see the headers in
+     [The stream](#the-stream))
 3. **The control run** turns the heartbeat off (`AI_HEARTBEAT_SECONDS=0`) and asserts that nginx
    cuts the stream. That proves the check can fail.
+4. **The holding control** (added in Stage 4): a second nginx that compresses the stream anyway
+   must hold its events back for 5 seconds, which proves the timing checks can fail. (Buffering
+   alone doesn't: nginx 1.27 forwards each chunk of a stream as it arrives.)
+5. **The shutdown run** (added in Stage 4) stops the API with SIGTERM mid-stream, starts it
+   again, and asserts the turn was saved as `stopped`.
 
-It runs in CI's E2E job, which already has Docker and Postgres, and takes about a minute.
+It runs in CI's E2E job, which already has Docker and Postgres, and takes under two minutes.
 
 ---
 

@@ -64,6 +64,11 @@ class CitationMapper:
         """Append the results this turn's tools returned, in the order they were sent."""
         self._sources.extend(entries)
 
+    def restart_markers(self) -> None:
+        """Number the markers from 1 again, for text that was taken back. The results stay:
+        `search_result_index` counts across the whole conversation."""
+        self._markers.clear()
+
     def on_block_end(
         self, answer_length: int, citations: Sequence[SearchResultCitation]
     ) -> list[CitationEvent]:

@@ -28,6 +28,7 @@ ERROR_CODES = {
     "model-unavailable",
     "budget-sandbox",
     "budget-daily",
+    "spend-limit",
     "too-many-calls",
     "internal",
 }
@@ -144,6 +145,8 @@ def test_the_budget_texts_are_the_approved_words() -> None:
     )
     assert ERROR_TEXTS["budget-sandbox"] == BUDGET_SANDBOX_TEXT
     assert ERROR_TEXTS["budget-daily"] == BUDGET_DAILY_TEXT
+    # The Console spend limit has its own code and reuses the approved daily text, unchanged.
+    assert ERROR_TEXTS["spend-limit"] == BUDGET_DAILY_TEXT
 
 
 def test_each_budget_text_gives_911_and_988() -> None:

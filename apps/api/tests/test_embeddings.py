@@ -443,3 +443,29 @@ async def test_documents_and_batches_pass_straight_through() -> None:
 
     assert len(inner.calls) == 3
     assert len(lru) == 0
+
+
+async def test_a_query_remembered_for_one_sandbox_is_a_miss_for_another() -> None:
+    """A hit skips Voyage's round trip, and the tool's duration reaches the browser, so a hit
+    across sandboxes would tell one visitor that another asked the same question."""
+    inner = CountingEmbedder()
+    lru = QueryEmbeddingLru(inner)
+
+    await lru.scoped("sandbox-1").embed(["how much sick leave"], input_type="query")
+    await lru.scoped("sandbox-1").embed(["how much sick leave"], input_type="query")  # A hit.
+    await lru.scoped("sandbox-2").embed(["how much sick leave"], input_type="query")
+
+    assert len(inner.calls) == 2
+    await lru.scoped("sandbox-2").embed(["how much sick leave"], input_type="query")
+    assert len(inner.calls) == 2
+
+
+async def test_scoped_memory_is_one_bounded_cache_of_hashes() -> None:
+    inner = CountingEmbedder()
+    lru = QueryEmbeddingLru(inner, max_entries=3)
+
+    for scope in ("a", "b", "c", "d"):
+        await lru.scoped(scope).embed(["same question"], input_type="query")
+
+    assert len(lru) == 3
+    assert all("same question" not in key and "a:" not in key[:2] for key in lru._vectors)

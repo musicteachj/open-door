@@ -23,11 +23,12 @@ import pytest
 from sqlalchemy import func, select, text
 from sqlalchemy.ext.asyncio import AsyncEngine
 
+from app.ai.budget import Caps
 from app.ai.embeddings import FakeEmbedder
-from app.ai.pricing import Usage
+from app.ai.pricing import IterationUsage, Usage
 from app.ai.prompts.versions import CANARY
 from app.ai.replay import FixtureStore, Record, ReplayMiss
-from app.ai.scripted import ScriptedTransport
+from app.ai.scripted import WORKING_NOTE_TEXT, ScriptedTransport
 from app.ai.transport import (
     Finished,
     GuardUnavailable,
@@ -199,6 +200,13 @@ def offline_env(
     )
 
 
+def ledger_cost(board: dict[str, Any]) -> str:
+    """The assistant spend the sandbox ledger saw (what the cap counts): what was called live
+    plus what the reused recordings cost. The tests that fake the ledger call nothing live."""
+    cost = board["cost_usd"]
+    return str(Decimal(cost["assistant"]) + Decimal(cost["recorded"]["assistant"]))
+
+
 def args(tmp_path: Path, *extra: str, mode: str = "live", name: str = "smoke") -> list[str]:
     return [
         "--mode",
@@ -260,9 +268,16 @@ async def test_a_live_run_records_and_an_offline_run_replays_it_with_no_client_b
     assert offline_board["items_run"] == 4
     assert offline_board["metrics"] == live_board["metrics"]
     assert offline_board["failures"] == live_board["failures"]
-    # The replayed usage prices the same; an offline run has no cap.
-    assert {**offline_board["cost_usd"], "cap": "2.000000"} == live_board["cost_usd"]
+    # An offline run has no cap and pays for nothing: the recorded costs are reported apart, and
+    # they match what the live run paid when it made the calls.
     assert offline_board["cost_usd"]["cap"] is None
+    assert offline_board["cost_usd"]["total"] == "0.000000"
+    assert offline_board["cost_usd"]["recorded"] == {
+        "assistant": live_board["cost_usd"]["assistant"],
+        "judge": live_board["cost_usd"]["judge"],
+        "total": live_board["cost_usd"]["total"],
+    }
+    assert live_board["cost_usd"]["recorded"]["total"] == "0.000000"
     assert offline_board["models"]["judge"] == "claude-sonnet-5-5"
     assert fake.calls == 2  # replay called nothing
 
@@ -379,7 +394,7 @@ async def test_the_cap_stops_a_live_run_and_marks_it_partial(
     assert board["partial"] is True
     assert board["items_run"] == 1
     assert board["items_not_run"] == ["rt-02", "qa-01", "qa-02"]
-    assert board["cost_usd"]["assistant"] == "1.500000"
+    assert ledger_cost(board) == "1.500000"
     assert fake.calls == 0
     # A partial run fails --check.
     assert code == 1
@@ -729,7 +744,7 @@ async def test_spend_is_carried_from_one_sandbox_to_the_next(
     assert board["partial"] is True
     assert board["items_run"] == 3
     assert board["items_not_run"] == ["qa-02"]
-    assert board["cost_usd"]["assistant"] == "0.900000"
+    assert ledger_cost(board) == "0.900000"
 
 
 # --- Which recordings a live run keeps --------------------------------------------------------
@@ -1193,6 +1208,63 @@ async def test_the_consoles_spend_limit_stops_the_run_with_exit_2_and_says_so(
     assert out_traces.exists()
 
 
+@pytest.mark.parametrize("where", ["model", "guard"])
+async def test_the_consoles_spend_limit_shows_in_the_trace_from_the_turns_error_code(
+    app_engine: AsyncEngine, owner_engine: AsyncEngine, where: str
+) -> None:
+    traces = await run.run_items(
+        [run.EvalItem("qa-001", "priya", "How much paid sick leave do I get?")],
+        mode="scripted",
+        transport=ConsoleLimited(on=where),
+        embedder=FakeEmbedder(),
+        effort="low",
+        app_engine=app_engine,
+        owner_engine=owner_engine,
+    )
+
+    assert [t.turn_error_code for t in traces] == ["spend-limit"]
+    assert [t.error_codes for t in traces] == [("spend-limit",)]
+    assert [t.console_limit for t in traces] == [True]
+
+
+async def test_a_working_note_taken_back_by_the_turn_is_not_in_the_traces_answer(
+    app_engine: AsyncEngine, owner_engine: AsyncEngine
+) -> None:
+    traces = await run.run_items(
+        [run.EvalItem("qa-001", "priya", "scripted working note: How much sick leave?")],
+        mode="scripted",
+        transport=ScriptedTransport(),
+        embedder=FakeEmbedder(),
+        effort="low",
+        app_engine=app_engine,
+        owner_engine=owner_engine,
+    )
+
+    (trace,) = traces
+    assert WORKING_NOTE_TEXT not in trace.answer_text
+    assert trace.answer_text
+    assert WORKING_NOTE_TEXT in trace.status_notes
+    assert all(c["offsetUtf16"] <= len(trace.answer_text) for c in trace.citations)
+
+
+async def test_the_ledgers_daily_refusal_is_not_the_consoles_spend_limit(
+    app_engine: AsyncEngine, owner_engine: AsyncEngine
+) -> None:
+    traces = await run.run_items(
+        [run.EvalItem("qa-001", "priya", "How much paid sick leave do I get?")],
+        mode="scripted",
+        transport=ScriptedTransport(),
+        embedder=FakeEmbedder(),
+        effort="low",
+        app_engine=app_engine,
+        owner_engine=owner_engine,
+        caps=Caps(Decimal(1000), Decimal("0.0001")),
+    )
+
+    assert [t.turn_error_code for t in traces] == ["budget-daily"]
+    assert [t.console_limit for t in traces] == [False]
+
+
 async def test_the_hand_grade_agreement_is_read_from_the_committed_folder(
     tmp_path: Path,
     app_engine: AsyncEngine,
@@ -1618,7 +1690,7 @@ async def test_money_billed_before_the_ledger_refused_a_call_is_in_the_scoreboar
 
     board = json.loads(out_json.read_text(encoding="utf-8"))
     assert board["items_run"] == 0
-    assert board["cost_usd"]["assistant"] == "0.070000"
+    assert ledger_cost(board) == "0.070000"
 
 
 async def test_money_billed_before_the_consoles_limit_was_hit_is_in_the_scoreboard(
@@ -1640,7 +1712,7 @@ async def test_money_billed_before_the_consoles_limit_was_hit_is_in_the_scoreboa
     await run.run_cli(args(tmp_path, "--yes", "--json", str(out_json)), env=env)
 
     board = json.loads(out_json.read_text(encoding="utf-8"))
-    assert board["cost_usd"]["assistant"] == "0.070000"
+    assert ledger_cost(board) == "0.070000"
 
 
 async def test_a_shared_record_stays_old_when_an_item_that_used_it_kept_its_old_recordings(
@@ -2324,3 +2396,100 @@ async def test_a_partial_run_names_its_real_cause(
         ),
     )
     assert "judge" in json.loads(unjudged.read_text("utf-8"))["stop_cause"]
+
+
+class PricedScripted:
+    """The scripted model, labeled as the paid models so the ledger and the live meter price its
+    calls (the scripted stand-in is free). Counts its calls."""
+
+    def __init__(self) -> None:
+        self.inner = ScriptedTransport()
+        self.calls = 0
+
+    async def stream(self, request: Any) -> Any:
+        self.calls += 1
+        async for event in self.inner.stream(request):
+            if isinstance(event, Finished):
+                usage = Usage(2000, 300, 0, 0)
+                iterations = (IterationUsage(request.model, usage),)
+                event = dataclasses.replace(
+                    event, usage=usage, iterations=iterations, served_by=request.model
+                )
+            yield event
+
+    async def classify(self, request: Any) -> Any:
+        self.calls += 1
+        result = await self.inner.classify(request)
+        return dataclasses.replace(result, usage=Usage(900, 40, 0, 0), served_by=request.model)
+
+
+async def board_of(tmp_path: Path, env: Any, name: str) -> dict[str, Any]:
+    out = tmp_path / f"{name}.json"
+    assert await run.run_cli(args(tmp_path, "--yes", "--json", str(out)), env=env) == 0
+    board: dict[str, Any] = json.loads(out.read_text(encoding="utf-8"))
+    return board
+
+
+async def test_a_live_run_reports_what_it_paid_apart_from_what_its_recordings_cost(
+    tmp_path: Path,
+    app_engine: AsyncEngine,
+    owner_engine: AsyncEngine,
+    database_settings: Settings,
+) -> None:
+    first_transport = PricedScripted()
+    first = await board_of(
+        tmp_path,
+        make_env(
+            tmp_path,
+            app_engine,
+            owner_engine,
+            database_settings,
+            transport_factory=lambda _settings: first_transport,
+        ),
+        "first",
+    )
+    paid_first = Decimal(first["cost_usd"]["assistant"])
+    assert paid_first > 0
+    assert first["cost_usd"]["recorded"]["assistant"] == "0.000000"
+
+    # The same run again: every call is answered from a recording, so nothing is paid for the
+    # assistant, and the recordings' cost is reported as such.
+    again_transport = PricedScripted()
+    again = await board_of(
+        tmp_path,
+        make_env(
+            tmp_path,
+            app_engine,
+            owner_engine,
+            database_settings,
+            transport_factory=lambda _settings: again_transport,
+        ),
+        "again",
+    )
+    assert again_transport.calls == 0
+    assert again["cost_usd"]["assistant"] == "0.000000"
+    assert again["cost_usd"]["judge"] == "0.000000"
+    assert Decimal(again["cost_usd"]["recorded"]["assistant"]) == paid_first
+    assert again["cost_usd"]["total"] == "0.000000"
+
+    # One question changed: only its calls are paid for, and the rest stay recorded.
+    partial_transport = PricedScripted()
+    changed = QA_YAML.replace("how much paid sick leave do i get", "how many sick days do i get")
+    partial = await board_of(
+        tmp_path,
+        make_env(
+            tmp_path,
+            app_engine,
+            owner_engine,
+            database_settings,
+            qa=changed,
+            transport_factory=lambda _settings: partial_transport,
+        ),
+        "partial",
+    )
+    paid_partial = Decimal(partial["cost_usd"]["assistant"])
+    recorded_partial = Decimal(partial["cost_usd"]["recorded"]["assistant"])
+    assert 0 < paid_partial < paid_first
+    assert recorded_partial > 0
+    # The sandbox ledger counted all of it, so the two parts add up to what the cap saw.
+    assert paid_partial + recorded_partial > paid_partial

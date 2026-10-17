@@ -13,7 +13,7 @@ one row that changes is a turn, which is added as `running` and finished once (`
 
 from collections.abc import Sequence
 from dataclasses import asdict, dataclass, field
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from decimal import Decimal
 from typing import Any, Literal, Self, cast
 from uuid import UUID
@@ -22,12 +22,15 @@ from sqlalchemy import CursorResult, Interval, func, insert, literal, select, up
 from sqlalchemy.exc import DBAPIError, IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.ai.pricing import HAIKU
+from app.ai.prompts.versions import PROMPT_VERSION, TOOLSET_VERSION
 from app.ai.transport import count_search_results
 from app.db.errors import constraint_name, has_sqlstate
-from app.db.models import AiConversation, AiMessage, AiTurn
+from app.db.models import AiConversation, AiFeedback, AiMessage, AiTurn
 from app.policy import Actor
 
 ONE_RUNNING_TURN_INDEX = "uq_ai_turns_one_running_per_conversation"
+FEEDBACK_ONCE_CONSTRAINT = "uq_ai_feedback_tenant_id_turn_id"
 # The SQLSTATE of the trigger that freezes a finished turn (migration 0008). A custom code, like
 # the sandbox's OD001: class OD is ours.
 FINISHED_TURN_SQLSTATE = "OD002"
@@ -52,6 +55,33 @@ class Pins:
     effort: str
     prompt_version: str
     toolset_version: str
+
+
+# What a new conversation is pinned to: today's models, effort, prompt, and tool set. The one place
+# the app (and the eval harness) reads them. Changing the model is an eval-gated decision
+# (CLAUDE.md), and a conversation keeps what it began with.
+CURRENT_PINS = Pins(
+    model="claude-opus-5-5",
+    guard_model=HAIKU,
+    effort="low",
+    prompt_version=PROMPT_VERSION,
+    toolset_version=TOOLSET_VERSION,
+)
+
+FEEDBACK_REASON_MAX_CHARACTERS = 500
+
+
+class FeedbackGiven(Exception):  # noqa: N818
+    """The turn already has feedback. There is one per turn."""
+
+
+class TurnNotFound(Exception):  # noqa: N818
+    """No turn of the actor's has that ID. Dedicated, so a lookup error from a bug is never taken
+    for it."""
+
+
+class TurnNotCompleted(Exception):  # noqa: N818
+    """Feedback is only for answers that finished."""
 
 
 @dataclass(frozen=True)
@@ -409,3 +439,103 @@ async def search_sources(db: AsyncSession, conversation_id: UUID) -> list[Source
         )
     ).all()
     return [SourceEntry.from_json(entry) for sources in rows for entry in sources or []]
+
+
+def is_abandoned(started_at: datetime, now: datetime) -> bool:
+    """Whether a `running` turn started at `started_at` is given up on at `now`: strictly older
+    than `ABANDONED_AFTER`. The same cut as SQL's, which `recover_abandoned` uses
+    (`started_at < now - limit`) and `has_running_turn` is the complement of
+    (`started_at >= now - limit` blocks), so a turn exactly at the limit is still running for all
+    three. Pass the database's clock for `now`."""
+    return now - started_at > ABANDONED_AFTER
+
+
+def conversation_is_outdated(conversation: AiConversation) -> bool:
+    """Whether the conversation is pinned to a prompt or tool set that is no longer current. It
+    can't be continued: the history is append-only and the model's thinking is tied to the exact
+    prompt and tools that produced it."""
+    return (
+        conversation.prompt_version != PROMPT_VERSION
+        or conversation.toolset_version != TOOLSET_VERSION
+    )
+
+
+async def has_running_turn(db: AsyncSession, conversation_id: UUID) -> bool:
+    """Whether the conversation has a turn in progress that the next question must wait for.
+
+    A `running` turn older than `ABANDONED_AFTER` doesn't count: its task died, and starting the
+    next turn marks it failed (`recover_abandoned`). A read only, so a refused request writes
+    nothing.
+    """
+    found = await db.scalar(
+        select(AiTurn.id)
+        .where(
+            AiTurn.conversation_id == conversation_id,
+            AiTurn.status == "running",
+            AiTurn.started_at >= func.now() - literal(ABANDONED_AFTER, Interval()),
+        )
+        .limit(1)
+    )
+    return found is not None
+
+
+async def conversation_turns(db: AsyncSession, conversation_id: UUID) -> list[AiTurn]:
+    """The conversation's turns, oldest first, for display."""
+    return list(
+        (
+            await db.scalars(
+                select(AiTurn)
+                .where(AiTurn.conversation_id == conversation_id)
+                .order_by(AiTurn.started_at, AiTurn.id)
+            )
+        ).all()
+    )
+
+
+async def turn_feedback(db: AsyncSession, conversation_id: UUID) -> dict[UUID, AiFeedback]:
+    """The feedback given on the conversation's turns, by turn ID."""
+    rows = await db.scalars(
+        select(AiFeedback)
+        .join(
+            AiTurn,
+            (AiTurn.tenant_id == AiFeedback.tenant_id) & (AiTurn.id == AiFeedback.turn_id),
+        )
+        .where(AiTurn.conversation_id == conversation_id)
+    )
+    return {row.turn_id: row for row in rows}
+
+
+async def add_feedback(
+    db: AsyncSession, actor: Actor, turn_id: UUID, *, helpful: bool, reason: str | None
+) -> None:
+    """Record the actor's thumbs up or down on one of their completed turns.
+
+    Raises `TurnNotFound` for a turn that is not the actor's (Postgres shows a turn only to its
+    person, so another's is not found, the same as an ID that doesn't exist), `TurnNotCompleted`
+    for one that did not finish, and `FeedbackGiven` if the turn has some already.
+    """
+    turn = await db.get(AiTurn, turn_id)
+    if turn is None or turn.person_id != actor.person_id:
+        raise TurnNotFound
+    if turn.status != "completed":
+        raise TurnNotCompleted
+    if reason is not None and len(reason) > FEEDBACK_REASON_MAX_CHARACTERS:
+        # The request body is checked against the same limit, so this is a bug if it is reached.
+        raise ValueError("a reason is at most 500 characters")
+    try:
+        # A savepoint, so that the refused insert doesn't abort the caller's transaction.
+        async with db.begin_nested():
+            db.add(
+                AiFeedback(
+                    tenant_id=actor.tenant_id,
+                    person_id=actor.person_id,
+                    turn_id=turn.id,
+                    helpful=helpful,
+                    reason=reason,
+                )
+            )
+            await db.flush()
+    except IntegrityError as error:
+        if constraint_name(error) == FEEDBACK_ONCE_CONSTRAINT:
+            raise FeedbackGiven from error
+        raise

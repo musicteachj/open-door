@@ -1,11 +1,16 @@
 """The application factory. Run it with `uvicorn --factory app.main:create_app`."""
 
+import logging
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
 from app import __version__
+from app.ai import anthropic_transport
+from app.ai.embeddings import Embedder, QueryEmbeddingLru, VoyageEmbedder
+from app.ai.scripted import ScriptedTransport
+from app.ai.transport import Transport, require_a_transport_fit_for
 from app.api.problems import document_problems_as_problem_json
 from app.api.v1.router import api_router
 from app.core.cache_control import NoStoreMiddleware
@@ -14,7 +19,32 @@ from app.core.logging import configure_logging
 from app.core.problems import install_problem_handlers
 from app.core.request_id import RequestIdMiddleware
 from app.db.engine import create_engine
+from app.modules.assistant.sse import CLOSE_TIMEOUT_SECONDS, StreamTracker
 from app.modules.identity.same_origin import SameOriginMiddleware
+
+# How long the shutdown waits for open turn streams to save their turns before it closes the
+# database engine. It is a stream's own close bound plus a second, so a cleanup that is still inside
+# its bound finishes, and a stuck one cannot hold the shutdown for good.
+STREAM_DRAIN_SECONDS = CLOSE_TIMEOUT_SECONDS + 1.0
+
+logger = logging.getLogger(__name__)
+
+
+def _build_transport(settings: Settings) -> Transport:
+    if settings.ai_transport == "anthropic":
+        return anthropic_transport.from_settings(settings)
+    return ScriptedTransport()
+
+
+def _build_embedder(settings: Settings) -> Embedder | None:
+    """Query embeddings cost money, so only the anthropic transport with a Voyage key gets one.
+
+    Without one the handbook search is full-text only. This keeps `make dev` and the browser tests
+    free even when the developer's `.env` holds a Voyage key for `make embed`.
+    """
+    if settings.ai_transport != "anthropic" or settings.voyage_api_key is None:
+        return None
+    return QueryEmbeddingLru(VoyageEmbedder(settings.voyage_api_key))
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
@@ -22,16 +52,47 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     if settings is None:
         settings = get_settings()
     configure_logging(settings.log_level)
+    require_a_transport_fit_for(settings)
+    if settings.ai_transport == "replay":
+        msg = (
+            "AI_TRANSPORT=replay is for the eval harness only: it keeps per-item state and has no"
+            " fixture-path setting. Use scripted or anthropic for the app."
+        )
+        raise ValueError(msg)
+    # Refused here so a bad environment fails at boot. The transport itself is built in the
+    # lifespan, with the client it closes, so each lifespan run gets its own.
+    if settings.ai_transport == "anthropic":
+        anthropic_transport.require_an_api_key(settings)
 
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+        transport = _build_transport(settings)
         app.state.engine = create_engine(str(settings.database_url))
+        app.state.transport = transport
+        app.state.embedder = _build_embedder(settings)
+        streams = StreamTracker()
+        app.state.streams = streams
         try:
             yield
         finally:
-            await app.state.engine.dispose()
+            try:
+                # uvicorn cancels the requests still open when its graceful-shutdown timeout
+                # passes, and then runs this shutdown without waiting for them. A canceled turn
+                # stream saves its turn as `stopped` with a cleanup that needs the engine, so the
+                # engine is closed only after the streams have finished (or the wait runs out).
+                if not await streams.wait_until_idle(STREAM_DRAIN_SECONDS):
+                    logger.error(
+                        "%d turn stream(s) did not close before shutdown", streams.open_count
+                    )
+                # The Anthropic client holds a connection pool; the scripted transport has none.
+                # Voyage needs nothing: it opens a client per call.
+                if isinstance(transport, anthropic_transport.AnthropicTransport):
+                    await transport.client.close()
+            finally:
+                await app.state.engine.dispose()
 
     app = FastAPI(title="Open Door API", version=__version__, lifespan=lifespan)
+    app.state.settings = settings
     # The middleware added last runs first. The request-ID middleware wraps the same-origin check,
     # so even a refused request carries its ID, and the no-store middleware wraps both, so a refusal
     # carries `Cache-Control: no-store` too. There is no CORS middleware: the web app reaches the

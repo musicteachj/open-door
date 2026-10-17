@@ -78,6 +78,9 @@ ERROR_TEXTS: Final[dict[str, str]] = {
     ),
     "budget-sandbox": BUDGET_SANDBOX_TEXT,
     "budget-daily": BUDGET_DAILY_TEXT,
+    # Anthropic's Console spend limit, not the product's own cap. The owner chose to reuse the
+    # approved daily text for it, so there are no new words to approve.
+    "spend-limit": BUDGET_DAILY_TEXT,
     "too-many-calls": (
         "That question took more steps than I can take in one turn. Try asking it in a "
         "smaller piece, or ask the HR team."

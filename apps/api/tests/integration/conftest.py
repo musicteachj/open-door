@@ -481,6 +481,50 @@ def browser(open_browser: OpenBrowser) -> Browser:
     return open_browser()
 
 
+@pytest.fixture
+async def daily_ledger_untouched(owner_engine: AsyncEngine) -> AsyncIterator[None]:
+    """Leave the demo-wide daily AI ledger as the test found it.
+
+    The daily ledger has no tenant, so deleting a test's sandbox leaves its rows behind, and the
+    stream tests reserve real amounts (a stopped call keeps its reservation) that would add up to
+    the day's cap. Use it with `pytest.mark.usefixtures`. Like the budget tests, such a test must
+    not run at the same time as another run.
+    """
+    async with owner_engine.connect() as connection:
+        existing: list[UUID] = list(
+            (await connection.execute(text("SELECT id FROM ai_spend_daily"))).scalars()
+        )
+    yield
+    async with owner_engine.begin() as connection:
+        await connection.execute(
+            text("DELETE FROM ai_spend_daily WHERE NOT (id = ANY(CAST(:keep AS uuid[])))"),
+            {"keep": existing},
+        )
+
+
+class OpenBrowserWith(Protocol):
+    def __call__(self, **setting_changes: Any) -> Browser: ...
+
+
+@pytest.fixture
+def open_browser_with(
+    database_settings: Settings, created_tenant_ids: list[UUID]
+) -> Iterator[OpenBrowserWith]:
+    """Open a browser on an app built with some settings changed, such as a smaller daily AI
+    budget or a shorter heartbeat. The app's lifespan runs while the test does."""
+    with ExitStack() as stack:
+
+        def open_one(**setting_changes: Any) -> Browser:
+            client = TestClient(
+                create_app(database_settings.model_copy(update=setting_changes)),
+                base_url="https://testserver",
+                headers={"Sec-Fetch-Site": "same-origin"},
+            )
+            return Browser(stack.enter_context(client), created_tenant_ids)
+
+        yield open_one
+
+
 async def audit_events(engine: AsyncEngine, tenant_id: UUID) -> list[AuditEvent]:
     """Every audit event in the tenant, oldest first, read as the API's login."""
     async with tenant_session(engine, TenantContext(tenant_id, None)) as session:

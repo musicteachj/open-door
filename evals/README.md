@@ -115,7 +115,8 @@ line (`JUDGE_VERSION`) like a prompt.
 
 **The scoreboard** (`--json PATH`): the models and efforts, the prompt, tool-set, guard-prompt, and
 judge versions, the SHA-256 of each dataset file and of `judge.md`, the git commit, the trials, the
-date (UTC), the cost in USD (assistant, judge, and total, as exact strings), whether the run was
+date (UTC), the cost in USD (assistant, judge, and total, as exact strings: what the run paid
+now, with what its reused recordings cost when they were made under `recorded`), whether the run was
 partial, and each metric with its mean and spread across trials (the min, the max, and their
 difference; one trial has a spread of zero):
 
@@ -187,9 +188,14 @@ A live run refuses to start without `--yes` (`YES=1` in make; `YES=0` or `YES=no
 item count, the trials, the estimated cost, and the cap, and exits 0.
 
 The runner measures what it spends: the sandbox's own spend ledger (the assistant and the guard)
-plus the judge's priced usage. Before each item, if the spend so far plus the largest single-item
-cost seen so far would pass the cap, it stops. The scoreboard is then marked `partial`, lists the
-items not run, and the printed report says so plainly. A partial run fails `--check`.
+plus the judge's priced usage. The ledger prices a call answered from a recording at its recorded
+usage, so the cap counts it (that can only stop a run sooner). The report keeps that apart: "Cost"
+is what the run actually paid for the calls it made, and a second line gives what the reused
+recordings cost when they were recorded. One caveat: a live call that fails after the provider has
+billed it is not counted as paid, so its cost shows under the recorded figure (the cap still counts
+it). Before each item, if the spend so far plus the largest single-item cost seen so far would pass
+the cap, it stops. The scoreboard is then marked `partial`, lists the items not run, and the
+printed report says so plainly. A partial run fails `--check`.
 
 The cap is also enforced inside an item. Each item's conversation is given what is left of the cap
 as its own budget, so the spend ledger refuses a model call that can't fit, and that is reported

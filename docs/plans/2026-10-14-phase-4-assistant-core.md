@@ -1935,6 +1935,134 @@ code, and config (2,055 of them the runner in `evals/assistant/run.py`), four ti
 estimate of 1,000 and the 1,500 guideline: most of the growth is the review rounds' re-record
 and cleanup rules. The PR gives a reading guide.
 
+### Stage 4 (`feat/phase-4-stream`, 2026-10-17)
+
+Run in three build batches (A: Tasks 26 and 27, plus two backlog items; B: 28 and 29; C: 30 and
+31), each with one Sonnet implementer. A and C had one combined Sonnet review each; B had a Sonnet
+compliance reviewer and an Opus security reviewer in parallel, and the Opus reviewer re-checked
+the fixes. Every fix was written test first and mutation-proved. The only paid call was one
+re-recorded judge request ($0.013, the owner's OK).
+
+**Owner decisions (2026-10-17):**
+- **The working notes: "stream, then take back".** Text still streams live; when a model call
+  that wrote text ends in a tool call, a new `text.retracted` event takes the text and its
+  citations back, and the text follows as a `status` line. The rejected options: holding each
+  call's text until it ends (no word-by-word streaming), and a prompt line alone (not guaranteed,
+  and a paid re-record). No model request changed, so only qa-10's judge request missed.
+- **The Console spend limit gets `spend-limit`,** shown with the approved daily-limit text, so no
+  new approval or hash.
+- **Settling a stopped call from streamed usage is not practical.** Anthropic's streaming docs
+  (read 2026-10-17) put output usage only in `message_delta`, after the last content block, so a
+  cut call's output is never known; the cut call keeps its reservation, as before.
+
+**Batch A (Tasks 26 and 27, the take-back, the code).**
+- **The personal-data check** normalizes first (NFKC, format characters dropped, Unicode spaces
+  and dashes to ASCII), then matches ASCII digits only, so the browser's copy (Task 39) can follow
+  the same steps from `personal-data-cases.json`. A separated card number must be grouped like a
+  card (fours, or 4-6-5 and 4-6-4) and start with 2 to 6: without that, 10% of adjacent ISO date
+  pairs were flagged (review). The feedback reason is checked too (Batch B's security review).
+- **The app's wiring:** `create_app` refuses `scripted` or `replay` in production, `replay`
+  anywhere (it keeps per-item state), and `anthropic` without a key; the lifespan builds the
+  transport and embedder, so a second lifespan run gets a fresh client (review). **Voyage is used
+  only when `AI_TRANSPORT=anthropic`:** `apps/api/.env` holds a Voyage key, so otherwise every
+  scripted question in `make dev` would have called Voyage. Voyage has no client to close, unlike
+  the plan's note. `TurnDeps.embedder` is optional.
+- **The take-back's edges (review):** if the final call writes nothing, the last taken-back text
+  returns as the answer (the earlier "answer before the last tool call" case); `too-many-calls`
+  takes the note back too; the `"\n\n"` separator between calls is gone (unreachable).
+
+**Batch B (Tasks 28 and 29).**
+- **Routes:** `getCurrentConversation`, `createConversation`, `giveFeedback`, `startTurn`. The
+  display (`app/modules/assistant/display.py`) gives each turn's fixed texts from the constants,
+  including an escalation object, so a reload shows the crisis text; hidden codes (`prompt-leak`,
+  `guard-error`, `abandoned`) show as `internal`; the guard's category and kind are shown, the
+  injection flag isn't. A `running` turn older than 10 minutes shows as failed.
+- **Problems** carry a bare code as `type` (`ProblemError` in `app/core/problems.py`).
+- **The budget threshold** (`app/ai/admission.py`, `room_needed_usd`) is one function, built from
+  the loop's own `model_request` and `first_call_input_tokens` and an upper bound on the context
+  and the guard's previous answer, about $0.17 a turn; both the 429 and the banner use it.
+- **The 80,000-token rule** had no enforcement; the turn route refuses it with 409
+  `history-too-long` (its own code since the close's review), measured with the budget's
+  byte-based estimate (it never undercounts).
+- **The stream** is a `TurnStream` class (one pending read; the heartbeat waits without
+  canceling it), inside a `TurnResponse` that bounds each write at 30 seconds and treats a stall
+  as a disconnect. A never-read stream finishes its turn itself.
+- **Shutdown:** uvicorn cancels open requests at its graceful timeout without awaiting them, then
+  runs the lifespan's shutdown (`uvicorn/server.py:281-311`, 0.54). So the lifespan waits up to
+  12 seconds for open streams, a turn still starting included, before disposing the engine. The
+  Opus reviewer confirmed it under a real uvicorn and SIGTERM.
+- **The Opus security review (one high, fixed):** the stream route held its request transaction
+  while `begin` took a second pooled connection, so about 15 concurrent questions froze the whole
+  API for 30 seconds. The route now uses `CallerDep` (the actor loaded in a short transaction) and
+  runs its checks in a second short session; a request-scoped `StreamSlot` stops the stream
+  whatever happens to the response, and the turn's start is shielded, so nothing can leave a turn
+  `running`. Its lows, also fixed: Unicode separators in personal data; the canary compared in a
+  folded form (NFKC, casefold, alphanumerics only) with the held tail counted in folded
+  characters. The seams that held: 404 for every other person's ID, CSRF and same-origin, no
+  caching or compression, cancellation at every phase, the budget race across conversations.
+- **Recorded, not fixed:** non-Latin digits in personal data and Cyrillic letters that look Latin in the
+  canary (backlog); `Retry-After`; unlimited conversations; the bare-code problem type.
+- **The plan's note was wrong** that time paused at a blocked write isn't counted by the turn's
+  deadline: `_within` measures wall-clock time. The bounded write went in anyway.
+
+**Batch C (Tasks 30 and 31, and the eval cost report).**
+- **The proxy check has five runs, not two:** the pass run; a holding control (a second nginx
+  that hides the stream's encoding and gzips it must hold the events back for 5 seconds); the
+  heartbeat control; and a shutdown run (SIGTERM mid-stream, restart, the turn is `stopped`).
+  The review found the plan's checks couldn't fail: nginx's default `gzip_types` skips event
+  streams, and `proxy_buffering` doesn't hold a stream (nginx 1.27 forwards each chunk). With
+  gzip on for event streams, nginx compressed the real stream and held every event back, so **the
+  stream now sends `Content-Encoding: identity`** (the spec says so).
+- **`--timeout-graceful-shutdown 15`, not the plan's 25:** with the 12-second drain, a container
+  needs about 27 seconds, inside ECS's default 30. A clean stop exits with -15 (uvicorn re-raises
+  SIGTERM). The API binds to loopback on macOS and the docker bridge on Linux, never `0.0.0.0`.
+- **`make check` runs the proxy check,** after the browser tests, as Task 32 says.
+- **The eval cost report** (found when the qa-10 re-record printed $0.40 for a $0.01 run): the
+  scoreboard's cost is the live spend, and reused recordings are reported separately; the cap
+  still counts both.
+- **Recorded, not fixed:** a lint rule against the generated `useStartTurn` hook (Stage 6's
+  stream client), a crashed proxy-check run's leftovers.
+
+**The close's `/code-review medium`: four rounds.** Rounds 1 to 3 each found at least one
+medium; round 4 found only lows, so the loop stopped there (the stopping rule), and its cheap
+lows were fixed without another round. Every fix was written test first and mutation-proved.
+What changed the design:
+- **The take-back's edges** (rounds 1 to 3): the saved answer survives blank text and a re-issued
+  call, and is cleared only when a later call's text is actually sent; the restore checks the
+  canary across the note and the restored text, and forgets every citation it retracts; a
+  restore happens only after a silent `end_turn` (after `max_tokens` the taken-back text is
+  usually a pre-search note, so that turn fails `internal`); a call that showed text and then sent
+  broken tool input is retracted and re-issued under the one-re-issue rule.
+- **The query-embedding cache is scoped by sandbox** (round 3). It was one cache for every
+  sandbox, and `durationMs` reaches the browser, so a fast search could tell a visitor that
+  someone in another sandbox had asked the same thing. Shared eviction still leaks load, not
+  questions.
+- **The display:** an abandoned turn shows the plain `internal` error and no escalation, decided
+  with the database's clock and the same strict cut-off as the POST (rounds 1 and 2); the GET
+  works without a pinned handbook version (round 3).
+- **Codes and errors:** `history-too-long` is its own 409 (round 3); `ConversationNotFound` and
+  the feedback errors are their own types, so an internal `KeyError` is a logged 500, not a 404
+  (round 1); feedback rules live once, in `add_feedback` (round 1).
+- **The eval cost meter** counts a guard call that failed after being billed (round 1).
+- **Round 4's lows, fixed without another round:** the shutdown drain measures its timeout on a
+  clock; the canary hold is capped in raw characters; two docstrings; one helper for the
+  handbook label.
+- **Recorded, not fixed:** each question reads the history twice (the admission checks, then
+  `begin`), with a small window in which a recovered turn could carry the history past the limit
+  after the check; and the banner's estimate reads and serializes the whole history on each
+  `GET` (backlogged).
+
+**The close.** `docs/AI-GOVERNANCE.md` is new, its EU AI Act text read from EUR-Lex on
+2026-10-17. The Digital Omnibus on AI (Regulation (EU) 2026/1744) moved the Annex III date to
+2 December 2027, replacing the backlog's unofficial source. Voyage's FAQ says it trains on API
+data unless the organization opts out; the opt-out is the owner's, backlogged under Phase 9.
+
+**Final counts (Stage 4):** 2,747 API tests (up from 2,451), 1,006 web unit tests, and 175 browser
+tests (both unchanged), with four import contracts kept. `make db && make check` is green, including
+the offline assistant evals and `make proxy-check` (about 100 seconds). About 2,840 lines of
+application code, scripts, and config, above the plan's estimate of 900 and the 1,500 guideline, so
+the PR gives a reading guide.
+
 ## Backlog
 
 Deferrals found during execution go in `docs/BACKLOG.md` under the phase that should pick them up,

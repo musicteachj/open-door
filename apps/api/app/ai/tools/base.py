@@ -32,7 +32,7 @@ class ToolContext:
     actor: Actor
     asker: Asker
     version_id: UUID  # the handbook version the sandbox is pinned to
-    embedder: Embedder
+    embedder: Embedder | None  # None means full-text search only
 
 
 @dataclass(frozen=True)

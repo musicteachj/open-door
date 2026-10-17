@@ -143,3 +143,18 @@ def test_an_event_is_frozen() -> None:
     assert isinstance(event, CitationEvent)
     with pytest.raises(AttributeError):
         event.marker = 9  # type: ignore[misc]
+
+
+def test_restarting_the_markers_numbers_from_one_again_but_keeps_every_result() -> None:
+    mapper = CitationMapper(ENTRIES)
+    [first] = mapper.on_block_end(10, [cite(ENTRIES, 1)])
+    [second] = mapper.on_block_end(20, [cite(ENTRIES, 2)])
+    assert (first.marker, second.marker) == (1, 2)
+
+    mapper.restart_markers()
+
+    # The result at index 4 still resolves, and a passage cited before is numbered afresh.
+    [again] = mapper.on_block_end(5, [cite(ENTRIES, 2)])
+    [other] = mapper.on_block_end(6, [cite(ENTRIES, 4)])
+    assert (again.marker, again.section_id) == (1, "CA-4.3")
+    assert (other.marker, other.section_id) == (2, "CA-4.5")

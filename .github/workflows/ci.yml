@@ -60,6 +60,8 @@ jobs:
             e2e:
               - 'apps/web/**'
               - 'apps/api/**'
+              - 'scripts/proxy-check/**'
+              - 'Makefile'
               - '.nvmrc'
               - '.github/workflows/ci.yml'
 
@@ -244,6 +246,12 @@ jobs:
       - name: Browser tests
         run: npm run e2e
         working-directory: apps/web
+      # The turn stream through a strict nginx (a 20-second read timeout), on Docker and the same
+      # database the browser tests used. It starts its own API on :8200 and nginx on :8201, with
+      # the scripted model, so no paid AI calls. The job's environment already has the database
+      # URLs. About two minutes.
+      - name: Proxy check
+        run: make proxy-check
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: failure()
         with:

@@ -20,9 +20,9 @@ from uuid import uuid4
 
 import pytest
 
-from app.ai.pricing import Usage
+from app.ai.pricing import HAIKU, IterationUsage, Usage, turn_call_cost
 from app.ai.replay import FixtureStore, Record
-from app.ai.transport import SpendLimitReached
+from app.ai.transport import Finished, GuardRequest, GuardResult, SpendLimitReached
 from app.modules.sandbox.seed import build_company
 from tests.assistant_eval import (
     EVAL_DIR,
@@ -41,6 +41,7 @@ datasets = load_datasets()
 judge = load_judge()
 
 SONNET = "claude-sonnet-5-5"
+OPUS = "claude-opus-5-5"
 
 
 def grade(*, failing: dict[str, list[str]] | None = None) -> Any:
@@ -332,6 +333,7 @@ def test_the_scoreboard_has_every_field() -> None:
         "judge": "0.250000",
         "total": "1.000000",
         "cap": "2.000000",
+        "recorded": {"assistant": "0.000000", "judge": "0.000000", "total": "0.000000"},
     }
     assert set(result["metrics"]) == {
         "redteam_pass_rate",
@@ -1546,7 +1548,7 @@ async def test_the_agreement_run_stops_before_a_call_that_could_pass_its_cap(
     assert len(FixtureStore.load(tmp_path / "f" / "judge-hand-grades.jsonl.gz")) == caller.calls
 
 
-async def test_the_observer_notes_when_the_console_spend_limit_was_raised() -> None:
+async def test_the_observer_passes_a_spend_limit_through_unchanged() -> None:
     from app.ai.guard import build_guard_request
     from tests.test_replay import a_request
 
@@ -1559,17 +1561,41 @@ async def test_the_observer_notes_when_the_console_spend_limit_was_raised() -> N
             raise SpendLimitReached("limit")
 
     observer = run.ObservingTransport(Limited())
-    assert observer.spend_limit_reached is False
+    # The turn's own error code says it now, so the observer keeps no flag of its own.
+    assert not hasattr(observer, "spend_limit_reached")
 
     with pytest.raises(SpendLimitReached):
         async for _ in observer.stream(a_request()):
             pass
-
-    assert observer.spend_limit_reached is True
-    fresh = run.ObservingTransport(Limited())
     with pytest.raises(SpendLimitReached):
-        await fresh.classify(build_guard_request("hi", None))
-    assert fresh.spend_limit_reached is True
+        await observer.classify(build_guard_request("hi", None))
+
+
+def test_a_retraction_clears_the_answer_text_and_citations_gathered_so_far() -> None:
+    from app.ai.citations import CitationEvent
+    from app.ai.turn import Citation, Status, TextDelta, TextRetracted
+
+    def cite(marker: int, offset: int) -> Citation:
+        return Citation(
+            CitationEvent(marker, offset, "CA-4.3", "p1", "t", "g", "a", "2026-10-07", "/x", "c")
+        )
+
+    events = [
+        TextDelta("A working note. "),
+        cite(1, 16),
+        TextRetracted(),
+        Status("A working note."),
+        TextDelta("The answer."),
+        cite(1, 11),
+    ]
+
+    text, citations = run.answer_as_shown(events)
+
+    assert text == "The answer."
+    assert [c["offsetUtf16"] for c in citations] == [11]
+    # Without a retraction nothing is dropped.
+    plain_text, plain_citations = run.answer_as_shown([TextDelta("a"), TextDelta("b"), cite(1, 2)])
+    assert (plain_text, len(plain_citations)) == ("ab", 1)
 
 
 # --- --prune, the trace's requests, the personas -----------------------------------------------
@@ -1895,6 +1921,134 @@ def test_the_spend_caps_amounts_carry_their_unit() -> None:
     assert not hasattr(cap, "judge_total")
 
 
+# --- What a live run actually spent, apart from what its recordings cost ---------------------
+
+ONE_CALL = Usage(1000, 200, 0, 0)
+
+
+class FakeLiveTransport:
+    """A real-looking transport that bills one model call and one guard call."""
+
+    def __init__(self) -> None:
+        self.closed = False
+
+    async def stream(self, request: Any) -> Any:
+        try:
+            yield Finished({}, "end_turn", None, ONE_CALL, (IterationUsage(OPUS, ONE_CALL),), OPUS)
+        finally:
+            self.closed = True
+
+    async def classify(self, request: Any) -> GuardResult:
+        return GuardResult("ordinary", None, False, ONE_CALL, HAIKU)
+
+
+async def test_the_live_meter_prices_the_calls_that_reach_the_real_transport() -> None:
+    inner = FakeLiveTransport()
+    meter = run.LiveCallMeter(inner)
+
+    events = [event async for event in meter.stream(object())]
+    await meter.classify(GuardRequest(HAIKU, "", ()))
+
+    assert len(events) == 1
+    assert meter.total_usd == turn_call_cost([IterationUsage(OPUS, ONE_CALL)]) + turn_call_cost(
+        [IterationUsage(HAIKU, ONE_CALL)]
+    )
+    assert meter.total_usd > 0
+    assert inner.closed
+
+
+async def test_the_live_meter_prices_a_guard_call_that_failed_after_it_was_billed() -> None:
+    from app.ai.transport import GuardUnavailable
+
+    class Billed(FakeLiveTransport):
+        async def classify(self, request: Any) -> GuardResult:
+            raise GuardUnavailable("off schema", usage=ONE_CALL)
+
+    class Unbilled(FakeLiveTransport):
+        async def classify(self, request: Any) -> GuardResult:
+            raise GuardUnavailable("timed out")  # Cost unknown: nothing is added.
+
+    billed, unbilled = run.LiveCallMeter(Billed()), run.LiveCallMeter(Unbilled())
+
+    for meter in (billed, unbilled):
+        with pytest.raises(GuardUnavailable):
+            await meter.classify(GuardRequest(HAIKU, "", ()))
+
+    assert billed.total_usd == turn_call_cost([IterationUsage(HAIKU, ONE_CALL)])
+    assert unbilled.total_usd == 0
+
+
+async def test_a_call_answered_from_a_recording_never_reaches_the_live_meter() -> None:
+    from app.ai.replay import RecordingTransport
+    from app.ai.transport import FALLBACK_BETA, ModelRequest
+
+    meter = run.LiveCallMeter(FakeLiveTransport())
+    recorder = RecordingTransport(meter, FixtureStore(Path("unused.jsonl.gz")))
+    recorder.current_item = "item"
+    request = ModelRequest(
+        OPUS, (), (), ({"role": "user", "content": "hi"},), "low", 100, (FALLBACK_BETA,)
+    )
+
+    _ = [event async for event in recorder.stream(request)]
+    first = meter.total_usd
+    recorder.current_item = "item"  # The same request again, now recorded.
+    _ = [event async for event in recorder.stream(request)]
+
+    assert first > 0
+    assert meter.total_usd == first
+
+
+def test_recorded_assistant_spend_is_the_ledger_less_what_was_called_live() -> None:
+    cap = run.SpendCap(Decimal("2.00"))
+    cap.observe(Decimal("0.39"))
+    cap.note_live_assistant(Decimal("0.05"))
+
+    assert cap.assistant_live_usd == Decimal("0.05")
+    assert cap.assistant_recorded_usd == Decimal("0.34")
+    # The cap still counts the whole ledger, recorded costs included.
+    assert cap.assistant_total_usd == Decimal("0.39")
+    assert cap.total_usd == Decimal("0.39")
+
+
+def test_a_run_that_called_nothing_live_reports_no_assistant_spend() -> None:
+    cap = run.SpendCap(Decimal("2.00"))
+    cap.after_item(measured=Decimal("0.39"), judge_cost=Decimal("0.013"))
+    cap.note_live_assistant(Decimal(0))
+
+    assert cap.assistant_live_usd == Decimal(0)
+    assert cap.assistant_recorded_usd == Decimal("0.39")
+
+
+def test_the_scoreboard_keeps_live_spend_apart_from_what_recordings_cost() -> None:
+    result = board.build_scoreboard(
+        facts(
+            assistant_cost_usd=Decimal("0"),
+            judge_cost_usd=Decimal("0.013"),
+            assistant_recorded_cost_usd=Decimal("0.39"),
+            judge_recorded_cost_usd=Decimal("0.02"),
+        ),
+        sample_records(),
+    )
+
+    assert result["cost_usd"] == {
+        "assistant": "0.000000",
+        "judge": "0.013000",
+        "total": "0.013000",
+        "cap": "2.000000",
+        "recorded": {"assistant": "0.390000", "judge": "0.020000", "total": "0.410000"},
+    }
+    text = board.render(result)
+    assert "Cost $0.01 (assistant $0.00, judge $0.01)" in text
+    assert "recordings" in text
+    assert "$0.41" in text
+
+
+def test_the_report_omits_the_recordings_line_when_nothing_was_reused() -> None:
+    text = board.render(board.build_scoreboard(facts(), sample_records()))
+
+    assert "recordings" not in text
+
+
 def test_the_judge_reuses_the_transports_usage_mapping_and_replays_usage_codec() -> None:
     from app.ai import anthropic_transport, replay
 
@@ -2036,3 +2190,12 @@ def test_the_guard_model_is_the_pricing_modules_haiku() -> None:
 
     assert run.GUARD_MODEL_ID == pricing.HAIKU
     assert 'GUARD_MODEL_ID = "claude-haiku-5-5"' not in source
+
+
+def test_the_evals_pin_the_models_a_new_conversation_gets() -> None:
+    from app.ai.conversations import CURRENT_PINS
+
+    source = (EVAL_DIR / "run.py").read_text(encoding="utf-8")
+
+    assert (CURRENT_PINS.model, CURRENT_PINS.guard_model) == (run.MODEL_ID, run.GUARD_MODEL_ID)
+    assert 'MODEL_ID = "claude-opus-5-5"' not in source
