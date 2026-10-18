@@ -2220,6 +2220,11 @@ What changed the design:
   address or a run of whitespace)
 - pressing Yes with the reason form open sends "helpful" and drops the typed reason (a
   deliberate change of mind)
+- **the header row has almost no spare room at the 760 px measure,** as in the design: on macOS
+  the retention line fits on one line with 0.2 px left, while Linux (measured in the Playwright
+  image) draws the bold "Start a new conversation" 12 px wider, so the line wraps onto two. CI
+  caught it (PR #55); the browser test now checks that nothing overflows and the line wraps at
+  most once, rather than demanding one line
 - **for Stage 6:**
   - the composer has two failed-send props (`error` with Retry, and `sendError`); use one
   - number markers once where citations enter the store, rather than in three components

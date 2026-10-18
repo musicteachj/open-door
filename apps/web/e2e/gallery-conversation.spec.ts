@@ -315,10 +315,26 @@ test.describe('at 1440 px', () => {
     const disclosure = section.getByText(/Open Door is an AI assistant/)
     await disclosure.scrollIntoViewIfNeeded()
     expect((await disclosure.boundingBox())!.height).toBeLessThan(24)
-    const line = section
-      .getByText('Conversations are deleted with your sandbox after 24 hours.')
-      .first()
-    expect((await line.boundingBox())!.height).toBeLessThan(24)
+  })
+
+  // The header row has almost no spare room at the 760 px measure, as in the design: on macOS the
+  // retention line fits on one line with a fraction of a pixel left, and Linux draws the bold
+  // button about 12 px wider, so there it wraps. Either is fine; what must hold everywhere is that
+  // nothing overflows, the button and the pill stay whole, and the line takes at most two lines.
+  test('the header row fits: the button and pill stay whole and the line wraps at most once', async ({
+    page,
+  }) => {
+    const section = state(page, 'conversation-cited-answer')
+    const header = section.locator('[data-slot="conversation-header"]')
+    await header.scrollIntoViewIfNeeded()
+    const overflow = await header.evaluate((row) => row.scrollWidth - row.clientWidth)
+    expect(overflow).toBeLessThanOrEqual(0)
+    const line = header.getByText('Conversations are deleted with your sandbox after 24 hours.')
+    expect((await line.boundingBox())!.height).toBeLessThan(44)
+    const button = header.getByRole('button', { name: 'Start a new conversation' })
+    expect((await button.boundingBox())!.height).toBeLessThan(36)
+    const pill = header.getByText(/Sandbox resets in/)
+    expect((await pill.boundingBox())!.height).toBeLessThan(30)
   })
 })
 
