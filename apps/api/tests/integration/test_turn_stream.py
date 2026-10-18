@@ -18,9 +18,14 @@ from sqlalchemy.ext.asyncio import AsyncEngine
 
 from app.ai.admission import HISTORY_REFUSE_TOKENS
 from app.ai.conversations import Pins, create_conversation, start_turn
-from app.ai.fixed_texts import BUDGET_DAILY_TEXT, BUDGET_SANDBOX_TEXT
+from app.ai.fixed_texts import (
+    BUDGET_DAILY_TEXT,
+    BUDGET_SANDBOX_TEXT,
+    PERSONAL_DATA_TEXT,
+    STILL_ANSWERING_TEXT,
+)
 from app.ai.prompts.versions import TOOLSET_VERSION
-from app.ai.scripted import WORKING_NOTE_TEXT, ScriptedTransport
+from app.ai.scripted import DECLINE_TEXT, NOT_FOUND_TEXT, WORKING_NOTE_TEXT, ScriptedTransport
 from app.ai.turn import ConversationNotFound
 from app.db.models import AiConversation, AiMessage, AiSpend, AiTurn, HandbookVersion
 from app.db.tenancy import TenantContext, tenant_session
@@ -198,6 +203,7 @@ async def test_personal_data_is_refused_as_a_problem_and_never_stored_or_logged(
     assert response.status_code == 422
     assert response.headers["content-type"] == "application/problem+json"
     assert response.json()["type"] == "personal-data"
+    assert response.json()["detail"] == PERSONAL_DATA_TEXT
     for number in ("078-05-1120", "4111 1111 1111 1111"):
         assert number not in response.text
     assert await turn_rows(app_engine, tenant_id, person_id) == []
@@ -224,6 +230,7 @@ async def test_a_turn_already_running_is_409_turn_running(
 
     assert response.status_code == 409
     assert response.json()["type"] == "turn-running"
+    assert response.json()["detail"] == STILL_ANSWERING_TEXT
     assert len(await turn_rows(app_engine, tenant_id, person_id)) == 1
 
 
@@ -580,3 +587,60 @@ async def test_a_question_in_a_sandbox_without_a_handbook_version_is_a_404(
 
     assert response.status_code == 404
     assert response.headers["content-type"] == "application/problem+json"
+
+
+# --- What the page shows after a turn: the HR team's title and place, and the not-found card ----
+
+
+def current(browser: Browser) -> dict[str, Any]:
+    body: dict[str, Any] = browser.client.get(f"{BASE}/conversations/current").json()
+    return body
+
+
+async def test_the_streamed_escalation_carries_the_hr_contacts_title_and_location(
+    browser: Browser,
+) -> None:
+    sign_in(browser)
+    conversation_id = new_conversation(browser)["id"]
+
+    events, _ = parse_sse(ask(browser, conversation_id, "My coworker keeps harassing me").text)
+
+    [escalation] = [data for name, data in events if name == "escalation"]
+    [dana] = escalation["hrContact"]
+    assert dana["name"] == "Dana Whitfield"
+    assert (dana["jobTitle"], dana["locationName"]) == ("HR Business Partner", "Denver HQ")
+
+
+async def test_a_question_the_handbook_cannot_answer_is_not_found_with_the_hr_team_to_ask(
+    browser: Browser,
+) -> None:
+    sign_in(browser)
+    conversation_id = new_conversation(browser)["id"]
+
+    events, _ = parse_sse(ask(browser, conversation_id, "Is there a parking garage?").text)
+
+    assert "citation" not in names(events)
+    body = current(browser)
+    [turn] = body["turns"]
+    assert turn["answerText"] == NOT_FOUND_TEXT
+    assert turn["notFound"] is True
+    assert turn["escalation"] is None
+    [dana] = body["hrContacts"]
+    assert (dana["jobTitle"], dana["locationName"]) == ("HR Business Partner", "Denver HQ")
+
+
+async def test_a_cited_answer_and_a_decline_that_never_searched_are_not_not_found(
+    browser: Browser,
+) -> None:
+    sign_in(browser)
+    conversation_id = new_conversation(browser)["id"]
+    ask(browser, conversation_id)
+    ask(browser, conversation_id, "What is Leo's home address?")
+
+    body = current(browser)
+
+    cited, declined = body["turns"]
+    assert cited["citations"]
+    assert declined["answerText"] == DECLINE_TEXT
+    assert [cited["notFound"], declined["notFound"]] == [False, False]
+    assert body["hrContacts"] == []

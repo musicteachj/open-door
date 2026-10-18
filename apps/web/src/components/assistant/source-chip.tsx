@@ -1,8 +1,8 @@
-import { useId, useMemo } from 'react'
+import { useId } from 'react'
 import type { CitationOut } from '@/api/generated'
 import { cn } from '@/lib/utils'
 import { chipLabel, conversationCopy, sourceName } from './labels'
-import { firstPerSection, numberBySection } from './sources'
+import { firstPerSection } from './sources'
 
 type SourceChipProps = {
   citation: CitationOut
@@ -21,6 +21,7 @@ function SourceChip({ citation, expanded, onOpen, className }: SourceChipProps) 
   return (
     <button
       data-slot="source-chip"
+      data-passage-id={citation.passageId}
       type="button"
       aria-label={sourceName(citation.marker, citation)}
       aria-expanded={expanded}
@@ -44,7 +45,10 @@ function SourceChip({ citation, expanded, onOpen, className }: SourceChipProps) 
 }
 
 type SourceChipsProps = {
-  /** Every citation of the answer. The chips are the distinct sections among them. */
+  /**
+   * Every citation of the answer, already numbered by section (`numberBySection`). The chips are
+   * the distinct sections among them.
+   */
   citations: CitationOut[]
   /** The passage open in the source panel, if any. */
   openPassageId?: string | null
@@ -55,9 +59,7 @@ type SourceChipsProps = {
 /** The "Sources" label and the chips, wrapping onto more rows as needed. */
 function SourceChips({ citations, openPassageId = null, onOpen, className }: SourceChipsProps) {
   const labelId = useId()
-  // Numbered once for these citations (a change of the open passage does not number again).
-  const numbered = useMemo(() => numberBySection(citations), [citations])
-  const sources = firstPerSection(numbered)
+  const sources = firstPerSection(citations)
   if (sources.length === 0) return null
   return (
     <div data-slot="source-chips" className={cn('mt-0.5 flex flex-col gap-2', className)}>
@@ -66,7 +68,7 @@ function SourceChips({ citations, openPassageId = null, onOpen, className }: Sou
       </p>
       <ul aria-labelledby={labelId} className="m-0 flex list-none flex-wrap gap-2 p-0">
         {sources.map((citation) => {
-          const open = numbered.find(
+          const open = citations.find(
             (cited) => cited.sectionId === citation.sectionId && cited.passageId === openPassageId,
           )
           return (

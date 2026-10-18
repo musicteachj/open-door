@@ -51,12 +51,18 @@ def test_each_event_serializes_to_the_specs_payload() -> None:
         "summary": "sick",
         "durationMs": 12,
     }
-    assert Escalation(
-        "sensitive", "msg", (HrContact("Dana Whitfield", "d@x.example"),)
-    ).to_json() == {
+    dana = HrContact("Dana Whitfield", "d@x.example", "HR Business Partner", "Denver HQ")
+    assert Escalation("sensitive", "msg", (dana,)).to_json() == {
         "kind": "sensitive",
         "message": "msg",
-        "hrContact": [{"name": "Dana Whitfield", "workEmail": "d@x.example"}],
+        "hrContact": [
+            {
+                "name": "Dana Whitfield",
+                "workEmail": "d@x.example",
+                "jobTitle": "HR Business Partner",
+                "locationName": "Denver HQ",
+            }
+        ],
         "offerCase": False,
     }
     assert Error("refusal", "msg").to_json() == {

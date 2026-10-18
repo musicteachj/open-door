@@ -1,23 +1,24 @@
 import { ChevronDown, ChevronUp, Search, ShieldCheck, User, Users, Wrench } from 'lucide-react'
-import { useId, useMemo, useState } from 'react'
+import { useId, useState } from 'react'
 import type { CitationOut, GuardOut, SectionOut, ToolCallOut } from '@/api/generated'
 import { sectionNumber } from '@/components/handbook/labels'
 import { cn } from '@/lib/utils'
 import { conversationCopy, toolCallLine, toolIcon, type ToolIconKind } from './labels'
-import { numberBySection } from './sources'
-
-/**
- * A section the assistant retrieved. The API sends only the ids today, so a title and a group are
- * optional: a cited section falls back to its citation's, and an uncited one shows its number alone.
- */
-type RetrievedSection = SectionOut & { title?: string | null; groupName?: string | null }
 
 type WorkTraceProps = {
   /** What the safety check decided. Null when the turn has no recorded result. */
   guard: GuardOut | null
   toolCalls: ToolCallOut[]
-  sections: RetrievedSection[]
-  /** The answer's citations, which say which sections were cited and as what number. */
+  /**
+   * The sections the assistant retrieved. A title or group is null when the conversation's stored
+   * sources don't hold it: a cited section falls back to its citation's, and an uncited one shows
+   * its number alone.
+   */
+  sections: SectionOut[]
+  /**
+   * The answer's citations, already numbered by section (`numberBySection`), which say which
+   * sections were cited and as what number.
+   */
   citations: CitationOut[]
   /** Opens with the panel showing, for a screen that draws that state. */
   defaultOpen?: boolean
@@ -41,13 +42,7 @@ function safetyLine(guard: GuardOut | null): { text: string; note?: string } | n
   return null
 }
 
-function SectionRow({
-  section,
-  citations,
-}: {
-  section: RetrievedSection
-  citations: CitationOut[]
-}) {
+function SectionRow({ section, citations }: { section: SectionOut; citations: CitationOut[] }) {
   const cited = citations.find((citation) => citation.sectionId === section.sectionId)
   const title = section.title ?? cited?.title ?? null
   const group = section.groupName ?? cited?.groupName ?? null
@@ -100,8 +95,6 @@ function WorkTrace({
   const toolsId = useId()
   const sectionsId = useId()
   const safety = safetyLine(guard)
-  // "Cited as N" is the marker number, which counts sections (see `numberBySection`).
-  const numbered = useMemo(() => numberBySection(citations), [citations])
   const Chevron = open ? ChevronUp : ChevronDown
   return (
     <>
@@ -161,8 +154,13 @@ function WorkTrace({
               <p className="m-0 text-ui text-ink-muted">{conversationCopy.none}</p>
             ) : (
               <ul aria-labelledby={sectionsId} className="m-0 list-none p-0">
-                {sections.map((section) => (
-                  <SectionRow key={section.sectionId} section={section} citations={numbered} />
+                {sections.map((section, index) => (
+                  <SectionRow
+                    // Each section once is the API's promise; the index keeps a repeat from breaking the list.
+                    key={`${index}:${section.sectionId}`}
+                    section={section}
+                    citations={citations}
+                  />
                 ))}
               </ul>
             )}
@@ -174,4 +172,4 @@ function WorkTrace({
 }
 
 export { WorkTrace }
-export type { RetrievedSection, WorkTraceProps }
+export type { WorkTraceProps }

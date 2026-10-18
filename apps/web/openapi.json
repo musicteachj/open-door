@@ -913,6 +913,70 @@
         }
       }
     },
+    "/api/v1/assistant/budget": {
+      "get": {
+        "tags": [
+          "assistant"
+        ],
+        "summary": "Whether the next question has room, before there is a conversation to ask",
+        "description": "The same `BudgetOut` the conversation carries, for a person with none yet: the home needs\nthe banner before the first question. With a conversation it is that conversation's, built by\nthe same function.",
+        "operationId": "getAssistantBudget",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BudgetOut"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/assistant/texts": {
+      "get": {
+        "tags": [
+          "assistant"
+        ],
+        "summary": "The fixed refusals the composer shows before a request is sent",
+        "description": "Needs a session like every assistant route, but reads nothing of the tenant's, so it takes\nno transaction: only the short session lookup.",
+        "operationId": "getAssistantTexts",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AssistantTextsOut"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/assistant/conversations": {
       "post": {
         "tags": [
@@ -1153,6 +1217,25 @@
   },
   "components": {
     "schemas": {
+      "AssistantTextsOut": {
+        "properties": {
+          "personalData": {
+            "type": "string",
+            "title": "Personaldata"
+          },
+          "stillAnswering": {
+            "type": "string",
+            "title": "Stillanswering"
+          }
+        },
+        "type": "object",
+        "required": [
+          "personalData",
+          "stillAnswering"
+        ],
+        "title": "AssistantTextsOut",
+        "description": "The fixed refusals the composer shows before a request is sent, so the web app holds no\ncopy of the words."
+      },
       "AudienceOut": {
         "properties": {
           "states": {
@@ -1185,6 +1268,29 @@
         ],
         "title": "AudienceOut"
       },
+      "BudgetBannerOut": {
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": [
+              "sandbox",
+              "daily"
+            ],
+            "title": "Kind"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message"
+          }
+        },
+        "type": "object",
+        "required": [
+          "kind",
+          "message"
+        ],
+        "title": "BudgetBannerOut",
+        "description": "The fixed text for the cap that stops the person: the sandbox's, or the day's."
+      },
       "BudgetOut": {
         "properties": {
           "sandboxReached": {
@@ -1198,13 +1304,24 @@
           "sandboxRemainingCents": {
             "type": "integer",
             "title": "Sandboxremainingcents"
+          },
+          "banner": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/BudgetBannerOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "type": "object",
         "required": [
           "sandboxReached",
           "dailyReached",
-          "sandboxRemainingCents"
+          "sandboxRemainingCents",
+          "banner"
         ],
         "title": "BudgetOut",
         "description": "Whether a turn can start. A cap counts as reached when it has less than a turn needs left,\nnot only at zero (the 429 uses the same measure)."
@@ -1287,6 +1404,13 @@
             "type": "array",
             "title": "Turns"
           },
+          "hrContacts": {
+            "items": {
+              "$ref": "#/components/schemas/HrContactOut"
+            },
+            "type": "array",
+            "title": "Hrcontacts"
+          },
           "budget": {
             "$ref": "#/components/schemas/BudgetOut"
           },
@@ -1308,6 +1432,7 @@
           "id",
           "createdAt",
           "turns",
+          "hrContacts",
           "budget",
           "longHistory",
           "historyTooLong",
@@ -1765,12 +1890,36 @@
           "workEmail": {
             "type": "string",
             "title": "Workemail"
+          },
+          "jobTitle": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Jobtitle"
+          },
+          "locationName": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Locationname"
           }
         },
         "type": "object",
         "required": [
           "name",
-          "workEmail"
+          "workEmail",
+          "jobTitle",
+          "locationName"
         ],
         "title": "HrContactOut"
       },
@@ -2464,12 +2613,36 @@
             },
             "type": "array",
             "title": "Passageids"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          },
+          "groupName": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Groupname"
           }
         },
         "type": "object",
         "required": [
           "sectionId",
-          "passageIds"
+          "passageIds",
+          "title",
+          "groupName"
         ],
         "title": "SectionOut"
       },
@@ -2741,6 +2914,10 @@
               }
             ]
           },
+          "notFound": {
+            "type": "boolean",
+            "title": "Notfound"
+          },
           "guard": {
             "anyOf": [
               {
@@ -2803,6 +2980,7 @@
           "incomplete",
           "error",
           "escalation",
+          "notFound",
           "guard",
           "toolCalls",
           "sections",

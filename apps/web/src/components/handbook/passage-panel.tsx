@@ -1,5 +1,5 @@
 import { ArrowRight, BookOpen, X } from 'lucide-react'
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, type ComponentProps, type ElementType } from 'react'
 import { Link } from 'react-router'
 import type { PassageView } from '@/api/generated'
 import { InlineError } from '@/components/feedback/inline-error'
@@ -25,6 +25,17 @@ type PassagePanelProps = {
   onClose: () => void
   /** Shows the error state's Retry button. */
   onRetry?: () => void
+  /**
+   * The element for the title, an `h2` by default. A dialog passes its own title component, so the
+   * visible title is what names the dialog. While there is no passage to title (loading, or an
+   * error) it still renders one, hidden, with the eyebrow's words, so the name never goes missing.
+   */
+  titleAs?: ElementType
+  /**
+   * Whether the panel is a labeled landmark ("Handbook passage"). A dialog sets false: the dialog
+   * is the landmark, and a second name inside it would be read twice.
+   */
+  landmark?: boolean
   className?: string
 }
 
@@ -47,8 +58,12 @@ function PassagePanel({
   groupName,
   onClose,
   onRetry,
+  titleAs,
+  landmark = true,
   className,
 }: PassagePanelProps) {
+  const Title: ElementType = titleAs ?? 'h2'
+  const Root = (landmark ? 'aside' : 'div') as ElementType<ComponentProps<'aside'>>
   const titleRef = useRef<HTMLHeadingElement>(null)
   const panelRef = useRef<HTMLElement>(null)
   const hasView = state === 'open' && view !== undefined
@@ -83,9 +98,9 @@ function PassagePanel({
   const contextClass = 'mb-4 text-body text-ink-muted'
 
   return (
-    <aside
+    <Root
       ref={panelRef}
-      aria-label="Handbook passage"
+      aria-label={landmark ? 'Handbook passage' : undefined}
       aria-busy={state === 'loading'}
       className={cn('flex h-full min-h-0 flex-col bg-surface-raised text-ink', className)}
     >
@@ -106,9 +121,9 @@ function PassagePanel({
         </div>
         {hasView && (
           <>
-            <h2 ref={titleRef} tabIndex={-1} className="m-0 text-h2 font-semibold outline-none">
+            <Title ref={titleRef} tabIndex={-1} className="m-0 text-h2 font-semibold outline-none">
               {view.section.title}
-            </h2>
+            </Title>
             <div className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-2">
               <ApplicabilityBadge label={view.section.audienceLabel} />
               <AppliesMarker applies={view.section.appliesToMe} />
@@ -116,6 +131,7 @@ function PassagePanel({
             </div>
           </>
         )}
+        {!hasView && titleAs !== undefined && <Title className="sr-only">{eyebrow}</Title>}
         {state === 'loading' && (
           <>
             <Skeleton className="my-1 h-5 w-40" />
@@ -165,7 +181,7 @@ function PassagePanel({
           <ArrowRight aria-hidden="true" className="size-4" strokeWidth={2} />
         </Link>
       </footer>
-    </aside>
+    </Root>
   )
 }
 

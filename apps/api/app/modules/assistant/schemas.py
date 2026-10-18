@@ -67,6 +67,10 @@ class ToolCallOut(CamelModel):
 class SectionOut(CamelModel):
     section_id: str
     passage_ids: list[str]
+    # Read from the conversation's stored sources when the page loads. Null for a section they
+    # don't hold.
+    title: str | None
+    group_name: str | None
 
 
 class FeedbackOut(CamelModel):
@@ -84,6 +88,8 @@ class TurnErrorOut(CamelModel):
 class HrContactOut(CamelModel):
     name: str
     work_email: str
+    job_title: str | None
+    location_name: str | None
 
 
 class EscalationOut(CamelModel):
@@ -104,12 +110,22 @@ class TurnOut(CamelModel):
     incomplete: bool
     error: TurnErrorOut | None
     escalation: EscalationOut | None
+    # The turn searched the handbook and found nothing to cite: the page offers the HR team, whose
+    # contacts are in the conversation's `hrContacts`.
+    not_found: bool
     guard: GuardOut | None
     tool_calls: list[ToolCallOut]
     sections: list[SectionOut]
     feedback: FeedbackOut | None
     started_at: datetime
     ended_at: datetime | None
+
+
+class BudgetBannerOut(CamelModel):
+    """The fixed text for the cap that stops the person: the sandbox's, or the day's."""
+
+    kind: Literal["sandbox", "daily"]
+    message: str
 
 
 class BudgetOut(CamelModel):
@@ -119,12 +135,17 @@ class BudgetOut(CamelModel):
     sandbox_reached: bool
     daily_reached: bool
     sandbox_remaining_cents: int
+    # The day's wins when both are reached, because a new sandbox would not help.
+    banner: BudgetBannerOut | None
 
 
 class ConversationOut(CamelModel):
     id: UUID
     created_at: datetime
     turns: list[TurnOut]
+    # The HR team, for the "not found" cards. Empty when no turn needs them. A sensitive or crisis
+    # turn's escalation carries its own.
+    hr_contacts: list[HrContactOut]
     budget: BudgetOut
     # Past 60,000 tokens of history: a new conversation is offered.
     long_history: bool
@@ -132,6 +153,14 @@ class ConversationOut(CamelModel):
     history_too_long: bool
     # Pinned to a prompt or tool set that is no longer current: it can't continue.
     outdated: bool
+
+
+class AssistantTextsOut(CamelModel):
+    """The fixed refusals the composer shows before a request is sent, so the web app holds no
+    copy of the words."""
+
+    personal_data: str
+    still_answering: str
 
 
 class FeedbackIn(CamelModel):

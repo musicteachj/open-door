@@ -38,9 +38,9 @@ function StatusLine({ steps, className }: StatusLineProps) {
     >
       {steps.length > 0 && (
         <ul className="m-0 flex list-none flex-col gap-1.5 p-0">
-          {steps.map((step) => (
+          {steps.map((step, index) => (
             <li
-              key={step.id}
+              key={`${index}:${step.id}`}
               className={cn(
                 'flex items-center gap-2 text-ui',
                 step.done ? 'text-ink-muted' : 'text-ink',

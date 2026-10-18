@@ -5,7 +5,6 @@ import { GALLERY_STATE_IDS } from '../gallery-ids'
 import {
   conversationRow,
   designScreenFile,
-  galleryFrameSelector,
   SCREEN_FOLDERS,
   SCREEN_ROWS,
   screenSlug,
@@ -59,45 +58,67 @@ describe('the screen 07 rows', () => {
   const rows = SCREEN_ROWS.filter((row) => row.designImage.includes('/07-conversation/'))
   const conversationIds = GALLERY_STATE_IDS.filter((id) => id.startsWith('conversation-'))
 
-  it('set each screenshot beside the gallery state of the same name', () => {
+  it('set each screenshot beside the real /ask page in the state of the same name', () => {
     for (const row of rows) {
       const file = row.designImage.split('/').pop()!.replace(/^desktop-/, '').replace(/\.png$/, '')
-      expect(row.galleryId, row.title).toBe(`conversation-${file}`)
-      expect(row.setup).toBe('gallery-state')
-      expect(row.target).toBe('section')
+      expect(row.scenario, row.title).toBe(file)
+      expect(row.setup).toBe('conversation')
+      expect(row.route).toBe('/ask')
+      expect(row.persona, row.title).toBeDefined()
+      // The design is drawn at 1440 by 900, so the page is photographed at that size, whole.
+      expect(row.target).toBe('viewport')
+      expect(row.viewport).toBeUndefined()
     }
   })
 
-  it('cover every conversation state in the gallery, once', () => {
-    expect(rows.map((row) => row.galleryId)).toEqual(conversationIds)
+  it('cover every conversation state the design has, once, in the gallery\'s order', () => {
+    expect(rows.map((row) => `conversation-${row.scenario}`)).toEqual(conversationIds)
   })
 
-  it('name a gallery state for every gallery-state row, and no other row does', () => {
+  it('name a scenario for every conversation row, and no other row uses one', () => {
     for (const row of SCREEN_ROWS) {
-      expect(row.galleryId !== undefined, row.title).toBe(row.setup === 'gallery-state')
-      if (row.galleryId) expect(GALLERY_STATE_IDS).toContain(row.galleryId)
+      expect(row.scenario !== undefined, row.title).toBe(row.setup === 'conversation')
     }
   })
 
-  it('open the source panel from its marker, and leave the other states as they load', () => {
-    const interactive = rows.filter((row) => row.interaction !== undefined)
-    expect(interactive.map((row) => row.galleryId)).toEqual(['conversation-source-panel'])
-  })
-})
-
-describe('galleryFrameSelector', () => {
-  it('photographs the conversation state inside the section, not the section', () => {
-    expect(galleryFrameSelector('conversation-crisis')).toBe(
-      'section[aria-labelledby="conversation-crisis"] [data-slot="conversation-state"]',
+  it('show the page, never the gallery, and say which states are stubbed', () => {
+    for (const row of rows) {
+      expect(row.route, row.title).not.toContain('gallery')
+    }
+    // The states the scripted model can't reach are labeled as stubs in the report.
+    const stubbed = rows.filter((row) => row.note?.startsWith('STUB'))
+    expect(stubbed.map((row) => row.scenario).sort()).toEqual(
+      [
+        'budget-daily',
+        'budget-sandbox',
+        'long-conversation',
+        'send-error',
+        'stopped',
+        'streaming-progress-note',
+        'streaming-searching',
+        'streaming-text',
+      ].sort(),
     )
+  })
+
+  it('also set the 06 docked passage panel beside the real page, with the panel open', () => {
+    const docked = SCREEN_ROWS.find((row) => row.designImage.endsWith('06-handbook/desktop-panel-docked.png'))
+    expect(docked?.setup).toBe('conversation')
+    expect(docked?.scenario).toBe('source-panel')
+    expect(docked?.differsUntil).toBeUndefined()
+  })
+
+  it('leave the home composer states without a "differs until": the failed send is on the conversation page now', () => {
+    const composer = SCREEN_ROWS.find((row) => row.setup === 'composer-states')
+    expect(composer?.differsUntil).toBeUndefined()
   })
 })
 
 describe('conversationRow', () => {
-  it('names a gallery state that exists for every suffix it accepts', () => {
-    expect(conversationRow('cited-answer', 'Cited answer').galleryId).toBe(
-      'conversation-cited-answer',
-    )
+  it('names a real-page scenario for every suffix it accepts', () => {
+    const row = conversationRow('cited-answer', 'Cited answer')
+    expect(row.scenario).toBe('cited-answer')
+    expect(row.setup).toBe('conversation')
   })
 
   it('refuses a misspelled suffix when the project is type checked', () => {

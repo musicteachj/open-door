@@ -53,8 +53,14 @@ describe('HrContacts', () => {
     expect(rows()[0]!.querySelector('[data-slot="avatar"]')).toHaveAttribute('aria-hidden', 'true')
   })
 
-  it('leaves out the title and location when the API does not send them', () => {
-    render(<HrContacts contacts={[{ name: 'Dana Whitfield', workEmail: DANA.workEmail }]} />)
+  it('leaves out the title and location when the API sends them as null', () => {
+    render(
+      <HrContacts
+        contacts={[
+          { name: 'Dana Whitfield', workEmail: DANA.workEmail, jobTitle: null, locationName: null },
+        ]}
+      />,
+    )
     expect(rows()[0]).not.toHaveTextContent('·')
     expect(rows()[0]).toHaveTextContent(/^DWDana Whitfielddana\.whitfield@juniperrow\.example$/)
   })
@@ -63,8 +69,18 @@ describe('HrContacts', () => {
     render(
       <HrContacts
         contacts={[
-          { name: 'Dana Whitfield', workEmail: DANA.workEmail, jobTitle: 'HR Business Partner' },
-          { name: 'Sam Lee', workEmail: 'sam.lee@juniperrow.example', locationName: 'Denver HQ' },
+          {
+            name: 'Dana Whitfield',
+            workEmail: DANA.workEmail,
+            jobTitle: 'HR Business Partner',
+            locationName: null,
+          },
+          {
+            name: 'Sam Lee',
+            workEmail: 'sam.lee@juniperrow.example',
+            jobTitle: null,
+            locationName: 'Denver HQ',
+          },
         ]}
       />,
     )
@@ -75,7 +91,18 @@ describe('HrContacts', () => {
   })
 
   it('shows the people icon, not an empty circle, for a name with no letters', () => {
-    render(<HrContacts contacts={[{ name: '   ', workEmail: 'blank@juniperrow.example' }]} />)
+    render(
+      <HrContacts
+        contacts={[
+          {
+            name: '   ',
+            workEmail: 'blank@juniperrow.example',
+            jobTitle: null,
+            locationName: null,
+          },
+        ]}
+      />,
+    )
     const blank = rows()[0]!
     expect(blank.querySelector('[data-slot="avatar-fallback"]')).not.toBeEmptyDOMElement()
     expect(blank.querySelector('[data-slot="avatar-fallback"] svg')).not.toBeNull()
@@ -86,8 +113,18 @@ describe('HrContacts', () => {
     render(
       <HrContacts
         contacts={[
-          { name: 'Dana Whitfield', workEmail: 'hr-team@juniperrow.example' },
-          { name: 'Sam Lee', workEmail: 'hr-team@juniperrow.example' },
+          {
+            name: 'Dana Whitfield',
+            workEmail: 'hr-team@juniperrow.example',
+            jobTitle: null,
+            locationName: null,
+          },
+          {
+            name: 'Sam Lee',
+            workEmail: 'hr-team@juniperrow.example',
+            jobTitle: null,
+            locationName: null,
+          },
         ]}
       />,
     )
@@ -101,7 +138,15 @@ describe('HrContacts', () => {
   it('ends with the shared HR inbox, after every person', () => {
     render(
       <HrContacts
-        contacts={[DANA, { name: 'Sam Lee', workEmail: 'sam.lee@juniperrow.example' }]}
+        contacts={[
+          DANA,
+          {
+            name: 'Sam Lee',
+            workEmail: 'sam.lee@juniperrow.example',
+            jobTitle: null,
+            locationName: null,
+          },
+        ]}
       />,
     )
     const all = rows()
@@ -125,7 +170,14 @@ describe('HrContacts', () => {
   it('cannot add a subject or a recipient to a mailto link through an odd address', () => {
     render(
       <HrContacts
-        contacts={[{ name: 'Eve', workEmail: 'eve@juniperrow.example?bcc=x@evil.example' }]}
+        contacts={[
+          {
+            name: 'Eve',
+            workEmail: 'eve@juniperrow.example?bcc=x@evil.example',
+            jobTitle: null,
+            locationName: null,
+          },
+        ]}
       />,
     )
     const href = within(rows()[0]!).getByRole('link').getAttribute('href')!

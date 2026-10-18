@@ -1,7 +1,6 @@
 import AxeBuilder from '@axe-core/playwright'
 import { expect, test, type Page } from '@playwright/test'
 import { GALLERY_STATE_IDS } from './gallery-ids'
-import { galleryFrameSelector } from './captures/manifest'
 import { AXE_TAGS } from './helpers'
 
 // The conversation section of the gallery in a real browser: axe on every state, the pieces that
@@ -283,31 +282,6 @@ test.describe('at 1440 px', () => {
     expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(
       1440,
     )
-  })
-
-  test('the capture selector finds one wrapper per state, and its photograph is all of it, panel included', async ({
-    page,
-  }) => {
-    for (const id of CONVERSATION_IDS) {
-      await expect(page.locator(galleryFrameSelector(id)), id).toHaveCount(1)
-    }
-    // The wrapper breaks out of the gallery column, so a photograph of the section would crop it.
-    await sourceMarker(page).scrollIntoViewIfNeeded()
-    await sourceMarker(page).click()
-    await expect(passagePanel(page)).toBeVisible()
-    const wrapper = page.locator(galleryFrameSelector('conversation-source-panel'))
-    const section = (await state(page, 'conversation-source-panel').boundingBox())!
-    const box = (await wrapper.boundingBox())!
-    const frame = (await wrapper.locator('[data-slot="conversation-frame"]').boundingBox())!
-    const panel = (await wrapper.locator('[data-slot="source-panel-frame"]').boundingBox())!
-    expect(box.width).toBeGreaterThan(section.width + 100)
-    // The photograph holds the panel: the wrapper reaches from the frame's top to the panel's bottom.
-    expect(box.y + box.height).toBeGreaterThanOrEqual(panel.y + panel.height - 1)
-    expect(box.y).toBeLessThanOrEqual(frame.y + 1)
-    const png = await wrapper.screenshot()
-    // A PNG's width and height are the 4-byte numbers at offsets 16 and 20, big-endian.
-    expect(png.readUInt32BE(16)).toBe(Math.round(box.width))
-    expect(png.readUInt32BE(20)).toBe(Math.round(box.height))
   })
 
   test('the composer keeps its disclosure on one line beside Ask', async ({ page }) => {

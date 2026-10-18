@@ -1,5 +1,5 @@
 import { render, screen, within } from '@testing-library/react'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { StatusLine } from './status-line'
 
 const steps = [
@@ -67,5 +67,24 @@ describe('StatusLine', () => {
     rerender(<StatusLine steps={[{ id: 'a', text: 'Searching the handbook…', done: false }]} />)
     expect(screen.getByRole('status')).toBe(region)
     expect(region).toHaveTextContent('Searching the handbook…')
+  })
+})
+
+describe('StatusLine with a repeated step ID', () => {
+  it('draws no React key warning, and shows both steps', () => {
+    const errors = vi.spyOn(console, 'error').mockImplementation(() => {})
+    render(
+      <StatusLine
+        steps={[
+          { id: 'tool-1', text: 'Searched the handbook', done: true },
+          { id: 'tool-1', text: 'Searching the handbook again…', done: false },
+        ]}
+      />,
+    )
+    expect(screen.getByText('Searched the handbook')).toBeInTheDocument()
+    expect(screen.getByText('Searching the handbook again…')).toBeInTheDocument()
+    const reported = errors.mock.calls.map((call) => String(call[0]) + String(call[1] ?? ''))
+    expect(reported.filter((text) => /same key/.test(text))).toEqual([])
+    errors.mockRestore()
   })
 })

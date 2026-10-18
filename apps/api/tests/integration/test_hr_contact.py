@@ -24,9 +24,15 @@ async def test_the_hr_contact_is_dana_with_her_work_email(
 
     assert [c.name for c in contacts] == ["Dana Whitfield"]
     assert contacts[0].work_email.startswith("dana.whitfield@")
+    assert (contacts[0].job_title, contacts[0].location_name) == (
+        "HR Business Partner",
+        "Denver HQ",
+    )
     assert contacts[0].to_json() == {
         "name": "Dana Whitfield",
         "workEmail": contacts[0].work_email,
+        "jobTitle": "HR Business Partner",
+        "locationName": "Denver HQ",
     }
     assert isinstance(contacts[0], HrContact)
 

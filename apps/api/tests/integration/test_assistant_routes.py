@@ -17,9 +17,18 @@ from app.ai.conversations import (
     CURRENT_PINS,
     TurnOutcome,
     finish_turn,
+    section_names,
     start_turn,
 )
-from app.ai.fixed_texts import BUDGET_DAILY_TEXT, CRISIS_TEXT, ERROR_TEXTS, UNAVAILABLE_TEXT
+from app.ai.fixed_texts import (
+    BUDGET_DAILY_TEXT,
+    BUDGET_SANDBOX_TEXT,
+    CRISIS_TEXT,
+    ERROR_TEXTS,
+    PERSONAL_DATA_TEXT,
+    STILL_ANSWERING_TEXT,
+    UNAVAILABLE_TEXT,
+)
 from app.db.models import AiConversation, AiMessage, AiSpend
 from app.db.tenancy import TenantContext, tenant_session
 from tests.integration.conftest import Browser, OpenBrowser, OpenBrowserWith
@@ -114,9 +123,11 @@ def test_every_route_needs_a_session(browser: Browser) -> None:
         browser.client.post(f"{BASE}/conversations"),
         browser.client.post(f"{BASE}/turns/{turn_id}/feedback", json={"helpful": True}),
         browser.client.post(f"{BASE}/conversations/{uuid4()}/turns", json={"question": "hi"}),
+        browser.client.get(f"{BASE}/texts"),
+        browser.client.get(f"{BASE}/budget"),
     ]
 
-    assert [r.status_code for r in responses] == [401] * 4
+    assert [r.status_code for r in responses] == [401] * 6
     assert all(r.headers["content-type"] == "application/problem+json" for r in responses)
 
 
@@ -167,13 +178,16 @@ def test_a_new_conversation_is_pinned_to_the_current_versions_and_is_the_current
         "sandboxReached": False,
         "dailyReached": False,
         "sandboxRemainingCents": 100,
+        "banner": None,
     }
+    assert created["hrContacts"] == []
     assert created["longHistory"] is False
     assert created["historyTooLong"] is False
     assert set(created) == {
         "id",
         "createdAt",
         "turns",
+        "hrContacts",
         "budget",
         "longHistory",
         "historyTooLong",
@@ -253,10 +267,15 @@ async def test_the_turns_come_oldest_first_with_everything_the_page_shows(
     assert one["toolCalls"] == [
         {"name": "search_handbook", "inputSummary": "sick leave", "ok": True, "durationMs": 12}
     ]
-    assert one["sections"] == [{"sectionId": "CA-4.3", "passageIds": ["p1", "p2"]}]
+    assert one["sections"] == [
+        {"sectionId": "CA-4.3", "passageIds": ["p1", "p2"], "title": None, "groupName": None}
+    ]
+    assert one["notFound"] is False
     assert one["feedback"] == {"helpful": False, "reason": "Not what I asked"}
     assert two["feedback"] is None
     assert two["incomplete"] is True
+    # Cut off, so not a miss, though it searched and cited nothing.
+    assert two["notFound"] is False
     assert two["error"] is None
     assert two["answerText"] == "Cut o"
 
@@ -320,7 +339,11 @@ async def test_a_crisis_turn_and_an_unavailable_guard_show_their_fixed_texts_and
     assert unavailable["escalation"]["message"] == UNAVAILABLE_TEXT
     contacts = crisis["escalation"]["hrContact"]
     assert contacts
-    assert set(contacts[0]) == {"name", "workEmail"}
+    assert set(contacts[0]) == {"name", "workEmail", "jobTitle", "locationName"}
+    assert (contacts[0]["jobTitle"], contacts[0]["locationName"]) == (
+        "HR Business Partner",
+        "Denver HQ",
+    )
     assert crisis["answerText"] == ""
 
 
@@ -783,3 +806,507 @@ async def test_a_sandbox_without_a_handbook_version_still_gets_its_conversation(
     assert len(body["turns"]) == 1
     assert body["budget"]["sandboxReached"] is False
     assert created_again.status_code == 201
+
+
+# --- The HR team on a "not found" card, section titles, the banner, and the browser's texts ----
+
+
+def hr_dana() -> dict[str, str]:
+    return {
+        "name": "Dana Whitfield",
+        "jobTitle": "HR Business Partner",
+        "locationName": "Denver HQ",
+    }
+
+
+async def test_the_conversations_hr_contacts_are_empty_when_no_turn_needs_them(
+    browser: Browser, app_engine: AsyncEngine
+) -> None:
+    tenant_id, person_id = sign_in(browser)
+    cid = UUID(new_conversation(browser)["id"])
+    await seed_turn(app_engine, tenant_id, person_id, cid, outcome=completed())
+
+    body = browser.client.get(f"{BASE}/conversations/current").json()
+
+    assert body["hrContacts"] == []
+    assert [t["notFound"] for t in body["turns"]] == [False]
+
+
+async def test_a_turn_that_searched_and_cited_nothing_is_not_found_and_brings_the_contacts(
+    browser: Browser, app_engine: AsyncEngine
+) -> None:
+    tenant_id, person_id = sign_in(browser)
+    cid = UUID(new_conversation(browser)["id"])
+    await seed_turn(
+        app_engine,
+        tenant_id,
+        person_id,
+        cid,
+        outcome=completed(citations=[], answer_text="I couldn't find that."),
+    )
+
+    body = browser.client.get(f"{BASE}/conversations/current").json()
+
+    [turn] = body["turns"]
+    assert turn["notFound"] is True
+    assert turn["escalation"] is None
+    [contact] = body["hrContacts"]
+    assert {k: contact[k] for k in ("name", "jobTitle", "locationName")} == hr_dana()
+    assert contact["workEmail"].startswith("dana.whitfield@")
+
+
+async def test_a_sensitive_turn_keeps_its_own_contacts_and_is_not_also_not_found(
+    browser: Browser, app_engine: AsyncEngine
+) -> None:
+    tenant_id, person_id = sign_in(browser)
+    cid = UUID(new_conversation(browser)["id"])
+    verdict = {"category": "sensitive", "kind": "harassment_discrimination"}
+    await seed_turn(
+        app_engine,
+        tenant_id,
+        person_id,
+        cid,
+        outcome=completed(guard_verdict=verdict, citations=[]),
+    )
+
+    body = browser.client.get(f"{BASE}/conversations/current").json()
+
+    [turn] = body["turns"]
+    assert turn["notFound"] is False
+    assert turn["escalation"]["hrContact"][0]["jobTitle"] == "HR Business Partner"
+    assert turn["escalation"]["hrContact"][0]["locationName"] == "Denver HQ"
+    assert len(body["hrContacts"]) == 1
+
+
+async def test_a_new_conversation_has_no_hr_contacts(browser: Browser) -> None:
+    sign_in(browser)
+
+    assert new_conversation(browser)["hrContacts"] == []
+
+
+async def seed_sources(
+    engine: AsyncEngine, tenant_id: UUID, person_id: UUID, conversation_id: UUID, turn_id: UUID
+) -> None:
+    """The `search_result` blocks the model was sent for a turn, as the store keeps them."""
+    async with tenant_session(engine, TenantContext(tenant_id, person_id)) as db:
+        db.add(
+            AiMessage(
+                tenant_id=tenant_id,
+                person_id=person_id,
+                conversation_id=conversation_id,
+                turn_id=turn_id,
+                position=0,
+                role="user",
+                content=[{"type": "text", "text": "results"}],
+                sources=[
+                    {
+                        "sectionId": "CA-4.3",
+                        "passageIds": ["p1", "p2"],
+                        "title": "Sick leave",
+                        "groupName": "California addendum",
+                        "audienceLabel": "California",
+                        "lastUpdated": "2026-09-12",
+                        "deepLink": "/handbook/CA-4.3?passage=p2",
+                    }
+                ],
+            )
+        )
+
+
+async def test_each_retrieved_section_carries_its_title_and_group_from_the_stored_sources(
+    browser: Browser, app_engine: AsyncEngine
+) -> None:
+    tenant_id, person_id = sign_in(browser)
+    cid = UUID(new_conversation(browser)["id"])
+    sections = [
+        {"sectionId": "CA-4.3", "passageIds": ["p1", "p2"]},
+        {"sectionId": "GONE-9.9", "passageIds": ["p1"]},
+    ]
+    first = await seed_turn(
+        app_engine, tenant_id, person_id, cid, outcome=completed(sections_retrieved=sections)
+    )
+    await seed_sources(app_engine, tenant_id, person_id, cid, first)
+    await seed_turn(
+        app_engine,
+        tenant_id,
+        person_id,
+        cid,
+        outcome=completed(sections_retrieved=[sections[0]]),
+    )
+
+    one, two = browser.client.get(f"{BASE}/conversations/current").json()["turns"]
+
+    assert one["sections"] == [
+        {
+            "sectionId": "CA-4.3",
+            "passageIds": ["p1", "p2"],
+            "title": "Sick leave",
+            "groupName": "California addendum",
+        },
+        # A section the stored sources don't know stays untitled.
+        {"sectionId": "GONE-9.9", "passageIds": ["p1"], "title": None, "groupName": None},
+    ]
+    assert two["sections"][0]["title"] == "Sick leave"
+
+
+async def test_the_sections_are_looked_up_once_per_request_not_once_per_turn(
+    browser: Browser, app_engine: AsyncEngine, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    tenant_id, person_id = sign_in(browser)
+    cid = UUID(new_conversation(browser)["id"])
+    for _ in range(3):
+        await seed_turn(app_engine, tenant_id, person_id, cid, outcome=completed())
+    lookups: list[UUID] = []
+
+    async def counting(db: Any, conversation_id: UUID) -> Any:
+        lookups.append(conversation_id)
+        return await section_names(db, conversation_id)
+
+    monkeypatch.setattr("app.modules.assistant.routes.section_names", counting)
+
+    turns = browser.client.get(f"{BASE}/conversations/current").json()["turns"]
+
+    assert len(turns) == 3
+    assert lookups == [cid]
+
+
+async def seed_source_messages(
+    engine: AsyncEngine,
+    tenant_id: UUID,
+    person_id: UUID,
+    conversation_id: UUID,
+    turn_id: UUID,
+    messages: list[list[dict[str, Any]] | None],
+) -> None:
+    """One stored message per entry, each with the given `search_result` sources (or none)."""
+    async with tenant_session(engine, TenantContext(tenant_id, person_id)) as db:
+        for position, sources in enumerate(messages):
+            db.add(
+                AiMessage(
+                    tenant_id=tenant_id,
+                    person_id=person_id,
+                    conversation_id=conversation_id,
+                    turn_id=turn_id,
+                    position=position,
+                    role="user",
+                    content=[{"type": "text", "text": "results"}],
+                    sources=sources,
+                )
+            )
+
+
+def source_entry(section_id: str, title: str, group_name: str, passage: str) -> dict[str, Any]:
+    return {
+        "sectionId": section_id,
+        "passageIds": [passage],
+        "title": title,
+        "groupName": group_name,
+        "audienceLabel": "Everyone",
+        "lastUpdated": "2026-09-12",
+        "deepLink": f"/handbook/{section_id}?passage={passage}",
+    }
+
+
+async def test_repeated_sections_in_the_stored_sources_give_the_same_titles_and_groups(
+    browser: Browser, app_engine: AsyncEngine
+) -> None:
+    tenant_id, person_id = sign_in(browser)
+    cid = UUID(new_conversation(browser)["id"])
+    sick = source_entry("CA-4.3", "Sick leave", "California addendum", "p1")
+    company = source_entry("4.3", "Sick leave", "Company handbook", "p1")
+    turn = await seed_turn(
+        app_engine,
+        tenant_id,
+        person_id,
+        cid,
+        outcome=completed(
+            sections_retrieved=[
+                {"sectionId": "CA-4.3", "passageIds": ["p1"]},
+                {"sectionId": "4.3", "passageIds": ["p1"]},
+                {"sectionId": "4.2", "passageIds": ["p1"]},
+            ]
+        ),
+    )
+    await seed_source_messages(
+        app_engine,
+        tenant_id,
+        person_id,
+        cid,
+        turn,
+        [
+            # Each section several times, across messages and within one, and a message with none.
+            [sick, company, sick],
+            None,
+            [sick, source_entry("4.2", "Paid time off", "Company handbook", "p1"), company],
+            [],
+        ],
+    )
+
+    (one,) = browser.client.get(f"{BASE}/conversations/current").json()["turns"]
+
+    assert {s["sectionId"]: (s["title"], s["groupName"]) for s in one["sections"]} == {
+        "CA-4.3": ("Sick leave", "California addendum"),
+        "4.3": ("Sick leave", "Company handbook"),
+        "4.2": ("Paid time off", "Company handbook"),
+    }
+
+
+async def test_a_block_without_a_title_does_not_hide_the_real_one(
+    browser: Browser, app_engine: AsyncEngine
+) -> None:
+    tenant_id, person_id = sign_in(browser)
+    cid = UUID(new_conversation(browser)["id"])
+    turn = await seed_turn(
+        app_engine,
+        tenant_id,
+        person_id,
+        cid,
+        outcome=completed(sections_retrieved=[{"sectionId": "4.3", "passageIds": ["p1"]}]),
+    )
+    real = source_entry("4.3", "Sick leave", "Company handbook", "p1")
+    no_title = {k: v for k, v in real.items() if k not in ("title", "groupName")}
+    null_title = {**real, "title": None, "groupName": None}
+    await seed_source_messages(
+        app_engine, tenant_id, person_id, cid, turn, [[real], [no_title], [null_title]]
+    )
+
+    (one,) = browser.client.get(f"{BASE}/conversations/current").json()["turns"]
+
+    assert (one["sections"][0]["title"], one["sections"][0]["groupName"]) == (
+        "Sick leave",
+        "Company handbook",
+    )
+
+
+async def test_only_this_conversations_sources_name_its_sections(
+    browser: Browser, app_engine: AsyncEngine
+) -> None:
+    tenant_id, person_id = sign_in(browser)
+    other = UUID(new_conversation(browser)["id"])
+    other_turn = await seed_turn(app_engine, tenant_id, person_id, other, outcome=completed())
+    await seed_source_messages(
+        app_engine,
+        tenant_id,
+        person_id,
+        other,
+        other_turn,
+        [[source_entry("CA-4.3", "Not this one", "Elsewhere", "p1")]],
+    )
+    cid = UUID(new_conversation(browser)["id"])
+    await seed_turn(
+        app_engine,
+        tenant_id,
+        person_id,
+        cid,
+        outcome=completed(sections_retrieved=[{"sectionId": "CA-4.3", "passageIds": ["p1"]}]),
+    )
+
+    (one,) = browser.client.get(f"{BASE}/conversations/current").json()["turns"]
+
+    assert one["sections"][0]["title"] is None
+
+
+async def test_each_turns_ending_is_worked_out_once_per_read(
+    browser: Browser, app_engine: AsyncEngine, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    tenant_id, person_id = sign_in(browser)
+    cid = UUID(new_conversation(browser)["id"])
+    for _ in range(3):
+        await seed_turn(app_engine, tenant_id, person_id, cid, outcome=completed())
+    calls: list[Any] = []
+
+    from app.modules.assistant import display
+
+    original = display.ending
+
+    def counting(turn: Any, now: Any) -> Any:
+        calls.append(turn.id)
+        return original(turn, now)
+
+    monkeypatch.setattr(display, "ending", counting)
+
+    turns = browser.client.get(f"{BASE}/conversations/current").json()["turns"]
+
+    assert len(turns) == 3
+    assert len(calls) == 3
+    assert len(set(calls)) == 3
+
+
+def test_no_banner_while_both_budgets_have_room(browser: Browser) -> None:
+    sign_in(browser)
+    new_conversation(browser)
+
+    budget = browser.client.get(f"{BASE}/conversations/current").json()["budget"]
+
+    assert budget["banner"] is None
+
+
+async def test_the_sandbox_banner_carries_the_sandbox_text(
+    browser: Browser, app_engine: AsyncEngine
+) -> None:
+    tenant_id, person_id = sign_in(browser)
+    cid = UUID(new_conversation(browser)["id"])
+    turn_id = await seed_turn(app_engine, tenant_id, person_id, cid, outcome=completed())
+    await add_spend(app_engine, tenant_id, person_id, turn_id, "0.95")
+
+    budget = browser.client.get(f"{BASE}/conversations/current").json()["budget"]
+
+    assert budget["banner"] == {"kind": "sandbox", "message": BUDGET_SANDBOX_TEXT}
+
+
+def test_the_daily_banner_carries_the_daily_text(open_browser_with: OpenBrowserWith) -> None:
+    browser = open_browser_with(ai_daily_budget_usd=Decimal("0.05"))
+    sign_in(browser)
+    new_conversation(browser)
+
+    budget = browser.client.get(f"{BASE}/conversations/current").json()["budget"]
+
+    assert (budget["dailyReached"], budget["sandboxReached"]) == (True, False)
+    assert budget["banner"] == {"kind": "daily", "message": BUDGET_DAILY_TEXT}
+
+
+async def test_when_both_budgets_are_reached_the_daily_banner_wins(
+    open_browser_with: OpenBrowserWith, app_engine: AsyncEngine
+) -> None:
+    """A new sandbox would not help when the day is spent."""
+    browser = open_browser_with(ai_daily_budget_usd=Decimal("0.05"))
+    tenant_id, person_id = sign_in(browser)
+    cid = UUID(new_conversation(browser)["id"])
+    turn_id = await seed_turn(app_engine, tenant_id, person_id, cid, outcome=completed())
+    await add_spend(app_engine, tenant_id, person_id, turn_id, "0.95")
+
+    budget = browser.client.get(f"{BASE}/conversations/current").json()["budget"]
+
+    assert (budget["dailyReached"], budget["sandboxReached"]) == (True, True)
+    assert budget["banner"] == {"kind": "daily", "message": BUDGET_DAILY_TEXT}
+
+
+def test_the_budget_route_answers_before_there_is_a_conversation(browser: Browser) -> None:
+    sign_in(browser)
+
+    response = browser.client.get(f"{BASE}/budget")
+
+    assert response.status_code == 200
+    assert response.headers["cache-control"] == "no-store"
+    budget = response.json()
+    assert (budget["sandboxReached"], budget["dailyReached"], budget["banner"]) == (
+        False,
+        False,
+        None,
+    )
+    assert budget["sandboxRemainingCents"] > 0
+
+
+def test_the_daily_cap_shows_before_the_first_conversation(
+    open_browser_with: OpenBrowserWith,
+) -> None:
+    browser = open_browser_with(ai_daily_budget_usd=Decimal("0.05"))
+    sign_in(browser)
+
+    budget = browser.client.get(f"{BASE}/budget").json()
+
+    assert browser.client.get(f"{BASE}/conversations/current").json() is None
+    assert (budget["dailyReached"], budget["sandboxReached"]) == (True, False)
+    assert budget["banner"] == {"kind": "daily", "message": BUDGET_DAILY_TEXT}
+
+
+async def test_the_sandbox_cap_shows_with_the_sandbox_text(
+    browser: Browser, app_engine: AsyncEngine
+) -> None:
+    tenant_id, person_id = sign_in(browser)
+    cid = UUID(new_conversation(browser)["id"])
+    turn_id = await seed_turn(app_engine, tenant_id, person_id, cid, outcome=completed())
+    await add_spend(app_engine, tenant_id, person_id, turn_id, "0.95")
+
+    budget = browser.client.get(f"{BASE}/budget").json()
+
+    assert (budget["sandboxReached"], budget["dailyReached"]) == (True, False)
+    assert budget["banner"] == {"kind": "sandbox", "message": BUDGET_SANDBOX_TEXT}
+
+
+async def test_when_both_caps_are_reached_the_budget_route_gives_the_daily_banner(
+    open_browser_with: OpenBrowserWith, app_engine: AsyncEngine
+) -> None:
+    browser = open_browser_with(ai_daily_budget_usd=Decimal("0.05"))
+    tenant_id, person_id = sign_in(browser)
+    cid = UUID(new_conversation(browser)["id"])
+    turn_id = await seed_turn(app_engine, tenant_id, person_id, cid, outcome=completed())
+    await add_spend(app_engine, tenant_id, person_id, turn_id, "0.95")
+
+    budget = browser.client.get(f"{BASE}/budget").json()
+
+    assert (budget["dailyReached"], budget["sandboxReached"]) == (True, True)
+    assert budget["banner"] == {"kind": "daily", "message": BUDGET_DAILY_TEXT}
+
+
+async def test_the_budget_route_and_the_conversation_never_disagree(
+    open_browser_with: OpenBrowserWith, app_engine: AsyncEngine
+) -> None:
+    browser = open_browser_with(ai_daily_budget_usd=Decimal("0.05"))
+    tenant_id, person_id = sign_in(browser)
+    cid = UUID(new_conversation(browser)["id"])
+    turn_id = await seed_turn(app_engine, tenant_id, person_id, cid, outcome=completed())
+    await add_spend(app_engine, tenant_id, person_id, turn_id, "0.5")
+
+    from_conversation = browser.client.get(f"{BASE}/conversations/current").json()["budget"]
+
+    assert browser.client.get(f"{BASE}/budget").json() == from_conversation
+
+
+async def test_the_budget_route_sizes_the_estimate_with_the_conversations_history_or_none(
+    browser: Browser, app_engine: AsyncEngine, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from app.modules.assistant import routes
+
+    seen: list[dict[str, Any]] = []
+    original = routes.budget_out
+
+    async def recording(*args: Any, **kwargs: Any) -> Any:
+        seen.append(kwargs)
+        return await original(*args, **kwargs)
+
+    monkeypatch.setattr(routes, "budget_out", recording)
+    tenant_id, person_id = sign_in(browser)
+
+    assert browser.client.get(f"{BASE}/budget").status_code == 200
+    assert seen[-1]["history"] == []
+
+    cid = UUID(new_conversation(browser)["id"])
+    turn = await seed_turn(app_engine, tenant_id, person_id, cid, outcome=completed())
+    await seed_source_messages(
+        app_engine,
+        tenant_id,
+        person_id,
+        cid,
+        turn,
+        [[source_entry("4.3", "Sick", "Handbook", "p1")]],
+    )
+    assert browser.client.get(f"{BASE}/budget").status_code == 200
+    assert seen[-1]["history"] != []
+
+
+def test_the_texts_route_returns_the_two_fixed_texts_the_composer_needs(browser: Browser) -> None:
+    sign_in(browser)
+
+    response = browser.client.get(f"{BASE}/texts")
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "personalData": PERSONAL_DATA_TEXT,
+        "stillAnswering": STILL_ANSWERING_TEXT,
+    }
+    assert response.headers["cache-control"] == "no-store"
+
+
+def test_the_texts_are_the_words_the_two_problems_use(browser: Browser) -> None:
+    sign_in(browser)
+    conversation_id = new_conversation(browser)["id"]
+
+    personal = browser.client.post(
+        f"{BASE}/conversations/{conversation_id}/turns",
+        json={"question": "My number is 078-05-1120"},
+        headers=browser.csrf,
+    )
+
+    assert (personal.status_code, personal.json()["type"]) == (422, "personal-data")
+    assert personal.json()["detail"] == PERSONAL_DATA_TEXT

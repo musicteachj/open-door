@@ -178,3 +178,11 @@ def test_the_daily_budget_text_is_approved() -> None:
     assert hashlib.sha256(BUDGET_DAILY_TEXT.encode()).hexdigest() == BUDGET_DAILY_TEXT_SHA256, (
         message
     )
+
+
+def test_the_composers_two_refusals_keep_their_words() -> None:
+    """The web app shows these from `GET /assistant/texts`, and the API sends them as problems."""
+    assert fixed_texts.PERSONAL_DATA_TEXT == (
+        "That looks like a Social Security or card number. Please take it out; I can't take those."
+    )
+    assert fixed_texts.STILL_ANSWERING_TEXT == "I'm still answering your last question."

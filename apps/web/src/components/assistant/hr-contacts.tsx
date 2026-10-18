@@ -7,14 +7,9 @@ import { cn } from '@/lib/utils'
 import { APP_LINK } from './link-class'
 import { HR_SHARED_INBOX, conversationCopy } from './labels'
 
-/**
- * An HR person from the directory. The conversation API sends the name and email today. The design
- * also shows a title and a location, which Stage 6 adds, so they are optional here.
- */
-type HrContact = HrContactOut & { jobTitle?: string | null; locationName?: string | null }
-
 type HrContactsProps = {
-  contacts: HrContact[]
+  /** HR people from the directory: the API sends a title and an office, either of which can be null. */
+  contacts: HrContactOut[]
   /**
    * `inline` sits inside an escalation panel, which supplies the border. `card` is the standalone
    * bordered card under a not-found answer.
@@ -117,4 +112,4 @@ function HrContacts({ contacts, variant = 'inline', className }: HrContactsProps
 }
 
 export { HrContacts }
-export type { HrContact, HrContactsProps }
+export type { HrContactsProps }

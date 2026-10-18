@@ -26,6 +26,17 @@ describe('CitationMarker', () => {
     expect(screen.getByRole('button', { name: NAME })).toHaveAttribute('aria-expanded', 'true')
   })
 
+  it('carries its passage, so focus can find it again after the page is redrawn', () => {
+    render(
+      <CitationMarker
+        citation={citation({ passageId: 'CA-4.3~p2' })}
+        expanded={false}
+        onOpen={() => {}}
+      />,
+    )
+    expect(screen.getByRole('button')).toHaveAttribute('data-passage-id', 'CA-4.3~p2')
+  })
+
   it('hands the citation back on click', async () => {
     const onOpen = vi.fn<(citation: CitationOut) => void>()
     const cited = citation({ marker: 2, sectionId: '4.3', groupName: 'Company handbook' })

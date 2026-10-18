@@ -11,7 +11,7 @@ from typing import Final
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db.models import Person
+from app.db.models import Location, Person
 
 # Source: 988 Suicide & Crisis Lifeline, https://988lifeline.org, read on 2026-10-15 ("Your conversations are free and confidential."; "The 988 Lifeline is available 24/7/365."; call or text 988, chat at https://chat.988lifeline.org). 911 and the EAP follow handbook section 6.2.  # noqa: E501
 CRISIS_TEXT: Final = """\
@@ -67,6 +67,14 @@ BUDGET_TEXTS_APPROVED_ON: str = "2026-10-15"
 BUDGET_SANDBOX_TEXT_SHA256: str = "6a3fc6f7b20c4e316e2830de9d354baad1ce6b3083a58606363747aa6a7e8635"
 BUDGET_DAILY_TEXT_SHA256: str = "23fa3acad35801765fb94c2999da280328d812b779b011d44fcb5226f3b901fd"
 
+# The two refusals the composer shows before a request is sent (and the API sends as problems),
+# from `GET /assistant/texts`, so the web app holds no copy of them. Not model text, and not a
+# safety message: they carry no 911 or 988 wording.
+PERSONAL_DATA_TEXT: Final = (
+    "That looks like a Social Security or card number. Please take it out; I can't take those."
+)
+STILL_ANSWERING_TEXT: Final = "I'm still answering your last question."
+
 ERROR_TEXTS: Final[dict[str, str]] = {
     "refusal": (
         "I can't help with that one. If you need an answer, the HR team can help. "
@@ -96,19 +104,40 @@ ERROR_TEXTS: Final[dict[str, str]] = {
 class HrContact:
     name: str
     work_email: str
+    job_title: str | None
+    location_name: str | None
 
-    def to_json(self) -> dict[str, str]:
-        return {"name": self.name, "workEmail": self.work_email}
+    def to_json(self) -> dict[str, str | None]:
+        return {
+            "name": self.name,
+            "workEmail": self.work_email,
+            "jobTitle": self.job_title,
+            "locationName": self.location_name,
+        }
 
 
 async def hr_contact(db: AsyncSession) -> list[HrContact]:
-    """The HR team's names and work emails. Row-level security limits it to the caller's tenant.
+    """The HR team's names, work emails, job titles, and offices. Row-level security limits it to
+    the caller's tenant. These are directory fields every member of the sandbox already sees.
 
     The directory has no active flag in this phase, so every HR administrator in the tenant counts.
     """
     rows = await db.execute(
-        select(Person.given_name, Person.family_name, Person.work_email)
+        select(
+            Person.given_name,
+            Person.family_name,
+            Person.work_email,
+            Person.title,
+            Location.name,
+        )
+        .join(
+            Location,
+            (Location.tenant_id == Person.tenant_id) & (Location.id == Person.location_id),
+        )
         .where(Person.is_hr_admin.is_(True))
         .order_by(Person.family_name, Person.given_name, Person.id)
     )
-    return [HrContact(f"{given} {family}", email) for given, family, email in rows]
+    return [
+        HrContact(f"{given} {family}", email, title, location)
+        for given, family, email, title, location in rows
+    ]

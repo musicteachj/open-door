@@ -7,6 +7,8 @@ import { AssistantMessage } from './assistant-message'
 import { CitationMarker } from './citation-marker'
 import * as linkSpans from './link-spans'
 import { SourceChips } from './source-chip'
+import * as sources from './sources'
+import { numberBySection } from './sources'
 
 type MessageProps = React.ComponentProps<typeof AssistantMessage>
 
@@ -126,7 +128,9 @@ describe('AssistantMessage: streaming', () => {
     const { container, rerender } = renderMessage({ status: 'streaming', text: '' })
     const live = container.querySelector('[data-slot="answer-live"]')!
     expect(live).toHaveAttribute('aria-live', 'polite')
-    expect(live).toBeEmptyDOMElement()
+    // Only the hidden caret: nothing for a screen reader to say yet.
+    expect(live).toHaveTextContent('')
+    expect(live.querySelector('[data-slot="caret"]')).toHaveAttribute('aria-hidden', 'true')
     const props = { renderMarker: () => null }
     rerender(
       <MemoryRouter>
@@ -181,14 +185,37 @@ describe('AssistantMessage: streaming', () => {
     expect(container.querySelector('[data-slot="caret"]')).not.toBeNull()
   })
 
-  it('shows no caret before text arrives, or once done', () => {
-    const { container, rerender } = renderMessage({ status: 'streaming', text: '' })
+  it('shows the caret alone while nothing has arrived, so the message does not read as stuck', () => {
+    const { container } = renderMessage({ status: 'streaming', text: '', steps: [] })
+    expect(container.querySelector('[data-slot="caret"]')).not.toBeNull()
+    expect(answerLive(container)).toHaveAttribute('aria-busy', 'true')
+  })
+
+  it('shows no caret while a step is showing before any text, or once done', () => {
+    const { container, rerender } = renderMessage({
+      status: 'streaming',
+      text: '',
+      steps: [{ id: 's1', text: 'Searching the handbook…', done: false }],
+    })
     expect(container.querySelector('[data-slot="caret"]')).toBeNull()
     rerender(
       <MemoryRouter>
         <AssistantMessage status="complete" text="Done." renderMarker={() => null} />
       </MemoryRouter>,
     )
+    expect(container.querySelector('[data-slot="caret"]')).toBeNull()
+  })
+
+  it('shows no caret for a stopped or failed message with no text', () => {
+    const stopped = renderMessage({ status: 'stopped', text: '' })
+    expect(stopped.container.querySelector('[data-slot="caret"]')).toBeNull()
+    expect(answerLive(stopped.container)).toBeEmptyDOMElement()
+    stopped.unmount()
+    const { container } = renderMessage({
+      status: 'error',
+      errorMessage: 'Something broke.',
+      text: '',
+    })
     expect(container.querySelector('[data-slot="caret"]')).toBeNull()
   })
 
@@ -398,10 +425,25 @@ describe('AssistantMessage: work it does for a render', () => {
 })
 
 describe('AssistantMessage: numbering by source', () => {
+  it('takes citations as numbered, and does not number them again', () => {
+    const spy = vi.spyOn(sources, 'numberBySection')
+    render(
+      <MemoryRouter>
+        <AssistantMessage
+          status="complete"
+          text={'x'.repeat(80)}
+          citations={apiCitations()}
+          renderMarker={(c) => <CitationMarker citation={c} expanded={false} onOpen={() => {}} />}
+        />
+      </MemoryRouter>,
+    )
+    expect(spy).not.toHaveBeenCalled()
+  })
+
   it('numbers markers by section, so marker 1 and chip 1 are the same section', () => {
     // The API numbers each passage (two passages of one section are 1 and 2). The design numbers
     // each section, and the message, its chips, and "Show your work" all show that.
-    const citations = apiCitations()
+    const citations = numberBySection(apiCitations())
     const { container } = render(
       <MemoryRouter>
         <AssistantMessage
@@ -428,7 +470,7 @@ describe('AssistantMessage: numbering by source', () => {
 
   it('still opens the passage each marker cites', async () => {
     const onOpen = vi.fn<(passageId: string) => void>()
-    const citations = apiCitations()
+    const citations = numberBySection(apiCitations())
     const { container } = render(
       <MemoryRouter>
         <AssistantMessage

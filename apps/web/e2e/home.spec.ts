@@ -6,10 +6,13 @@ import { focusRing, greetingHeading, scan, startAs, themeColor, type FirstName }
 //
 // Not tests, and where each is proved instead:
 //  - "Matches the screenshots at 1440 px": the capture report (make captures).
-//  - "A failed send keeps the question, shows the inline error with Retry, and announces it": the
-//    fake transport has no way to fail from a browser, so home-page.test.tsx proves it with a
-//    failing transport, and the gallery's composer-error state shows it (axe-scanned in
-//    gallery.spec.ts).
+//  - "A failed send keeps the question, shows the error under the box, and announces it": the API
+//    (with the scripted model) has no way to fail a send from a browser, so home-page.test.tsx
+//    proves it with a failing request, and the gallery's composer-error state shows it (axe-scanned
+//    in gallery.spec.ts). The conversation page's own send errors are in conversation.spec.ts.
+//  - The first question turns this page into the conversation (screen 07). The home runs against
+//    the real API with the scripted model, so a question gets a real, cited answer. What the
+//    conversation does is conversation.spec.ts's.
 //  - "The cinnamon marker appears only beside text": the one at-a-glance figure so far
 //    (Handbook updated) has no marker, so none is on the page. glance-link.test.tsx proves it on the component, and the gallery's
 //    glance-link-marker state is scanned and captured.
@@ -18,6 +21,15 @@ const scrollWidth = (page: Page) => page.evaluate(() => document.documentElement
 const AI_DISCLOSURE =
   'Open Door is an AI assistant. It can make mistakes, and it always shows its sources.'
 const box = (page: Page) => page.getByRole('textbox', { name: 'Ask Open Door' })
+const ASK_FIRST = 'How many sick days do I get?'
+
+/** Asks the first question and waits for the page to become the conversation, with its answer. */
+async function askAndWaitForAnswer(page: Page, question = ASK_FIRST) {
+  await box(page).fill(question)
+  await page.getByRole('button', { name: 'Ask', exact: true }).click()
+  // Feedback arrives with the saved answer, once the stream is over.
+  await expect(page.getByRole('group', { name: 'Was this right?' })).toBeVisible()
+}
 
 test.beforeEach(async ({ page }) => {
   await startAs(page, 'Priya')
@@ -29,9 +41,7 @@ test.describe('usable at 390 px', () => {
 
   test('nothing overflows', async ({ page }) => {
     expect(await scrollWidth(page)).toBeLessThanOrEqual(390)
-    await box(page).fill('How many sick days do I get?')
-    await page.getByRole('button', { name: 'Ask', exact: true }).click()
-    await expect(page.getByRole('region', { name: "Open Door's reply" })).toBeVisible()
+    await askAndWaitForAnswer(page)
     expect(await scrollWidth(page)).toBeLessThanOrEqual(390)
   })
 
@@ -171,13 +181,14 @@ test('text contrast meets WCAG 2.2 AA, and axe reports no violations, on the hom
 }) => {
   // axe's color-contrast rule is in the wcag2aa tag, so this is the text-contrast check.
   expect((await scan(page)).violations).toEqual([])
-  await box(page).fill('How many sick days do I get?')
-  expect((await scan(page)).violations).toEqual([])
-  await page.getByRole('button', { name: 'Ask', exact: true }).click()
-  await expect(page.getByRole('region', { name: "Open Door's reply" })).toBeVisible()
+  await box(page).fill(ASK_FIRST)
   expect((await scan(page)).violations).toEqual([])
   // A row hovered and the Ask button busy are brief; hover a row for its state.
   await page.getByRole('button', { name: 'Book next Friday off' }).hover()
+  expect((await scan(page)).violations).toEqual([])
+  // The reply is the conversation now: the question, the cited answer, and its feedback.
+  await page.getByRole('button', { name: 'Ask', exact: true }).click()
+  await expect(page.getByRole('group', { name: 'Was this right?' })).toBeVisible()
   expect((await scan(page)).violations).toEqual([])
 })
 
@@ -215,10 +226,10 @@ test('nav hover uses neutral-hover, never primary-tint; the current page alone u
 test('the AI disclosure is always visible in the composer', async ({ page }) => {
   const disclosure = page.locator('[data-slot="composer"]').getByText(AI_DISCLOSURE)
   await expect(disclosure).toBeVisible()
-  await box(page).fill('How many sick days do I get?')
+  await box(page).fill(ASK_FIRST)
   await expect(disclosure).toBeVisible()
   await page.getByRole('button', { name: 'Ask', exact: true }).click()
-  await expect(page.getByRole('region', { name: "Open Door's reply" })).toBeVisible()
+  await expect(page.getByRole('group', { name: 'Was this right?' })).toBeVisible()
   await expect(disclosure).toBeVisible()
   // It describes the box, so a screen reader reads it with the field.
   await expect(box(page)).toHaveAccessibleDescription(AI_DISCLOSURE)

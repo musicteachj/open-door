@@ -1,18 +1,25 @@
 import { act, screen, waitFor, within } from '@testing-library/react'
+import { http, HttpResponse } from 'msw'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { useChatStore } from '@/features/chat/store'
-import { createFakeTransport, FAKE_REPLY } from '@/features/chat/fake-transport'
-import type { ChatTransport } from '@/features/chat/transport'
 import { PERSONAS } from '@/features/personas/personas'
 import { installFakeApi } from '@/test/fake-api'
+import {
+  CONVERSATION_ID,
+  TEXTS,
+  TURN_ID,
+  eventStream,
+  installAssistantApi,
+  onTurn,
+  openStream,
+} from '@/test/fake-assistant'
+import { server } from '@/test/msw'
 import { renderApp } from '@/test/render-app'
 
-const FAST = createFakeTransport({ delayMs: 0 })
-const FAILING = createFakeTransport({ delayMs: 0, fail: true })
 const composer = () => screen.findByRole('textbox', { name: 'Ask Open Door' })
 
 beforeEach(() => {
-  useChatStore.setState({ draft: '', status: 'idle', reply: null, lastQuestion: null })
+  useChatStore.setState(useChatStore.getInitialState())
 })
 afterEach(() => {
   vi.useRealTimers()
@@ -28,7 +35,7 @@ describe('the greeting', () => {
     try {
       vi.useFakeTimers({ toFake: ['Date'], now: INSTANT })
       installFakeApi('priya')
-      renderApp({ at: '/ask', transport: FAST })
+      renderApp({ at: '/ask' })
       expect(
         await screen.findByRole('heading', { level: 1, name: 'Good evening, Priya.' }),
       ).toBeInTheDocument()
@@ -41,7 +48,7 @@ describe('the greeting', () => {
   it('names the signed-in person', async () => {
     vi.useFakeTimers({ toFake: ['Date'], now: new Date('2026-10-06T17:00:00Z') })
     installFakeApi('marcus')
-    renderApp({ at: '/ask', transport: FAST })
+    renderApp({ at: '/ask' })
     expect(
       await screen.findByRole('heading', { level: 1, name: 'Good morning, Marcus.' }),
     ).toBeInTheDocument()
@@ -51,7 +58,7 @@ describe('the greeting', () => {
 describe('Try asking', () => {
   it("lists the signed-in person's own questions", async () => {
     installFakeApi('marcus')
-    renderApp({ at: '/ask', transport: FAST })
+    renderApp({ at: '/ask' })
     const list = await screen.findByRole('region', { name: 'Try asking' })
     const marcus = PERSONAS.find((p) => p.key === 'marcus')!
     expect(
@@ -63,157 +70,178 @@ describe('Try asking', () => {
 
   it('fills the box without sending', async () => {
     installFakeApi('priya')
-    const send = vi.fn<ChatTransport['send']>(() => Promise.resolve({ text: 'x' }))
-    const { user } = renderApp({ at: '/ask', transport: { send } })
+    const posted = onTurn(() => eventStream())
+    const { user } = renderApp({ at: '/ask' })
     await user.click(await screen.findByRole('button', { name: 'Book next Friday off' }))
     expect(await composer()).toHaveValue('Book next Friday off')
     // Give a stray send every chance to happen.
     await act(async () => {
       await new Promise((resolve) => setTimeout(resolve, 20))
     })
-    expect(send).not.toHaveBeenCalled()
+    expect(posted).toHaveLength(0)
     expect(useChatStore.getState().status).toBe('idle')
-    expect(screen.queryByRole('region', { name: "Open Door's reply" })).not.toBeInTheDocument()
+    // Still the home: no conversation was started.
+    expect(screen.getByRole('heading', { level: 1 })).toBeInTheDocument()
   })
 })
 
 describe('asking', () => {
-  it('sends through the transport and shows the reply in a block named for screen readers', async () => {
+  const started = ['turn.started', { turnId: TURN_ID }] as const
+  const completed = [
+    'turn.completed',
+    { turnId: TURN_ID, servedBy: 'anthropic', usage: { inputTokens: 1, outputTokens: 1 } },
+  ] as const
+
+  function answer(text: string) {
+    return onTurn(() => eventStream([...started], ['text.delta', { text }], [...completed]))
+  }
+
+  it('sends the question to the API, trimmed, and shows the streamed reply in the conversation', async () => {
     installFakeApi('priya')
-    const send = vi.fn<ChatTransport['send']>(FAST.send)
-    const { user } = renderApp({ at: '/ask', transport: { send } })
-    await user.type(await composer(), 'How many sick days do I get?')
+    installAssistantApi()
+    const posted = answer('You get 5 days.')
+    const { user } = renderApp({ at: '/ask' })
+    await user.type(await composer(), '  How many sick days do I get?  ')
     await user.click(screen.getByRole('button', { name: 'Ask' }))
-    const reply = await screen.findByRole('region', { name: "Open Door's reply" })
-    expect(reply).toHaveTextContent(FAKE_REPLY)
-    expect(send).toHaveBeenCalledOnce()
-    expect(send.mock.calls[0][0]).toBe('How many sick days do I get?')
+    expect(await screen.findByText('You get 5 days.')).toBeInTheDocument()
+    expect(posted).toHaveLength(1)
+    // The first question creates the conversation, and what is sent is trimmed.
+    expect(posted[0]).toMatchObject({
+      conversationId: CONVERSATION_ID,
+      question: 'How many sick days do I get?',
+    })
     await waitFor(async () => expect(await composer()).toHaveValue(''))
   })
 
   it('sends a picked question when Ask is pressed', async () => {
     installFakeApi('priya')
-    const send = vi.fn<ChatTransport['send']>(FAST.send)
-    const { user } = renderApp({ at: '/ask', transport: { send } })
+    installAssistantApi()
+    const posted = answer('Done.')
+    const { user } = renderApp({ at: '/ask' })
     await user.click(await screen.findByRole('button', { name: 'Book next Friday off' }))
     await user.click(screen.getByRole('button', { name: 'Ask' }))
-    await screen.findByRole('region', { name: "Open Door's reply" })
-    expect(send.mock.calls[0][0]).toBe('Book next Friday off')
+    await screen.findByText('Done.')
+    expect(posted[0]?.question).toBe('Book next Friday off')
   })
 
-  it('keeps the question and announces the error with Retry when the send fails', async () => {
+  it('keeps the question and announces the error when the send fails, and Ask sends it again', async () => {
     installFakeApi('priya')
-    const { user } = renderApp({ at: '/ask', transport: FAILING })
+    installAssistantApi()
+    let calls = 0
+    const posted = onTurn(() =>
+      ++calls === 1
+        ? new Response(null, { status: 500 })
+        : eventStream([...started], ['text.delta', { text: 'Back.' }], [...completed]),
+    )
+    const { user } = renderApp({ at: '/ask' })
     await user.type(await composer(), 'How many sick days do I get?')
     await user.click(screen.getByRole('button', { name: 'Ask' }))
     const alert = await screen.findByRole('alert')
     expect(alert).toHaveTextContent('Something went wrong sending that.')
-    expect(within(alert).getByRole('button', { name: 'Retry' })).toBeInTheDocument()
     expect(await composer()).toHaveValue('How many sick days do I get?')
-    expect(screen.queryByRole('region', { name: "Open Door's reply" })).not.toBeInTheDocument()
-  })
+    // Still the home: nothing was answered.
+    expect(screen.getByRole('heading', { level: 1 })).toBeInTheDocument()
 
-  it('Retry sends the same question again', async () => {
-    installFakeApi('priya')
-    let calls = 0
-    const send = vi.fn<ChatTransport['send']>(() => {
-      calls++
-      return calls === 1 ? Promise.reject(new Error('down')) : Promise.resolve({ text: 'Back.' })
-    })
-    const { user } = renderApp({ at: '/ask', transport: { send } })
-    await user.type(await composer(), 'Who do I talk to about a concern?')
     await user.click(screen.getByRole('button', { name: 'Ask' }))
-    await user.click(
-      await within(await screen.findByRole('alert')).findByRole('button', { name: 'Retry' }),
-    )
-    expect(await screen.findByRole('region', { name: "Open Door's reply" })).toHaveTextContent(
-      'Back.',
-    )
-    expect(send).toHaveBeenCalledTimes(2)
-    expect(send.mock.calls[1][0]).toBe('Who do I talk to about a concern?')
+    expect(await screen.findByText('Back.')).toBeInTheDocument()
+    expect(posted.map((p) => p.question)).toEqual([
+      'How many sick days do I get?',
+      'How many sick days do I get?',
+    ])
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
   })
-})
 
-describe('the reply slot', () => {
-  const slot = () => document.querySelector<HTMLElement>('[data-slot="reply-slot"]')
-
-  it('is a polite output region that exists before the send and receives the reply', async () => {
+  it("shows the API's personal-data text and sends nothing for a number it refuses", async () => {
     installFakeApi('priya')
-    const { user } = renderApp({ at: '/ask', transport: FAST })
-    await user.type(await composer(), 'Hello')
-    const before = slot()
-    // An <output> is a polite status region.
-    expect(before?.tagName).toBe('OUTPUT')
-    expect(before).toBeEmptyDOMElement()
+    installAssistantApi()
+    const posted = answer('x')
+    const { user } = renderApp({ at: '/ask' })
+    await user.type(await composer(), 'My SSN is 123-45-6789')
     await user.click(screen.getByRole('button', { name: 'Ask' }))
-    const reply = await screen.findByRole('region', { name: "Open Door's reply" })
-    expect(slot()).toBe(before)
-    expect(slot()).toContainElement(reply)
+    expect(await screen.findByRole('alert')).toHaveTextContent(TEXTS.personalData)
+    expect(posted).toHaveLength(0)
+    expect(await composer()).toHaveValue('My SSN is 123-45-6789')
   })
 
-  it("says the spec's fixed text, word for word", async () => {
+  it('stops an answer that is streaming, and shows it as stopped', async () => {
     installFakeApi('priya')
-    const { user } = renderApp({ at: '/ask', transport: FAST })
-    await user.type(await composer(), 'Hello')
+    installAssistantApi()
+    const stream = openStream()
+    onTurn(() => stream.response())
+    const { user } = renderApp({ at: '/ask' })
+    await user.type(await composer(), 'How many sick days do I get?')
     await user.click(screen.getByRole('button', { name: 'Ask' }))
-    expect(await screen.findByRole('region', { name: "Open Door's reply" })).toHaveTextContent(
-      "The assistant isn't connected yet. When it is, it will answer here and cite the Juniper Row handbook for every policy it mentions.",
-    )
-  })
-})
-
-describe('Retry', () => {
-  async function failFirst() {
-    installFakeApi('priya')
-    let calls = 0
-    const send = vi.fn<ChatTransport['send']>(() => {
-      calls++
-      return calls === 1 ? Promise.reject(new Error('down')) : Promise.resolve({ text: 'Back.' })
-    })
-    const { user } = renderApp({ at: '/ask', transport: { send } })
-    await user.type(await composer(), 'First question')
-    await user.click(screen.getByRole('button', { name: 'Ask' }))
-    const alert = await screen.findByRole('alert')
-    return { user, send, alert }
-  }
-
-  it('sends the edited text when the box was edited after the failure', async () => {
-    const { user, send, alert } = await failFirst()
-    await user.type(await composer(), ' edited')
-    await user.click(within(alert).getByRole('button', { name: 'Retry' }))
-    await screen.findByRole('region', { name: "Open Door's reply" })
-    expect(send.mock.calls[1][0]).toBe('First question edited')
-  })
-
-  it('focuses the box and keeps the error when the box was cleared', async () => {
-    const { user, send, alert } = await failFirst()
-    await user.clear(await composer())
-    await user.click(within(alert).getByRole('button', { name: 'Retry' }))
-    expect(await composer()).toHaveFocus()
-    expect(send).toHaveBeenCalledOnce()
-    expect(screen.getByRole('alert')).toBeInTheDocument()
+    stream.push(...started)
+    stream.push('text.delta', { text: 'You get ' })
+    expect(await screen.findByText(/You get/)).toBeInTheDocument()
+    await user.click(await screen.findByRole('button', { name: 'Stop' }))
+    expect(useChatStore.getState().status).toBe('stopped')
+    expect(screen.queryByRole('button', { name: 'Stop' })).not.toBeInTheDocument()
+    expect(screen.getByText('Stopped')).toBeInTheDocument()
   })
 })
 
 describe('the page', () => {
-  it('shows the disclosure and no at-a-glance figures in Phase 2', async () => {
+  it('shows the disclosure and the rail, with only the figures that exist so far', async () => {
     installFakeApi('priya')
-    renderApp({ at: '/ask', transport: FAST })
+    renderApp({ at: '/ask' })
     await composer()
     expect(
       screen.getByText(
         'Open Door is an AI assistant. It can make mistakes, and it always shows its sources.',
       ),
     ).toBeVisible()
-    expect(screen.queryByText('At a glance')).not.toBeInTheDocument()
+    // Only the Handbook's figure until Phase 5 brings time off.
+    expect(
+      await screen.findByRole('link', { name: 'Sep 12 Handbook updated. Open Handbook' }),
+    ).toBeInTheDocument()
+    expect(screen.queryByText(/days PTO available/)).not.toBeInTheDocument()
+  })
+
+  it.each(['assistant/conversations/current', 'assistant/texts'])(
+    'waits for the %s read before it shows the composer',
+    async (path) => {
+      installFakeApi('priya')
+      let release!: () => void
+      const held = new Promise<void>((resolve) => {
+        release = resolve
+      })
+      installAssistantApi()
+      server.use(
+        http.get(`${window.location.origin}/api/v1/${path}`, async () => {
+          await held
+          return HttpResponse.json(path.endsWith('texts') ? TEXTS : null)
+        }),
+      )
+      renderApp({ at: '/ask' })
+      await screen.findByRole('link', { name: /Handbook updated/ })
+      expect(screen.queryByRole('textbox', { name: 'Ask Open Door' })).not.toBeInTheDocument()
+      release()
+      expect(await composer()).toBeInTheDocument()
+    },
+  )
+
+  it('sends a failed read to the route’s error page, with Retry', async () => {
+    installFakeApi('priya')
+    installAssistantApi()
+    let calls = 0
+    server.use(
+      http.get(`${window.location.origin}/api/v1/assistant/texts`, () =>
+        ++calls <= 2 ? new HttpResponse(null, { status: 500 }) : HttpResponse.json(TEXTS),
+      ),
+    )
+    const { user } = renderApp({ at: '/ask' })
+    expect(await screen.findByRole('button', { name: 'Retry' })).toBeInTheDocument()
+    expect(screen.queryByRole('textbox', { name: 'Ask Open Door' })).not.toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Retry' }))
+    expect(await composer()).toBeInTheDocument()
   })
 
   it("tabs through the controls in 03's order, from the first real control", async () => {
     // The notes list the logo first, but the design's logo is not a control (the kit draws a
     // plain div), so the order starts at the first nav item.
     installFakeApi('priya')
-    const { user } = renderApp({ at: '/ask', transport: FAST })
+    const { user } = renderApp({ at: '/ask' })
     await composer()
     // The rail comes after the page, so its figure is the last stop.
     await screen.findByRole('link', { name: 'Sep 12 Handbook updated. Open Handbook' })

@@ -4,9 +4,9 @@ The fixed texts come from `fixed_texts` at the time of the request, never from t
 are written by a person, and nothing generated or stored can change what a person is told.
 """
 
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from datetime import datetime
-from typing import Any, Literal
+from typing import Any, Literal, NamedTuple
 
 from app.ai.conversations import is_abandoned
 from app.ai.fixed_texts import (
@@ -92,16 +92,98 @@ def ending(turn: AiTurn, now: datetime) -> tuple[str, str | None]:
     return turn.status, turn.error_code
 
 
-def needs_hr_contact(turns: Sequence[AiTurn], now: datetime) -> bool:
-    """Whether any turn shows an escalation, by the same endings `turn_out` shows."""
-    return any(escalation_kind(*ending(t, now), t.guard_verdict) for t in turns)
+def is_not_found(
+    *,
+    status: str,
+    error_code: str | None,
+    guard_verdict: dict[str, Any] | None,
+    citations: Sequence[Any],
+    tool_calls: Sequence[dict[str, Any]],
+) -> bool:
+    """Whether the turn searched the handbook and found nothing to cite, so the page offers the HR
+    team (invariant 4). Decided from what the turn stored, never from the model's words: it
+    completed whole (not stopped, failed, or cut off), cited nothing, has no escalation of its own,
+    the guard judged it ordinary (a turn with no verdict was never screened), and a
+    `search_handbook` call ran. A refusal that never searched, or an answer from the directory
+    alone, is not a miss. An uncited answer after a search is shown as one too, which is
+    harmless."""
+    if status != "completed" or error_code == MAX_TOKENS_CODE or citations:
+        return False
+    if escalation_kind(status, error_code, guard_verdict) is not None:
+        return False
+    if guard_verdict is None or guard_verdict.get("category") != "ordinary":
+        return False
+    return any(call["name"] == "search_handbook" for call in tool_calls)
+
+
+class Shown(NamedTuple):
+    """What a turn shows as, worked out once per read: its ending, its escalation, and whether the
+    page offers the HR team for a miss. `needs_hr_contact` and `turn_out` both use it."""
+
+    status: str
+    error_code: str | None
+    kind: EscalationKind | None
+    not_found: bool
+
+
+def shown(turn: AiTurn, now: datetime) -> Shown:
+    status, error_code = ending(turn, now)
+    kind = escalation_kind(status, error_code, turn.guard_verdict)
+    not_found = is_not_found(
+        status=status,
+        error_code=error_code,
+        guard_verdict=turn.guard_verdict,
+        citations=turn.citations,
+        tool_calls=turn.tool_calls,
+    )
+    return Shown(status, error_code, kind, not_found)
+
+
+def needs_hr_contact(turns: Sequence[Shown]) -> bool:
+    """Whether any turn shows an escalation or a not-found card."""
+    return any(t.kind is not None or t.not_found for t in turns)
+
+
+def hr_contact_out(contacts: Sequence[HrContact]) -> list[HrContactOut]:
+    """The contacts as the conversation read shows them, built from the event's own form
+    (`HrContact.to_json`), so the two can't drift apart."""
+    return [HrContactOut.model_validate(c.to_json()) for c in contacts]
+
+
+def sections_out(
+    sections: Sequence[Mapping[str, Any]],
+    section_names: Mapping[str, tuple[str | None, str | None]],
+) -> list[SectionOut]:
+    """Each retrieved section once, in the order it was first retrieved, with its passage IDs
+    merged (order kept, no repeats). The stored list has an entry for each search result, so a
+    section two searches found appears twice there, and the page keys its list by section. Nothing
+    stored changes. A section `section_names` doesn't hold has no title or group."""
+    merged: dict[str, list[str]] = {}
+    for section in sections:
+        passages = merged.setdefault(section["sectionId"], [])
+        passages.extend(p for p in section["passageIds"] if p not in passages)
+    out: list[SectionOut] = []
+    for section_id, passage_ids in merged.items():
+        title, group_name = section_names.get(section_id, (None, None))
+        out.append(
+            SectionOut(
+                section_id=section_id, passage_ids=passage_ids, title=title, group_name=group_name
+            )
+        )
+    return out
 
 
 def turn_out(
-    turn: AiTurn, feedback: AiFeedback | None, hr_contact: Sequence[HrContact], now: datetime
+    turn: AiTurn,
+    shows: Shown,
+    feedback: AiFeedback | None,
+    hr_contact: Sequence[HrContact],
+    section_names: Mapping[str, tuple[str | None, str | None]],
 ) -> TurnOut:
-    status, error_code = ending(turn, now)
-    kind = escalation_kind(status, error_code, turn.guard_verdict)
+    """`shows` is what `shown` worked out for the turn. `section_names` maps a section ID to its
+    (title, group name), from the conversation's stored sources. A section it doesn't hold is shown
+    without them."""
+    status, error_code, kind = shows.status, shows.error_code, shows.kind
     verdict = turn.guard_verdict
     return TurnOut(
         id=turn.id,
@@ -116,8 +198,9 @@ def turn_out(
         else EscalationOut(
             kind=kind,
             message=_ESCALATION_TEXTS[kind],
-            hr_contact=[HrContactOut(name=c.name, work_email=c.work_email) for c in hr_contact],
+            hr_contact=hr_contact_out(hr_contact),
         ),
+        not_found=shows.not_found,
         guard=None
         if verdict is None
         else GuardOut(category=verdict["category"], kind=verdict.get("kind")),
@@ -130,10 +213,7 @@ def turn_out(
             )
             for t in turn.tool_calls
         ],
-        sections=[
-            SectionOut(section_id=s["sectionId"], passage_ids=s["passageIds"])
-            for s in turn.sections_retrieved
-        ],
+        sections=sections_out(turn.sections_retrieved, section_names),
         feedback=None
         if feedback is None
         else FeedbackOut(helpful=feedback.helpful, reason=feedback.reason),

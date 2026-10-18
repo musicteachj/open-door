@@ -5,7 +5,8 @@ stream against this transport, so everything but the model's judgment is exercis
 
 Which scenario runs is picked by trigger phrases in the question (app/ai/scripted_scenarios.json,
 which the browser tests import). A question with no trigger gets the default: search the handbook,
-then write two sentences that quote the first passage and cite it.
+then write two sentences that quote the first result's first passage and cite it. When the search
+also returns a state addendum ("CA-4.3"), that result is the one it quotes and cites.
 """
 
 import asyncio
@@ -184,18 +185,33 @@ def _tool_calls_so_far(messages: Sequence[dict[str, Any]]) -> int:
     )
 
 
-def _first_search_result(message: dict[str, Any]) -> dict[str, Any] | None:
-    """The first `search_result` block in a message, including inside its tool results."""
-    return next(iter_search_results(message.get("content", [])), None)
+# A state addendum's section id is a two-letter state code, a dash, and the section number
+# ("CA-4.3"), as the handbook validates it (app/domain/handbook/validate.py). A search result
+# carries no kind field, only its deep link ("/handbook/CA-4.3?passage=p1"), so the id is read
+# from that.
+_ADDENDUM_SOURCE = re.compile(r"^/handbook/[A-Z]{2}-\d+(?:\.\d+)*(?:[?#]|$)")
 
 
-def _index_of_first_result(messages: Sequence[dict[str, Any]]) -> int:
-    """Where the first result of the latest tool result sits among all the request's results.
+def _is_addendum(result: dict[str, Any]) -> bool:
+    return _ADDENDUM_SOURCE.match(str(result.get("source", ""))) is not None
 
-    The API counts every `search_result` block in the request, in order, across messages and inside
-    tool results. Everything before the last message comes first, so that count is the index.
+
+def _chosen_search_result(
+    messages: Sequence[dict[str, Any]],
+) -> tuple[dict[str, Any], int] | None:
+    """The result the scripted model cites, and its place among all the request's results.
+
+    The first `search_result` of the latest tool result, unless the search also returned a state
+    addendum: then the first addendum, so a person is cited their own state's rule. The API counts
+    every `search_result` block in the request, in order, across messages and inside tool results,
+    so the index is the count of everything before the last message plus the place in it.
     """
-    return sum(count_search_results(message.get("content", [])) for message in messages[:-1])
+    results = list(iter_search_results(messages[-1].get("content", [])))
+    if not results:
+        return None
+    before = sum(count_search_results(message.get("content", [])) for message in messages[:-1])
+    position = next((i for i, result in enumerate(results) if _is_addendum(result)), 0)
+    return results[position], before + position
 
 
 # --- Writing the answer -----------------------------------------------------------------------
@@ -354,12 +370,13 @@ class ScriptedTransport:
     async def _second_call(
         self, messages: Sequence[dict[str, Any]], behavior: str
     ) -> AsyncIterator[ModelEvent]:
-        result = _first_search_result(messages[-1])
-        if result is None or behavior == "not_found":
+        chosen = _chosen_search_result(messages)
+        if chosen is None or behavior == "not_found":
             async for event in self._say([(NOT_FOUND_TEXT, None)]):
                 yield event
             return
-        citation = _citation_for(result, _index_of_first_result(messages))
+        result, index = chosen
+        citation = _citation_for(result, index)
         texts = _long_answer(result) if behavior == "long_answer" else _two_sentences(result)
         async for event in self._say([(text, citation) for text in texts]):
             yield event

@@ -22,10 +22,34 @@ import type {
 
 import { apiFetch } from '../lib/api-fetch'
 import type { ErrorType } from '../lib/api-fetch'
+/**
+ * The fixed refusals the composer shows before a request is sent, so the web app holds no
+ * copy of the words.
+ */
+export interface AssistantTextsOut {
+  personalData: string
+  stillAnswering: string
+}
+
 export interface AudienceOut {
   states: string[]
   employmentTypes: string[]
   locations: string[]
+}
+
+export type BudgetBannerOutKind = (typeof BudgetBannerOutKind)[keyof typeof BudgetBannerOutKind]
+
+export const BudgetBannerOutKind = {
+  sandbox: 'sandbox',
+  daily: 'daily',
+} as const
+
+/**
+ * The fixed text for the cap that stops the person: the sandbox's, or the day's.
+ */
+export interface BudgetBannerOut {
+  kind: BudgetBannerOutKind
+  message: string
 }
 
 /**
@@ -36,6 +60,7 @@ export interface BudgetOut {
   sandboxReached: boolean
   dailyReached: boolean
   sandboxRemainingCents: number
+  banner: BudgetBannerOut | null
 }
 
 /**
@@ -84,6 +109,8 @@ export const EscalationOutKind = {
 export interface HrContactOut {
   name: string
   workEmail: string
+  jobTitle: string | null
+  locationName: string | null
 }
 
 /**
@@ -121,6 +148,8 @@ export interface ToolCallOut {
 export interface SectionOut {
   sectionId: string
   passageIds: string[]
+  title: string | null
+  groupName: string | null
 }
 
 export interface FeedbackOut {
@@ -137,6 +166,7 @@ export interface TurnOut {
   incomplete: boolean
   error: TurnErrorOut | null
   escalation: EscalationOut | null
+  notFound: boolean
   guard: GuardOut | null
   toolCalls: ToolCallOut[]
   sections: SectionOut[]
@@ -149,6 +179,7 @@ export interface ConversationOut {
   id: string
   createdAt: string
   turns: TurnOut[]
+  hrContacts: HrContactOut[]
   budget: BudgetOut
   longHistory: boolean
   historyTooLong: boolean
@@ -2144,6 +2175,243 @@ export function useGetCurrentConversation<
   queryClient?: QueryClient,
 ): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
   const queryOptions = getGetCurrentConversationQueryOptions(options)
+
+  const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
+    queryKey: DataTag<QueryKey, TData, TError>
+  }
+
+  return withQueryKey(query, queryOptions.queryKey)
+}
+
+export const getGetAssistantBudgetUrl = () => {
+  return `/api/v1/assistant/budget`
+}
+
+/**
+ * The same `BudgetOut` the conversation carries, for a person with none yet: the home needs
+ * the banner before the first question. With a conversation it is that conversation's, built by
+ * the same function.
+ * @summary Whether the next question has room, before there is a conversation to ask
+ */
+export const getAssistantBudget = async (
+  options?: Parameters<typeof apiFetch>[1],
+): Promise<BudgetOut> => {
+  return apiFetch<BudgetOut>(getGetAssistantBudgetUrl(), {
+    ...options,
+    method: 'GET',
+  })
+}
+
+export const getGetAssistantBudgetQueryKey = () => {
+  return [`/api/v1/assistant/budget`] as const
+}
+
+export const getGetAssistantBudgetQueryOptions = <
+  TData = Awaited<ReturnType<typeof getAssistantBudget>>,
+  TError = ErrorType<Problem>,
+>(options?: {
+  query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof getAssistantBudget>>, TError, TData>>
+  request?: SecondParameter<typeof apiFetch>
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {}
+
+  const queryKey = queryOptions?.queryKey ?? getGetAssistantBudgetQueryKey()
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getAssistantBudget>>> = ({ signal }) =>
+    getAssistantBudget({ signal, ...requestOptions })
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getAssistantBudget>>,
+    TError,
+    TData
+  > & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type GetAssistantBudgetQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getAssistantBudget>>
+>
+export type GetAssistantBudgetQueryError = ErrorType<Problem>
+
+export function useGetAssistantBudget<
+  TData = Awaited<ReturnType<typeof getAssistantBudget>>,
+  TError = ErrorType<Problem>,
+>(
+  options: {
+    query: Partial<UseQueryOptions<Awaited<ReturnType<typeof getAssistantBudget>>, TError, TData>> &
+      Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getAssistantBudget>>,
+          TError,
+          Awaited<ReturnType<typeof getAssistantBudget>>
+        >,
+        'initialData'
+      >
+    request?: SecondParameter<typeof apiFetch>
+  },
+  queryClient?: QueryClient,
+): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetAssistantBudget<
+  TData = Awaited<ReturnType<typeof getAssistantBudget>>,
+  TError = ErrorType<Problem>,
+>(
+  options?: {
+    query?: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof getAssistantBudget>>, TError, TData>
+    > &
+      Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getAssistantBudget>>,
+          TError,
+          Awaited<ReturnType<typeof getAssistantBudget>>
+        >,
+        'initialData'
+      >
+    request?: SecondParameter<typeof apiFetch>
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetAssistantBudget<
+  TData = Awaited<ReturnType<typeof getAssistantBudget>>,
+  TError = ErrorType<Problem>,
+>(
+  options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof getAssistantBudget>>, TError, TData>>
+    request?: SecondParameter<typeof apiFetch>
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary Whether the next question has room, before there is a conversation to ask
+ */
+
+export function useGetAssistantBudget<
+  TData = Awaited<ReturnType<typeof getAssistantBudget>>,
+  TError = ErrorType<Problem>,
+>(
+  options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof getAssistantBudget>>, TError, TData>>
+    request?: SecondParameter<typeof apiFetch>
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+  const queryOptions = getGetAssistantBudgetQueryOptions(options)
+
+  const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
+    queryKey: DataTag<QueryKey, TData, TError>
+  }
+
+  return withQueryKey(query, queryOptions.queryKey)
+}
+
+export const getGetAssistantTextsUrl = () => {
+  return `/api/v1/assistant/texts`
+}
+
+/**
+ * Needs a session like every assistant route, but reads nothing of the tenant's, so it takes
+ * no transaction: only the short session lookup.
+ * @summary The fixed refusals the composer shows before a request is sent
+ */
+export const getAssistantTexts = async (
+  options?: Parameters<typeof apiFetch>[1],
+): Promise<AssistantTextsOut> => {
+  return apiFetch<AssistantTextsOut>(getGetAssistantTextsUrl(), {
+    ...options,
+    method: 'GET',
+  })
+}
+
+export const getGetAssistantTextsQueryKey = () => {
+  return [`/api/v1/assistant/texts`] as const
+}
+
+export const getGetAssistantTextsQueryOptions = <
+  TData = Awaited<ReturnType<typeof getAssistantTexts>>,
+  TError = ErrorType<Problem>,
+>(options?: {
+  query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof getAssistantTexts>>, TError, TData>>
+  request?: SecondParameter<typeof apiFetch>
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {}
+
+  const queryKey = queryOptions?.queryKey ?? getGetAssistantTextsQueryKey()
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getAssistantTexts>>> = ({ signal }) =>
+    getAssistantTexts({ signal, ...requestOptions })
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getAssistantTexts>>,
+    TError,
+    TData
+  > & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type GetAssistantTextsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getAssistantTexts>>
+>
+export type GetAssistantTextsQueryError = ErrorType<Problem>
+
+export function useGetAssistantTexts<
+  TData = Awaited<ReturnType<typeof getAssistantTexts>>,
+  TError = ErrorType<Problem>,
+>(
+  options: {
+    query: Partial<UseQueryOptions<Awaited<ReturnType<typeof getAssistantTexts>>, TError, TData>> &
+      Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getAssistantTexts>>,
+          TError,
+          Awaited<ReturnType<typeof getAssistantTexts>>
+        >,
+        'initialData'
+      >
+    request?: SecondParameter<typeof apiFetch>
+  },
+  queryClient?: QueryClient,
+): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetAssistantTexts<
+  TData = Awaited<ReturnType<typeof getAssistantTexts>>,
+  TError = ErrorType<Problem>,
+>(
+  options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof getAssistantTexts>>, TError, TData>> &
+      Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getAssistantTexts>>,
+          TError,
+          Awaited<ReturnType<typeof getAssistantTexts>>
+        >,
+        'initialData'
+      >
+    request?: SecondParameter<typeof apiFetch>
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetAssistantTexts<
+  TData = Awaited<ReturnType<typeof getAssistantTexts>>,
+  TError = ErrorType<Problem>,
+>(
+  options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof getAssistantTexts>>, TError, TData>>
+    request?: SecondParameter<typeof apiFetch>
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary The fixed refusals the composer shows before a request is sent
+ */
+
+export function useGetAssistantTexts<
+  TData = Awaited<ReturnType<typeof getAssistantTexts>>,
+  TError = ErrorType<Problem>,
+>(
+  options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof getAssistantTexts>>, TError, TData>>
+    request?: SecondParameter<typeof apiFetch>
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+  const queryOptions = getGetAssistantTextsQueryOptions(options)
 
   const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
     queryKey: DataTag<QueryKey, TData, TError>

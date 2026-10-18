@@ -1,6 +1,7 @@
 import { CircleAlert, Phone, RotateCcw, Users } from 'lucide-react'
 import { useEffect, useId, type ReactNode } from 'react'
 import { Link } from 'react-router'
+import type { HrContactOut } from '@/api/generated'
 import { handbookPath } from '@/components/handbook/labels'
 import { Button } from '@/components/ui/button'
 import { announce } from '@/lib/announce'
@@ -8,7 +9,7 @@ import { cn } from '@/lib/utils'
 import { linkifyEmergency, parseCrisisText } from './crisis-text'
 import { Segments } from './crisis-segments'
 import { APP_LINK } from './link-class'
-import { HrContacts, type HrContact } from './hr-contacts'
+import { HrContacts } from './hr-contacts'
 import { conversationCopy } from './labels'
 
 type EscalationKind = 'crisis' | 'sensitive' | 'unavailable'
@@ -18,7 +19,7 @@ type EscalationPanelProps = {
   /** The stream's fixed text for this event, shown as written. It is never generated or reworded. */
   message: string
   /** The HR people from the directory. The shared inbox is added after them. */
-  contacts: HrContact[]
+  contacts: HrContactOut[]
   /** Shows "Try again" on the `unavailable` panel. */
   onTryAgain?: () => void
   /**

@@ -199,6 +199,85 @@ async def test_the_second_call_cites_the_first_result_by_its_place_in_the_conver
         ]
 
 
+ADDENDUM_SOURCE = "/handbook/CA-4.3?passage=p1"
+ADDENDUM_TITLE = "CA-4.3 Sick leave · California addendum"
+
+
+def cited_of(events: list[ModelEvent]) -> list[SearchResultCitation]:
+    ends = [event for event in events if isinstance(event, TextBlockEnd)]
+    return [citation for end in ends for citation in end.citations]
+
+
+async def test_a_state_addendum_is_cited_in_place_of_the_first_result() -> None:
+    # The handbook search puts the company section first, and the addendum after it. The scripted
+    # model prefers the addendum, so a person in that state is cited their own state's rule.
+    _, second = await first_then_second(
+        ScriptedTransport(),
+        QUESTION,
+        search_result("/handbook/4.3?passage=p2", "4.3 Sick leave · Time off", PASSAGE_TWO),
+        search_result(ADDENDUM_SOURCE, ADDENDUM_TITLE, PASSAGE_ONE),
+    )
+
+    citations = cited_of(second)
+    assert [c.source for c in citations] == [ADDENDUM_SOURCE, ADDENDUM_SOURCE]
+    # Its place among the request's results: the second.
+    assert {c.search_result_index for c in citations} == {1}
+    assert {c.cited_text for c in citations} == {PASSAGE_ONE}
+    text = "".join(event.text for event in second if isinstance(event, TextDelta))
+    assert text.startswith("According to CA-4.3 Sick leave")
+
+
+async def test_the_addendum_is_found_after_earlier_results_in_the_conversation() -> None:
+    transport = ScriptedTransport()
+    first = await collect(transport, a_request(user(QUESTION)))
+    call = next(event for event in first if isinstance(event, ToolCall))
+    earlier_result = tool_result_message(
+        "toolu_old", search_result("/handbook/4.1?passage=p1", "4.1", "Old.")
+    )
+    second_request = a_request(
+        user("What are the holidays?"),
+        earlier_result,
+        user(QUESTION),
+        finished_of(first).message,
+        tool_result_message(
+            call.id,
+            search_result("/handbook/4.3?passage=p2", "4.3 Sick leave", PASSAGE_TWO),
+            search_result("/handbook/4.2?passage=p1", "4.2 Holidays", "Holidays."),
+            search_result(ADDENDUM_SOURCE, ADDENDUM_TITLE, PASSAGE_ONE),
+        ),
+    )
+
+    citations = cited_of(await collect(transport, second_request))
+
+    # One result from the earlier turn, then this turn's three: the addendum is the fourth (3).
+    assert {c.search_result_index for c in citations} == {3}
+
+
+async def test_with_no_addendum_the_first_result_is_still_cited() -> None:
+    _, second = await first_then_second(
+        ScriptedTransport(),
+        QUESTION,
+        search_result("/handbook/4.3?passage=p1", "4.3 Sick leave", PASSAGE_ONE),
+        search_result("/handbook/4.2?passage=p1", "4.2 Holidays", PASSAGE_TWO),
+    )
+
+    citations = cited_of(second)
+    assert {c.source for c in citations} == {"/handbook/4.3?passage=p1"}
+    assert {c.search_result_index for c in citations} == {0}
+
+
+async def test_a_company_section_whose_number_has_a_dash_is_not_an_addendum() -> None:
+    # Only a two-letter state code before the dash marks an addendum (the handbook's own rule).
+    _, second = await first_then_second(
+        ScriptedTransport(),
+        QUESTION,
+        search_result("/handbook/4.3?passage=p1", "4.3 Sick leave", PASSAGE_ONE),
+        search_result("/handbook/4.3-x?passage=p1", "4.3-x", PASSAGE_TWO),
+    )
+
+    assert {c.source for c in cited_of(second)} == {"/handbook/4.3?passage=p1"}
+
+
 async def test_each_text_block_is_followed_by_its_own_end_event() -> None:
     _, second = await first_then_second(
         ScriptedTransport(), QUESTION, search_result("/handbook/4.3?passage=p1", "4.3", PASSAGE_ONE)

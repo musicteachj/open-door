@@ -8,10 +8,9 @@ import type { CitationOut } from '@/api/generated'
  * passage cited from its section. Each citation still names the passage it cites, so a marker
  * still opens that passage.
  *
- * Stage 6 passes the API's raw citations. The three places a message's citations enter the
- * components apply this themselves (`AssistantMessage` for its markers, `SourceChips`, and
- * `WorkTrace`), so the numbers agree everywhere. It is safe to apply twice: numbering by section
- * again changes nothing.
+ * The raw citations are numbered once, where they enter the app: the chat store as they stream in,
+ * and the conversation query's `select` for the stored ones. The components take citations that are
+ * already numbered. It is safe to apply twice: numbering by section again changes nothing.
  */
 function numberBySection(citations: CitationOut[]): CitationOut[] {
   // Numbered by where each section first appears in the text, not by array position: the array

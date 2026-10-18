@@ -12,6 +12,28 @@ version (`0.x.y` while the app is being built, `1.0.0` when it is complete).
 
 ### Changed
 
+- **The browser's fake assistant is gone** (Phase 4, stage 6). The home's canned reply, its
+  transport, and their tests are deleted; development and the browser tests use the server's
+  scripted model. The scripted model now cites a state addendum when its search returns one, so
+  the demo's California and Texas employees get different citations. Both Playwright configs
+  name the scripted model explicitly, so a local `.env` set to `anthropic` can't make the browser
+  tests call Anthropic.
+- **The assistant evals' first full live run is recorded** (Phase 4, stage 6): every red-team and
+  Q&A item, three trials, $6.78. Red team 98%, Q&A citation checks 98%, unanswerable items 97%,
+  and the judge 67%, short of the plan's 85%: most misses are policy sentences without a
+  citation. The crisis item twice outran the guard's 4-second timeout and failed closed (the
+  "can't answer right now" text still gives 911 and 988). The re-recorded fixtures are
+  committed; the offline evals stay on the smoke set until a focused follow-up fixes the prompt
+  and the guard's timeout and records a fresh full run.
+- **Local browser runs clean up their AI reservations** (Phase 4, stage 6). Each scripted answer
+  reserves budget in the shared development database's daily ledger, so a full browser run could
+  push the day past the $3 cap and then fail the API's own tests. The browser-test and capture
+  configs now delete the rows their run created when it ends, through
+  `apps/api/scripts/clear_browser_test_spend.py`, which takes its start time from the database's
+  own clock and refuses anything older than a day. CI skips it, since its database is new each
+  run.
+- **The composer has one failed-send message,** under the box (Phase 4, stage 6). The inline
+  error with its own Retry is gone: the question stays in the box, so Ask is the retry.
 - **The model's working notes no longer show up as answer text** (Phase 4, stage 4). When a model
   call that wrote text ends in a tool call (as in "Missing the rate passage. Search again."), a
   new `text.retracted` event takes that text and its citations back, and the note is shown as a
@@ -48,6 +70,38 @@ version (`0.x.y` while the app is being built, `1.0.0` when it is complete).
 
 ### Added
 
+- **The conversation page: ask Open Door a question at `/ask` and get a streamed, cited answer**
+  (Phase 4, stage 6). The first question turns the assistant home into the conversation, and a
+  reload shows it again, a stopped answer included. Every state from screen 07 is on the real
+  page now, against the real API.
+  - **The answer streams in** with its progress steps ("Searching the handbook…", then "Searched
+    the handbook: sick leave"), citation markers as each claim completes, and Stop in place of
+    Ask. Source chips, "Was this right?", and "Show your work" appear when it finishes.
+  - **A citation opens its handbook passage** beside the conversation on a wide screen (the
+    passage stays in the address, so Back closes it), and as a sheet from the bottom on a phone
+    or a narrower window, which a swipe down dismisses. Focus returns to the marker that opened
+    it.
+  - **When the handbook has no answer,** the HR contacts follow it: the HR people from the
+    directory, with their job titles and locations, then the shared HR inbox. The server decides
+    this from what it stored (a finished answer that searched the handbook and cites nothing),
+    never from the model's wording.
+  - **The sensitive, crisis, and "can't answer right now" panels** arrive with the answer and are
+    announced to screen readers once, never again on a reload. **Budget banners** come from the
+    API and disable the composer, and "Start a new sandbox" starts one as the same person.
+  - **The composer** checks for a Social Security or card number before sending, so it never
+    leaves the browser. That check and the API's share one set of test cases. Pressing Enter while
+    an answer streams says "I'm still answering your last question." and keeps the draft. Both
+    texts come from a new route, `GET /api/v1/assistant/texts`, so the web app keeps no copy of
+    the API's words.
+  - **The API sends what the design needs:** HR contacts' titles and locations, each retrieved
+    section's title and group (each section listed once), the budget banner's text, and whether
+    an answer counts as not found. `GET /api/v1/assistant/budget` gives the same budget state
+    before the first question, so the home shows a reached cap too.
+  - **Browser tests run against the real API with the scripted model:** one per acceptance
+    criterion, with an accessibility scan on each state, the demo's steps (Priya and Mateo get
+    their own states' sick leave, Leo's address is refused, the sensitive and crisis paths), a
+    persona switch mid-answer, Stop then reload, and the 390 px layout of every state. The
+    capture report now shows the real page beside each design.
 - **The conversation's components, in every state the design draws** (Phase 4, stage 5). They
   are built and shown in the component gallery on sample data; Stage 6 connects them to the
   live stream and the conversation API. Everything follows screen 07's design and its build

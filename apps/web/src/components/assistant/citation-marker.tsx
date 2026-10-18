@@ -22,6 +22,7 @@ function CitationMarker({ citation, expanded, onOpen, className }: CitationMarke
   return (
     <button
       data-slot="citation-marker"
+      data-passage-id={citation.passageId}
       type="button"
       aria-label={sourceName(citation.marker, citation)}
       aria-expanded={expanded}

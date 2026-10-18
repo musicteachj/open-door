@@ -10,7 +10,6 @@ import {
   type ReactNode,
 } from 'react'
 import { Link } from 'react-router'
-import { InlineError } from '@/components/feedback/inline-error'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 import { AI_DISCLOSURE } from '@/lib/disclosure'
@@ -29,8 +28,6 @@ type ComposerProps = {
   onSubmit: (value: string) => void
   /** A question is being sent. Ask shows a spinner and swallows clicks, and Enter sends nothing. */
   busy?: boolean
-  /** The message for a failed send. Shows an inline error with Retry, which sends `value` again. */
-  error?: string
   placeholder?: string
   /** An answer is streaming. Stop takes Ask's place, and Enter sends nothing. */
   streaming?: boolean
@@ -38,7 +35,7 @@ type ComposerProps = {
   onStop?: () => void
   /** Enter was pressed with a question typed while an answer streams, for the caller's send error. */
   onSubmitWhileStreaming?: () => void
-  /** A send error from the API, shown under the box. Never worded here. */
+  /** Why the last send failed, shown under the box (`role="alert"`). The draft is kept, so Ask is the retry. Never worded here. */
   sendError?: string
   /** The assistant is out of budget. The box and Ask are disabled, and the placeholder says why. */
   disabledReason?: 'sandbox' | 'daily'
@@ -185,7 +182,6 @@ function Composer({
   onChange,
   onSubmit,
   busy = false,
-  error,
   placeholder = 'Ask about time off, pay, benefits, or policy…',
   streaming = false,
   onStop,
@@ -423,7 +419,6 @@ function Composer({
         </div>
       </div>
       <LengthAnnouncement count={disabled ? null : count} />
-      {error !== undefined && <InlineError message={error} onRetry={send} className="mt-0" />}
       {line}
     </form>
   )
