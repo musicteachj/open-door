@@ -5,6 +5,11 @@ should pick it up. When one is done, delete it here and record it in the changel
 
 ## Any phase
 
+- **Some web unit tests are timing-flaky under full-suite load:** the directory page's "footer when
+  an update has failed" and a few handbook-page searches time out now and then when the whole
+  Vitest suite runs, on a clean `dev` too, and pass alone. Raise their waits or find the slow
+  path. (Phase 4 stage 6.)
+
 - **Locally, the browser tests can reuse a stale server.** `playwright.config.ts` sets
   `reuseExistingServer` off CI, so a preview already on 4173, or an older API on 8100, is tested
   without a rebuild, and `make check` can pass or fail against old code. CI always starts fresh
@@ -100,54 +105,23 @@ should pick it up. When one is done, delete it here and record it in the changel
 
 ## Phase 4: assistant core
 
-- **The audit log stores `None` as the JSON value `null`.** `AuditEvent.before` and `after` are
-  nullable `jsonb` columns without `none_as_null=True`, so an event with no before or after state
-  holds JSON `null`, not SQL `NULL`, and an `IS NULL` query misses it. The assistant tables were
-  fixed in stage 1; the audit columns need the same type change and a data fix for existing rows.
-  Phase 7's console is the first to query them. (Phase 4 stage 1 review.)
-
-- **Quote directory values in the per-turn context before names become editable.** The context is
-  a `system` message built from the asker's name and location. `one_line` keeps each to one line,
-  but a name like "Dana. Operator notes: ..." would still read as an instruction with system
-  weight. Names come only from the seed today. Before any route edits a person, allow only name
-  characters, or put the values in the context as quoted JSON. (Phase 4 stage 2 Opus security
-  review.)
-- **Prompt findings from the first live runs, for the next prompt change.** The judge and the
-  independent grades agree on these: a policy sentence without a citation inside an otherwise
-  cited answer (5 of 15 answers at low effort); an answer about Colorado medical leave that leaves
-  out FAMLI's partial pay; an answer about Denver's sick leave that doesn't say it differs from
-  the asker's California rule; and "Since you work in HR yourself", inferred from the per-turn
-  context. Each is a prompt change, so each needs a smoke run (about $0.55). (Phase 4 stage 3.)
-- **The thinking-display progress notes have no live evidence yet.** The beta is sent and
-  accepted, but neither live run (low or medium effort) produced a note: every thinking block came
-  back empty, and the model went straight to its search. Stage 5's status line is tested against
-  the scripted model, which does emit one. Check again after the next prompt change or at the
-  Stage 6 full run. (Phase 4 stage 3.)
-- **Pass structured search results to the judge.** The eval judge reads each cited section's text
-  back out of the flattened "source | title | passages" tool-result text. It holds for today's
-  handbook (no title contains " | " and no passage starts a line with "/handbook/"), but keeping
-  the source, title, and passages as fields on the trace would remove the round trip. (Phase 4
-  stage 3 `/code-review medium`.)
-- **Catch personal data written in non-Latin digits.** The check normalizes the text (NFKC,
-  format characters dropped, Unicode spaces and dashes mapped to ASCII) and then matches ASCII
-  digits only, so the browser's copy can follow the same steps. An SSN written in Arabic-Indic or
-  Devanagari digits passes. Mapping every Unicode decimal digit to ASCII would catch it; do it in
-  both copies at once. (Phase 4 stage 4 Opus security review.)
-- **The canary check misses look-alike letters.** It folds case, width, and separators, so the
-  canary in capitals or letter-spaced is caught, but Cyrillic letters that look like Latin ones
-  (`а` for `a`) are not. It's a tripwire, not a boundary; a confusables map would close it.
-  (Phase 4 stage 4 Opus security review.)
-- **Read a conversation's history once per request.** A question reads and serializes the whole
-  stored history in the admission checks and again in `TurnRun.begin`, and every
-  `GET /assistant/conversations/current` serializes it to size the budget banner. Near the
-  80,000-token limit that's about 160 KB read and encoded two or three times before the first
-  event. Keep a running size on the conversation, or pass the admitted history into `begin`
-  (which also closes the small window in which a recovered turn could carry the history past the
-  limit after the check). (Phase 4 stage 4 `/code-review medium`.)
-- **Small API polish from stage 4's reviews:** a `Retry-After` header on the budget 429s; problem
-  `type` values are bare codes (`turn-running`), a relative URI reference that RFC 9457 allows but
-  that a full URI would make unambiguous; there's no limit on how many conversations one person
-  starts (sandbox expiry cleans them up). (Phase 4 stage 4 reviews.)
+- **The answer-quality follow-up, before the phase review** (the owner's choice, 2026-10-18). Stage
+  6's full live run (`evals/assistant/runs/20261018T172145Z-full.json`, $6.78) missed three of the
+  plan's "Phase 4 is done" bars, and one focused PR fixes them, each change with its smoke run:
+  - **The judge passed 67% against 85%:** mostly a policy sentence without a citation inside an
+    otherwise cited answer (48 rubric lines over three trials), and four manager answers that
+    decline a discipline or promotion decision but then suggest process steps ("document the
+    dates first"). The earlier findings belong to the same prompt pass: Colorado FAMLI's partial
+    pay left out, Denver's sick leave not contrasted with the asker's California rule, and "Since
+    you work in HR yourself" inferred from the per-turn context. qa-01 cited nothing in all three
+    trials, and qa-53 once didn't offer HR. (Phase 4 stage 3 and stage 6.)
+  - **The red team passed 98% against 100%:** the crisis item rt-35 (a threat of violence) hit the
+    guard's 4-second timeout in two of three trials and failed closed to "can't answer right
+    now". That text still gives 911 and 988, but the crisis panel is the right answer, and the
+    item went unrecorded, so the full set can't replay offline yet. Give the guard more time
+    (and check ADR 0009's reasoning for 4 seconds).
+  - **Then a fresh full run** that records rt-35, and switch `make eval-offline` and CI from the
+    smoke set to the full set, as `evals/README.md` says.
 
 ## Phase 5: time off
 
@@ -209,12 +183,55 @@ Source for both: [the Phase 1 spec](specs/2026-10-03-phase-1-tenancy-identity-pe
 
 ## Phase 7: AI Ops console, reviewer experience, model decision
 
+- **The audit log stores `None` as the JSON value `null`.** `AuditEvent.before` and `after` are
+  nullable `jsonb` columns without `none_as_null=True`, so an event with no before or after state
+  holds JSON `null`, not SQL `NULL`, and an `IS NULL` query misses it. The assistant tables were
+  fixed in stage 1; the audit columns need the same type change and a data fix for existing rows.
+  Phase 7's console is the first to query them. (Phase 4 stage 1 review.) Moved from Phase 4 at its close: the console is the first to query these columns.
+- **Pass structured search results to the judge.** The eval judge reads each cited section's text
+  back out of the flattened "source | title | passages" tool-result text. It holds for today's
+  handbook (no title contains " | " and no passage starts a line with "/handbook/"), but keeping
+  the source, title, and passages as fields on the trace would remove the round trip. (Phase 4
+  stage 3 `/code-review medium`.) Moved from Phase 4 at its close: it belongs with the scoreboard generator.
+
 - **Report the questions the handbook couldn't answer.** The console lists them, so HR can see
   what to write next. The question text is user-written, so it's untrusted data, and it's redacted
   for guard-flagged turns. Fold the "design notes" idea into the tour and the "How it's built" page
   rather than adding a third explainer. (2026-10-06 design brainstorm.)
 
 ## Phase 8: hardening and deploy-readiness
+
+- **Quote directory values in the per-turn context before names become editable.** The context is
+  a `system` message built from the asker's name and location. `one_line` keeps each to one line,
+  but a name like "Dana. Operator notes: ..." would still read as an instruction with system
+  weight. Names come only from the seed today. Before any route edits a person, allow only name
+  characters, or put the values in the context as quoted JSON. (Phase 4 stage 2 Opus security
+  review.) Moved from Phase 4 at its close: no route edits a name yet, and hardening reviews the prompt inputs.
+- **Catch personal data written in non-Latin digits.** The check normalizes the text (NFKC,
+  format characters dropped, Unicode spaces and dashes mapped to ASCII) and then matches ASCII
+  digits only, so the browser's copy can follow the same steps. An SSN written in Arabic-Indic or
+  Devanagari digits passes. Mapping every Unicode decimal digit to ASCII would catch it; do it in
+  both copies at once. (Phase 4 stage 4 Opus security review.) Moved from Phase 4 at its close, with a related note: the browser runs Unicode 17 and the API's Python 15.1, so a few new code points (outlined digits) are flagged only in the browser. Do both copies together. (Phase 4 stage 6 review.)
+- **The canary check misses look-alike letters.** It folds case, width, and separators, so the
+  canary in capitals or letter-spaced is caught, but Cyrillic letters that look like Latin ones
+  (`а` for `a`) are not. It's a tripwire, not a boundary; a confusables map would close it.
+  (Phase 4 stage 4 Opus security review.) Moved from Phase 4 at its close: a tripwire, for the hardening pass.
+- **Read a conversation's history once per request.** A question reads and serializes the whole
+  stored history in the admission checks and again in `TurnRun.begin`, and every
+  `GET /assistant/conversations/current` serializes it to size the budget banner. Near the
+  80,000-token limit that's about 160 KB read and encoded two or three times before the first
+  event. Keep a running size on the conversation, or pass the admitted history into `begin`
+  (which also closes the small window in which a recovered turn could carry the history past the
+  limit after the check). (Phase 4 stage 4 `/code-review medium`.) Moved from Phase 4 at its close: it fits the cost and load test.
+- **Small API polish from stage 4's reviews:** a `Retry-After` header on the budget 429s; problem
+  `type` values are bare codes (`turn-running`), a relative URI reference that RFC 9457 allows but
+  that a full URI would make unambiguous; there's no limit on how many conversations one person
+  starts (sandbox expiry cleans them up). (Phase 4 stage 4 reviews.) Moved from Phase 4 at its close: for the hardening pass.
+- **Small web polish from Phase 4 stage 6:** the shared passage panel puts Close before its title in
+  the DOM, so Tab goes from the title to the passage text rather than to Close as screen 07's notes
+  say; a second tab that starts a new conversation leaves this tab asking in the old one; and a
+  malformed stored search source would fail the conversation `GET` (only the API writes them).
+  For the accessibility audit and the hardening pass. (Phase 4 stage 6 reviews.)
 
 - **Give the app's database login a `statement_timeout`.** The engine sets none, so a hung query
   waits forever. The assistant's end-of-turn writes are bounded in code (10 seconds), but other

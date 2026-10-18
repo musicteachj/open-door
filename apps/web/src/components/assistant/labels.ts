@@ -91,6 +91,9 @@ export const conversationCopy = {
     `${charactersOf(count, QUESTION_LIMIT_CHARACTERS)}. Shorten your question to send it.`,
   // Spoken (not shown) when a question that was over the limit is short enough again.
   underLimitAgain: 'Back under the limit.',
+  // A send that failed for no reason the API gave (the network, a 5xx). The same words the home
+  // page used before the assistant was connected.
+  sendFailed: 'Something went wrong sending that.',
   longConversation:
     'This conversation is getting long, so answers may miss details from earlier messages. A new conversation starts clean.',
 } as const
@@ -212,6 +215,22 @@ export function toolLine(name: string, inputSummary: string): string {
     default:
       return 'Used a tool'
   }
+}
+
+const RUNNING_LINES: Record<string, string> = {
+  search_handbook: 'Searching the handbook',
+  get_my_profile: 'Looking up your profile',
+  find_people: 'Searching the directory',
+}
+
+/**
+ * A tool's line while it runs (the design's present tense, with a spinner): "Searching the
+ * handbook…", and "Searching the handbook again…" for a later call of the same tool in the turn.
+ * When the call finishes the step's words become its `toolCallLine`.
+ */
+export function toolRunningLine(name: string, again: boolean): string {
+  if (!Object.hasOwn(RUNNING_LINES, name)) return 'Working…'
+  return `${RUNNING_LINES[name]}${again ? ' again' : ''}…`
 }
 
 /**

@@ -9,6 +9,7 @@ import { PersonaCard } from '@/components/landing/persona-card'
 import { PERSONAS } from '@/features/personas/personas'
 import { ApiError } from '@/lib/api-fetch'
 import { AI_DISCLOSURE } from '@/lib/disclosure'
+import { SANDBOX_START_FAILED } from '@/lib/sandbox-copy'
 
 // From docs/design/screens/01-landing/notes.md. "How it's built" and the tour button are designed
 // but hidden until Phase 7 builds their destinations. Nothing here is the signed-in person's: the
@@ -74,7 +75,7 @@ export function LandingPage() {
           </ul>
           {start.isError && (
             <InlineError
-              message="We couldn't start a sandbox."
+              message={SANDBOX_START_FAILED}
               onRetry={() => start.mutate(start.variables)}
             />
           )}

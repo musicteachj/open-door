@@ -18,7 +18,7 @@ from decimal import Decimal
 from typing import Any, Literal, Self, cast
 from uuid import UUID
 
-from sqlalchemy import CursorResult, Interval, func, insert, literal, select, update
+from sqlalchemy import CursorResult, Interval, func, insert, literal, select, true, update
 from sqlalchemy.exc import DBAPIError, IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -439,6 +439,38 @@ async def search_sources(db: AsyncSession, conversation_id: UUID) -> list[Source
         )
     ).all()
     return [SourceEntry.from_json(entry) for sources in rows for entry in sources or []]
+
+
+async def section_names(
+    db: AsyncSession, conversation_id: UUID
+) -> dict[str, tuple[str | None, str | None]]:
+    """Each section the conversation's searches found, mapped to its (title, group name), either of
+    which is None if no stored block of the section has it.
+
+    One query, which unpacks `ai_messages.sources` in the database and selects only the distinct
+    section ID, title and group, so the cited text and the rest of every stored block are never
+    loaded or parsed. The page asks on every read of the conversation. Under the same row-level
+    security as `search_sources`: only the person's own messages.
+    """
+    block = func.jsonb_array_elements(AiMessage.sources).table_valued("value").lateral("block")
+    section_id = block.c.value.op("->>")("sectionId")
+    title = block.c.value.op("->>")("title")
+    group_name = block.c.value.op("->>")("groupName")
+    rows = await db.execute(
+        select(section_id, title, group_name)
+        .select_from(AiMessage)
+        .join(block, true())
+        .where(AiMessage.conversation_id == conversation_id, AiMessage.sources.is_not(None))
+        .distinct()
+        .order_by(section_id, title, group_name)
+    )
+    # A block with no title or group (or a null one) never hides a section's real one, whichever
+    # way the rows sort.
+    names: dict[str, tuple[str | None, str | None]] = {}
+    for found_id, found_title, found_group in rows:
+        known_title, known_group = names.get(found_id, (None, None))
+        names[found_id] = (known_title or found_title, known_group or found_group)
+    return names
 
 
 def is_abandoned(started_at: datetime, now: datetime) -> bool:

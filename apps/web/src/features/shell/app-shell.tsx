@@ -11,11 +11,19 @@ import { Toast, ToastProvider, ToastViewport } from '@/components/ui/toast'
 import { navFor } from '@/app/nav'
 import { useMe } from '@/app/useMe'
 import { getGetHandbookQueryKey, useGetHandbook } from '@/api/generated'
+import {
+  ConversationSourcePanel,
+  NARROW_WINDOW_QUERY,
+} from '@/features/chat/conversation-source-panel'
+import { useSourceUrl } from '@/features/chat/source-url'
 import { PERSONAS } from '@/features/personas/personas'
+import { useMediaQuery } from '@/hooks/use-media-query'
 import { cn } from '@/lib/utils'
 import { formatMonthDay, formatTimeLeft, isExpiringSoon } from '@/lib/time'
 import { useExpiryBannerDismissal } from './expiry-banner-dismissal'
 import { useIdentityActions } from './use-identity-actions'
+import { ShellBannerSlot } from './shell-slots'
+import { useShellLayout } from './shell-layout-store'
 import { useNow } from './use-now'
 import { useScrollsMore } from './use-scrolls-more'
 import { useShellToast } from './toast-store'
@@ -44,6 +52,17 @@ function Frame({ me }: { me: NonNullable<ReturnType<typeof useMe>['data']> }) {
   const now = useNow()
   // The right rail belongs to the assistant home alone. Every other page takes the sheet's width.
   const showRail = useLocation().pathname === RAIL_PATH
+  // The conversation has its own sandbox pill in its header, so the shell's two (the top bar's and
+  // the rail's) step aside, and "At a glance" moves up and hides on a phone (screen 07's notes).
+  const conversation = useShellLayout((s) => s.conversation) && showRail
+  // A passage open from a citation (`?source=`) takes the rail's place (`w-panel`, 420 px) from
+  // 1280 px up. Below that it is a modal sheet instead, over everything. The rail itself stops
+  // being a side column at 1100 px.
+  const sourceOpen = useSourceUrl().key !== null && showRail
+  const narrow = useMediaQuery(NARROW_WINDOW_QUERY)
+  const dockedPanel = sourceOpen && !narrow
+  // Where a page puts a banner that spans the sheet, the rail included.
+  const [bannerSlot, setBannerSlot] = useState<HTMLElement | null>(null)
   const items = navFor(me)
   // Only the rail shows the figure, so only the assistant home asks. A failure leaves it out:
   // the rail is a convenience, not the page.
@@ -97,7 +116,9 @@ function Frame({ me }: { me: NonNullable<ReturnType<typeof useMe>['data']> }) {
       >
         <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 px-2 pb-8 max-[760px]:px-0 max-[760px]:pb-3">
           <Logo customerName={COMPANY} />
-          <SandboxIndicator className="hidden max-[760px]:inline-flex">
+          <SandboxIndicator
+            className={cn('hidden max-[760px]:inline-flex', conversation && 'max-[760px]:hidden')}
+          >
             Sandbox resets in {timeLeft}
           </SandboxIndicator>
         </div>
@@ -150,42 +171,61 @@ function Frame({ me }: { me: NonNullable<ReturnType<typeof useMe>['data']> }) {
         <div className="min-w-0 flex-1 p-sheet pl-0 max-[760px]:px-2 max-[760px]:pt-0">
           <div
             data-slot="shell-sheet"
-            className="relative flex min-h-[calc(100dvh-24px)] flex-col overflow-hidden rounded-xl border border-border bg-surface-raised"
+            className={cn(
+              'relative flex min-h-[calc(100dvh-24px)] flex-col rounded-xl border border-border bg-surface-raised',
+              // `clip` clips the rounded corners without making the sheet a scroll container, so
+              // the conversation's header and composer can stick to the window.
+              conversation ? 'overflow-clip' : 'overflow-hidden',
+            )}
           >
             <output data-slot="shell-announcement" className="sr-only">
               {announcement}
             </output>
             {bannerShown && <Banner live={false} message={bannerMessage} onDismiss={dismiss} />}
+            <div data-slot="shell-banner-slot" ref={setBannerSlot} />
             <div
               className={cn(
                 'grid min-h-0 flex-1',
                 showRail
                   ? 'grid-cols-[minmax(0,1fr)_var(--spacing-rail)] max-[1100px]:grid-cols-1 max-[1100px]:grid-rows-[1fr_auto] max-[760px]:grid-cols-1'
                   : 'grid-cols-1',
+                dockedPanel && 'grid-cols-[minmax(0,1fr)_var(--spacing-panel)]',
               )}
             >
               <main ref={mainRef} tabIndex={-1} className="flex min-w-0 flex-col outline-none">
-                <Outlet />
+                <ShellBannerSlot value={bannerSlot}>
+                  <Outlet />
+                </ShellBannerSlot>
               </main>
-              {showRail && (
-                <aside
-                  aria-label="Sandbox status"
-                  className={cn(
-                    'flex flex-col border-l border-border-subtle bg-surface-sunken px-8 pt-7 pb-8 max-[1100px]:border-t max-[1100px]:border-l-0',
-                    // Below 760 px the indicator is in the top bar, so with no glance items the
-                    // rail would be an empty strip.
-                    glance.length === 0 && 'max-[760px]:hidden',
-                  )}
-                >
-                  <div className="flex justify-end">
-                    <SandboxIndicator className="max-[760px]:hidden">
-                      Sandbox resets in {timeLeft}
-                    </SandboxIndicator>
-                  </div>
-                  <GlanceList items={glance} className="mt-16 max-[1100px]:mt-6" />
-                </aside>
+              {dockedPanel ? (
+                <ConversationSourcePanel docked />
+              ) : (
+                showRail && (
+                  <aside
+                    aria-label="Sandbox status"
+                    className={cn(
+                      'flex flex-col border-l border-border-subtle bg-surface-sunken px-8 pt-7 pb-8 max-[1100px]:border-t max-[1100px]:border-l-0',
+                      // Below 760 px the indicator is in the top bar, so with no glance items the
+                      // rail would be an empty strip. The conversation hides it there too.
+                      (glance.length === 0 || conversation) && 'max-[760px]:hidden',
+                    )}
+                  >
+                    {!conversation && (
+                      <div className="flex justify-end">
+                        <SandboxIndicator className="max-[760px]:hidden">
+                          Sandbox resets in {timeLeft}
+                        </SandboxIndicator>
+                      </div>
+                    )}
+                    <GlanceList
+                      items={glance}
+                      className={conversation ? 'mt-1' : 'mt-16 max-[1100px]:mt-6'}
+                    />
+                  </aside>
+                )
               )}
             </div>
+            {sourceOpen && narrow && <ConversationSourcePanel docked={false} />}
             <ShellToast personId={me.id} />
           </div>
         </div>

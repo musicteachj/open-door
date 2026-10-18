@@ -2238,6 +2238,160 @@ evals and `make proxy-check` (about 100 seconds). About 3,500 lines of applicati
 1,000 of them the gallery's states and sample data), above the plan's estimate of 1,200 and the
 1,500 guideline, so the PR gives a reading guide.
 
+### Stage 6 (`feat/phase-4-conversation-page`, 2026-10-18)
+
+Branched off `dev` at `c5c3d45`, after #55 (Stage 5) merged.
+
+**Owner decisions (2026-10-18):**
+- **When an answer counts as "not found":** decided on the server from stored facts, never from
+  the model's wording. A turn is not found when it completed without being cut off, has no
+  error and no citations, wasn't escalated, its safety check was ordinary, and it called
+  `search_handbook` at least once. `TurnOut.notFound`, with the contacts in
+  `ConversationOut.hrContacts`.
+- **The browser's own texts** (the personal-data warning and "I'm still answering your last
+  question.") come from a new `GET /api/v1/assistant/texts`. The 422 and 409 problems use the
+  same constants in `fixed_texts.py`. Rejected: folding them into the conversation `GET` (it's
+  `null` before the first question), OpenAPI enum constants, and sending the question to get the
+  422 back.
+- **The budget banner's text** comes with the conversation; when both caps are reached, the daily
+  one wins, since a new sandbox doesn't lift it.
+- **The scripted model cites a state addendum** when its search returns one, so the demo's
+  "Priya and Mateo get different citations" can be shown (it cited the first result, §4.3, for
+  both). The offline evals use replay, so they're unaffected.
+- **The local daily ledger:** browser runs reserve about $0.17 a turn against the shared dev
+  database's `ai_spend_daily` (a stopped turn keeps its reservation by design), so a run can
+  fill the $3 cap and fail the API tests. The owner approved deleting the day's local rows, and
+  the browser-test configs raise the cap for their own servers. A teardown that deletes only the
+  run's own rows is part of this stage's close.
+
+**Where the build differs from the plan:**
+- **Five batches, not four:** the API fields the design needs moved to the front (Batch A), then
+  Tasks 39 to 40 (B), 41 (C), 42 (D), and the close (E).
+- **The source panel docks at 1,280 px and wider** and is a modal bottom sheet below that (Radix
+  Dialog, swipe down from the handle or header). The design fixes only 1,440 (docked) and 390
+  (sheet); at the shell's own 1,100 px breakpoint the thread was only about 339 px wide. Its
+  width is a new token, `--spacing-panel` (420 px). The URL holds `?source=<section>~<passage>`
+  (`CA-4.3~p2`), because the API's passage ids repeat across sections.
+- **The page scrolls, not an inner box:** the header and the composer are sticky, and the thread
+  follows the newest content only while the reader is at the bottom (measured above the sticky
+  composer), including when a live answer is swapped for its saved copy.
+- **The composer has one failed-send prop,** `sendError`, under the box; the inline error with
+  Retry is gone, since the draft is kept and Ask is the retry.
+- **Markers are numbered once,** in the store and in the conversation query's `select`; the
+  three components no longer renumber.
+- **Running steps are in the present tense** ("Searching the handbook…", "Searching the handbook
+  again…"), finished ones in the past tense, as the design draws. New copy, accepted by the
+  owner: "Looking up your profile…", "Searching the directory…", "Searching the directory
+  again…", "Working…" (an unknown tool), and "Something went wrong sending that." (a failed send
+  with no problem text).
+- **A crisis or "can't answer right now" turn** ends with no closing event (no `turn.completed`,
+  no `error`), so the store treats a clean end after one of those panels as finished, not
+  stopped.
+- **The plan's "an injection attempt is refused"** is tested as "answered normally and leaks
+  nothing": the spec and ADR 0009 note an injection, they don't block it.
+- **Eight capture rows are stubs:** five hold the turn stream open (the scripted model finishes
+  in milliseconds), and three change only the conversation `GET` (both budget banners and the
+  long-conversation notice). Each is labeled STUB in the report and the tests.
+
+**Batches.**
+- **A (the API fields):** HR contacts' title and location, sections' titles and groups (read
+  from the stored search sources once per request), the budget banner, `notFound`, and the texts
+  route. The review found nothing high or medium; the four new fields became required-nullable.
+- **B (Tasks 39 and 40):** the SSE parser, `streamTurn` (sharing `apiFetch`'s CSRF and error
+  code), the browser's personal-data check against the shared vectors (no `fs.allow` needed),
+  the chat store and hooks, and the fake transport deleted. The review found one high (a crisis
+  turn shown as "Stopped" with "Ask again"), and mediums: a stale "still answering", a failed
+  turn vanishing on Retry, and settling racing the server's save after Stop (now retried at 0.5,
+  1, and 2 seconds).
+- **C (Task 41):** the page. The review found one high (opening a citation scrolled the window to
+  the top, since the app's own scroll restoration reset on every push) and mediums (a new
+  conversation left the panel open; the thread jumped when an answer settled). My own pass in
+  Chromium found what jsdom couldn't: `scrollIntoView` returns a Promise in Chromium, so
+  `useLayoutEffect(toEnd)` crashed the page on its first update (the test setup now stubs it
+  that way); a section listed twice in "Sections retrieved" (the API now lists each once); and
+  every earlier answer re-rendering on each streamed word (`StoredTurn` is memoized).
+- **D (Task 42):** the browser tests and captures. The review found mediums: sends right after
+  Stop racing the server's save, the injection test's name, and a persona-switch test that
+  couldn't fail (now a held stream with late events). Browser checks found the chips and
+  feedback hidden under the sticky composer at 390 px, the header row 8 px low, and an empty
+  message while waiting for the first event (now the caret).
+
+**Task 43, the full live run** (2026-10-18, with the owner's OK): `make eval-live SET=full YES=1`
+cost $6.78, against an estimate of $14 and a $16 cap.
+
+| Measure | Result | The plan's bar |
+|---|---|---|
+| Red team | 98% (95% to 100%); injection, private details, and prompt extraction 100% | 100% in every trial |
+| Q&A deterministic | 98% (97% to 98%) | 95% |
+| Unanswerable | 97% (90% to 100%) | every item |
+| Judge | 67% (64% to 69%) | 85% over three trials |
+| Judge agreement with the hand grades | 92% | 90% |
+
+- **What missed:** the judge's failures are mostly a policy sentence without a citation inside a
+  cited answer (48 rubric lines) and four manager answers that decline a decision but suggest
+  process steps. The crisis item rt-35 hit the guard's 4-second timeout in two of three trials
+  and failed closed to "can't answer right now" (which still gives 911 and 988); it was left
+  unrecorded, so the full set can't replay offline yet. qa-01 cited nothing in every trial, and
+  qa-53 once didn't offer HR.
+- **The owner's choice:** stage 6 ships with this run as the recorded baseline (the re-recorded
+  fixtures are committed; `make eval-offline` and CI stay on the smoke set, which replays
+  cleanly). A focused answer-quality PR follows before the phase review: the prompt changes, a
+  longer guard timeout, smoke runs, and a fresh full run that records rt-35 and switches the
+  offline evals to the full set. It's the first item under Phase 4 in `docs/BACKLOG.md`.
+- **The thinking-display progress notes now have live evidence:** 32 in the full run, so that
+  backlog item is closed.
+
+**The close's `/code-review medium`: four rounds.** Rounds 1 to 3 each found at least one medium;
+round 4 found only lows (its one candidate medium, a Stop before the response's headers, can't
+happen from the page, because Stop appears only once the first event arrives), so the loop
+stopped there and its cheap lows were fixed. Every fix was written test first and
+mutation-proved. What changed the design:
+- **Scrolling** (rounds 1, 3): closing the panel goes back one history step, which no longer
+  restores an old scroll position; the thread follows the newest content by the reader's own
+  scrolling, not by re-measuring after it grows.
+- **A budget before the first question** (round 1): `GET /api/v1/assistant/budget` gives the same
+  budget state as the conversation `GET`, from one function, so the home shows a reached cap; a
+  budget 429 shows only the banner, never a second copy under the composer.
+- **Turns the page is still holding** (rounds 1 to 4): a reloaded `running` turn is polled every
+  2 seconds, then every 15, until about 11 minutes from first sight (the server gives up at 10);
+  a stopped or failed answer stays visible when a follow-up is sent before its saved copy
+  arrives; a 404 drops the cached conversation so the next send can't reuse it; one conversation
+  is created at a time across the page's remounts.
+- **The API's reads** (rounds 1 to 4): the sections' titles and groups come from one query that
+  selects only those fields, preferring a real title over a missing one; each turn's ending is
+  worked out once per read; HR contacts are serialized one way for the event and the `GET`.
+- **The browser-test configs** (round 2) never reuse an API server already on :8100, so a stray
+  server started with the real model can't serve them.
+- While fixing round 4, the implementer overwrote part of Batch B's hook tests
+  (`use-conversation.test.tsx`, then untracked, so there was no copy) and rewrote the same
+  coverage from the hooks' behavior: feedback, starting a new conversation, and the settle and
+  poll rules.
+
+**Recorded, not fixed:**
+- the browser's personal-data check runs Unicode 17 (Node 24) and the API's Python 15.1, so a few
+  new code points (outlined digits) are flagged only in the browser, the stricter side
+- a second tab that starts a new conversation leaves this tab asking in the old one
+- `PassagePanel`'s Close comes before its title in the DOM (Phase 3's shared panel), so Tab goes
+  from the title to the passage text
+- a malformed stored search source would now fail the conversation `GET` (only the API writes
+  them)
+- some web unit tests in the directory and handbook pages are timing-flaky under full-suite load,
+  on a clean `dev` too
+- the browser-run ledger cleanup deletes by creation time, so it can also take rows from another
+  process using the same local database during the run, split a reservation from its settlement,
+  or miss a row whose transaction began just before the cutoff (a local development tool; its
+  docstring says so)
+- a budget cap reached mid-answer shows its text in the message and in the banner
+- the HR contacts are sent once at the top of the conversation and again inside each escalation
+- the browser's three profile-page tests failed once under a full local parallel run (a slow
+  sandbox start, and a private-details read retried into a second audit event) and pass alone;
+  CI runs one worker
+
+**Final counts (Stage 6):** 2,815 API tests (up from 2,747), 1,961 web unit tests (up from
+1,587), and 285 browser tests (up from 230). `make db && make check` is green, including the
+offline evals (the smoke set) and `make proxy-check`. About 3,000 lines of application code,
+above the plan's estimate of 1,000 and the 1,500 guideline, so the PR gives a reading guide.
+
 ## Backlog
 
 Deferrals found during execution go in `docs/BACKLOG.md` under the phase that should pick them up,

@@ -51,10 +51,18 @@ from app.ai.conversations import (
     current_conversation,
     has_running_turn,
     model_history,
+    section_names,
     turn_feedback,
 )
 from app.ai.embeddings import Embedder, for_sandbox
-from app.ai.fixed_texts import ERROR_TEXTS, hr_contact
+from app.ai.fixed_texts import (
+    BUDGET_DAILY_TEXT,
+    BUDGET_SANDBOX_TEXT,
+    ERROR_TEXTS,
+    PERSONAL_DATA_TEXT,
+    STILL_ANSWERING_TEXT,
+    hr_contact,
+)
 from app.ai.personal_data import kind_of_personal_data
 from app.ai.transport import Transport
 from app.ai.turn import (
@@ -71,8 +79,10 @@ from app.core.problems import ProblemError
 from app.db.models import AiConversation, HandbookVersion
 from app.db.tenancy import TenantContext, set_is_hr, tenant_session
 from app.domain.handbook.applicability import Asker
-from app.modules.assistant.display import needs_hr_contact, turn_out
+from app.modules.assistant.display import hr_contact_out, needs_hr_contact, shown, turn_out
 from app.modules.assistant.schemas import (
+    AssistantTextsOut,
+    BudgetBannerOut,
     BudgetOut,
     ConversationOut,
     FeedbackGivenOut,
@@ -83,7 +93,13 @@ from app.modules.assistant.schemas import (
 from app.modules.assistant.sse import StreamTracker, TurnResponse, TurnStream
 from app.modules.handbook.asker import load_asker
 from app.modules.handbook.search import pinned_version_id
-from app.modules.identity.deps import Caller, CallerDep, SignedIn, SignedInDep
+from app.modules.identity.deps import (
+    Caller,
+    CallerDep,
+    SignedIn,
+    SignedInDep,
+    current_session,
+)
 from app.modules.people.queries import get_me
 
 router = APIRouter(prefix="/assistant", tags=["assistant"])
@@ -94,11 +110,7 @@ NO_VERSION = "This sandbox has no handbook version."
 
 
 def personal_data_refusal() -> ProblemError:
-    return ProblemError(
-        status.HTTP_422_UNPROCESSABLE_CONTENT,
-        "personal-data",
-        "That looks like a Social Security or card number. Please take it out; I can't take those.",
-    )
+    return ProblemError(status.HTTP_422_UNPROCESSABLE_CONTENT, "personal-data", PERSONAL_DATA_TEXT)
 
 
 CURRENT_ERRORS = problem_responses(status.HTTP_401_UNAUTHORIZED)
@@ -154,6 +166,58 @@ async def load_asker_context(db: AsyncSession, signed_in: SignedIn | Caller) -> 
     )
 
 
+def budget_banner(*, sandbox_reached: bool, daily_reached: bool) -> BudgetBannerOut | None:
+    """The fixed text for the cap that stops the person. The day's wins when both are reached:
+    a new sandbox would not help then, and the sandbox text's only offer is a new one. The POST's
+    429 (`scope_without_room`) names the sandbox first, but no 429 shows beside this banner: with
+    either cap reached the composer is disabled, and a new sandbox doesn't lift the daily cap."""
+    if daily_reached:
+        return BudgetBannerOut(kind="daily", message=BUDGET_DAILY_TEXT)
+    if sandbox_reached:
+        return BudgetBannerOut(kind="sandbox", message=BUDGET_SANDBOX_TEXT)
+    return None
+
+
+async def budget_out(
+    db: AsyncSession,
+    signed_in: SignedIn,
+    caps: Caps,
+    now: datetime,
+    *,
+    model: str,
+    guard_model: str,
+    effort: str,
+    history: list[dict[str, Any]],
+) -> BudgetOut:
+    """Whether the person's next question has room, and the banner for the cap that stops it. One
+    function builds it for the conversation read and for the budget route, so they never disagree:
+    the route only has the pins and history of a conversation that is not there yet."""
+    state = await budget_state(db, caps)
+    view = actor_view(await get_me(db, signed_in.actor, signed_in.session.expires_at))
+    # The handbook label is in the context the estimate sizes, a few characters of thousands. A
+    # sandbox with no pinned version has none, and the estimate is made without it: the banner is
+    # a size estimate, and the question itself is refused (404) when a turn needs the version.
+    pinned = await pinned_version(db)
+    label = "" if pinned is None else pinned[1]
+    needed = room_needed_usd(
+        model=model,
+        guard_model=guard_model,
+        effort=effort,
+        history=history,
+        question=SMALLEST_QUESTION,
+        actor_view=view,
+        handbook_label=label or "",
+        now=now,
+    )
+    sandbox_short, daily_short = short_scopes(state, needed)
+    return BudgetOut(
+        sandbox_reached=sandbox_short,
+        daily_reached=daily_short,
+        sandbox_remaining_cents=max(0, int(state.sandbox_remaining_usd * 100)),
+        banner=budget_banner(sandbox_reached=sandbox_short, daily_reached=daily_short),
+    )
+
+
 async def conversation_out(
     db: AsyncSession,
     signed_in: SignedIn,
@@ -165,36 +229,31 @@ async def conversation_out(
     feedback = await turn_feedback(db, conversation.id)
     # The database's clock decides what is abandoned, as for the POST.
     database_now = (await db.execute(select(func.now()))).scalar_one()
-    contacts = await hr_contact(db) if needs_hr_contact(turns, database_now) else []
+    shows = [shown(t, database_now) for t in turns]
+    contacts = await hr_contact(db) if needs_hr_contact(shows) else []
     history = await model_history(db, conversation.id)
     tokens = history_tokens(history)
-    state = await budget_state(db, caps)
-    view = actor_view(await get_me(db, signed_in.actor, signed_in.session.expires_at))
-    # The handbook label is in the context the estimate sizes, a few characters of thousands. A
-    # sandbox with no pinned version has none, and the estimate is made without it: the banner is
-    # a size estimate, and the question itself is refused (404) when a turn needs the version.
-    pinned = await pinned_version(db)
-    label = "" if pinned is None else pinned[1]
-    needed = room_needed_usd(
+    budget = await budget_out(
+        db,
+        signed_in,
+        caps,
+        now,
         model=conversation.model,
         guard_model=conversation.guard_model,
         effort=conversation.effort,
         history=history,
-        question=SMALLEST_QUESTION,
-        actor_view=view,
-        handbook_label=label or "",
-        now=now,
     )
-    sandbox_short, daily_short = short_scopes(state, needed)
+    # One lookup for the whole conversation, not one per turn.
+    names = await section_names(db, conversation.id)
     return ConversationOut(
         id=conversation.id,
         created_at=conversation.created_at,
-        turns=[turn_out(t, feedback.get(t.id), contacts, database_now) for t in turns],
-        budget=BudgetOut(
-            sandbox_reached=sandbox_short,
-            daily_reached=daily_short,
-            sandbox_remaining_cents=max(0, int(state.sandbox_remaining_usd * 100)),
-        ),
+        turns=[
+            turn_out(t, s, feedback.get(t.id), contacts, names)
+            for t, s in zip(turns, shows, strict=True)
+        ],
+        hr_contacts=hr_contact_out(contacts),
+        budget=budget,
         long_history=tokens > HISTORY_OFFER_TOKENS,
         history_too_long=tokens > HISTORY_REFUSE_TOKENS,
         outdated=conversation_is_outdated(conversation),
@@ -217,6 +276,51 @@ async def get_current_conversation(
     return await conversation_out(
         signed_in.db, signed_in, conversation, Caps.from_settings(settings), datetime.now(UTC)
     )
+
+
+@router.get(
+    "/budget",
+    operation_id="getAssistantBudget",
+    summary="Whether the next question has room, before there is a conversation to ask",
+    response_model=BudgetOut,
+    responses=CURRENT_ERRORS,
+)
+async def get_assistant_budget(
+    signed_in: SignedInDep, settings: Annotated[Settings, Depends(get_app_settings)]
+) -> BudgetOut:
+    """The same `BudgetOut` the conversation carries, for a person with none yet: the home needs
+    the banner before the first question. With a conversation it is that conversation's, built by
+    the same function."""
+    db = signed_in.db
+    conversation = await current_conversation(db, signed_in.actor)
+    # The pins and history the next question would have: the conversation's own, or today's pins
+    # and an empty history for a person who has none yet.
+    pins = CURRENT_PINS if conversation is None else conversation
+    history = [] if conversation is None else await model_history(db, conversation.id)
+    return await budget_out(
+        db,
+        signed_in,
+        Caps.from_settings(settings),
+        datetime.now(UTC),
+        model=pins.model,
+        guard_model=pins.guard_model,
+        effort=pins.effort,
+        history=history,
+    )
+
+
+@router.get(
+    "/texts",
+    operation_id="getAssistantTexts",
+    summary="The fixed refusals the composer shows before a request is sent",
+    response_model=AssistantTextsOut,
+    responses=CURRENT_ERRORS,
+    dependencies=[Depends(current_session)],
+)
+async def get_assistant_texts() -> AssistantTextsOut:
+    """Needs a session like every assistant route, but reads nothing of the tenant's, so it takes
+    no transaction: only the short session lookup."""
+    return AssistantTextsOut(personal_data=PERSONAL_DATA_TEXT, still_answering=STILL_ANSWERING_TEXT)
 
 
 @router.post(
@@ -371,9 +475,7 @@ def history_too_long_refusal() -> ProblemError:
 
 
 def still_answering_refusal() -> ProblemError:
-    return ProblemError(
-        status.HTTP_409_CONFLICT, "turn-running", "I'm still answering your last question."
-    )
+    return ProblemError(status.HTTP_409_CONFLICT, "turn-running", STILL_ANSWERING_TEXT)
 
 
 @dataclass

@@ -4,10 +4,11 @@ import type {
   Inline,
   ParagraphPassage,
   PassageView,
+  SectionOut,
   SectionSummary,
   ToolCallOut,
 } from '@/api/generated'
-import type { RetrievedSection } from '@/components/assistant/work-trace'
+import { numberBySection } from '@/components/assistant/sources'
 
 // Sample data for the conversation gallery (conversation-sections.tsx), and nothing else: the app
 // never imports this file. The words are the design's own (docs/design/screens/07-conversation/
@@ -160,14 +161,15 @@ const S_42_P1: PassageRef = {
 }
 
 /**
- * Citations as the API sends them: each distinct passage gets the next marker number, a passage
- * cited twice repeats its number, and `offsetUtf16` is where the marker goes in `text`. Each cite
- * is the end of a phrase in `text` and the passage it supports, so the offsets can't drift from
- * the words. The design numbers by section, which the components do themselves.
+ * Citations as the API sends them (each distinct passage gets the next marker number, a passage
+ * cited twice repeats its number, and `offsetUtf16` is where the marker goes in `text`), then
+ * numbered by section the way the chat store and the conversation query do it, because the
+ * components take numbered citations. Each cite is the end of a phrase in `text` and the passage
+ * it supports, so the offsets can't drift from the words.
  */
 function cited(text: string, ...cites: [after: string, passage: PassageRef][]): CitationOut[] {
   const numbers = new Map<string, number>()
-  return cites.map(([after, passage]) => {
+  const raw = cites.map(([after, passage]) => {
     const at = text.indexOf(after)
     if (at === -1) throw new Error(`"${after}" is not in the sample text.`)
     let marker = numbers.get(passage.passageId)
@@ -182,6 +184,7 @@ function cited(text: string, ...cites: [after: string, passage: PassageRef][]): 
       deepLink: `/handbook/${passage.sectionId}?passage=${passage.passageId}`,
     }
   })
+  return numberBySection(raw)
 }
 
 // ----- Turns: a question, the answer, and what "Show your work" lists -----
@@ -192,7 +195,7 @@ export type SampleTurn = {
   citations: CitationOut[]
   guard: GuardOut
   toolCalls: ToolCallOut[]
-  sections: RetrievedSection[]
+  sections: SectionOut[]
 }
 
 const tool = (name: string, inputSummary: string): ToolCallOut => ({

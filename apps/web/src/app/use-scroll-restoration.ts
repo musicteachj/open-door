@@ -1,5 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { useLocation, useNavigationType } from 'react-router'
+import { SOURCE_PARAM } from '@/features/chat/source-url'
 
 // How long Back keeps trying to reach the saved position while the page is still too short.
 const SETTLE_MS = 2000
@@ -37,6 +38,13 @@ function remember(positions: Map<string, number>, key: string, top: number) {
   while (positions.size > MAX_ENTRIES) positions.delete(positions.keys().next().value!)
 }
 
+/** The search with the open source panel's parameter taken out. */
+function withoutSource(search: string): string {
+  const params = new URLSearchParams(search)
+  params.delete(SOURCE_PARAM)
+  return params.toString()
+}
+
 /**
  * Scroll for a router with no loaders, on the window (the shell's sheet grows with its content, so
  * the page is what scrolls). React Router's <ScrollRestoration> jumps to the top on every location
@@ -44,6 +52,9 @@ function remember(positions: Map<string, number>, key: string, top: number) {
  * place.
  *
  * - A new page (a push) starts at the top.
+ * - A push, Back or Forward that only opens or closes the conversation's source panel (`?source=`)
+ *   keeps the position: pressing a marker must not throw the reader to the top of the thread, and
+ *   closing the panel must not jump back to where the page was when it opened.
  * - A replace on the same page keeps the position: typing a search must not throw the visitor up.
  *   A replace to another page starts at the top.
  * - Back and Forward (a pop) return to where that history entry was left, saved by `location.key`.
@@ -53,7 +64,11 @@ export function useScrollRestoration() {
   const location = useLocation()
   const type = useNavigationType()
   const [positions] = useState(load)
-  const current = useRef({ key: location.key, pathname: location.pathname })
+  const current = useRef({
+    key: location.key,
+    pathname: location.pathname,
+    search: location.search,
+  })
   // True while a restore is still trying to reach its position. The page is too short then, so
   // what the browser reports is a cut-short position that must not replace the saved one.
   const restoring = useRef(false)
@@ -77,7 +92,7 @@ export function useScrollRestoration() {
 
   useLayoutEffect(() => {
     const previous = current.current
-    current.current = { key: location.key, pathname: location.pathname }
+    current.current = { key: location.key, pathname: location.pathname, search: location.search }
     if (previous.key === location.key) {
       // The first render. After a reload the browser's own restoration is off, so this puts the
       // page back where this history entry was left. A visit with no saved position stays at the
@@ -88,8 +103,16 @@ export function useScrollRestoration() {
       return
     }
 
+    // A move between two URLs that differ only in `?source=` (the conversation's source panel
+    // opening or closing, by a push or by Back and Forward) never moves the page.
+    const onlySource =
+      previous.pathname === location.pathname &&
+      previous.search !== location.search &&
+      withoutSource(previous.search) === withoutSource(location.search)
     let stop = () => {}
-    if (type === 'POP') {
+    if (onlySource) {
+      // Nothing to do: the reader stays where they are, and this entry is noted below.
+    } else if (type === 'POP') {
       stop = restore(positions.get(location.key) ?? 0, restoring)
     } else if (type === 'PUSH' || previous.pathname !== location.pathname) {
       window.scrollTo(0, 0)
@@ -102,7 +125,7 @@ export function useScrollRestoration() {
       persist(positions)
     }
     return stop
-  }, [location.key, location.pathname, type, positions])
+  }, [location.key, location.pathname, location.search, type, positions])
 }
 
 // What a visitor does to take over the scroll themselves.

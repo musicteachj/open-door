@@ -384,6 +384,19 @@ All are under `/api/v1/assistant`, need a session, and return problem details on
 | `GET /conversations/current` | The asker's newest conversation and its turns for display: question, answer, citations, status, the guard result, tools, sections, and feedback. Also the budget state (sandbox remaining, daily reached) and whether the history has passed the new-conversation threshold. `null` if there's none yet |
 | `POST /conversations` | Starts a new conversation, pinned to today's model, effort, prompt, and tool-set versions |
 | `POST /turns/{turnId}/feedback` | `{ helpful: boolean, reason?: string }`, with the reason up to 500 characters. One answer per turn (409 after that). Only on the asker's own completed turns |
+| `GET /texts` | The two fixed texts the browser shows before any request: the personal-data warning and "I'm still answering your last question." The 422 and 409 problems use the same constants, so the web app never keeps its own copy (added in Stage 6) |
+| `GET /budget` | The same budget state `GET /conversations/current` carries (`sandboxReached`, `dailyReached`, the sandbox's remaining cents, and the banner with its fixed text, the day's winning when both are reached), for a person with no conversation yet, so the home shows the banner and disables the composer before the first question. It is built by the same function, from the newest conversation if there is one and from today's pins otherwise, so the two can't disagree (added in Stage 6) |
+
+**Added to `GET /conversations/current` in Stage 6,** for the design (screen 07):
+- each HR contact's job title and location, in the `escalation` event too
+- each retrieved section's title and group, read from the conversation's stored search sources
+- the budget banner's kind and fixed text. When both caps are reached, the daily one wins, since
+  a new sandbox doesn't lift it
+- `notFound` on a turn, and the HR contacts a not-found answer shows. A turn is **not found**
+  when it completed without being cut off, cites nothing, wasn't escalated, its safety check was
+  ordinary, and it searched the handbook at least once. The rule reads stored facts, never the
+  model's wording, so the contacts card follows any answer that found no supporting passage
+  (invariant 4)
 
 ---
 
@@ -603,7 +616,9 @@ The design (screen 07) decides the look. The build adds these rules.
 - **The source panel** is the Phase 3 passage panel, docked in the rail's place, opened from a
   marker or a source chip. Its data comes from `usePassage`. Focus returns to the marker that
   opened it. The open passage is kept in the URL (`?source=CA-4.3~p2`), so Back closes it, unless
-  the design says otherwise.
+  the design says otherwise. As built in Stage 6: it docks at 1,280 px and wider, 420 px wide
+  (`--spacing-panel`), and below that it's a modal sheet from the bottom, as the design's phone
+  notes describe.
 - **The AI disclosure:**
   - the composer keeps its line ("Open Door is an AI assistant…")
   - every assistant message carries an "AI" label

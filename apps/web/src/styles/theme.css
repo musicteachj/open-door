@@ -106,9 +106,11 @@
   --default-transition-duration: 150ms;
   --default-transition-timing-function: cubic-bezier(0.2, 0, 0, 1);
 
-  /* Layout: w-sidebar, w-rail, max-w-content, h-control, h-control-sm, h-row, inset-sheet */
+  /* Layout: w-sidebar, w-rail, w-panel, max-w-content, h-control, h-control-sm, h-row, inset-sheet */
   --spacing-sidebar: 248px;
   --spacing-rail: 340px;
+  /* The conversation's source panel, docked in the rail's place (not in the design export). */
+  --spacing-panel: 420px;
   --spacing-content: 760px;
   --spacing-sheet: 12px;
   --spacing-control: 40px;

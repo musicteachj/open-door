@@ -1,14 +1,13 @@
 import { RotateCcw, Square } from 'lucide-react'
-import { useMemo, type ReactNode } from 'react'
+import type { ReactNode } from 'react'
 import { InlineError } from '@/components/feedback/inline-error'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { Answer, type AnswerProps } from './answer'
 import { conversationCopy } from './labels'
-import { numberBySection } from './sources'
 import { StatusLine, type StatusStep } from './status-line'
 
-/** One empty array for every message with no citations, so a default does not defeat `useMemo`. */
+/** One empty array for every message with no citations, so a default does not defeat memoizing. */
 const NO_CITATIONS: NonNullable<AnswerProps['citations']> = []
 
 /**
@@ -67,9 +66,9 @@ function AssistantMessage(props: AssistantMessageProps) {
     feedback,
     className,
   } = props
-  // Numbered once for a given set of citations, so the answer below can skip its own work too.
-  const numbered = useMemo(() => numberBySection(citations), [citations])
   const streaming = status === 'streaming'
+  // Nothing has arrived yet (no step, no text): the caret alone says the answer is on its way.
+  const waiting = streaming && steps.length === 0
   const finished = status === 'complete' || status === 'incomplete'
   return (
     <div
@@ -93,12 +92,12 @@ function AssistantMessage(props: AssistantMessageProps) {
         aria-busy={streaming}
         className="empty:-mt-3.5"
       >
-        {text !== '' && (
+        {(text !== '' || waiting) && (
           <Answer
             text={text}
-            // Markers show the section's number (the API's count passages), so a marker 1 and a
-            // chip 1 are the same section. See `numberBySection`.
-            citations={numbered}
+            // Already numbered by section where the citations entered the chat store or the
+            // conversation query (`numberBySection`), so a marker 1 and a chip 1 are one section.
+            citations={citations}
             renderMarker={renderMarker}
             caret={streaming}
           />

@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from 'vitest'
 import type { GuardOut } from '@/api/generated'
 import { SICK_LEAVE_SECTIONS, apiCitations, citation, toolCall } from '@/test/assistant-fixtures'
 import * as sources from './sources'
+import { numberBySection } from './sources'
 import { WorkTrace, type WorkTraceProps } from './work-trace'
 
 const ORDINARY: GuardOut = { category: 'ordinary' }
@@ -209,8 +210,10 @@ describe('WorkTrace: sections retrieved', () => {
     expect(within(panel).getAllByText('Not cited')[0]).not.toHaveClass('font-semibold')
   })
 
-  it('shows the section number alone when the API sends no title or group', async () => {
-    renderTrace({ sections: [{ sectionId: '4.1', passageIds: ['4.1~p1'] }] })
+  it('shows the section number alone when the API sends a null title and group', async () => {
+    renderTrace({
+      sections: [{ sectionId: '4.1', passageIds: ['4.1~p1'], title: null, groupName: null }],
+    })
     const panel = await open()
     const rows = within(
       within(panel).getByRole('list', { name: 'Sections retrieved' }),
@@ -220,7 +223,9 @@ describe('WorkTrace: sections retrieved', () => {
   })
 
   it("takes a cited section's title and group from its citation when the section has none", async () => {
-    renderTrace({ sections: [{ sectionId: 'CA-4.3', passageIds: ['CA-4.3~p1'] }] })
+    renderTrace({
+      sections: [{ sectionId: 'CA-4.3', passageIds: ['CA-4.3~p1'], title: null, groupName: null }],
+    })
     const panel = await open()
     expect(panel).toHaveTextContent('CA-4.3Sick leave · California addendumCited as 1')
   })
@@ -234,20 +239,16 @@ describe('WorkTrace: sections retrieved', () => {
 })
 
 describe('WorkTrace: the numbering work', () => {
-  it('numbers the citations once, and not again when the panel opens and closes', async () => {
+  it('takes citations as numbered, and does not number them again', () => {
     const spy = vi.spyOn(sources, 'numberBySection')
     renderTrace({ citations: apiCitations() })
-    expect(spy).toHaveBeenCalledTimes(1)
-    await userEvent.click(toggle())
-    await userEvent.click(toggle())
-    expect(spy).toHaveBeenCalledTimes(1)
-    spy.mockRestore()
+    expect(spy).not.toHaveBeenCalled()
   })
 })
 
 describe('WorkTrace: citations as the API sends them', () => {
   it('numbers cited sections the way the markers and chips do', async () => {
-    renderTrace({ citations: apiCitations() })
+    renderTrace({ citations: numberBySection(apiCitations()) })
     const panel = await open()
     expect(within(panel).getByText('Cited as 1').closest('li')).toHaveTextContent('CA-4.3')
     expect(within(panel).getByText('Cited as 2').closest('li')).toHaveTextContent('§4.3')
@@ -257,10 +258,42 @@ describe('WorkTrace: citations as the API sends them', () => {
   it('says a section cited only through its second passage was cited', async () => {
     renderTrace({
       citations: [citation({ marker: 1, passageId: 'CA-4.3~p2' })],
-      sections: [{ sectionId: 'CA-4.3', passageIds: ['CA-4.3~p1', 'CA-4.3~p2'] }],
+      sections: [
+        {
+          sectionId: 'CA-4.3',
+          passageIds: ['CA-4.3~p1', 'CA-4.3~p2'],
+          title: null,
+          groupName: null,
+        },
+      ],
     })
     const panel = await open()
     expect(within(panel).getByText('Cited as 1')).toBeInTheDocument()
     expect(within(panel).queryByText('Not cited')).not.toBeInTheDocument()
+  })
+})
+
+describe('WorkTrace with a section listed twice', () => {
+  it('draws no React key warning, though the API promises each section once', () => {
+    const errors = vi.spyOn(console, 'error').mockImplementation(() => {})
+    renderTrace({
+      sections: [
+        {
+          sectionId: '4.3',
+          passageIds: ['p1'],
+          title: 'Sick leave',
+          groupName: 'Company handbook',
+        },
+        {
+          sectionId: '4.3',
+          passageIds: ['p2'],
+          title: 'Sick leave',
+          groupName: 'Company handbook',
+        },
+      ],
+    })
+    const reported = errors.mock.calls.map((call) => String(call[0]) + String(call[1] ?? ''))
+    expect(reported.filter((text) => /same key/.test(text))).toEqual([])
+    errors.mockRestore()
   })
 })

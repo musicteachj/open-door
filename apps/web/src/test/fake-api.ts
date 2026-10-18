@@ -1,6 +1,7 @@
 import { http, HttpResponse } from 'msw'
 import type { PersonaKey, SandboxCreated } from '@/api/generated'
 import { handbookOverview } from './fake-handbook'
+import { NO_BUDGET_STOP, TEXTS } from './fake-assistant'
 import { meFor } from './fixtures'
 import { server } from './msw'
 
@@ -32,6 +33,11 @@ export function installFakeApi(initial: PersonaKey | null = null) {
     http.get(url('/api/v1/handbook'), () =>
       HttpResponse.json(handbookOverview(current === 'mateo' ? 'mateo' : 'priya')),
     ),
+    // The assistant page reads these two on arrival: nothing asked yet, and the fixed texts. A test
+    // that needs a conversation or a stream installs its own (fake-assistant.ts), which wins.
+    http.get(url('/api/v1/assistant/texts'), () => HttpResponse.json(TEXTS)),
+    http.get(url('/api/v1/assistant/conversations/current'), () => HttpResponse.json(null)),
+    http.get(url('/api/v1/assistant/budget'), () => HttpResponse.json(NO_BUDGET_STOP)),
     http.post(url('/api/v1/sandboxes'), async ({ request }) => {
       const body = (await request.json()) as { persona?: PersonaKey } | null
       current = body?.persona ?? 'priya'

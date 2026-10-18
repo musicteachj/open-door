@@ -45,7 +45,7 @@ export function AssistantSections() {
         <Section id="composer-error" title="Composer, after a failed send">
           <Draft
             initial="How many sick days do I get?"
-            error="Something went wrong sending that."
+            sendError="Something went wrong sending that."
           />
         </Section>
         <Section id="composer-busy" title="Composer, sending">

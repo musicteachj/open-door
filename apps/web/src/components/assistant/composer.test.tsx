@@ -80,14 +80,17 @@ describe('Composer', () => {
     expect(screen.getByRole('button', { name: 'Ask' })).toBeEnabled()
   })
 
-  it('shows an inline error with Retry, which resends the question', async () => {
-    const onSubmit = vi.fn<(value: string) => void>()
+  it('has no second failed-send prop: sendError is the only one, and there is no Retry', () => {
     render(
-      <Harness initial="How many sick days?" onSubmit={onSubmit} error="Something went wrong." />,
+      <Harness
+        initial="How many sick days?"
+        // @ts-expect-error `error` was deleted: a failed send is `sendError`, under the box.
+        error="Something went wrong."
+      />,
     )
-    expect(screen.getByRole('alert')).toHaveTextContent('Something went wrong.')
-    await userEvent.click(screen.getByRole('button', { name: 'Retry' }))
-    expect(onSubmit).toHaveBeenCalledExactlyOnceWith('How many sick days?')
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Retry' })).not.toBeInTheDocument()
+    expect(screen.queryByText('Something went wrong.')).not.toBeInTheDocument()
   })
 
   it('shows no error by default', () => {

@@ -68,6 +68,47 @@ describe('scroll restoration', () => {
     expect(y).toBe(300)
   })
 
+  it('keeps the position when a push only opens or closes the source panel (?source=)', () => {
+    scrollBy(900)
+    act(() => void go('/directory?source=CA-4.3~p2'))
+    expect(scrollTo).not.toHaveBeenCalled()
+    expect(y).toBe(900)
+    // Back closes it, and the page stays where the reader is.
+    act(() => void go(-1))
+    expect(scrollTo).not.toHaveBeenCalled()
+  })
+
+  it('keeps the position when Back or Forward only closes or opens the source panel', () => {
+    scrollBy(500)
+    act(() => void go('/directory?source=CA-4.3~p2'))
+    // The reader scrolls on with the panel open (an answer kept streaming, say).
+    scrollBy(1400)
+    scrollTo.mockClear()
+    act(() => void go(-1))
+    // Closing is Back (a POP), but the page stays where the reader is, not where it was opened.
+    expect(scrollTo).not.toHaveBeenCalled()
+    expect(y).toBe(1400)
+    act(() => void go(1))
+    expect(scrollTo).not.toHaveBeenCalled()
+  })
+
+  it('still restores Back to a page that differs by more than ?source=', () => {
+    scrollBy(500)
+    act(() => void go('/directory?location=x&source=CA-4.3~p2'))
+    scrollBy(120)
+    act(() => void go(-1))
+    expect(scrollTo).toHaveBeenLastCalledWith(0, 500)
+  })
+
+  it('still starts at the top for a push that changes anything besides ?source=', () => {
+    scrollBy(900)
+    act(() => void go('/directory?location=x&source=CA-4.3~p2'))
+    expect(scrollTo).toHaveBeenLastCalledWith(0, 0)
+    scrollTo.mockClear()
+    act(() => void go('/ask?source=CA-4.3~p2'))
+    expect(scrollTo).toHaveBeenLastCalledWith(0, 0)
+  })
+
   it('starts at the top when a replace goes to another page', () => {
     scrollBy(300)
     act(() => void go('/ask', { replace: true }))

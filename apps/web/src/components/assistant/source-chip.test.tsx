@@ -5,6 +5,7 @@ import type { CitationOut } from '@/api/generated'
 import { apiCitations, citation } from '@/test/assistant-fixtures'
 import { SourceChip, SourceChips } from './source-chip'
 import * as sources from './sources'
+import { numberBySection } from './sources'
 
 const ca1 = citation({ marker: 1, passageId: 'CA-4.3~p1' })
 const ca2 = citation({ marker: 1, passageId: 'CA-4.3~p2', offsetUtf16: 40 })
@@ -27,6 +28,11 @@ describe('SourceChip', () => {
     expect(chip).toHaveAttribute('aria-expanded', 'false')
   })
 
+  it('carries its passage, so focus can find it again after the page is redrawn', () => {
+    render(<SourceChip citation={ca2} expanded={false} onOpen={() => {}} />)
+    expect(screen.getByRole('button')).toHaveAttribute('data-passage-id', 'CA-4.3~p2')
+  })
+
   it('truncates a long label in its own element, so the name keeps all of it', () => {
     render(<SourceChip citation={ca1} expanded={false} onOpen={() => {}} />)
     const label = screen.getByText('Handbook CA-4.3 · California addendum')
@@ -44,27 +50,23 @@ describe('SourceChip', () => {
 })
 
 describe('SourceChips: the numbering work', () => {
-  it('numbers the citations once, and not again when only the open passage changes', () => {
-    const spy = vi.spyOn(sources, 'numberBySection')
-    const citations = apiCitations()
-    const { rerender } = render(<SourceChips citations={citations} onOpen={() => {}} />)
-    expect(spy).toHaveBeenCalledTimes(1)
-    rerender(<SourceChips citations={citations} openPassageId="CA-4.3~p2" onOpen={() => {}} />)
-    rerender(<SourceChips citations={citations} openPassageId="4.3~p3" onOpen={() => {}} />)
-    expect(spy).toHaveBeenCalledTimes(1)
-    spy.mockRestore()
+  it('still shows the same chips', () => {
+    render(<SourceChips citations={numberBySection(apiCitations())} onOpen={() => {}} />)
+    expect(screen.getAllByRole('button')).toHaveLength(2)
   })
 
-  it('still shows the same chips', () => {
+  it('takes citations as numbered, and does not number them again', () => {
+    // Marker 3 is the API's raw number. A component that renumbered would turn it into 2.
+    const spy = vi.spyOn(sources, 'numberBySection')
     render(<SourceChips citations={apiCitations()} onOpen={() => {}} />)
-    expect(screen.getAllByRole('button')).toHaveLength(2)
+    expect(spy).not.toHaveBeenCalled()
   })
 })
 
 describe('SourceChips: citations as the API sends them', () => {
   it('shows one chip per section, numbered by section, each opening the first passage cited', async () => {
     const onOpen = vi.fn<(citation: CitationOut) => void>()
-    render(<SourceChips citations={apiCitations()} onOpen={onOpen} />)
+    render(<SourceChips citations={numberBySection(apiCitations())} onOpen={onOpen} />)
     const chips = within(screen.getByRole('list', { name: 'Sources' })).getAllByRole('button')
     expect(chips.map((chip) => chip.getAttribute('aria-label'))).toEqual([
       'Source 1: Handbook CA-4.3, California addendum',
@@ -77,7 +79,13 @@ describe('SourceChips: citations as the API sends them', () => {
   })
 
   it('marks a chip expanded when any passage of its section is open, not only the first', () => {
-    render(<SourceChips citations={apiCitations()} openPassageId="CA-4.3~p2" onOpen={() => {}} />)
+    render(
+      <SourceChips
+        citations={numberBySection(apiCitations())}
+        openPassageId="CA-4.3~p2"
+        onOpen={() => {}}
+      />,
+    )
     expect(screen.getByRole('button', { name: /^Source 1/ })).toHaveAttribute(
       'aria-expanded',
       'true',
@@ -90,7 +98,13 @@ describe('SourceChips: citations as the API sends them', () => {
 
   it('hands back the open passage of its section when an open chip is pressed, so the caller can close it', async () => {
     const onOpen = vi.fn<(citation: CitationOut) => void>()
-    render(<SourceChips citations={apiCitations()} openPassageId="CA-4.3~p2" onOpen={onOpen} />)
+    render(
+      <SourceChips
+        citations={numberBySection(apiCitations())}
+        openPassageId="CA-4.3~p2"
+        onOpen={onOpen}
+      />,
+    )
     await userEvent.click(screen.getByRole('button', { name: /^Source 1/ }))
     expect(onOpen).toHaveBeenCalledExactlyOnceWith(
       expect.objectContaining({ passageId: 'CA-4.3~p2', marker: 1 }),
@@ -99,7 +113,13 @@ describe('SourceChips: citations as the API sends them', () => {
 
   it('hands back its own first passage when it is not open, even if another section is', async () => {
     const onOpen = vi.fn<(citation: CitationOut) => void>()
-    render(<SourceChips citations={apiCitations()} openPassageId="CA-4.3~p2" onOpen={onOpen} />)
+    render(
+      <SourceChips
+        citations={numberBySection(apiCitations())}
+        openPassageId="CA-4.3~p2"
+        onOpen={onOpen}
+      />,
+    )
     await userEvent.click(screen.getByRole('button', { name: /^Source 2/ }))
     expect(onOpen).toHaveBeenCalledExactlyOnceWith(
       expect.objectContaining({ passageId: '4.3~p3', marker: 2 }),
@@ -107,7 +127,13 @@ describe('SourceChips: citations as the API sends them', () => {
   })
 
   it('marks a chip expanded when the open passage is the one it opens', () => {
-    render(<SourceChips citations={apiCitations()} openPassageId="4.3~p3" onOpen={() => {}} />)
+    render(
+      <SourceChips
+        citations={numberBySection(apiCitations())}
+        openPassageId="4.3~p3"
+        onOpen={() => {}}
+      />,
+    )
     expect(screen.getByRole('button', { name: /^Source 2/ })).toHaveAttribute(
       'aria-expanded',
       'true',

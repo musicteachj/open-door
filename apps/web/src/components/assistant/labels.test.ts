@@ -13,6 +13,7 @@ import {
   toolIcon,
   toolCallLine,
   toolLine,
+  toolRunningLine,
 } from './labels'
 
 describe('conversationCopy', () => {
@@ -42,6 +43,7 @@ describe('conversationCopy', () => {
       sensitiveLink: 'How confidential HR cases work, §7.2',
       followUpPlaceholder: 'Ask a follow-up question',
       feedbackThanks: 'Thanks for the feedback.',
+      sendFailed: 'Something went wrong sending that.',
     })
   })
 
@@ -278,5 +280,22 @@ describe('lengthHint', () => {
   it('shows the count against the limit', () => {
     expect(QUESTION_LIMIT_CHARACTERS).toBe(2000)
     expect(lengthHint(1962)).toBe('1,962 of 2,000 characters')
+  })
+})
+
+describe('toolRunningLine', () => {
+  it('words a search in the present tense, and "again" for a later one', () => {
+    expect(toolRunningLine('search_handbook', false)).toBe('Searching the handbook…')
+    expect(toolRunningLine('search_handbook', true)).toBe('Searching the handbook again…')
+  })
+
+  it('words the other tools', () => {
+    expect(toolRunningLine('get_my_profile', false)).toBe('Looking up your profile…')
+    expect(toolRunningLine('find_people', false)).toBe('Searching the directory…')
+    expect(toolRunningLine('find_people', true)).toBe('Searching the directory again…')
+  })
+
+  it('gives an unknown tool a plain line', () => {
+    expect(toolRunningLine('something_new', false)).toBe('Working…')
   })
 })
