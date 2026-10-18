@@ -5,7 +5,12 @@ import { RouterProvider } from 'react-router/dom'
 import './index.css'
 import { createAppRouter } from './app/router'
 import { markExpired } from './app/session-status'
+import { installAnnouncer } from './lib/announce'
 import { createQueryClient } from './lib/query-client'
+
+// The live regions go into the page first, so a screen reader is already watching them when the
+// first thing is announced.
+installAnnouncer()
 
 const queryClient = createQueryClient({ onUnauthorized: markExpired })
 const router = createAppRouter()

@@ -6,7 +6,12 @@ import { AXE_TAGS, focusRing, themeColor } from './helpers'
 // The handbook section of the gallery in a real browser: axe on every state, what the browser
 // paints on hover and focus, the passage panel's focus behavior, and 390 px.
 
-const HANDBOOK_IDS = GALLERY_STATE_IDS.slice(GALLERY_STATE_IDS.indexOf('applicability-badge-chip'))
+// From the first handbook state to the last one. The list is in page order and grows at its other
+// ends, so the slice is bounded on both sides.
+const HANDBOOK_IDS = GALLERY_STATE_IDS.slice(
+  GALLERY_STATE_IDS.indexOf('applicability-badge-chip'),
+  GALLERY_STATE_IDS.indexOf('passage-panel-error') + 1,
+)
 // These two start closed, behind a button, so that an open panel does not take focus on load.
 const HOSTS = {
   'passage-panel-open': 'Open the passage',

@@ -212,7 +212,7 @@ export const COMPONENT_ROWS: ComponentRow[] = [
 ]
 
 /** The screen folders the report compares, in docs/design/screens/. The other folders belong to
- * later phases (07 onward). manifest.test.ts checks that every PNG in these has a row. */
+ * later phases (08 onward). manifest.test.ts checks that every PNG in these has a row. */
 export const SCREEN_FOLDERS = [
   '01-landing',
   '02-app-shell',
@@ -220,6 +220,7 @@ export const SCREEN_FOLDERS = [
   '04-directory',
   '05-global-states',
   '06-handbook',
+  '07-conversation',
 ] as const
 
 /** How to reach each state in the build. The capture spec holds the steps for each one; they use
@@ -257,9 +258,10 @@ export type ScreenSetup =
   | 'not-applicable'
   | 'missing-section'
   | 'panel-gallery'
+  | 'gallery-state'
 
 /** What the build photograph shows: the whole viewport, or one region of it. */
-export type ScreenTarget = 'viewport' | 'page' | 'sidebar' | 'main' | 'rail'
+export type ScreenTarget = 'viewport' | 'page' | 'sidebar' | 'main' | 'rail' | 'section'
 
 /** One row per screenshot in docs/design/screens/. */
 export type ScreenRow = {
@@ -271,6 +273,11 @@ export type ScreenRow = {
   /** Signed in as this person first. Left out, the visitor is not signed in. */
   persona?: 'Priya' | 'Mateo' | 'Marcus' | 'Dana'
   setup: ScreenSetup
+  /** For `gallery-state`: the gallery state this screenshot is set beside, by its heading's id.
+   * Its conversation state is photographed (`target: 'section'`, see `galleryFrameSelector`). */
+  galleryId?: GalleryStateId
+  /** For `gallery-state`: what to do inside the section before the photograph. */
+  interaction?: Interaction
   target?: ScreenTarget
   /** Photographed at this size. 1440 by 900 when left out, the width the designs are drawn at. */
   viewport?: { width: number; height: number }
@@ -288,6 +295,28 @@ const HANDBOOK_NAV =
   'Phase 5: the Time off item in the sidebar and the at-a-glance figures, and "How it\'s built" in Phase 7'
 const PHASE_5_HOME =
   'Phase 3 and Phase 5: the Time off and Handbook items and the at-a-glance figures'
+
+/**
+ * A screen 07 row: a conversation state in the gallery, set beside the design screenshot of the
+ * same name (desktop-<file>.png is the gallery state conversation-<file>). The page that composes
+ * these states is Phase 4, Stage 6, so until then the gallery is the build side.
+ */
+export type ConversationFile<Id extends string = GalleryStateId> =
+  Id extends `conversation-${infer File}` ? File : never
+
+export const conversationRow = (
+  file: ConversationFile,
+  title: string,
+  extra: Pick<ScreenRow, 'note' | 'interaction'> = {},
+): ScreenRow => ({
+  title: `07 Conversation: ${title}`,
+  designImage: `${SCREENS}/07-conversation/desktop-${file}.png`,
+  route: '/gallery',
+  setup: 'gallery-state',
+  galleryId: `conversation-${file}`,
+  target: 'section',
+  ...extra,
+})
 
 export const SCREEN_ROWS: ScreenRow[] = [
   {
@@ -635,7 +664,62 @@ export const SCREEN_ROWS: ScreenRow[] = [
     note: "The assistant home without the panel, which is the closest real state",
     differsUntil: 'Phase 4: the panel docked in the right rail, opened from a citation',
   },
+
+  // Screen 07, the conversation view: one row per screenshot, each beside its gallery state.
+  conversationRow('cited-answer', 'Cited answer'),
+  conversationRow('source-panel', 'Source panel', {
+    note: 'The panel opens when the third marker ("Source 1") is pressed, as it would from the page. The design docks the panel beside the column; the gallery shows it in its own frame below, and Stage 6\'s captures of the real page check the side-by-side layout',
+    interaction: {
+      action: 'click',
+      target: 'button[aria-label^="Source 1:"][data-slot="citation-marker"] >> nth=2',
+    },
+  }),
+  conversationRow('streaming-searching', 'Streaming, searching'),
+  conversationRow('streaming-text', 'Streaming, text arriving'),
+  conversationRow('streaming-progress-note', 'Streaming, progress note', {
+    note: 'The design\'s "Read §4.3 Sick leave" step matches no tool event, so only this fixture shows it',
+  }),
+  conversationRow('stopped', 'Stopped'),
+  conversationRow('show-your-work', 'Show your work', {
+    note: 'The profile line reads "Read your profile", with no private details (owner decision)',
+  }),
+  conversationRow('show-your-work-routed', 'Show your work, routed', {
+    note: 'Build decision: the sensitive turn shows the assistant\'s answer, then the panel, then "Show your work" with "Routed to HR guidance" and the "also go to" note. The screenshot is not redrawn',
+  }),
+  conversationRow('feedback-yes', 'Feedback, Yes'),
+  conversationRow('feedback-no', 'Feedback, No'),
+  conversationRow('feedback-thanks', 'Feedback, thank-you', {
+    note: 'Build decision: the thank-you after a reason is "Thanks for the feedback.", the same as after Yes',
+  }),
+  conversationRow('other-state', "Another state's policy"),
+  conversationRow('not-found', 'Not found'),
+  conversationRow('refusal', 'Refusal'),
+  conversationRow('sensitive', 'Sensitive', {
+    note: 'Build decision: the assistant\'s answer comes first, with its sources and "Was this right?", then the panel. The screenshot is not redrawn',
+  }),
+  conversationRow('crisis', 'Crisis'),
+  conversationRow('error-midstream', 'Error mid-stream', {
+    note: 'Build decision: the error shows the API\'s own text (the "internal" error), where the screenshot shows its own sentence. Only "Retry" is the design\'s',
+  }),
+  conversationRow('cant-answer', "Can't answer right now"),
+  conversationRow('send-error', 'Send error'),
+  conversationRow('budget-sandbox', 'Budget banner, sandbox'),
+  conversationRow('budget-daily', 'Budget banner, daily'),
+  conversationRow('length-hint', 'Length hint'),
+  conversationRow('personal-data', 'Personal-data warning'),
+  conversationRow('long-conversation', 'Long conversation', {
+    note: '"Show your work" stays on every finished answer, though the mockup leaves it off',
+  }),
 ]
+
+/**
+ * What a `gallery-state` row photographs: the conversation state inside its section, not the
+ * section. The state wraps the conversation frame and, once opened, the source panel's own frame.
+ * It breaks out of the gallery's 760 px column (810 px wide), so a photograph of the section would
+ * crop it, and one of the frame alone would leave the panel out.
+ */
+export const galleryFrameSelector = (galleryId: string) =>
+  `section[aria-labelledby="${galleryId}"] [data-slot="conversation-state"]`
 
 /** The slug that names a screen row's pictures: "01-landing-desktop-default". */
 export const screenSlug = (row: Pick<ScreenRow, 'designImage'>) =>

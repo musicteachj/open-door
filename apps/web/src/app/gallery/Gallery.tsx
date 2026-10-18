@@ -29,6 +29,7 @@ import { DirectorySections } from './sections/directory-sections'
 import { FeedbackSections } from './sections/feedback-sections'
 import { HandbookSections } from './sections/handbook-sections'
 import { FormsSections } from './sections/forms-sections'
+import { ConversationSections } from './sections/conversation-sections'
 import { CoreSections } from './sections/core-sections'
 import { LandingSections } from './sections/landing-sections'
 import { NavigationSections } from './sections/navigation-sections'
@@ -269,6 +270,7 @@ export function Gallery() {
         <NavigationSections />
         <FeedbackSections />
         <AssistantSections />
+        <ConversationSections />
         <LandingSections />
         <FormsSections />
         <DirectorySections />
