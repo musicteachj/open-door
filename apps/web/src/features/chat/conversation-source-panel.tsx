@@ -70,6 +70,12 @@ function Passage({
  * composer), not only from the panel. The panel itself handles Escape from inside it and from the
  * page body, so this takes only what is in the view and leaves the rest alone. It skips a key
  * another part of the page already used (an open menu) and an IME composition.
+ *
+ * This differs on purpose from `PassagePanel`'s own rule, which never closes from a field
+ * elsewhere (so a half-typed message is never at risk in the handbook): screen 07's notes
+ * (docs/design/screens/07-conversation/notes.md, "Keyboard and focus") ask that Escape anywhere in
+ * the conversation view, the composer included, closes the panel. Closing it does not touch the
+ * draft.
  */
 function useEscapeInConversation(onClose: () => void) {
   useEffect(() => {

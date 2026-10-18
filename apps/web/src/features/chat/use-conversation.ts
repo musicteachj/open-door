@@ -15,7 +15,7 @@ import {
 import { registerReset } from '@/lib/identity'
 import { conversationCopy } from '@/components/assistant/labels'
 import { numberBySection } from '@/components/assistant/sources'
-import { useChatStore, type ChatState, type SendDeps } from './store'
+import { useChatStore, type ChatState, type SendDeps, type SendOrigin } from './store'
 
 // The hooks the conversation page uses: the stored conversation (TanStack Query), the API's fixed
 // texts, and the actions that join the chat store to the server.
@@ -265,7 +265,7 @@ export function useConversationActions() {
   }, [queryClient, texts, createConversation])
 
   const send = useCallback(
-    async (question: string) => {
+    async (question: string, origin?: SendOrigin) => {
       let ready: SendDeps | null
       try {
         ready = await deps()
@@ -275,7 +275,7 @@ export function useConversationActions() {
         useChatStore.setState({ sendError: conversationCopy.sendFailed })
         return
       }
-      if (ready !== null) await useChatStore.getState().send(question, ready)
+      if (ready !== null) await useChatStore.getState().send(question, ready, origin)
     },
     [deps],
   )
@@ -289,7 +289,7 @@ export function useConversationActions() {
   /** Retry (after an error) and Ask again (after Stop): the live turn's question, sent again. */
   const askAgain = useCallback(async () => {
     const question = useChatStore.getState().turn?.question
-    if (question !== undefined) await send(question)
+    if (question !== undefined) await send(question, 'again')
   }, [send])
 
   /** "Start a new conversation": a new one on the server, and the old one's live turn dropped. */

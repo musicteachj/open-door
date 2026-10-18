@@ -163,7 +163,7 @@ export function ConversationView({
       hrContacts,
       renderMarker,
       onOpenSource,
-      onAskAgain: (question) => void send(question),
+      onAskAgain: (question) => void send(question, 'again'),
       budgetStop,
     }),
     [hrContacts, renderMarker, onOpenSource, send, budgetStop],

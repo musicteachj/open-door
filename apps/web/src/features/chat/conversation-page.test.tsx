@@ -344,6 +344,91 @@ describe('sensitive and crisis turns', () => {
   })
 })
 
+describe('a sensitive turn that ended some other way still shows its HR panel', () => {
+  // A sensitive turn can fail (the budget ran out at the model call) or be cut off: sensitive
+  // topics go to a person whatever happened to the answer (invariant 6).
+  it('shows the error message and the sensitive panel for a failed turn, on every read', async () => {
+    signedInWith(
+      conversationOut({
+        turns: [
+          turnOut({
+            id: 't-1',
+            question: 'My manager keeps making comments',
+            status: 'failed',
+            answerText: '',
+            error: { code: 'budget-sandbox', message: 'The sandbox budget is used.' },
+            guard: { category: 'sensitive' },
+            escalation: SENSITIVE,
+          }),
+        ],
+      }),
+    )
+    renderApp({ at: '/ask' })
+    const panel = await screen.findByRole('region', { name: SENSITIVE_HEADER })
+    expect(screen.getByText('The sandbox budget is used.')).toBeInTheDocument()
+    expect(within(panel).getByText('Dana Whitfield')).toBeInTheDocument()
+    // The panel follows the message, and a saved panel is not announced.
+    const message = document.querySelector('[data-slot="assistant-message"]')!
+    expect(message.compareDocumentPosition(panel) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(announceMock).not.toHaveBeenCalled()
+  })
+
+  it('shows it for a stopped turn too', async () => {
+    signedInWith(
+      conversationOut({
+        turns: [
+          turnOut({
+            id: 't-1',
+            question: 'Help',
+            status: 'stopped',
+            answerText: 'I am sorry',
+            guard: { category: 'sensitive' },
+            escalation: SENSITIVE,
+          }),
+        ],
+      }),
+    )
+    renderApp({ at: '/ask' })
+    expect(await screen.findByRole('region', { name: SENSITIVE_HEADER })).toBeInTheDocument()
+    expect(screen.getByText('Stopped')).toBeInTheDocument()
+  })
+
+  it('shows it for a live failed turn that settles into its saved copy, without announcing again', async () => {
+    const api = signedInWith(null)
+    onTurn(() => {
+      api.setCurrent(
+        conversationOut({
+          turns: [
+            turnOut({
+              id: 't-1',
+              question: 'Help',
+              status: 'failed',
+              answerText: '',
+              error: { code: 'budget-sandbox', message: 'The sandbox budget is used.' },
+              guard: { category: 'sensitive' },
+              escalation: SENSITIVE,
+            }),
+          ],
+        }),
+      )
+      return eventStream(
+        ['turn.started', { turnId: 't-1' }],
+        ['escalation', { ...SENSITIVE, offerCase: false }],
+        [
+          'error',
+          { code: 'budget-sandbox', message: 'The sandbox budget is used.', requestId: null },
+        ],
+      )
+    })
+    const { user } = renderApp({ at: '/ask' })
+    await user.type(await composer(), 'Help{Enter}')
+    await screen.findByRole('region', { name: SENSITIVE_HEADER })
+    await waitFor(() => expect(useChatStore.getState().turn).toBeNull())
+    expect(screen.getByRole('region', { name: SENSITIVE_HEADER })).toBeInTheDocument()
+    expect(announceMock).toHaveBeenCalledTimes(1)
+  })
+})
+
 describe('a panel’s arrival is announced only when it came down the stream', () => {
   it('announces a live sensitive panel once, and not again when the saved copy takes over', async () => {
     const api = signedInWith(null)
@@ -593,6 +678,29 @@ describe('a turn that is streaming, stopped, or has failed', () => {
     expect(await screen.findByText('Something went wrong on our end.')).toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: 'Retry' }))
     await waitFor(() => expect(posted[0]?.question).toBe('Sick days?'))
+  })
+
+  it('leaves what was typed in the box when Retry re-sends the question, even if it is the same words', async () => {
+    signedInWith(
+      conversationOut({
+        turns: [
+          turnOut({
+            id: 't-1',
+            question: 'Sick days?',
+            status: 'failed',
+            answerText: '',
+            error: { code: 'internal', message: 'Something went wrong on our end.' },
+          }),
+        ],
+      }),
+    )
+    const posted = onTurn(() => eventStream(...completedEvents('t-2', 'Done.')))
+    const { user } = renderApp({ at: '/ask' })
+    await user.type(await composer(), 'Sick days?')
+    await user.click(await screen.findByRole('button', { name: 'Retry' }))
+    await waitFor(() => expect(posted).toHaveLength(1))
+    await screen.findByText('Done.')
+    expect(await composer()).toHaveValue('Sick days?')
   })
 
   it('shows no Retry when a budget banner has turned the composer off', async () => {
@@ -851,9 +959,26 @@ describe('the budget', () => {
     await waitFor(() =>
       expect(screen.getByRole('textbox', { name: 'Ask Open Door' })).toBeDisabled(),
     )
-    // The banner is the one message: nothing under the box repeats it.
+    // The banner is the one message: the composer's own line (the budget stop) wins over the send
+    // error, so nothing under the box repeats it.
     expect(screen.getAllByText('This sandbox has used its assistant budget.')).toHaveLength(1)
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  })
+
+  it('shows the 429’s own words under the box when the conversation read has no banner (a long question the smallest one would not have been refused for)', async () => {
+    signedInWith(conversationOut({ turns: [cited()] }))
+    onTurn(() =>
+      problemResponse(429, 'budget-sandbox', 'There is not room for a question that long.'),
+    )
+    const { user } = renderApp({ at: '/ask' })
+    await user.type(await composer(), 'A very long question{Enter}')
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'There is not room for a question that long.',
+    )
+    // No banner came with the refetch, so the composer stays on and the draft is kept.
+    expect(screen.queryByRole('button', { name: 'Start a new sandbox' })).not.toBeInTheDocument()
+    expect(await composer()).toBeEnabled()
+    expect(await composer()).toHaveValue('A very long question')
   })
 
   it('shows the daily banner and a disabled composer before the first conversation, from the budget route', async () => {

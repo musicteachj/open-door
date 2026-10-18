@@ -147,6 +147,17 @@ export const StoredTurn = memo(function StoredTurn({
   const citations = withSourceKeys(turn.citations)
   const escalation = turn.escalation
   const again = () => context.onAskAgain(turn.question)
+  // A sensitive turn shows its HR panel whatever became of the answer (it can fail, or be cut
+  // off): sensitive topics go to a person. Keyed by the turn, and a saved panel never announces.
+  const panel =
+    escalation === null ? null : (
+      <EscalationPanel
+        key={`escalation-${turn.id}`}
+        kind={escalation.kind}
+        message={escalation.message}
+        contacts={escalation.hrContact}
+      />
+    )
 
   // A crisis or "can't answer right now" never reached the model: the panel alone follows the
   // question.
@@ -176,6 +187,7 @@ export const StoredTurn = memo(function StoredTurn({
           onAskAgain={again}
           context={context}
         />
+        {panel}
       </>
     )
   }
@@ -191,6 +203,7 @@ export const StoredTurn = memo(function StoredTurn({
           onRetry={context.budgetStop ? undefined : again}
           context={context}
         />
+        {panel}
       </>
     )
   }
@@ -206,6 +219,7 @@ export const StoredTurn = memo(function StoredTurn({
           citations={citations}
           context={context}
         />
+        {panel}
       </>
     )
   }

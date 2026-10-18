@@ -2387,6 +2387,17 @@ mutation-proved. What changed the design:
   sandbox start, and a private-details read retried into a second audit event) and pass alone;
   CI runs one worker
 
+**A `/code-review high` on PR #56** (the owner's request, after the PR opened) found one high: a
+sensitive turn that then failed lost its HR panel once its saved copy arrived and on every reload
+(invariant 6); stored turns now show their escalation panel whatever their status. Its mediums: a
+budget 429 for a long question could show nothing, since the banner's "reached" is sized for the
+smallest question (the 429's text shows again; the banner's line still wins when both apply); and
+a connection lost after the server accepted the question but before its first event hid the saved
+turn. Lows fixed: the panel flashing for a stale `?source=` on the home, one shared sandbox-start
+hook, and a re-send (Retry, Ask again, Try again) no longer clearing a matching draft. Dismissed:
+a Stop before the response (Stop shows only once streaming), and Escape closing the panel from
+the composer (screen 07's notes ask for it).
+
 **Final counts (Stage 6):** 2,815 API tests (up from 2,747), 1,961 web unit tests (up from
 1,587), and 285 browser tests (up from 230). `make db && make check` is green, including the
 offline evals (the smoke set) and `make proxy-check`. About 3,000 lines of application code,

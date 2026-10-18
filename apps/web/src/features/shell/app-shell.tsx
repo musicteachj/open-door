@@ -58,7 +58,8 @@ function Frame({ me }: { me: NonNullable<ReturnType<typeof useMe>['data']> }) {
   // A passage open from a citation (`?source=`) takes the rail's place (`w-panel`, 420 px) from
   // 1280 px up. Below that it is a modal sheet instead, over everything. The rail itself stops
   // being a side column at 1100 px.
-  const sourceOpen = useSourceUrl().key !== null && showRail
+  // Only while the conversation is on the page: the loading page and the home have nothing to cite.
+  const sourceOpen = useSourceUrl().key !== null && conversation
   const narrow = useMediaQuery(NARROW_WINDOW_QUERY)
   const dockedPanel = sourceOpen && !narrow
   // Where a page puts a banner that spans the sheet, the rail included.

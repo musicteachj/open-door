@@ -569,7 +569,7 @@ describe('a send that fails', () => {
   )
 
   it.each(['budget-sandbox', 'budget-daily'])(
-    'keeps the draft, asks again, and says nothing under the box (the banner is the one message) after a 429 %s',
+    'keeps the draft, asks again, and says the problem’s words under the box (the banner, if it shows, wins there) after a 429 %s',
     async (type) => {
       onTurn(() => problemResponse(429, type, 'The limit was reached.'))
       const deps = makeDeps()
@@ -577,7 +577,7 @@ describe('a send that fails', () => {
       await state().send('Hello', deps)
       expect(deps.invalidateConversation).toHaveBeenCalledTimes(1)
       expect(state().draft).toBe('Hello')
-      expect(state().sendError).toBeNull()
+      expect(state().sendError).toBe('The limit was reached.')
       expect(state().status).toBe('idle')
     },
   )
@@ -644,7 +644,7 @@ describe('an error in the middle of an answer', () => {
       await state().send('Sick days?', deps)
       expect(deps.invalidateConversation).toHaveBeenCalledTimes(1)
       expect(state().status).toBe('error')
-      // The banner is the one message: nothing is set under the box.
+      // An error event is the turn's own, shown in its message: nothing is set under the box.
       expect(state().sendError).toBeNull()
     },
   )
@@ -665,6 +665,25 @@ describe('an error in the middle of an answer', () => {
   })
 })
 
+describe('what a send clears from the box', () => {
+  it('empties the box when the server takes a question typed in the composer', async () => {
+    onTurn(() => eventStream(started, completed))
+    state().setDraft('Sick days?')
+    await state().send('Sick days?', makeDeps())
+    expect(state().draft).toBe('')
+  })
+
+  it.each([['Retry or Ask again'], ['Try again']])(
+    'leaves a draft typed since alone when %s re-sends a question, even one that matches',
+    async () => {
+      onTurn(() => eventStream(started, completed))
+      state().setDraft('Sick days?')
+      await state().send('Sick days?', makeDeps(), 'again')
+      expect(state().draft).toBe('Sick days?')
+    },
+  )
+})
+
 describe('a connection that drops', () => {
   it('shows the partial answer as stopped when it drops after the turn began', async () => {
     const stream = openStream()
@@ -682,14 +701,66 @@ describe('a connection that drops', () => {
     expect(deps.invalidateConversation).toHaveBeenCalledTimes(1)
   })
 
-  it('is a failed send when nothing came at all', async () => {
-    onTurn(() => eventStream())
+  it('is a failed send, with the question still in the box, when the server never answered', async () => {
+    onTurn(() => Response.error())
+    const deps = makeDeps()
     state().setDraft('Sick days?')
-    await state().send('Sick days?', makeDeps())
+    await state().send('Sick days?', deps)
     expect(state().status).toBe('idle')
     expect(state().turn).toBeNull()
     expect(state().sendError).toBe('Something went wrong sending that.')
     expect(state().draft).toBe('Sick days?')
+    // No turn can exist, so there is nothing to read.
+    expect(deps.invalidateConversation).not.toHaveBeenCalled()
+  })
+
+  describe('after the server answered (200) but before it announced the turn', () => {
+    // The server has the question and saves the turn stopped: a resend would ask it twice.
+    it('clears the question from the box, reads the conversation, and says the send failed, when the stream ends', async () => {
+      onTurn(() => eventStream())
+      const deps = makeDeps()
+      state().setDraft('Sick days?')
+      await state().send('Sick days?', deps)
+      expect(state().status).toBe('idle')
+      expect(state().turn).toBeNull()
+      expect(state().sendError).toBe('Something went wrong sending that.')
+      expect(state().draft).toBe('')
+      expect(deps.invalidateConversation).toHaveBeenCalledTimes(1)
+    })
+
+    it('does the same when the connection fails', async () => {
+      onTurn(
+        () =>
+          new HttpResponse(
+            new ReadableStream({
+              start(controller) {
+                controller.error(new Error('connection reset'))
+              },
+            }),
+            { headers: { 'Content-Type': 'text/event-stream' } },
+          ),
+      )
+      const deps = makeDeps()
+      state().setDraft('Sick days?')
+      await state().send('Sick days?', deps)
+      expect(state().turn).toBeNull()
+      expect(state().sendError).toBe('Something went wrong sending that.')
+      expect(state().draft).toBe('')
+      expect(deps.invalidateConversation).toHaveBeenCalledTimes(1)
+    })
+
+    it('keeps what was typed since', async () => {
+      const stream = openStream()
+      onTurn(() => stream.response())
+      const deps = makeDeps()
+      state().setDraft('Sick days?')
+      const sending = state().send('Sick days?', deps)
+      await vi.waitFor(() => expect(state().turn?.accepted).toBe(true))
+      state().setDraft('Something else')
+      stream.close()
+      await sending
+      expect(state().draft).toBe('Something else')
+    })
   })
 })
 
@@ -853,7 +924,7 @@ describe('Stop after the server answered but before the turn was announced', () 
     await sending
   })
 
-  it('is not a stopped turn when nothing ever comes: the question stays in the box', async () => {
+  it('is not a stopped turn when nothing ever comes: the server has the question, so it is read', async () => {
     const stream = openStream()
     onTurn(() => stream.response())
     const deps = makeDeps()
@@ -864,7 +935,8 @@ describe('Stop after the server answered but before the turn was announced', () 
     stream.close()
     await sending
     expect(state().turn).toBeNull()
-    expect(state().draft).toBe('Sick days?')
+    expect(state().draft).toBe('')
+    expect(deps.invalidateConversation).toHaveBeenCalledTimes(1)
     expect(state().status).toBe('idle')
   })
 

@@ -1,8 +1,7 @@
-import { useQueryClient } from '@tanstack/react-query'
 import { Info } from 'lucide-react'
-import { Navigate, useNavigate } from 'react-router'
-import { useCreateSandbox } from '@/api/generated'
-import { signInAs, useMe } from '@/app/useMe'
+import { Navigate } from 'react-router'
+import { useMe } from '@/app/useMe'
+import { useStartSandbox } from '@/app/useStartSandbox'
 import { Logo } from '@/components/core/logo'
 import { InlineError } from '@/components/feedback/inline-error'
 import { PersonaCard } from '@/components/landing/persona-card'
@@ -25,16 +24,7 @@ const NOTICE =
 
 export function LandingPage() {
   const me = useMe()
-  const navigate = useNavigate()
-  const queryClient = useQueryClient()
-  const start = useCreateSandbox({
-    mutation: {
-      onSuccess: ({ me: person }) => {
-        signInAs(queryClient, person)
-        void navigate('/ask')
-      },
-    },
-  })
+  const start = useStartSandbox()
 
   // A signed-in visitor has nothing to choose. Cached data whose latest fetch was a 401 is not a
   // signed-in visitor: the sandbox ended, and sending them on would bounce them to the reset page.

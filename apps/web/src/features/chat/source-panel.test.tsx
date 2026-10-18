@@ -385,6 +385,37 @@ describe('the docked panel (a wide window)', () => {
     expect(screen.getByRole('complementary', { name: 'Sandbox status' })).toBeInTheDocument()
   })
 
+  it('shows no panel, and fetches no passage, where there is no conversation to cite: not while loading, nor on the home', async () => {
+    installFakeApi('priya')
+    installAssistantApi()
+    const passages = installPassages()
+    const { router } = renderApp({ at: '/ask?source=CA-4.3~p2' })
+    // The wait for the conversation, then the home, which closes a stale link by replacing it.
+    expect(
+      screen.queryByRole('complementary', { name: 'Handbook passage' }),
+    ).not.toBeInTheDocument()
+    await screen.findByRole('textbox', { name: 'Ask Open Door' })
+    await waitFor(() => expect(source(router)).toBeNull())
+    expect(
+      screen.queryByRole('complementary', { name: 'Handbook passage' }),
+    ).not.toBeInTheDocument()
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    expect(passages.requests).toEqual([])
+  })
+
+  it('shows no sheet on the home for a stale link in a narrow window either', async () => {
+    stubMediaQuery(true)
+    installFakeApi('priya')
+    installAssistantApi()
+    const passages = installPassages()
+    const { router } = renderApp({ at: '/ask?source=CA-4.3~p2' })
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    await screen.findByRole('textbox', { name: 'Ask Open Door' })
+    await waitFor(() => expect(source(router)).toBeNull())
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    expect(passages.requests).toEqual([])
+  })
+
   it('shows no panel on another page, whatever the URL says', async () => {
     installFakeApi('priya')
     installAssistantApi()

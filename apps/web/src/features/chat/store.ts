@@ -70,6 +70,13 @@ export type SendDeps = {
 /** A finished live turn whose saved copy has not arrived yet, shown in order until it does. */
 export type SettlingTurn = { turn: LiveTurn; phase: 'idle' | 'error' | 'stopped' }
 
+/**
+ * Where a send came from. `composer`: the person typed the question, so the box is emptied once
+ * the server takes it. `again`: Retry, Ask again, or Try again re-sent a turn's question, and what
+ * is in the box (something typed since, even if it matches) is not theirs to clear.
+ */
+export type SendOrigin = 'composer' | 'again'
+
 export type ChatState = {
   draft: string
   status: ChatStatus
@@ -94,7 +101,7 @@ export type ChatState = {
    * shows the "still answering" text. A question that looks like a Social Security or card number
    * is not sent and sets `warning`.
    */
-  send: (question: string, deps: SendDeps) => Promise<void>
+  send: (question: string, deps: SendDeps, origin?: SendOrigin) => Promise<void>
   /** Stops the answer: the connection closes, and the turn shows "Stopped" with what arrived. */
   stop: (deps: Pick<SendDeps, 'invalidateConversation'>) => void
   /** The refetched conversation holds the finished turn: drop the live copy. */
@@ -254,7 +261,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       }
     }),
 
-  async send(question, deps) {
+  async send(question, deps, origin = 'composer') {
     const trimmed = trimLikePython(question)
     if (trimmed === '') return
     const { status } = get()
@@ -299,7 +306,10 @@ export const useChatStore = create<ChatState>((set, get) => ({
           turn,
           // The first event means the server took the question, so it is no longer a draft. Text
           // typed since then stays.
-          draft: event.type === 'turn.started' && state.draft === question ? '' : state.draft,
+          draft:
+            event.type === 'turn.started' && origin === 'composer' && state.draft === question
+              ? ''
+              : state.draft,
           // "Still answering" is about this answer, which has now ended.
           sendError:
             event.type === 'error' || event.type === 'turn.completed' ? null : state.sendError,
@@ -343,13 +353,18 @@ export const useChatStore = create<ChatState>((set, get) => ({
       if (!live()) return
       // The stream ended. With no closing event the connection dropped, which the server saves as
       // stopped.
-      endWithoutClosingEvent(deps)
+      endWithoutClosingEvent(deps, origin)
     } catch (error) {
       if (!live()) return
       const turn = get().turn
-      if (turn !== null && turn.turnId !== null && !(error instanceof ApiError)) {
-        // The answer had begun: keep what arrived. The server saved it as stopped.
-        endWithoutClosingEvent(deps)
+      if (
+        turn !== null &&
+        !(error instanceof ApiError) &&
+        (turn.turnId !== null || turn.accepted)
+      ) {
+        // The server had answered: keep what arrived (it saved the turn as stopped), or, if it had
+        // not yet said which turn, treat it as a turn it holds all the same.
+        endWithoutClosingEvent(deps, origin)
         return
       }
       failSend(error, deps)
@@ -420,12 +435,25 @@ export const useChatStore = create<ChatState>((set, get) => ({
  * design (its escalation is the last event), so it is finished like a completed turn. Anything
  * else means the connection dropped, which the server saves as stopped.
  */
-function endWithoutClosingEvent(deps: Pick<SendDeps, 'invalidateConversation'>) {
+function endWithoutClosingEvent(
+  deps: Pick<SendDeps, 'invalidateConversation'>,
+  origin: SendOrigin,
+) {
   const { status, turn } = useChatStore.getState()
   if (turn === null || (status !== 'sending' && status !== 'streaming')) return
   if (turn.turnId === null) {
-    // Nothing came at all, so there is no turn to show.
-    useChatStore.setState({ status: 'idle', turn: null, sendError: conversationCopy.sendFailed })
+    // No event came, so there is no turn to show. If the server had answered (200) it holds the
+    // question, and saves the turn stopped: the question is not an unsent draft any more (as
+    // `turn.started` would have made it), and the conversation is read so the saved turn shows.
+    // A resend would ask it twice. If it had not answered, nothing exists to read.
+    useChatStore.setState((state) => ({
+      status: 'idle',
+      turn: null,
+      sendError: conversationCopy.sendFailed,
+      draft:
+        turn.accepted && origin === 'composer' && state.draft === turn.question ? '' : state.draft,
+    }))
+    if (turn.accepted) deps.invalidateConversation()
     return
   }
   // (An `error` event has already put the turn in `error`, which returned above.)
@@ -463,10 +491,12 @@ function failSend(error: unknown, deps: SendDeps) {
   } else if (error.status === 422 && type === 'personal-data') {
     set({ ...cleared, warning: deps.texts.personalData })
   } else if (error.status === 429 && type !== undefined && BUDGET_CODES.has(type)) {
-    // The banner comes from the conversation read, not from this response, and it is the one
-    // message: the same words are not also put under the box.
+    // The banner comes from the conversation read. Its "reached" is sized for the smallest
+    // question, while this refusal sized the real one plus the history, so a long question can be
+    // refused with no banner: the problem's words go under the box. When the banner does show, the
+    // composer's budget line wins there, so it is still one message.
     deps.invalidateConversation()
-    set({ ...cleared })
+    set({ ...cleared, sendError: problemText(error) })
   } else if (error.status === 404) {
     // The conversation it was sent to is gone (or was never this person's): forget it, so the
     // next question uses the server's current one.
