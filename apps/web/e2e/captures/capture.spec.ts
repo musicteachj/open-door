@@ -9,6 +9,7 @@ import {
   COMPONENT_ROWS,
   designFile,
   designScreenFile,
+  galleryFrameSelector,
   SCREEN_ROWS,
   screenGroup,
   specimenPath,
@@ -272,6 +273,18 @@ async function reachScreen(page: Page, row: ScreenRow) {
         .locator('section[aria-labelledby="passage-panel-open"]')
         .evaluate((el) => el.scrollIntoView({ block: 'center' }))
       break
+    case 'gallery-state': {
+      // A conversation state in the gallery, centered, then the interaction a person would make.
+      const section = page.locator(`section[aria-labelledby="${row.galleryId}"]`)
+      await section.evaluate((el) => el.scrollIntoView({ block: 'center' }))
+      if (row.interaction) {
+        const target = section.locator(row.interaction.target).first()
+        if (row.interaction.action === 'hover') await target.hover()
+        else if (row.interaction.action === 'focus') await target.focus()
+        else await target.click()
+      }
+      break
+    }
     case 'home':
     case 'expiry-banner':
       await expect(page.getByRole('heading', { level: 1 })).toBeVisible()
@@ -301,6 +314,8 @@ async function photographScreen(browser: Browser, row: ScreenRow): Promise<strin
     }
     if (row.target === 'sidebar' || row.target === 'main' || row.target === 'rail') {
       await region[row.target]().screenshot({ path })
+    } else if (row.target === 'section') {
+      await page.locator(galleryFrameSelector(row.galleryId!)).screenshot({ path })
     } else {
       await page.screenshot({ path, fullPage: row.target === 'page' })
     }

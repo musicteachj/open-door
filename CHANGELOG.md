@@ -48,6 +48,40 @@ version (`0.x.y` while the app is being built, `1.0.0` when it is complete).
 
 ### Added
 
+- **The conversation's components, in every state the design draws** (Phase 4, stage 5). They
+  are built and shown in the component gallery on sample data; Stage 6 connects them to the
+  live stream and the conversation API. Everything follows screen 07's design and its build
+  decisions.
+  - **Answers render a small Markdown subset as React elements:** paragraphs, bold, italic,
+    lists, and links. Raw HTML shows as plain characters, and only links to `/handbook/` or
+    `/directory/` can be clicked. Citation markers are placed where the server says, and the
+    model's own text can't fake one.
+  - **Markers and source chips are numbered by section,** so marker 1 and chip 1 always name
+    the same handbook section. Each marker still opens the exact passage it cites. (The API
+    numbers passages, so the web renumbers them in one place.)
+  - **Messages:** the person's question, and the assistant's answer with its "AI" label while
+    it streams, when it's complete, stopped ("Ask again"), cut off, or failed (the API's own
+    error text, with Retry). Progress steps show a spinner on the current step and a check on
+    the finished ones.
+  - **"Show your work"** lists the safety check's result, the tools called (in plain words, such
+    as "Searched the handbook: sick leave"; the profile step just says "Read your profile"), and
+    the sections retrieved, each "Cited as N" or "Not cited".
+  - **"Was this right?"** with Yes, or No and an optional reason of up to 500 characters, then
+    "Thanks for the feedback." Focus moves the way the design's notes say.
+  - **The crisis, sensitive, and "can't answer right now" panels** show the API's fixed text
+    word for word, are announced to screen readers when they appear, and end with the HR
+    contacts: the directory's HR people, then the shared HR inbox. "Call 911" and "call or text
+    988" are tap-to-call links in the crisis panel, the can't-answer panel, and both budget
+    banners, and the crisis panel also links the 988 chat and the EAP number. No words change.
+  - **Budget banners** for a used sandbox budget and the day's demo limit, a conversation header,
+    and the composer's new states: Stop while an answer streams, disabled at a budget cap, a
+    length hint from 1,800 characters (it blocks sending only past 2,000, counted as the API
+    counts), the personal-data warning, the send error, and the long-conversation notice. The
+    conversation's composer is one line that grows as you type.
+  - **Tests:** unit tests for every component and state, and browser tests for each gallery
+    state: an accessibility scan, no sideways scrolling at 390 px, the focus rules, and a check
+    that pressing Stop never sends a half-typed next question. The capture report pairs each
+    state with its design screenshot.
 - **The assistant's conversation routes and its streamed answers** (Phase 4, stage 4). The API
   can now start a conversation, stream an answer to a question, show the current conversation
   after a reload, and take "Was this right?" feedback, all under `/api/v1/assistant`. An answer

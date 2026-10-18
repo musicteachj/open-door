@@ -1308,12 +1308,36 @@ manifest, `home.spec.ts` (updated for the real API).
 
 ## Self-review: acceptance criteria to tasks
 
-Screen 07 isn't designed yet. Stage 5's first step fills this table from
-`07-conversation/notes.md`, one row per criterion, before Task 33 starts.
+Filled at Stage 5's start (2026-10-17) from `07-conversation/notes.md`, its "Build decisions
+(owner, 2026-10-17)", and the spec's conversation view, and approved by the owner. Tasks 39 to
+42 are Stage 6's.
 
 | Criterion (07 Conversation) | Task |
 |---|---|
-| (added when the design lands) | |
+| Every state matches its screenshot at 1440 px within the spacing tokens, with the Build decisions applied | 37 (gallery), 42 (page) |
+| Usable at 390 px with nothing scrolling sideways. User messages take at most 85% of the width. Chips wrap, and a long label truncates while its accessible name keeps the full label. "Was this right?" and "Show your work" sit on two rows. Contact rows stack, with the email under the name. The composer's footer and the banners wrap | 34–37, 42 |
+| User messages sit on the right on surface-hover. Assistant messages have no bubble, are capped at 680 px, and every one starts with the "AI" label and "Open Door" | 34 |
+| Answers render the Markdown subset as React elements. Raw HTML and bare URLs show as text. Only `/handbook/` and `/directory/` links are clickable. There's no `dangerouslySetInnerHTML` | 33 |
+| Markers are numbered by source in order of first use, so marker 1 and chip 1 are the same section. Each marker opens the passage it cites, and a chip opens the first passage cited from its section. Markers appear while text streams. Chips and feedback appear only after the answer finishes | 33, 35 |
+| Markers and chips are buttons with `aria-expanded` and the name "Source 1: Handbook CA-4.3, California addendum". A chip names the section's group ("Handbook §4.3 · Company handbook") | 35 |
+| Status lines are `role="status"` and `aria-live="polite"`. The current step has a spinner. Finished steps have a check and past-tense text. A taken-back working note shows as a status line | 34 |
+| The streaming message is `aria-busy` until it finishes. Stop takes Ask's place, and pressing it returns focus to the composer | 34, 36, 40 |
+| A stopped answer shows its partial text, "Stopped", and "Ask again" | 34 |
+| A mid-stream error shows the API's `error` message as `role="alert"` inside the message, with "Retry" | 34 |
+| A not-found answer is followed by the HR contacts card | 34, 36, 41 |
+| A refusal reads as an ordinary answer, with the AI label, its sources, and feedback | 34 |
+| "Show your work" is a disclosure button (`aria-expanded`, `aria-controls`), collapsed by default, and focus stays on it. It shows "Safety check: no concerns" or "Routed to HR guidance" with "Questions like this also go to a person on the HR team." Then "Tools called" (lines formatted from the tool's name and summary; "Read your profile") and "Sections retrieved" ("Cited as N" or "Not cited"). An empty list says "None" | 35 |
+| Feedback: Yes, or No. No opens the reason form ("What was wrong?" Optional, the placeholder, "N of 500 characters", Cancel, "Send feedback") and moves focus into the box. Cancel returns focus to No. After Yes or Send, focus moves to "Thanks for the feedback." (`role="status"`), the same line in both cases. A failed send keeps what was typed | 35 |
+| Escalation panels are bordered cards with a header band, each a region labeled by its header. They have no AI label, sources, or feedback, and they show the event's fixed message verbatim. The crisis band is ink (the only dark band). The sensitive and can't-answer bands are surface-sunken. Red appears only on the can't-answer icon | 36 |
+| The crisis panel shows its bullets as a list, with `tel:` links for 911, 988, and the EAP, and a link to chat.988lifeline.org. The sensitive panel follows the assistant's answer, links "How confidential HR cases work, §7.2", and keeps "Show your work". The can't-answer panel has "Try again". A panel's arrival is announced once, and focus stays in the composer | 36 |
+| Every panel's contacts list the directory's HR people (initials, name, title and location when given, a `mailto:` email), then the shared inbox constant (HR team · Shared inbox · hr@juniperrow.example), under "HR contacts" and "A person on the HR team reads and answers these, not the AI." | 36 |
+| The sandbox banner ("Start a new sandbox") and the daily banner show the API's text. Under either, the composer and Ask are disabled and skipped by Tab, the placeholder says why, and "You can still use the Handbook and the Directory." keeps its links in the Tab order | 36 |
+| Composer: "Ask a follow-up question" in a conversation. From 1,800 characters, "1,962 of 2,000 characters". At the limit, "2,000 of 2,000 characters. Shorten your question to send it." and it won't send. The personal-data warning (`role="alert"`) blocks sending. The send error appears under the composer. The long-conversation notice has "Start a new conversation" | 36 |
+| The header row has the retention line, "Start a new conversation", and the sandbox pill. At 390 px it stacks: the icon button sits by the pill, and the retention line moves under the composer | 36, 41 |
+| The source panel docks at 420 px in the rail's place, with focus on its title. Escape, Close, or the same marker closes it, and focus returns to the newest opener. A different marker replaces the passage. The URL keeps `?source=`. At 390 px it's a modal bottom sheet (focus kept inside, the page behind it inert, swipe or Close dismisses it) | 41, 42 |
+| The Tab order runs: the nav, the persona switcher, the banner action, "Start a new conversation", the thread in reading order (markers and links, chips, Yes, No, "Show your work"), the composer, Ask or Stop, then the rail or panel | 34–36, 42 |
+| The AI disclosure stays under the composer, and the panels say that a person in HR, not the AI, handles what comes next | 36 |
+| axe reports no violations in any state | 37, 42 |
 
 **The Phase 4 backlog items:**
 - map search hits to `search_result` blocks, and open the panel on a citation's passage
@@ -2062,6 +2086,152 @@ tests (both unchanged), with four import contracts kept. `make db && make check`
 the offline assistant evals and `make proxy-check` (about 100 seconds). About 2,840 lines of
 application code, scripts, and config, above the plan's estimate of 900 and the 1,500 guideline, so
 the PR gives a reading guide.
+
+### Stage 5 (`feat/phase-4-conversation-components`, 2026-10-17)
+
+Branched off `dev` at `5f1ae03`, after #52 (Stage 4), #53 (the Voyage opt-out), and #54 (screen
+07) merged. Screen 07's criteria are in the
+[self-review table](#self-review-acceptance-criteria-to-tasks).
+
+**Owner decisions (2026-10-17):**
+- **The design shows data the API doesn't send yet, and Stage 6 adds it.** The components take
+  these as props, and the gallery shows the design. Stage 6's page task (41) adds them to the
+  conversation API:
+  - HR contacts' job title and location
+  - uncited sections' titles and groups
+  - the budget banner's text on a reload
+  - HR contacts under a not-found answer, and the rule for when a turn counts as "not found"
+- **"Show your work" formats each tool line in the web app** from the tool's name and its
+  summary ("Searched the handbook: sick leave"). The profile line is "Read your profile", not
+  the design's "Read your profile: Oakland store, California, salaried", so no private details
+  enter the stored trace.
+
+**Where the build differs from the design** (the Build decisions in notes.md, plus these):
+- The crisis panel renders the fixed text's "- " lines as a list. It links a fixed set of
+  patterns: "call 911", "Call or text 988", and the EAP number (as `tel:`), and
+  chat.988lifeline.org. The words are never changed.
+- "Show your work" stays on every finished answer, though the long-conversation mockup leaves it
+  off.
+- The design's status step "Read §4.3 Sick leave" matches no tool. The steps come from the
+  `status`, `tool.started`, and `tool.finished` events, so it appears only in the gallery's
+  fixture.
+- The plan's "same trick as Phase 3's excerpt markers" was a server-side trick (the handbook
+  search splits its excerpt on the server), so the answer renderer builds its own marker
+  placeholders.
+- **Markers and chips are numbered by section, not by passage** (Batch B's review). The API
+  numbers distinct passages (the spec's `marker`), but notes.md says "Chip 1 and every marker 1
+  point to the same section", and the design wins over this plan's "one chip per distinct
+  passage". `numberBySection` in `components/assistant/sources.ts` renumbers once, where a
+  message's citations enter `AssistantMessage`, `SourceChips`, and `WorkTrace`; Stage 6 passes
+  the API's citations unchanged. Each marker still opens the passage it cites.
+- **Tap-to-call links beyond the crisis panel** (the owner's choice): "call 911" and "call or
+  text 988" are links in the can't-answer panel and both budget banners too, not only in the
+  crisis panel as notes.md says. The words never change; only those fixed patterns link.
+- **The question limit counts as the API does:** code points after trimming. Exactly 2,000
+  sends; from 2,001 the composer shows the real count ("2,001 of 2,000 characters. Shorten your
+  question to send it.") and won't send. Nothing is cut from a paste. The feedback reason
+  follows the same rule at 500.
+- **A failed tool call says so** in "Show your work" ("… (failed)"), and a missing safety check
+  draws no safety line rather than claiming "no concerns".
+- **Copy the design doesn't give, accepted by the owner:** "This answer was cut off before it
+  finished." (an incomplete answer), a hidden "You asked: " before each question, "Used a tool"
+  (an unknown tool), "Back under the limit." (spoken only), and " (failed)".
+- **The gallery shows the open passage panel below the conversation,** not beside it (the
+  owner's choice after the first look: every frame is 810 px wide). Side-by-side docking is
+  checked on the real page in Stage 6's captures.
+- **The gallery's sample answer corrects the design's "instead of the company's 3 days":**
+  §4.3 gives every employee 40 hours, so it says what CA-4.3 adds ("40 hours or 5 of your
+  workdays, whichever is more"). The other sample answers were checked against the handbook.
+- **The conversation's composer is a docked variant:** one line that grows to about four, then
+  scrolls (`field-sizing: content`, with a measured fallback), and below 640 px its disclosure
+  sits above Ask or Stop. The home composer keeps its three rows and footer.
+
+**Batches.**
+- **A (Tasks 33 and 34):** `labels.ts` (the screen's words, `HR_SHARED_INBOX`, `chipLabel`,
+  `sourceName`, `toolLine` with a parser for the summaries' Python `repr`), `answer.tsx`
+  (`react-markdown` 10 with an own rehype step for the markers and the caret, and a path-checked
+  link), the messages, and the status line. The combined review found one medium (a marker right
+  after a closing `**` broke the bold) and lows: a marker inside a link's address, dot segments
+  in a link path, prototype keys in `toolIcon`, the answer's live region, the caret after a
+  block, an empty anchor, and an error message made required by the props' type.
+- **B (Tasks 35 and 36):** the marker, chips, trace, feedback, HR contacts, the crisis
+  formatter, the panels, the banner, the header, and the composer's new states. The review found
+  one high, proved in real Chromium: Stop and Ask were one reused button, so pressing Stop
+  turned it into Ask before the click finished and **sent the half-typed next question**
+  (separate `key`s fix it, and a browser test guards it). Its mediums: the per-section
+  numbering above; panels' arrival never announced (now a live region, `role="alert"` for the
+  crisis panel); the length hint spoken on every keystroke (now only when crossing 1,800 or
+  2,000). Lows: feedback focus edge cases, Stop under a budget, the disabled line's links, CRLF
+  in the crisis text.
+- **C (Task 37):** the gallery's 24 conversation states in notes.md's order, the browser tests
+  (`e2e/gallery-conversation.spec.ts`), the bounded handbook slice, and the capture rows. My
+  own screenshot pass at 1440 and 390 px against the 24 design screenshots found the frame too narrow, the
+  composer too tall, the narrow footer, the chips' group names, Retry's place, and the narrow
+  trace rows; all fixed, then a second pass after the owner's panel feedback. The review found
+  one medium (the capture photo cropped the widened frame) and scoped the narrow footer to the
+  docked composer.
+
+**Stage 6 must-dos (Task 41 unless noted):**
+- **API fields the design needs:** an HR contact's job title and location; each retrieved
+  section's title and group; the budget banner's text in the conversation `GET`; HR contacts for
+  a turn that isn't escalated, and a rule for when an answer counts as "not found" (so the
+  contacts card follows it).
+- **The browser's own texts:** the composer's personal-data warning (Task 39's check) and the
+  "still answering" send error (Enter while streaming) need the API's words without a call;
+  decide where they come from, since the web never keeps its own copy of an API text.
+- **The page's composition:** under a sensitive panel, "Show your work" keeps the 680 px cap
+  (the gallery wraps it); the sandbox pill (`PageSandboxIndicator`) hides below 760 px, but at
+  390 px the design wants it beside the header's icon button; the retention line moves under the
+  composer below 640 px (`RetentionLine`). Re-measure the 390 px layout on the page: the
+  gallery's own padding makes its column 326 px.
+- **The source panel:** docked beside the column on desktop, a modal bottom sheet at 390 px
+  (Task 42 checks both against the design).
+- Delete the fake transport (Task 40).
+
+**The close's `/code-review medium`: six rounds.** Rounds 1 to 5 each found at least one
+medium; round 6 found only lows, so the loop stopped there (the stopping rule), and its cheap
+lows were fixed without another round. Every fix was written test first and mutation-proved.
+What changed the design:
+- **Marker placement** (rounds 1 to 5): a marker steps back over trailing whitespace and over a
+  closing `*`/`_` run, but never onto a bare list bullet (`-`, `+`, `*`, `1.`), into an
+  underscored word, or inside a delimiter run; a marker in a link's address, a reference
+  definition, an autolink, or a raw HTML block still renders. Sections are numbered in text
+  order. An image the model writes shows its alt text.
+- **Screen-reader announcements** (rounds 1 to 5): one shared announcer (`src/lib/announce.ts`),
+  installed at app start, so its live regions exist before anything is said. The panels use it
+  only when the page asks (`announceOnMount`, for a panel arriving live), so a reload never
+  re-announces. The status line's region is mounted for the whole stream, is not atomic, and
+  sits outside the answer's `aria-busy` region.
+- **Keyboard focus** (rounds 3 to 5): focus follows Ask to Stop when an answer starts, Stop back
+  to the box when it ends, and the box to the Handbook link when a budget stop disables the
+  composer, each only when focus would otherwise be lost.
+- **The composer** (rounds 1, 2, 4): counts as Python's `str.strip()` does (`text-count.ts`);
+  the budget stop's links always show; the over-limit reason beats a stale send error;
+  `aria-invalid` only for the over-limit block. Feedback's Send behaves like Ask when too long.
+- **"Show your work"** names skipped steps ("Skipped 3 more steps (the limit for one question)",
+  new copy), and a chip that's open closes the panel when pressed.
+
+**Recorded, not fixed:**
+- the docked composer's measured fallback (Firefox and Safari lack `field-sizing`) doesn't
+  re-measure when the width changes, and no browser test runs it, since Chromium has
+  `field-sizing`
+- marker numbers come from the citations' raw offsets, while placement uses the adjusted ones,
+  so two markers that land in one spot can read "2 1" (only when an offset falls inside a link's
+  address or a run of whitespace)
+- pressing Yes with the reason form open sends "helpful" and drops the typed reason (a
+  deliberate change of mind)
+- **for Stage 6:**
+  - the composer has two failed-send props (`error` with Retry, and `sendError`); use one
+  - number markers once where citations enter the store, rather than in three components
+  - key each escalation panel by its turn, so a new arrival mounts a new panel and announces
+  - send the trimmed question (the API's schema also caps the untrimmed body at 20,000
+    characters)
+
+**Final counts (Stage 5):** 1,587 web unit tests (up from 1,006) and 230 browser tests (up from
+175), with 2,747 API tests unchanged. `make db && make check` is green, including the offline
+evals and `make proxy-check` (about 100 seconds). About 3,500 lines of application code (about
+1,000 of them the gallery's states and sample data), above the plan's estimate of 1,200 and the
+1,500 guideline, so the PR gives a reading guide.
 
 ## Backlog
 

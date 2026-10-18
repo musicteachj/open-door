@@ -1,6 +1,7 @@
 import '@testing-library/jest-dom/vitest'
 import { cleanup } from '@testing-library/react'
 import { afterAll, afterEach, beforeAll } from 'vitest'
+import { resetAnnouncer } from '@/lib/announce'
 import { server } from './msw'
 
 beforeAll(() => {
@@ -25,6 +26,8 @@ beforeAll(() => {
 
 afterEach(() => {
   cleanup()
+  // The announcer's regions live on the body, outside what `cleanup` removes.
+  resetAnnouncer()
   server.resetHandlers()
 })
 
