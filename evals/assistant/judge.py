@@ -53,6 +53,7 @@ from anthropic import (
 )
 
 from app.ai.anthropic_transport import is_spend_limit, usage_from_sdk
+from app.ai.context import ROLE_LABELS, role_for
 from app.ai.pricing import Usage, cost_usd, is_priced
 from app.ai.replay import (
     RE_RECORD_HINT,
@@ -298,12 +299,22 @@ def reservation_usd(kwargs: Mapping[str, Any]) -> Decimal:
 
 
 def asker_line(company: SeedCompany, persona: str) -> str:
-    """The asker in one line for the judge: name, employment type, and office."""
+    """The asker in one line for the judge: name, role, employment type, and office.
+
+    The role is the one the assistant is told (`role_for`: HR over manager over employee), so the
+    judge doesn't mistake an HR person's "since you're on the HR team" for a made-up claim. A
+    manager is anyone who has a report other than themselves (as `load_actor` counts reports)."""
     person = next(p for p in company.people if p.persona_key == persona)
     place = next(loc for loc in company.locations if loc.id == person.location_id)
+    role = role_for(
+        is_hr_admin=person.is_hr_admin,
+        is_manager=any(
+            other.manager_id == person.id and other.id != person.id for other in company.people
+        ),
+    )
     return (
-        f"{person.given_name} {person.family_name}, {person.employment_type}, works at the"
-        f" {place.name} in {place.city}, {place.state}"
+        f"{person.given_name} {person.family_name}, {ROLE_LABELS[role]}, {person.employment_type},"
+        f" works at the {place.name} in {place.city}, {place.state}"
     )
 
 

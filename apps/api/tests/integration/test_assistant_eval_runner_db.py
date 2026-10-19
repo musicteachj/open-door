@@ -251,6 +251,12 @@ async def test_a_live_run_records_and_an_offline_run_replays_it_with_no_client_b
     assert live_board["mode"] == "live"
     assert live_board["items_run"] == 4
     assert live_board["partial"] is False
+    # Every guard call of the live run went to the real transport, so each was timed on the way
+    # through the recorder; a replay times nothing.
+    live_guard_calls = [c for c in live_board["live_evidence"]["calls"] if c["kind"] == "guard"]
+    assert len(live_guard_calls) == 4
+    assert all(isinstance(call["duration_ms"], int) for call in live_guard_calls)
+    assert live_board["live_evidence"]["guard_latency_ms"]["count"] == 4
 
     # Offline: every factory that would build a client raises, and so does Voyage's class.
     monkeypatch.setattr(run, "VoyageEmbedder", Boom())
@@ -266,6 +272,12 @@ async def test_a_live_run_records_and_an_offline_run_replays_it_with_no_client_b
     offline_board = json.loads(offline_json.read_text(encoding="utf-8"))
     assert offline_board["mode"] == "offline"
     assert offline_board["items_run"] == 4
+    offline_guard_calls = [
+        c for c in offline_board["live_evidence"]["calls"] if c["kind"] == "guard"
+    ]
+    assert len(offline_guard_calls) == 4
+    assert all(call["duration_ms"] is None for call in offline_guard_calls)
+    assert offline_board["live_evidence"]["guard_latency_ms"]["count"] == 0
     assert offline_board["metrics"] == live_board["metrics"]
     assert offline_board["failures"] == live_board["failures"]
     # An offline run has no cap and pays for nothing: the recorded costs are reported apart, and

@@ -4,7 +4,7 @@ from datetime import UTC, datetime, timedelta, timezone
 
 import pytest
 
-from app.ai.context import ActorView, turn_context
+from app.ai.context import ROLE_LABELS, ActorView, role_for, turn_context
 
 NOW = datetime(2026, 10, 15, 3, 0, tzinfo=UTC)
 
@@ -138,3 +138,19 @@ def test_values_cannot_add_lines_to_the_system_message() -> None:
     assert "- first second third" in text
     assert text.count("\n") == len(text.splitlines()) - 1
     assert len(text.splitlines()) == 7
+
+
+@pytest.mark.parametrize(
+    ("is_hr_admin", "is_manager", "role", "label"),
+    [
+        (True, True, "hr", "HR"),
+        (True, False, "hr", "HR"),
+        (False, True, "manager", "manager"),
+        (False, False, "employee", "employee"),
+    ],
+)
+def test_hr_outranks_manager_and_manager_outranks_employee(
+    is_hr_admin: bool, is_manager: bool, role: str, label: str
+) -> None:
+    assert role_for(is_hr_admin=is_hr_admin, is_manager=is_manager) == role
+    assert ROLE_LABELS[role_for(is_hr_admin=is_hr_admin, is_manager=is_manager)] == label

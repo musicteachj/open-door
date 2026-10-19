@@ -12,6 +12,31 @@ version (`0.x.y` while the app is being built, `1.0.0` when it is complete).
 
 ### Changed
 
+- **The assistant cites every policy sentence and stays out of decisions** (Phase 4, answer-quality
+  follow-up). The prompt (now version 2026-10.2) asks for a citation on every sentence that states
+  or sums up a policy, including which location's rule applies and how HR handles what people tell
+  it, and for each paragraph to start with a cited sentence. It gives a rule with its conditions
+  (who qualifies, how long they must have worked, whether it is paid, whether unused time carries
+  over), searches again when a passage mentions something it doesn't have, names the HR team when
+  it can't find an answer, and no longer works out dates from a number of days. Declining an
+  employment decision now also means no advice on how to make it ("document the dates first").
+  The full live run moved the judge from 67% to 74% (the plan's bar is 85%, carried to Phase 7),
+  and every other measure to 100%.
+- **The guard gets 10 seconds instead of 4** (Phase 4, answer-quality follow-up). In Stage 6's
+  full run the threat-of-violence item twice got no guard answer within 4 seconds and failed
+  closed instead of showing the crisis panel. The guard's measured p95 is about 2 seconds, so 4
+  seconds left no room for a retry; ADR 0009 is amended with the reasons and how 10 seconds fits
+  the turn's deadline and the AWS timeouts. The fresh full run had no guard failures.
+- **The eval judge knows the asker's role** (Phase 4, answer-quality follow-up). Its asker line
+  now says HR, manager, or employee, the same rule the assistant is told, so an HR person's
+  answer that mentions their HR role is no longer graded as a made-up claim. The judge is now
+  version 2026-10.2, and its agreement with the independent hand grades is 93%.
+- **The offline evals and CI replay the full set** (Phase 4, answer-quality follow-up), every
+  red-team and Q&A item instead of the smoke set, from a fresh full run ($8.02) that records
+  the crisis item the guard used to time out on. The smoke set gains that item too. Because a
+  smoke run re-records only its own items, CLAUDE.md's AI rule now asks for a full run before a
+  prompt, tool, guard, or retrieval PR, with smoke runs for trying wording first.
+
 - **The browser's fake assistant is gone** (Phase 4, stage 6). The home's canned reply, its
   transport, and their tests are deleted; development and the browser tests use the server's
   scripted model. The scripted model now cites a state addendum when its search returns one, so
@@ -70,6 +95,10 @@ version (`0.x.y` while the app is being built, `1.0.0` when it is complete).
 
 ### Added
 
+- **The live eval runs time each call** (Phase 4, answer-quality follow-up). Each live guard and
+  model call carries its `duration_ms` in the traces, and the scoreboard reports the guard's
+  median, p95, and slowest call. The first full run measured a median of 965 ms and a p95 of
+  1,992 ms, against the 800 ms target.
 - **The conversation page: ask Open Door a question at `/ask` and get a streamed, cited answer**
   (Phase 4, stage 6). The first question turns the assistant home into the conversation, and a
   reload shows it again, a stopped answer included. Every state from screen 07 is on the real

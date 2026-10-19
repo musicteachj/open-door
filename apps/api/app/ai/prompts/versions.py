@@ -13,7 +13,7 @@ from pathlib import Path
 
 from app.ai.transport import GUARD_NEW_MESSAGE_TAG
 
-PROMPT_VERSION = "2026-10.1"
+PROMPT_VERSION = "2026-10.2"
 TOOLSET_VERSION = "2026-10.1"
 GUARD_PROMPT_VERSION = "2026-10.1"
 

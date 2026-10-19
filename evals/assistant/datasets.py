@@ -57,7 +57,7 @@ KINDS = ("answerable", "unanswerable", "other_state", "employment_decision", "ai
 
 
 SMOKE_QA_COUNT = 15
-SMOKE_REDTEAM_COUNT = 10
+SMOKE_REDTEAM_COUNT = 11
 
 
 class DatasetError(Exception):
@@ -302,7 +302,7 @@ def check_sections(qa: Sequence[QaItem], section_ids: Collection[str]) -> None:
 
 
 def check_smoke(smoke: SmokeSet, redteam: Sequence[RedTeamItem], qa: Sequence[QaItem]) -> None:
-    """The smoke list names 15 Q&A items and 10 red-team items, each once, each existing."""
+    """The smoke list names 15 Q&A items and 11 red-team items, each once, each existing."""
     lines: list[str] = []
     for name, ids, known, count in (
         ("qa", smoke.qa, {i.id for i in qa}, SMOKE_QA_COUNT),

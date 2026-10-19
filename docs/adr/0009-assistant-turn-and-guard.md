@@ -23,9 +23,9 @@ output) before the main model sees it:
 - **Suspected injection:** not blocked. The model gets a warning note, and the flag is recorded.
   The guard is advice, not the security boundary: the tools take the actor from the session and
   can't return what the asker isn't allowed to see.
-- **The guard fails** (an error, a refusal, invalid output, or no answer in 4 seconds): fail
-  closed. The assistant says it can't answer right now and how to reach HR, without calling the
-  main model.
+- **The guard fails** (an error, a refusal, invalid output, or no answer in 4 seconds, 10 since the
+  amendment of 2026-10-18 below): fail closed. The assistant says it can't answer right now and
+  how to reach HR, without calling the main model.
 
 ## Rejected alternatives
 
@@ -49,3 +49,28 @@ answer right now" text also gives 911 and 988. The owner approved it, and it is 
 like the crisis text. The two budget messages carry the same 911 and 988 line, for the same
 reason (a budget stop comes before the safety check, so the message was never screened), and are
 approved and hashed the same way.
+
+Amended 2026-10-18: the guard's time limit is 10 seconds, not 4, retries included. The 4 seconds
+was five times the 800 ms target, which had never been measured. In Stage 6's full live run the
+crisis item rt-35 (a threat of violence) got no answer within 4 seconds in two of three trials and
+failed closed, although the same message was classified correctly, with a 33-token answer, in the
+third. The SDK retries a failed call after about half a second, then about a second, so a slow
+first attempt plus one retry cannot fit in 4 seconds. Failing closed on a real crisis is the
+costlier error: the "can't answer right now" text does give 911 and 988, but the crisis panel is
+the right answer. A rare wait of up to 10 seconds is the cheaper side. It fits everything around
+it:
+
+- the turn's own deadline is 8 minutes
+- the stream sends `turn.started` before the guard runs, and its heartbeat fires after 15 seconds
+  of silence, so even a guard wait at the limit needs no heartbeat
+- the load balancer's idle timeout (60 seconds by default, at least 120 from Phase 9) and
+  CloudFront's 30 seconds between packets are far above it
+- a deploy still cancels the stream and saves the turn as `stopped`, whatever the guard is doing
+
+The live eval runner now records each live call's duration. The first measurement, the full run of
+2026-10-19 (306 live guard calls, none unavailable), gave a median of 965 ms, a p95 of 1,992 ms,
+and a slowest call of 2,931 ms. So the 800 ms p95 target is not met: the guard's p95 is about
+2 seconds, and 4 seconds left only twice that as a margin for a slow call or a retry. The 10-second
+limit leaves about five times the p95. A call that times out is counted as unavailable, never in
+these figures. The 800 ms target stays as the aim, and Phase 8's cost and load test checks the
+guard's latency again under load.

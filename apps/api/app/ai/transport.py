@@ -79,7 +79,7 @@ class ModelRequest:
 
 
 # The guard sits in front of every message. It gets this long, retries included, and no longer.
-GUARD_TIMEOUT_SECONDS = 4
+GUARD_TIMEOUT_SECONDS = 10
 GUARD_MAX_TOKENS = 1024  # Its thinking counts toward this.
 # The guard wraps the person's new message in this tag, and the previous answer sits beside it. The
 # scripted guard reads only what is inside the tag.

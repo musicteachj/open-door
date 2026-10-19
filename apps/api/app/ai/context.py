@@ -18,7 +18,7 @@ Role = Literal["employee", "manager", "hr"]
 
 # Fixed English names, so the text doesn't change with the server's locale.
 _WEEKDAYS = ("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday")
-_ROLE_LABELS: dict[Role, str] = {"employee": "employee", "manager": "manager", "hr": "HR"}
+ROLE_LABELS: dict[Role, str] = {"employee": "employee", "manager": "manager", "hr": "HR"}
 
 
 @dataclass(frozen=True)
@@ -34,9 +34,13 @@ class ActorView:
     employment_type: str
 
 
-def role_of(me: Me) -> Role:
+def role_for(*, is_hr_admin: bool, is_manager: bool) -> Role:
     """The one rule for a person's role: HR over manager over employee."""
-    return "hr" if me.is_hr_admin else "manager" if me.is_manager else "employee"
+    return "hr" if is_hr_admin else "manager" if is_manager else "employee"
+
+
+def role_of(me: Me) -> Role:
+    return role_for(is_hr_admin=me.is_hr_admin, is_manager=me.is_manager)
 
 
 def actor_view(me: Me) -> ActorView:
@@ -66,7 +70,7 @@ def turn_context(
     local = now.astimezone(ZoneInfo(actor_view.timezone))
     lines = [
         "Context for this turn.",
-        f"Asker: {one_line(actor_view.given_name)}, role {_ROLE_LABELS[actor_view.role]}, "
+        f"Asker: {one_line(actor_view.given_name)}, role {ROLE_LABELS[actor_view.role]}, "
         f"{actor_view.employment_type} employee.",
         f"Location: {one_line(actor_view.location_name)} "
         f"({actor_view.state}, code {actor_view.location_code}).",

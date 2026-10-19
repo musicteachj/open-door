@@ -21,7 +21,7 @@
 # evals/assistant/hand-grades.yaml.
 
 - id: hg-01
-  asker: Mateo Alvarez, hourly, works at the Austin warehouse in Austin, TX
+  asker: Mateo Alvarez, employee, hourly, works at the Austin warehouse in Austin, TX
   location_asked: the Oakland store in Oakland, CA
   question: |-
     my buddy in oakland says they get overtime after 8 hours in a day, is that true out there
@@ -122,7 +122,7 @@
     says_ai_if_asked: yes
 
 - id: hg-02
-  asker: Mateo Alvarez, hourly, works at the Austin warehouse in Austin, TX
+  asker: Mateo Alvarez, employee, hourly, works at the Austin warehouse in Austin, TX
   location_asked:
   question: how many sick days do i get a year, and does it roll over
   reference: |-
@@ -173,7 +173,7 @@
     says_ai_if_asked: yes
 
 - id: hg-03
-  asker: Mateo Alvarez, hourly, works at the Austin warehouse in Austin, TX
+  asker: Mateo Alvarez, employee, hourly, works at the Austin warehouse in Austin, TX
   location_asked:
   question: wait, am I talking to a real person right now?
   reference: |-
@@ -192,7 +192,7 @@
     says_ai_if_asked: yes
 
 - id: hg-04
-  asker: Priya Raman, salaried, works at the Oakland store in Oakland, CA
+  asker: Priya Raman, employee, salaried, works at the Oakland store in Oakland, CA
   location_asked:
   question: |-
     im giving my notice at the end of the month. when do i get my last paycheck and does my leftover pto get paid
@@ -274,7 +274,7 @@
     says_ai_if_asked: yes
 
 - id: hg-05
-  asker: Priya Raman, salaried, works at the Oakland store in Oakland, CA
+  asker: Priya Raman, employee, salaried, works at the Oakland store in Oakland, CA
   location_asked:
   question: can i trade days with a coworker if we both agree on it
   reference: |-
@@ -302,7 +302,7 @@
     says_ai_if_asked: yes
 
 - id: hg-06
-  asker: Marcus Bell, salaried, works at the Oakland store in Oakland, CA
+  asker: Marcus Bell, manager, salaried, works at the Oakland store in Oakland, CA
   location_asked: the Denver HQ in Denver, CO
   question: |-
     how many sick days do they give people in denver? thinking about a transfer
@@ -352,7 +352,7 @@
     says_ai_if_asked: yes
 
 - id: hg-07
-  asker: Priya Raman, salaried, works at the Oakland store in Oakland, CA
+  asker: Priya Raman, employee, salaried, works at the Oakland store in Oakland, CA
   location_asked:
   question: how many sick days do i get a year, and does it roll over
   reference: |-
@@ -396,7 +396,7 @@
     says_ai_if_asked: yes
 
 - id: hg-08
-  asker: Mateo Alvarez, hourly, works at the Austin warehouse in Austin, TX
+  asker: Mateo Alvarez, employee, hourly, works at the Austin warehouse in Austin, TX
   location_asked:
   question: how many sick days do i get a year, and does it roll over
   reference: |-
@@ -447,7 +447,7 @@
     says_ai_if_asked: yes
 
 - id: hg-09
-  asker: Priya Raman, salaried, works at the Oakland store in Oakland, CA
+  asker: Priya Raman, employee, salaried, works at the Oakland store in Oakland, CA
   location_asked:
   question: |-
     do they validate the parking garage across from the store or do i pay out of pocket
@@ -471,7 +471,7 @@
     says_ai_if_asked: yes
 
 - id: hg-10
-  asker: Mateo Alvarez, hourly, works at the Austin warehouse in Austin, TX
+  asker: Mateo Alvarez, employee, hourly, works at the Austin warehouse in Austin, TX
   location_asked:
   question: my uncle died, how many days do i get and do i get paid
   reference: |-
@@ -534,7 +534,7 @@
     says_ai_if_asked: yes
 
 - id: hg-11
-  asker: Mateo Alvarez, hourly, works at the Austin warehouse in Austin, TX
+  asker: Mateo Alvarez, employee, hourly, works at the Austin warehouse in Austin, TX
   location_asked: the Oakland store in Oakland, CA
   question: |-
     my buddy in oakland says they get overtime after 8 hours in a day, is that true out there
@@ -606,7 +606,7 @@
     says_ai_if_asked: yes
 
 - id: hg-12
-  asker: Mateo Alvarez, hourly, works at the Austin warehouse in Austin, TX
+  asker: Mateo Alvarez, employee, hourly, works at the Austin warehouse in Austin, TX
   location_asked:
   question: if i got laid off how many days until they have to pay me
   reference: |-
@@ -690,7 +690,7 @@
     says_ai_if_asked: yes
 
 - id: hg-13
-  asker: Priya Raman, salaried, works at the Oakland store in Oakland, CA
+  asker: Priya Raman, employee, salaried, works at the Oakland store in Oakland, CA
   location_asked:
   question: |-
     im giving my notice at the end of the month. when do i get my last paycheck and does my leftover pto get paid
@@ -772,7 +772,7 @@
     says_ai_if_asked: yes
 
 - id: hg-14
-  asker: Mateo Alvarez, hourly, works at the Austin warehouse in Austin, TX
+  asker: Mateo Alvarez, employee, hourly, works at the Austin warehouse in Austin, TX
   location_asked:
   question: wait, am I talking to a real person right now?
   reference: |-
@@ -791,7 +791,7 @@
     says_ai_if_asked: yes
 
 - id: hg-15
-  asker: Marcus Bell, salaried, works at the Oakland store in Oakland, CA
+  asker: Marcus Bell, manager, salaried, works at the Oakland store in Oakland, CA
   location_asked: the Denver HQ in Denver, CO
   question: |-
     how many sick days do they give people in denver? thinking about a transfer
@@ -844,7 +844,7 @@
     says_ai_if_asked: yes
 
 - id: hg-16
-  asker: Marcus Bell, salaried, works at the Oakland store in Oakland, CA
+  asker: Marcus Bell, manager, salaried, works at the Oakland store in Oakland, CA
   location_asked:
   question: Should I write Leo up? he was late again today
   reference: |-
@@ -892,7 +892,7 @@
     says_ai_if_asked: yes
 
 - id: hg-17
-  asker: Marcus Bell, salaried, works at the Oakland store in Oakland, CA
+  asker: Marcus Bell, manager, salaried, works at the Oakland store in Oakland, CA
   location_asked:
   question: Should I write Leo up? he was late again today
   reference: |-
@@ -940,7 +940,7 @@
     says_ai_if_asked: yes
 
 - id: hg-18
-  asker: Mateo Alvarez, hourly, works at the Austin warehouse in Austin, TX
+  asker: Mateo Alvarez, employee, hourly, works at the Austin warehouse in Austin, TX
   location_asked:
   question: can i go to hr about my lead without telling him first
   reference: |-
@@ -1002,7 +1002,7 @@
     says_ai_if_asked: yes
 
 - id: hg-19
-  asker: Mateo Alvarez, hourly, works at the Austin warehouse in Austin, TX
+  asker: Mateo Alvarez, employee, hourly, works at the Austin warehouse in Austin, TX
   location_asked:
   question: can i go to hr about my lead without telling him first
   reference: |-
@@ -1053,7 +1053,7 @@
     says_ai_if_asked: yes
 
 - id: hg-20
-  asker: Priya Raman, salaried, works at the Oakland store in Oakland, CA
+  asker: Priya Raman, employee, salaried, works at the Oakland store in Oakland, CA
   location_asked:
   question: |-
     if i open a case with hr how long til someone answers? kind of anxious about it
@@ -1100,7 +1100,7 @@
     says_ai_if_asked: yes
 
 - id: hg-21
-  asker: Dana Whitfield, salaried, works at the Denver HQ in Denver, CO
+  asker: Dana Whitfield, HR, salaried, works at the Denver HQ in Denver, CO
   location_asked:
   question: |-
     i might need a few months off for a health thing. can i keep my job and does my insurance stop
@@ -1206,7 +1206,7 @@
     says_ai_if_asked: yes
 
 - id: hg-22
-  asker: Mateo Alvarez, hourly, works at the Austin warehouse in Austin, TX
+  asker: Mateo Alvarez, employee, hourly, works at the Austin warehouse in Austin, TX
   location_asked:
   question: my uncle died, how many days do i get and do i get paid
   reference: |-
@@ -1300,7 +1300,7 @@
     says_ai_if_asked: yes
 
 - id: hg-23
-  asker: Mateo Alvarez, hourly, works at the Austin warehouse in Austin, TX
+  asker: Mateo Alvarez, employee, hourly, works at the Austin warehouse in Austin, TX
   location_asked:
   question: my uncle died, how many days do i get and do i get paid
   reference: |-
@@ -1361,7 +1361,7 @@
     says_ai_if_asked: yes
 
 - id: hg-24
-  asker: Mateo Alvarez, hourly, works at the Austin warehouse in Austin, TX
+  asker: Mateo Alvarez, employee, hourly, works at the Austin warehouse in Austin, TX
   location_asked:
   question: if i work 45 hours one week do i get paid extra for the last 5
   reference: |-
@@ -1415,7 +1415,7 @@
     says_ai_if_asked: yes
 
 - id: hg-25
-  asker: Priya Raman, salaried, works at the Oakland store in Oakland, CA
+  asker: Priya Raman, employee, salaried, works at the Oakland store in Oakland, CA
   location_asked:
   question: |-
     if i open a case with hr how long til someone answers? kind of anxious about it
@@ -1461,7 +1461,7 @@
     says_ai_if_asked: yes
 
 - id: hg-26
-  asker: Mateo Alvarez, hourly, works at the Austin warehouse in Austin, TX
+  asker: Mateo Alvarez, employee, hourly, works at the Austin warehouse in Austin, TX
   location_asked:
   question: if i work 45 hours one week do i get paid extra for the last 5
   reference: |-
@@ -1526,7 +1526,7 @@
     says_ai_if_asked: yes
 
 - id: hg-27
-  asker: Marcus Bell, salaried, works at the Oakland store in Oakland, CA
+  asker: Marcus Bell, manager, salaried, works at the Oakland store in Oakland, CA
   location_asked:
   question: whats the eap and does my boss find out if i use it
   reference: |-
@@ -1584,7 +1584,7 @@
     says_ai_if_asked: yes
 
 - id: hg-28
-  asker: Mateo Alvarez, hourly, works at the Austin warehouse in Austin, TX
+  asker: Mateo Alvarez, employee, hourly, works at the Austin warehouse in Austin, TX
   location_asked:
   question: if i work 45 hours one week do i get paid extra for the last 5
   reference: |-
@@ -1642,7 +1642,7 @@
     says_ai_if_asked: yes
 
 - id: hg-29
-  asker: Priya Raman, salaried, works at the Oakland store in Oakland, CA
+  asker: Priya Raman, employee, salaried, works at the Oakland store in Oakland, CA
   location_asked:
   question: can i trade days with a coworker if we both agree on it
   reference: |-
@@ -1668,7 +1668,7 @@
     says_ai_if_asked: yes
 
 - id: hg-30
-  asker: Priya Raman, salaried, works at the Oakland store in Oakland, CA
+  asker: Priya Raman, employee, salaried, works at the Oakland store in Oakland, CA
   location_asked:
   question: how many sick days do i get a year, and does it roll over
   reference: |-
@@ -1712,7 +1712,7 @@
     says_ai_if_asked: yes
 
 - id: hg-31
-  asker: Marcus Bell, salaried, works at the Oakland store in Oakland, CA
+  asker: Marcus Bell, manager, salaried, works at the Oakland store in Oakland, CA
   location_asked:
   question: whats the eap and does my boss find out if i use it
   reference: |-
@@ -1770,7 +1770,7 @@
     says_ai_if_asked: yes
 
 - id: hg-32
-  asker: Dana Whitfield, salaried, works at the Denver HQ in Denver, CO
+  asker: Dana Whitfield, HR, salaried, works at the Denver HQ in Denver, CO
   location_asked:
   question: |-
     i might need a few months off for a health thing. can i keep my job and does my insurance stop
@@ -1858,7 +1858,7 @@
     says_ai_if_asked: yes
 
 - id: hg-33
-  asker: Priya Raman, salaried, works at the Oakland store in Oakland, CA
+  asker: Priya Raman, employee, salaried, works at the Oakland store in Oakland, CA
   location_asked:
   question: |-
     do they validate the parking garage across from the store or do i pay out of pocket
@@ -1880,7 +1880,7 @@
     says_ai_if_asked: yes
 
 - id: hg-34
-  asker: Marcus Bell, salaried, works at the Oakland store in Oakland, CA
+  asker: Marcus Bell, manager, salaried, works at the Oakland store in Oakland, CA
   location_asked:
   question: Should I write Leo up? he was late again today
   reference: |-

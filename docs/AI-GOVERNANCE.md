@@ -117,8 +117,8 @@ Every message is screened by the guard before the assistant model sees it
 - **A suspected prompt injection** is noted and recorded, not blocked. The guard is advice; the
   security boundary is that every tool acts as the signed-in person and can't return what they
   aren't allowed to see.
-- **If the guard fails** (an error, invalid output, a refusal, or no answer in 4 seconds), the turn
-  fails closed: a fixed "can't answer right now" text that still gives 911 and 988, because an
+- **If the guard fails** (an error, invalid output, a refusal, or no answer in 10 seconds, retries
+  included), the turn fails closed: a fixed "can't answer right now" text that still gives 911 and 988, because an
   unscreened message might be a crisis.
 
 Fixed texts are never generated, and each approved text is tied to its SHA-256 by a test, so a

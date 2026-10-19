@@ -63,7 +63,7 @@
     "id": "slow-guard",
     "trigger": "scripted slow guard",
     "behavior": "slow_guard",
-    "note": "The guard takes 6 seconds, longer than its 4-second limit."
+    "note": "The guard takes 2 seconds longer than its time limit."
   },
   {
     "id": "guard-failure",

@@ -1420,3 +1420,135 @@ async def test_a_stream_the_consumer_closes_is_still_closed_early_and_cancellati
 
     [skipped] = recorder.skipped
     assert skipped.reason == "stream closed early"
+
+
+# --- Timing the live calls --------------------------------------------------------------------
+
+
+class FakeClock:
+    """A monotonic clock a test moves by hand."""
+
+    def __init__(self) -> None:
+        self.now = 100.0
+
+    def __call__(self) -> float:
+        return self.now
+
+
+class SlowTransport:
+    """The scripted transport, taking `seconds` on the fake clock to answer a guard call or to end
+    a stream."""
+
+    def __init__(self, clock: FakeClock, seconds: float) -> None:
+        self.inner = ScriptedTransport()
+        self.clock = clock
+        self.seconds = seconds
+
+    async def stream(self, request: ModelRequest) -> AsyncIterator[ModelEvent]:
+        async for event in self.inner.stream(request):
+            if isinstance(event, Finished):
+                self.clock.now += self.seconds
+            yield event
+
+    async def classify(self, request: GuardRequest) -> GuardResult:
+        self.clock.now += self.seconds
+        return await self.inner.classify(request)
+
+
+async def test_a_live_guard_call_is_timed_in_milliseconds(tmp_path: Path) -> None:
+    clock = FakeClock()
+    recorder = RecordingTransport(SlowTransport(clock, 0.25), a_store(tmp_path), clock=clock)
+    recorder.current_item = "rt-01"
+    request = build_guard_request("Hello", None)
+
+    await recorder.classify(request)
+
+    assert recorder.timings == {("guard", guard_fingerprint(request), 0): 250}
+
+
+async def test_a_live_model_call_is_timed_from_the_call_to_the_end_of_the_stream(
+    tmp_path: Path,
+) -> None:
+    clock = FakeClock()
+    recorder = RecordingTransport(SlowTransport(clock, 1.5), a_store(tmp_path), clock=clock)
+    recorder.current_item = "qa-001"
+    request = a_request()
+
+    await collect(recorder.stream(request))
+
+    assert recorder.timings == {("model", model_fingerprint(request), 0): 1500}
+
+
+async def test_a_call_answered_from_a_recording_has_no_duration(tmp_path: Path) -> None:
+    clock = FakeClock()
+    recorder = RecordingTransport(SlowTransport(clock, 0.25), a_store(tmp_path), clock=clock)
+    guard_request, model_request = build_guard_request("Hello", None), a_request()
+    recorder.current_item = "item-1"
+    await recorder.classify(guard_request)
+    await collect(recorder.stream(model_request))
+
+    recorder.current_item = "item-2"  # The same requests again, now answered from the store.
+    await recorder.classify(guard_request)
+    await collect(recorder.stream(model_request))
+
+    assert recorder.timings == {}
+
+
+async def test_the_timings_start_over_with_each_item(tmp_path: Path) -> None:
+    clock = FakeClock()
+    recorder = RecordingTransport(SlowTransport(clock, 0.25), a_store(tmp_path), clock=clock)
+    recorder.current_item = "item-1"
+    await recorder.classify(build_guard_request("Hello", None))
+
+    recorder.current_item = "item-2"
+
+    assert recorder.timings == {}
+
+
+async def test_a_second_live_call_with_the_same_request_is_timed_by_its_occurrence(
+    tmp_path: Path,
+) -> None:
+    clock = FakeClock()
+    transport = SlowTransport(clock, 0.1)
+    recorder = RecordingTransport(transport, a_store(tmp_path), clock=clock)
+    recorder.current_item = "item-1"
+    request = build_guard_request("Hello", None)
+
+    await recorder.classify(request)
+    transport.seconds = 0.4
+    await recorder.classify(request)
+
+    key = guard_fingerprint(request)
+    assert recorder.timings == {("guard", key, 0): 100, ("guard", key, 1): 400}
+
+
+async def test_a_live_call_that_failed_has_no_duration(tmp_path: Path) -> None:
+    clock = FakeClock()
+
+    class TimedOut:
+        async def stream(self, request: ModelRequest) -> AsyncIterator[ModelEvent]:
+            raise NotImplementedError
+            yield  # pragma: no cover
+
+        async def classify(self, request: GuardRequest) -> GuardResult:
+            clock.now += 10
+            raise GuardUnavailable("no answer in time")
+
+    recorder = RecordingTransport(TimedOut(), a_store(tmp_path), clock=clock)
+    recorder.current_item = "item-1"
+
+    with pytest.raises(GuardUnavailable):
+        await recorder.classify(build_guard_request("Hello", None))
+
+    assert recorder.timings == {}
+
+
+async def test_a_model_stream_the_consumer_closes_early_is_not_timed(tmp_path: Path) -> None:
+    clock = FakeClock()
+    recorder = RecordingTransport(SlowTransport(clock, 0.25), a_store(tmp_path), clock=clock)
+    recorder.current_item = "qa-001"
+
+    # The loop stops reading before the stream ends, as on a canary or a stop.
+    await read_then_close(recorder.stream(a_request()), 1)
+
+    assert recorder.timings == {}

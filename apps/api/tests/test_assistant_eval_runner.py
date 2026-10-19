@@ -141,7 +141,7 @@ def test_smoke_runs_the_smoke_lists_and_full_runs_every_item() -> None:
 
     assert [i.id for i in smoke_rt] == [i.id for i in redteam if i.id in smoke.redteam]
     assert [i.id for i in smoke_qa] == [i.id for i in qa if i.id in smoke.qa]
-    assert (len(smoke_rt), len(smoke_qa)) == (10, 15)
+    assert (len(smoke_rt), len(smoke_qa)) == (11, 15)
     assert (len(full_rt), len(full_qa)) == (len(redteam), len(qa))
     effort_rt, effort_qa = run.items_for_set(run.SETS["effort"], redteam, qa, smoke)
     assert [i.id for i in effort_qa] == [i.id for i in smoke_qa]
@@ -438,6 +438,7 @@ def test_live_evidence_lists_each_calls_tokens_and_whether_the_cache_was_read() 
         "output_tokens": 20,
         "cache_read_tokens": 0,
         "cache_write_tokens": 500,
+        "duration_ms": None,
     }
     assert len(evidence["calls"]) == 5
     assert evidence["cache_read_after_an_items_first_call"] is True
@@ -513,6 +514,185 @@ def test_the_scoreboard_carries_the_live_evidence_and_the_recording_gaps() -> No
 
     assert result["recording_gaps"] == ["qa-01: model call: boom"]
     assert "calls" in result["live_evidence"]
+
+
+# --- Call durations and the guard's latency ---------------------------------------------------
+
+
+def timed(kind: str, duration_ms: int | None) -> Any:
+    return run.CallUsage(kind, "claude-haiku-5-5", 100, 20, 0, 0, duration_ms)
+
+
+def guard_records(*durations: int | None) -> list[Any]:
+    return [
+        record(f"rt-{index:02d}", usage=(timed("guard", ms),))
+        for index, ms in enumerate(durations, start=1)
+    ]
+
+
+def test_a_call_has_no_duration_unless_it_was_timed() -> None:
+    assert usage("guard", 0).duration_ms is None
+
+
+def test_a_replayed_call_equals_the_live_call_it_was_recorded_from() -> None:
+    assert timed("guard", 640) == timed("guard", None)
+
+
+def test_the_live_evidence_lists_each_calls_duration() -> None:
+    first = record("qa-01", usage=(timed("guard", 640), timed("model", 5200), timed("model", None)))
+
+    calls = board.live_evidence([first])["calls"]
+
+    assert [call["duration_ms"] for call in calls] == [640, 5200, None]
+
+
+def test_the_guards_latency_is_the_nearest_rank_percentiles_of_its_live_calls() -> None:
+    # 20 calls, 100 ms to 2000 ms. Nearest rank: the p-th percentile of n values is the value at
+    # rank ceil(p * n / 100) in order, so p50 is the 10th and p95 the 19th.
+    records = guard_records(*reversed(range(100, 2100, 100)))
+
+    latency = board.live_evidence(records)["guard_latency_ms"]
+
+    assert latency == {"count": 20, "p50": 1000, "p95": 1900, "max": 2000}
+
+
+def test_the_guards_latency_counts_only_live_guard_calls() -> None:
+    models_only = record("qa-01", usage=(timed("model", 90000),))
+    replayed = record("rt-01", usage=(timed("guard", None),))
+    live = guard_records(300, 900)
+
+    latency = board.live_evidence([models_only, replayed, *live])["guard_latency_ms"]
+
+    assert latency == {"count": 2, "p50": 300, "p95": 900, "max": 900}
+
+
+@pytest.mark.parametrize("percent", [50, 95])
+def test_nearest_rank_matches_exact_integer_math_for_every_count(percent: int) -> None:
+    for count in range(1, 501):
+        values = list(range(1, count + 1))  # The value at a rank is the rank itself.
+        exact_rank = (percent * count + 99) // 100  # ceil(percent * count / 100), no floats
+
+        assert board._nearest_rank(values, percent) == exact_rank, (count, percent)
+
+
+def test_one_live_guard_call_is_its_own_percentiles() -> None:
+    latency = board.live_evidence(guard_records(420))["guard_latency_ms"]
+
+    assert latency == {"count": 1, "p50": 420, "p95": 420, "max": 420}
+
+
+def test_a_run_with_no_live_guard_call_has_a_count_of_zero_and_no_percentiles() -> None:
+    latency = board.live_evidence(guard_records(None, None))["guard_latency_ms"]
+
+    assert latency == {"count": 0, "p50": None, "p95": None, "max": None}
+
+
+def test_the_report_shows_the_guards_latency_on_one_line() -> None:
+    records = guard_records(*range(100, 2100, 100))
+
+    text = board.render(board.build_scoreboard(facts(), records))
+
+    [line] = [line for line in text.splitlines() if line.startswith("Guard latency")]
+    assert line == (
+        "Guard latency over 20 live calls: p50 1000 ms, p95 1900 ms, max 2000 ms"
+        " (0 unavailable, not timed)."
+    )
+
+
+def test_the_latency_line_carries_the_count_of_turns_the_guard_never_answered() -> None:
+    answered = guard_records(300, 900)
+    timed_out = [record(f"rt-{n}", guard=None, turn_status="guard_unavailable") for n in (8, 9, 10)]
+
+    text = board.render(board.build_scoreboard(facts(), [*answered, *timed_out]))
+
+    [line] = [line for line in text.splitlines() if line.startswith("Guard latency")]
+    assert line == (
+        "Guard latency over 2 live calls: p50 300 ms, p95 900 ms, max 900 ms"
+        " (3 unavailable, not timed)."
+    )
+
+
+def test_the_report_says_when_no_guard_call_was_live() -> None:
+    text = board.render(board.build_scoreboard(facts(), guard_records(None)))
+
+    [line] = [line for line in text.splitlines() if line.startswith("Guard latency")]
+    assert line == "Guard latency: no live guard calls (0 unavailable, not timed)."
+
+
+class SlowFakeTransport:
+    """A transport whose calls take `seconds` on a clock the test holds."""
+
+    def __init__(self, clock: Any, seconds: float) -> None:
+        self.clock = clock
+        self.seconds = seconds
+        self.attempts = 1
+
+    async def stream(self, request: Any) -> Any:
+        attempts = tuple(IterationUsage(OPUS, ONE_CALL) for _ in range(self.attempts))
+        self.clock.now += self.seconds
+        yield Finished({}, "end_turn", None, ONE_CALL, attempts, OPUS)
+
+    async def classify(self, request: Any) -> GuardResult:
+        self.clock.now += self.seconds
+        return GuardResult("ordinary", None, False, ONE_CALL, HAIKU)
+
+
+async def watched_calls(tmp_path: Path, *, items: int, attempts: int = 1) -> list[Any]:
+    """Each item makes one guard call and one model call through the recorder, 250 ms apiece for
+    the guard and 1.5 s for the model; the usage the observer reports for the last item."""
+    from app.ai.replay import RecordingTransport
+    from app.ai.transport import FALLBACK_BETA, ModelRequest
+
+    class Clock:
+        now = 0.0
+
+        def __call__(self) -> float:
+            return self.now
+
+    clock = Clock()
+    inner = SlowFakeTransport(clock, 0.25)
+    recorder = RecordingTransport(inner, FixtureStore(tmp_path / "x.jsonl.gz"), clock=clock)
+    model_request = ModelRequest(
+        OPUS, (), (), ({"role": "user", "content": "hi"},), "low", 100, (FALLBACK_BETA,)
+    )
+    usage_of_last: list[Any] = []
+    for index in range(items):
+        recorder.current_item = f"item-{index}"
+        observer = run.ObservingTransport(recorder)
+        await observer.classify(GuardRequest(HAIKU, "", ()))
+        inner.seconds, inner.attempts = 1.5, attempts
+        _ = [event async for event in observer.stream(model_request)]
+        inner.seconds = 0.25
+        usage_of_last = list(run._usage(observer, recorder.timings))
+    return usage_of_last
+
+
+async def test_a_live_guard_call_and_a_live_model_call_carry_their_durations(
+    tmp_path: Path,
+) -> None:
+    calls = await watched_calls(tmp_path, items=1)
+
+    assert [(call.kind, call.duration_ms) for call in calls] == [("guard", 250), ("model", 1500)]
+
+
+async def test_calls_answered_from_a_recording_carry_no_duration(tmp_path: Path) -> None:
+    calls = await watched_calls(tmp_path, items=2)  # The second item repeats the first's requests.
+
+    assert [(call.kind, call.duration_ms) for call in calls] == [("guard", None), ("model", None)]
+
+
+async def test_a_streams_duration_is_on_its_first_attempt_only(tmp_path: Path) -> None:
+    calls = await watched_calls(tmp_path, items=1, attempts=2)
+
+    assert [(call.kind, call.duration_ms) for call in calls] == [
+        ("guard", 250),
+        ("model", 1500),
+        ("model", None),
+    ]
+
+
+def test_a_trace_built_without_a_recorder_has_no_timings() -> None:
+    assert run._timings_of(object()) == {}
 
 
 # --- --check ----------------------------------------------------------------------------------
@@ -873,7 +1053,7 @@ async def test_live_without_yes_prints_the_estimate_and_makes_no_call(
     out = capsys.readouterr().out
     assert code == 0
     assert "smoke" in out
-    assert "25 items" in out
+    assert "26 items" in out
     assert "1 trial" in out
     assert "$1.20" in out
     assert "$2.00" in out
@@ -884,8 +1064,8 @@ async def test_live_without_yes_prints_the_estimate_and_makes_no_call(
 @pytest.mark.parametrize(
     ("name", "items", "trials", "estimate", "cap", "effort"),
     [
-        ("smoke", 25, 1, "$1.20", "$2.00", "low"),
-        ("effort", 25, 1, "$1.50", "$2.00", "medium"),
+        ("smoke", 26, 1, "$1.20", "$2.00", "low"),
+        ("effort", 26, 1, "$1.50", "$2.00", "medium"),
     ],
 )
 async def test_each_live_set_estimates_its_own_cost_and_cap(

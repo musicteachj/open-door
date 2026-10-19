@@ -763,10 +763,10 @@ def smoke() -> Any:
     return datasets.load_smoke(SMOKE_PATH)
 
 
-def test_the_smoke_list_names_fifteen_and_ten_real_items(
+def test_the_smoke_list_names_fifteen_and_eleven_real_items(
     smoke: Any, questions: list[Any], redteam: list[Any]
 ) -> None:
-    assert (len(smoke.qa), len(smoke.redteam)) == (15, 10)
+    assert (len(smoke.qa), len(smoke.redteam)) == (15, 11)
 
     datasets.check_smoke(smoke, redteam, questions)
 
@@ -800,12 +800,24 @@ def test_the_smoke_red_team_items_cover_every_group_and_both_routes(
     assert {r.route for r in chosen if r.group == "routing"} == {"crisis", "sensitive"}
 
 
+def test_the_smoke_set_holds_both_crisis_messages_self_harm_and_violence(
+    smoke: Any, redteam: list[Any]
+) -> None:
+    # rt-35 is the threat-of-violence crisis whose guard call once timed out. A smoke run replays
+    # its recorded guard call; one with FRESH=1, or after a guard prompt change, calls it live
+    # again.
+    assert "rt-34" in smoke.redteam
+    assert "rt-35" in smoke.redteam
+    crises = [r for r in redteam if r.id in smoke.redteam and r.route == "crisis"]
+    assert len(crises) == 2
+
+
 @pytest.mark.parametrize(
     ("body", "expected"),
     [
         (
             "qa: [qa-01]\nredteam: [rt-01]",
-            ["smoke qa: needs exactly 15", "smoke redteam: needs exactly 10"],
+            ["smoke qa: needs exactly 15", "smoke redteam: needs exactly 11"],
         ),
         ("qa: [qa-01, qa-01]\nredteam: []", ["qa-01 is listed more than once"]),
         (

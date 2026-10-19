@@ -79,6 +79,7 @@ from app.ai.prompts.versions import GUARD_PROMPT_VERSION, PROMPT_VERSION, TOOLSE
 from app.ai.replay import (
     RE_RECORD_HINT,
     FixtureStore,
+    Kind,
     RecordingTransport,
     ReplayMiss,
     ReplayTransport,
@@ -380,6 +381,13 @@ class CallUsage:
     output_tokens: int
     cache_read_tokens: int
     cache_write_tokens: int
+    # Live calls only: how long the real call took, in milliseconds. A guard call runs from the call
+    # to its answer. A model call runs from the call to the end of its stream, including the loop's
+    # own time between events, and when the stream has several attempts (a retry or a fallback) the
+    # whole time sits on the first attempt. None for a call answered from a recording, which was not
+    # timed. Not compared: a replay must equal the live run that recorded
+    # it, and only the live run has a time.
+    duration_ms: int | None = field(default=None, compare=False)
 
 
 @dataclass(frozen=True)
@@ -435,15 +443,21 @@ class ObservingTransport:
         self.guard_results: list[GuardResult] = []
         # Every call in the order it was made: the kind and its fingerprint.
         self.calls: list[tuple[Literal["model", "guard"], str]] = []
+        # Where in `calls` each entry of `finished` and `guard_results` was made, so a result can
+        # be tied back to its call (a call that raised has no result).
+        self.finished_calls: list[int] = []
+        self.guard_result_calls: list[int] = []
 
     async def stream(self, request: ModelRequest) -> AsyncIterator[ModelEvent]:
         self.requests.append(request)
         self.calls.append(("model", model_fingerprint(request)))
+        call_index = len(self.calls) - 1
         events = self.inner.stream(request)
         try:
             async for event in events:
                 if isinstance(event, Finished):
                     self.finished.append(event)
+                    self.finished_calls.append(call_index)
                 yield event
         finally:
             close = getattr(events, "aclose", None)
@@ -453,8 +467,10 @@ class ObservingTransport:
     async def classify(self, request: GuardRequest) -> GuardResult:
         self.guard_requests.append(request)
         self.calls.append(("guard", guard_fingerprint(request)))
+        call_index = len(self.calls) - 1
         result = await self.inner.classify(request)
         self.guard_results.append(result)
+        self.guard_result_calls.append(call_index)
         return result
 
 
@@ -731,7 +747,7 @@ async def _run_item(
         error_codes=tuple(e.code for e in events if isinstance(e, Error)),
         status_note_count=sum(1 for e in events if isinstance(e, Status)),
         status_notes=tuple(e.text for e in events if isinstance(e, Status)),
-        usage=_usage(observer),
+        usage=_usage(observer, _timings_of(transport)),
         turn_status=turn_status,
         turn_error_code=turn_error_code,
         cost_usd=cost_usd,
@@ -837,7 +853,22 @@ def _guard_verdict(observer: ObservingTransport) -> GuardVerdict | None:
     return GuardVerdict(result.category, result.kind, result.injection_suspected)
 
 
-def _usage(observer: ObservingTransport) -> tuple[CallUsage, ...]:
+def _timings_of(transport: Transport) -> Mapping[tuple[Kind, str, int], int]:
+    """How long each live call of the item took, by (kind, fingerprint, occurrence). Only the
+    recorder times a call, and only one the real transport answered."""
+    return transport.timings if isinstance(transport, RecordingTransport) else {}
+
+
+def _usage(
+    observer: ObservingTransport, timings: Mapping[tuple[Kind, str, int], int]
+) -> tuple[CallUsage, ...]:
+    keys = _used_keys(observer)
+
+    def duration(call_index: int) -> int | None:
+        kind, _ = observer.calls[call_index]
+        key, occurrence = keys[call_index]
+        return timings.get((kind, key, occurrence))
+
     calls = [
         CallUsage(
             "guard",
@@ -846,11 +877,14 @@ def _usage(observer: ObservingTransport) -> tuple[CallUsage, ...]:
             result.usage.output_tokens,
             result.usage.cache_read_tokens,
             result.usage.cache_write_tokens,
+            duration(call_index),
         )
-        for result in observer.guard_results
+        for result, call_index in zip(
+            observer.guard_results, observer.guard_result_calls, strict=True
+        )
     ]
-    for finished in observer.finished:
-        for attempt in finished.iterations or ():
+    for finished, call_index in zip(observer.finished, observer.finished_calls, strict=True):
+        for attempt_index, attempt in enumerate(finished.iterations or ()):
             usage = attempt.usage
             calls.append(
                 CallUsage(
@@ -860,6 +894,7 @@ def _usage(observer: ObservingTransport) -> tuple[CallUsage, ...]:
                     usage.output_tokens,
                     usage.cache_read_tokens,
                     usage.cache_write_tokens,
+                    duration(call_index) if attempt_index == 0 else None,
                 )
             )
     return tuple(calls)
