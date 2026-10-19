@@ -146,7 +146,8 @@ export const StoredTurn = memo(function StoredTurn({
 }) {
   const citations = withSourceKeys(turn.citations)
   const escalation = turn.escalation
-  const again = () => context.onAskAgain(turn.question)
+  // Under a budget stop the server refuses every question, so there is nothing to ask again.
+  const again = context.budgetStop ? undefined : () => context.onAskAgain(turn.question)
   // A sensitive turn shows its HR panel whatever became of the answer (it can fail, or be cut
   // off): sensitive topics go to a person. Keyed by the turn, and a saved panel never announces.
   const panel =
@@ -200,7 +201,7 @@ export const StoredTurn = memo(function StoredTurn({
           errorMessage={turn.error?.message}
           text={turn.answerText}
           citations={citations}
-          onRetry={context.budgetStop ? undefined : again}
+          onRetry={again}
           context={context}
         />
         {panel}
@@ -288,7 +289,8 @@ export function LiveTurnView({
 }) {
   const citations = withSourceKeys(live.citations)
   const escalation = live.escalation
-  const again = () => context.onAskAgain(live.question)
+  // Under a budget stop the server refuses every question, so there is nothing to ask again.
+  const again = context.budgetStop ? undefined : () => context.onAskAgain(live.question)
 
   const panel =
     escalation !== null ? (
@@ -333,7 +335,7 @@ export function LiveTurnView({
         citations={citations}
         steps={live.steps}
         onAskAgain={phase === 'stopped' ? again : undefined}
-        onRetry={phase === 'error' && !context.budgetStop ? again : undefined}
+        onRetry={phase === 'error' ? again : undefined}
         context={context}
       />
       {panel}

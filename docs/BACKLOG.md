@@ -139,6 +139,13 @@ should pick it up. When one is done, delete it here and record it in the changel
 
 Source for both: [the Phase 1 spec](specs/2026-10-03-phase-1-tenancy-identity-permissions.md#later-phases).
 
+- **Keep trial 1's recordings when a fresh run stops in a later trial.** With `FRESH=1` (and
+  `PRUNE=1`), `evals/assistant/run.py` saves recordings only when every item ran and was judged in
+  every trial, but only trial 1 is ever recorded. A run stopped by its cap, or a judge call with no
+  room, in trial 2 or 3 throws away trial 1's complete, already paid recordings. Gate the save (and
+  the prune) on trial 1 alone. The last full run used $8.02 of a $16 cap, so it hasn't bitten;
+  Phase 5's new tools will need a full run, so fix it first. (Phase 4 phase review.)
+
 ## Phase 6: cases and escalation
 
 - **The hand-off says only what's true.** Before the person writes anything, say:
@@ -210,6 +217,14 @@ Source for both: [the Phase 1 spec](specs/2026-10-03-phase-1-tenancy-identity-pe
   turn's date to the judge, or say in the rubric that profile facts are not policy claims.
   (Phase 4 stage 6 full run, qa-09 and qa-31.)
 
+- **Two eval cost-report gaps.** The scoreboard's "reused recordings" cost is the ledger total
+  minus what the live meter saw, and the meter prices only streams that finish, so a billed call
+  that kept its reservation (cut by the deadline, a canary, or a transient error) is reported as
+  recorded cost, not spent now. And the run's daily cap is its remaining cap plus a baseline read
+  at the start, so spend from another sandbox during the run (a `make dev` session) is charged to
+  the run and can stop it as if it reached its own cap. Evals run one at a time against the dev
+  database, so neither has mattered yet. (Phase 4 phase review.)
+
 ## Phase 8: hardening and deploy-readiness
 
 - **Quote directory values in the per-turn context before names become editable.** The context is
@@ -244,6 +259,28 @@ Source for both: [the Phase 1 spec](specs/2026-10-03-phase-1-tenancy-identity-pe
   malformed stored search source would fail the conversation `GET` (only the API writes them).
   For the accessibility audit and the hardening pass. (Phase 4 stage 6 reviews.)
 
+- **Keep the crisis panel when a crisis turn's end-of-turn write fails.** The crisis text goes out
+  live, but if `finish_turn` then times out, the stream adds an `internal` error, the row stays
+  `running`, and a reload shows it as abandoned with no escalation, so the 988 and EAP text is gone
+  from the page. It needs the database to fail at that moment. Store the crisis verdict before the
+  escalation goes out, or have the display show a crisis panel for an abandoned turn whose guard
+  said crisis. Do it with the `statement_timeout` item below. (Phase 4 phase review.)
+- **One exit for the canary check, and a cheaper fold.** `turn.py` checks the canary at about seven
+  places (held text, status notes, the take-back, the restore, closing events), each keeping its
+  own tail, so every new event path has needed its own patch. Holding and checking every outgoing
+  string at the one exit in `events()` would cover future paths with one rule. Its `_keep_from`
+  also NFKC-normalizes one character at a time, twice per text delta, on up to 512 characters;
+  measure it in the load test. (Phase 4 phase review.)
+- **End crisis and "can't answer right now" turns with a closing event.** They end with no
+  `turn.completed` and no `error` (a Stage 6 decision), so the web store infers the end from the
+  escalation's kind, and a connection lost right after a crisis panel reads as finished, not
+  stopped. One terminal event for every turn would remove the special case. It changes the stream
+  protocol, so do it with the hardening pass. (Phase 4 phase review.)
+- **Announce the HR panel that appears after a stopped sensitive answer.** Since the Phase 4 phase
+  review, a sensitive question the person stops gets the HR contact panel, but only once the saved
+  turn replaces the live one (the stream is already closed when they press Stop), and a saved
+  panel doesn't announce itself, so a screen-reader user isn't told it appeared. Announce a panel
+  that a settling turn adds. For the accessibility audit. (Phase 4 phase review.)
 - **Give the app's database login a `statement_timeout`.** The engine sets none, so a hung query
   waits forever. The assistant's end-of-turn writes are bounded in code (10 seconds), but other
   requests aren't. A role-level `statement_timeout` (and `idle_in_transaction_session_timeout`)

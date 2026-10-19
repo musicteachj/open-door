@@ -307,6 +307,18 @@ async def test_find_people_cleans_its_query_like_the_handbook_search(
     assert [card["name"] for card in data["people"]] == ["Priya Raman"]
 
 
+async def test_find_people_measures_its_query_after_cleaning(
+    app_engine: AsyncEngine, seeded_sandbox: SeedCompany
+) -> None:
+    ctx = await context_for(app_engine, seeded_sandbox, "marcus")
+    padded = "Raman" + "\u200b" * 150
+    data = payload(await run_tool("find_people", {"scope": "everyone", "query": padded}, ctx))
+    assert [card["name"] for card in data["people"]] == ["Priya Raman"]
+    too_long = await run_tool("find_people", {"scope": "everyone", "query": "a" * 150}, ctx)
+    assert too_long.is_error is True
+    assert "at most" in json.dumps(too_long.content)
+
+
 async def test_find_people_matches_a_name_query(
     app_engine: AsyncEngine, seeded_sandbox: SeedCompany
 ) -> None:

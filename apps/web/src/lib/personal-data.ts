@@ -5,8 +5,14 @@
 
 export type PersonalDataKind = 'ssn' | 'card'
 
-// Three digits, two, then four, joined by dashes or spaces, not part of a longer digit run.
-const SSN = /(?<![0-9])[0-9]{3}[- ][0-9]{2}[- ][0-9]{4}(?![0-9])/
+// Nine bare digits; or three digits, two, then four joined by dashes or spaces (the two joins may
+// differ); or the same joined by two dots, or by two slashes. Not part of a longer digit run. Mixed
+// joins other than dash and space are not flagged ("125.00 2026" is an amount and a year). A
+// ten-digit phone number and an eight-digit date are other run lengths, and the dashed ZIP+4
+// ("78701-1234") has no join after its third digit. Nine bare digits, such as a ZIP+4 typed without
+// its dash or a routing number, are refused, by the owner's choice.
+const SSN =
+  /(?<![0-9])(?:[0-9]{9}|[0-9]{3}(?:[- ][0-9]{2}[- ]|\.[0-9]{2}\.|\/[0-9]{2}\/)[0-9]{4})(?![0-9])/
 
 // A card number: a plausible issuer digit first (2 to 6), then either 13 to 19 digits in one run,
 // or digits grouped the way cards are printed, joined by single spaces or dashes: groups of 4 (and

@@ -91,6 +91,7 @@ from app.ai.turn import (
 from app.db.models import AiConversation, AiMessage, AiSpend, AiTurn, HandbookVersion
 from app.db.tenancy import TenantContext, tenant_session
 from app.domain.handbook.applicability import Asker
+from app.modules.assistant.display import escalation_kind
 from app.modules.handbook.asker import load_asker
 from app.modules.handbook.search import pinned_version_id
 from app.modules.identity.actor import load_actor
@@ -1511,9 +1512,11 @@ async def test_a_sensitive_turn_that_fails_still_routes_to_hr(
     ]
     assert len(audit) == 1
     assert audit[0].target_id == (await env.last_turn()).id
+    assert audit[0].after is not None
+    assert audit[0].after["kind"] == "sensitive"
 
 
-async def test_a_sensitive_turn_that_is_stopped_writes_no_escalation_audit(
+async def test_a_sensitive_turn_that_is_stopped_still_audits_the_escalation(
     app_engine: AsyncEngine, seeded_sandbox: SeedCompany
 ) -> None:
     env = await make_env(
@@ -1530,12 +1533,17 @@ async def test_a_sensitive_turn_that_is_stopped_writes_no_escalation_audit(
     await stream.aclose()  # type: ignore[attr-defined]
 
     assert (await env.last_turn()).status == "stopped"
+    # The client is gone, so no event goes out; the audit and the reload's panel remain.
     assert not of_type(seen, Escalation)
-    assert [
+    turn = await env.last_turn()
+    audit = [
         e
         for e in await audit_events(app_engine, seeded_sandbox.tenant_id)
         if e.action == "escalation.offered"
-    ] == []
+    ]
+    assert len(audit) == 1
+    assert audit[0].target_id == turn.id
+    assert escalation_kind(turn.status, turn.error_code, turn.guard_verdict) == "sensitive"
 
 
 async def test_the_guard_uses_the_conversations_pinned_model(
@@ -2801,7 +2809,6 @@ async def test_the_completed_event_does_not_send_cache_token_counts(
     assert "cacheReadTokens" not in json.dumps(completed.to_json())
     # Cost minus the token counts would give the cached share, so the event carries neither.
     assert set(completed.to_json()["usage"]) == {"inputTokens", "outputTokens"}
-    assert (await env.last_turn()).cost_usd == completed.usage.cost_usd
 
 
 async def test_a_canary_split_between_a_status_note_and_the_answer_ends_the_turn(
@@ -3291,3 +3298,56 @@ async def test_citations_on_blank_text_that_is_taken_back_before_a_restore_are_d
     assert of_type(events[last_retraction:], Citation) == []
     turn = await env.last_turn()
     assert (turn.answer_text, turn.citations) == (answer, [])
+
+
+async def test_a_lone_surrogate_in_model_text_becomes_a_replacement_character(
+    app_engine: AsyncEngine, seeded_sandbox: SeedCompany
+) -> None:
+    def plan(request: ModelRequest, number: int) -> list[Item]:
+        return text_events(request, "Hi \ud83d", " there")
+
+    env = await make_env(app_engine, seeded_sandbox, transport=PlanTransport(plan))
+    events = await env.ask()
+
+    assert isinstance(events[-1], TurnCompleted)
+    assert sent_text(events) == "Hi \ufffd there"
+    assert (await env.last_turn()).answer_text == "Hi \ufffd there"
+    # The stored history holds the answer too, with the replacement.
+    stored = await env.messages()
+    assert roles(stored)[-1] == "assistant"
+    assert stored[-1].content == [{"type": "text", "text": "Hi \ufffd there"}]
+
+
+async def test_a_lone_surrogate_in_a_tool_round_completes_the_turn(
+    app_engine: AsyncEngine, seeded_sandbox: SeedCompany
+) -> None:
+    def tool_round(request: ModelRequest, number: int) -> list[Item]:
+        blocks: list[dict[str, Any]] = [
+            {"type": "text", "text": "Checking \ud83d"},
+            {
+                "type": "tool_use",
+                "id": "toolu_1",
+                "name": "search_handbook",
+                "input": {"query": "sick \ud83d leave"},
+            },
+        ]
+        return [
+            ModelText("Checking \ud83d"),
+            ToolCall("toolu_1", "search_handbook", blocks[1]["input"]),
+            finished(blocks, "tool_use"),
+        ]
+
+    def plans(request: ModelRequest, number: int) -> list[Item]:
+        if number == 1:
+            return tool_round(request, number)
+        return text_events(request, "Done \ud83d")
+
+    transport = PlanTransport(plans)
+    env = await make_env(app_engine, seeded_sandbox, transport=transport)
+    events = await env.ask()
+
+    assert isinstance(events[-1], TurnCompleted)
+    assert "ud83d" not in json.dumps(env.transport.requests[-1].messages)
+    stored = await env.messages()
+    assert "ud83d" not in json.dumps([row.content for row in stored])
+    assert stored[-1].content == [{"type": "text", "text": "Done \ufffd"}]

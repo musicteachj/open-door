@@ -56,7 +56,7 @@ from typing import Any, Literal
 from uuid import UUID
 
 import anyio
-from sqlalchemy import func, select, text
+from sqlalchemy import func, select
 from sqlalchemy.exc import DBAPIError, SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 
@@ -110,6 +110,7 @@ from app.ai.turn import TextDelta as AnswerText
 from app.core.config import Settings, get_settings
 from app.db.engine import create_engine
 from app.db.models import AiSpend, AiTurn, HandbookSection, HandbookVersion, Tenant
+from app.db.spend_cleanup import SpendRow, remove_sandboxes, spend_rows_of
 from app.db.tenancy import TenantContext, tenant_session
 from app.domain.handbook.models import Audience
 from app.modules.handbook.asker import load_asker
@@ -186,15 +187,10 @@ async def create_fixed_sandbox(app_engine: AsyncEngine) -> SeedCompany:
     return company
 
 
-async def _delete_fixed_tenant(owner_engine: AsyncEngine) -> None:
-    """Delete the fixed tenant. Every table that holds its rows cascades from it."""
-    async with owner_engine.begin() as connection:
-        await connection.execute(
-            text("DELETE FROM tenants WHERE id = :tenant_id"), {"tenant_id": TENANT_ID}
-        )
-
-
-SpendRow = tuple[str, Decimal, datetime]
+async def _remove_fixed_sandbox(owner_engine: AsyncEngine, rows: Sequence[SpendRow]) -> None:
+    """Delete the ledger rows that match `rows`, then the fixed tenant (every table that holds its
+    rows cascades from it), in one owner transaction."""
+    await remove_sandboxes(owner_engine, [TENANT_ID], rows)
 
 
 @asynccontextmanager
@@ -208,7 +204,8 @@ async def fixed_sandbox(
     can't cascade away with the sandbox, and other sandboxes, a developer's session or the API
     under test, write to it too. So the cleanup deletes exactly the rows this run wrote and
     nothing else: it reads the eval tenant's own `ai_spend` rows before the tenant is deleted, and
-    deletes one `ai_spend_daily` row for each, of the same kind and amount and the same instant.
+    deletes one `ai_spend_daily` row for each, of the same kind and amount and the same instant,
+    and then the tenant, in one transaction (so a failure leaves both for the next run).
     The two rows of a reservation (or of a settle) are inserted in one transaction, and Postgres
     stamps `created_at` with the transaction's `now()` on both (a column default on `ai_spend`, a
     trigger on `ai_spend_daily`), so the instants are equal to the microsecond and the window is
@@ -217,16 +214,14 @@ async def fixed_sandbox(
     which is vanishingly rare. A run that crashed before its cleanup leaves its tenant behind, and
     the next run's start removes the leftover rows the same way.
 
-    The two cleanup steps, the tenant and the ledger rows, each run shielded from cancellation and
-    within their own time limit, so a slow one can't cancel the other. If one times out, a warning
-    names what was left behind. If the block raised and a cleanup step also fails, the cleanup
+    The two cleanup steps, reading the spend and removing the ledger rows with the tenant, each run
+    shielded from cancellation and within their own time limit. If one times out, a warning names
+    what was left behind. If the block raised and a cleanup step also fails, the cleanup
     failure is logged and the block's own error is the one raised; if the block succeeded, the
     cleanup failure is raised."""
     # A run that crashed before its cleanup leaves the tenant behind, and the ID is fixed.
     leftover = await _read_eval_spend(app_engine)
-    await _delete_fixed_tenant(owner_engine)
-    if leftover:
-        await delete_daily_rows_matching(owner_engine, leftover)
+    await _remove_fixed_sandbox(owner_engine, leftover)
     body_error: BaseException | None = None
     try:
         yield await create_fixed_sandbox(app_engine)
@@ -251,71 +246,49 @@ async def _read_eval_spend(app_engine: AsyncEngine) -> list[SpendRow]:
     """The eval tenant's own spend rows (kind, amount, instant), read as the API's login under
     row-level security. Empty when there is no such tenant."""
     async with tenant_session(app_engine, TenantContext(TENANT_ID, None)) as session:
-        rows = (
-            await session.execute(select(AiSpend.kind, AiSpend.amount_usd, AiSpend.created_at))
-        ).all()
-    return [(row.kind, row.amount_usd, row.created_at) for row in rows]
+        return await spend_rows_of(await session.connection(), [TENANT_ID])
 
 
 async def _clean_up(app_engine: AsyncEngine, owner_engine: AsyncEngine) -> list[Exception]:
-    """Read the run's spend rows, remove the tenant, then remove the ledger rows that match, each
-    on its own time limit. Returns the errors (logged), and warns, naming what was left, about a
-    step that timed out."""
+    """Read the run's spend rows, then remove the ledger rows that match together with the tenant
+    (one transaction), each step on its own time limit. Returns the errors (logged), and warns,
+    naming what was left, about a step that timed out. If the read failed or timed out the rows
+    are missing or partial, so nothing is removed: the tenant and its spend stay for the next
+    run's leftover sweep, which reads them again."""
     problems: list[Exception] = []
     rows: list[SpendRow] = []
 
     async def read() -> None:
         rows.extend(await _read_eval_spend(app_engine))
 
+    read_whole = False
     try:
-        if not await _bounded(read):
+        read_whole = await _bounded(read)
+        if not read_whole:
             logger.warning(
-                "Reading the eval's spend timed out; its daily ledger rows will be left behind"
+                "Reading the eval's spend timed out; the tenant %s was left in place for the next"
+                " run to remove",
+                TENANT_ID,
             )
     except Exception as error:
         logger.error("Reading the eval's spend failed: %s", error)
         problems.append(error)
+    if not read_whole:
+        return problems
     try:
-        if not await _bounded(lambda: _delete_fixed_tenant(owner_engine)):
-            logger.warning(
-                "Removing the eval sandbox timed out; the tenant %s was left behind: delete it by"
-                " hand",
-                TENANT_ID,
-            )
-    except Exception as error:
-        logger.error("Removing the eval sandbox failed: %s", error)
-        problems.append(error)
-    try:
-        if not await _bounded(lambda: delete_daily_rows_matching(owner_engine, rows)):
+        if not await _bounded(lambda: _remove_fixed_sandbox(owner_engine, rows)):
             total = sum((amount for _, amount, _ in rows), Decimal(0))
             logger.warning(
-                "Removing the eval's daily ledger rows timed out; %d rows totaling $%s were left"
-                " behind: delete them by hand",
+                "Removing the eval sandbox timed out; the tenant %s and %d daily ledger rows"
+                " totaling $%s were left behind: the next run removes them, or delete them by hand",
+                TENANT_ID,
                 len(rows),
                 total,
             )
     except Exception as error:
-        logger.error("Removing the eval's daily ledger rows failed: %s", error)
+        logger.error("Removing the eval sandbox failed: %s", error)
         problems.append(error)
     return problems
-
-
-async def delete_daily_rows_matching(owner_engine: AsyncEngine, rows: Sequence[SpendRow]) -> None:
-    """Delete one daily ledger row for each spend row: the same kind and amount, and the same
-    instant. One to one, so a daily row is used for at most one spend row (see `fixed_sandbox`)."""
-    if not rows:
-        return
-    async with owner_engine.begin() as connection:
-        for kind, amount, created_at in rows:
-            await connection.execute(
-                text(
-                    "DELETE FROM ai_spend_daily WHERE id = ("
-                    " SELECT id FROM ai_spend_daily"
-                    " WHERE kind = :kind AND amount_usd = :amount AND created_at = :created_at"
-                    " ORDER BY id LIMIT 1)"
-                ),
-                {"kind": kind, "amount": amount, "created_at": created_at},
-            )
 
 
 async def measured_spend_usd(app_engine: AsyncEngine) -> Decimal:
@@ -1845,6 +1818,44 @@ def _read_json(path: Path, what: str) -> dict[str, Any]:
     return data
 
 
+def _is_judge_verdict(judge: object) -> bool:
+    """What `scoreboard.compare` reads of an item's judge: null, or an object that is either
+    'unavailable' or has 'passed', and whose 'lines', if any, is an object."""
+    if judge is None:
+        return True
+    return (
+        isinstance(judge, dict)
+        and ("unavailable" in judge or "passed" in judge)
+        and isinstance(judge.get("lines", {}), dict)
+    )
+
+
+def _read_baseline(path: Path) -> dict[str, Any]:
+    """The `--compare` scoreboard, checked for every key `scoreboard.compare` reads, so a file of
+    the wrong shape fails at the start and not after the paid run."""
+    what = "the --compare scoreboard"
+    data = _read_json(path, what)
+    bad = (
+        not isinstance(data.get("metrics"), dict)
+        or not isinstance(data.get("effort"), str)
+        or not isinstance(data.get("commit"), str)
+        or not isinstance(data.get("items"), list)
+        or any(
+            not isinstance(item, dict)
+            or not {"trial", "item", "judge"} <= item.keys()
+            or not _is_judge_verdict(item["judge"])
+            for item in data["items"]
+        )
+    )
+    if bad:
+        raise EvalFailure(
+            f"{what} {path} is not a full scoreboard: it needs 'metrics' (an object), 'effort' and"
+            " 'commit' (text), and 'items' (a list of objects with 'trial', 'item', and 'judge',"
+            " which is null or a verdict)"
+        )
+    return data
+
+
 def _write_json(path: Path, data: Mapping[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
@@ -1902,7 +1913,9 @@ async def eval_command(args: argparse.Namespace, env: RunEnv) -> int:
     if live and not args.yes:
         print(estimate_text(config, len(redteam_items) + len(qa_items)))
         return 0
-    baseline = _read_json(args.compare, "the --compare scoreboard") if args.compare else None
+    baseline = _read_baseline(args.compare) if args.compare else None
+    # Read now: the run saves its fixtures, and a commit read after would end in `-dirty`.
+    commit = env.git()
     settings = env.settings or get_settings()
     # Everything a live run needs from outside is built before the database is touched, so a missing
     # key fails the run before anything is paid for. Building a client makes no call. An offline run
@@ -1955,11 +1968,11 @@ async def eval_command(args: argparse.Namespace, env: RunEnv) -> int:
             # What finished is still worth having: write it, marked aborted, then let the error
             # end the command (exit 2).
             try:
-                report(args, env, run, run.result(), baseline, aborted=_describe(error))
+                report(args, env, run, run.result(), baseline, commit, aborted=_describe(error))
             except Exception as writing:
-                print(f"The partial results could not be written ({writing}).", file=sys.stderr)
+                print(f"Reporting the partial results failed ({writing}).", file=sys.stderr)
             raise
-    return report(args, env, run, result, baseline)
+    return report(args, env, run, result, baseline, commit)
 
 
 def _describe(error: BaseException) -> str:
@@ -1972,6 +1985,7 @@ def report(
     run: EvalRun,
     result: RunResult,
     baseline: Mapping[str, Any] | None,
+    commit: str,
     *,
     aborted: str | None = None,
 ) -> int:
@@ -1987,7 +2001,7 @@ def report(
         set_name=run.config.name,
         effort=run.config.effort,
         trials=run.trials,
-        commit=env.git(),
+        commit=commit,
         date=now.isoformat(timespec="seconds"),
         models={"assistant": MODEL_ID, "guard": GUARD_MODEL_ID, "judge": judge.JUDGE_MODEL},
         versions={
@@ -2011,10 +2025,6 @@ def report(
         facts, result.records, recording_gaps=result.recording_gaps, aborted=aborted
     )
     print(scoreboard.render(board))
-    if baseline is not None:
-        board["compare"] = scoreboard.compare(baseline, board)
-        print()
-        print(scoreboard.render_compare(board["compare"]))
     if args.json is not None:
         _write_json(args.json, board)
     if args.traces is not None:
@@ -2027,6 +2037,14 @@ def report(
             "trials": run.trials,
         }
         _write_json(args.traces, scoreboard.traces_document(meta, result.records))
+    if baseline is not None:
+        # After the files are written, so a failure here can't lose a paid run's results; the
+        # scoreboard is then written again with the comparison in it.
+        board["compare"] = scoreboard.compare(baseline, board)
+        print()
+        print(scoreboard.render_compare(board["compare"]))
+        if args.json is not None:
+            _write_json(args.json, board)
     if not args.check or aborted is not None:
         return 0
     problems = scoreboard.check_problems(board)

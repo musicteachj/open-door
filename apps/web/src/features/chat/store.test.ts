@@ -411,6 +411,14 @@ describe('one question at a time', () => {
     expect(state().turn).toBeNull()
   })
 
+  it('reads the conversation again on a 409 turn-running, so the running turn shows', async () => {
+    onTurn(() => problemResponse(409, 'turn-running', 'running'))
+    const deps = makeDeps()
+    state().setDraft('Second question')
+    await state().send('Second question', deps)
+    expect(deps.invalidateConversation).toHaveBeenCalledTimes(1)
+  })
+
   it('sends nothing, and says "still answering", when Enter is pressed while an answer streams', async () => {
     const stream = openStream()
     const posted = onTurn(() => stream.response())
@@ -940,6 +948,18 @@ describe('Stop after the server answered but before the turn was announced', () 
     expect(state().status).toBe('idle')
   })
 
+  it('clears a draft that has trailing whitespace, as the trimmed question was accepted', async () => {
+    const stream = openStream()
+    onTurn(() => stream.response())
+    const deps = makeDeps()
+    state().setDraft('Sick days?  ')
+    const sending = state().send('Sick days?  ', deps)
+    await vi.waitFor(() => expect(state().turn?.accepted).toBe(true))
+    stream.close()
+    await sending
+    expect(state().draft).toBe('')
+  })
+
   it('does not mark a send accepted before the response came', async () => {
     onTurn(() => new Promise<never>(() => {}) as never)
     void state().send('Sick days?', makeDeps())
@@ -1096,6 +1116,18 @@ describe('a remembered conversation that is gone', () => {
     expect(state().sendError).toBe('Something went wrong sending that.')
     expect(state().draft).toBe('Hello')
     expect(state().turn).toBeNull()
+  })
+})
+
+describe('a remembered conversation that is gone, with turns waiting for their saved copy', () => {
+  it("forgets the old conversation's waiting turns, so nothing polls for them", async () => {
+    onTurn(() => eventStream(started, completed))
+    await state().send('First', makeDeps())
+    // The second send is refused with a 404: the first turn goes to `settling` behind it.
+    onTurn(() => problemResponse(404, 'about:blank', 'Not found'))
+    await state().send('Second', makeDeps({ conversationId: 'gone-1' }))
+    expect(state().conversationId).toBeNull()
+    expect(state().settling).toEqual([])
   })
 })
 

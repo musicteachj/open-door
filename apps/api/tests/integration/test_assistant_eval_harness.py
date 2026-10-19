@@ -44,6 +44,7 @@ from app.ai.transport import (
 )
 from app.ai.transport import TextDelta as ModelText
 from app.core.config import Settings
+from app.db.spend_cleanup import delete_daily_rows
 from app.db.tenancy import TenantContext, tenant_session
 from app.domain.handbook.models import Audience
 from app.modules.handbook.search import pinned_version_id
@@ -86,6 +87,11 @@ async def count_rows(owner_engine: AsyncEngine, table: str) -> int:
             {"tenant": run.TENANT_ID},
         )
         return int(result.scalar_one())
+
+
+async def delete_daily_matching(owner_engine: AsyncEngine, rows: Any) -> None:
+    async with owner_engine.begin() as connection:
+        await delete_daily_rows(connection, rows)
 
 
 async def daily_count(owner_engine: AsyncEngine) -> int:
@@ -282,7 +288,7 @@ async def test_the_daily_cleanup_deletes_one_row_for_each_spend_row_of_the_evals
     twins = await insert_daily(owner_engine, "reserve", "0.07", count=2)  # one instant, two rows
     before = await daily_count(owner_engine)
 
-    await run.delete_daily_rows_matching(
+    await delete_daily_matching(
         owner_engine, [("settle", Decimal("0.01"), mine), ("reserve", Decimal("0.07"), twins)]
     )
 
@@ -311,7 +317,7 @@ async def test_a_row_of_another_kind_or_amount_at_the_same_instant_is_not_taken(
     stamp = await insert_daily(owner_engine, "reserve", "0.09")
     before = await daily_count(owner_engine)
 
-    await run.delete_daily_rows_matching(
+    await delete_daily_matching(
         owner_engine,
         [("settle", Decimal("0.09"), stamp), ("reserve", Decimal("0.08"), stamp)],
     )
@@ -351,8 +357,7 @@ async def test_ledger_rows_a_crashed_run_left_are_cleaned_when_the_next_run_star
     before = await daily_count(owner_engine)
     # A run that dies before its cleanup: the tenant, its spend, and the ledger rows all stay.
     with monkeypatch.context() as crash:
-        crash.setattr(run, "delete_daily_rows_matching", nothing)
-        crash.setattr(run, "_delete_fixed_tenant", nothing)
+        crash.setattr(run, "_remove_fixed_sandbox", nothing)
         await live_run(app_engine, owner_engine, FixtureStore(tmp_path / "s"))
     assert await daily_count(owner_engine) > before
     assert await count_rows(owner_engine, "tenants") == 1

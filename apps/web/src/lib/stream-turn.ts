@@ -1,5 +1,5 @@
 import type { CitationOut, EscalationOut } from '@/api/generated'
-import { applyCsrfHeader, apiErrorFrom } from './api-fetch'
+import { ApiError, applyCsrfHeader, apiErrorFrom } from './api-fetch'
 import { readSse } from './sse'
 
 // The one hand-written API call besides `apiFetch`: the generated client reads a whole body, and a
@@ -104,6 +104,13 @@ export async function streamTurn(
     throw error
   }
   if (!response.ok) throw apiErrorFrom(response, await response.text())
+  // A 2xx that is not a stream, such as an HTML page from a misconfigured proxy, is a failed send:
+  // the server did not take the question, so nothing is "accepted" and the draft stays.
+  if (!(response.headers.get('Content-Type') ?? '').toLowerCase().includes('text/event-stream')) {
+    // Let go of the body so the connection is not held open.
+    void response.body?.cancel().catch(() => {})
+    throw new ApiError(response.status, null, response.headers.get('X-Request-ID'))
+  }
   onResponse?.()
   if (response.body === null) return
 

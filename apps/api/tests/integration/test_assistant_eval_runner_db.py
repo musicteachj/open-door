@@ -533,6 +533,155 @@ async def test_compare_prints_both_efforts_and_is_stored_in_the_scoreboard(
     assert "Effort comparison: low (baseline) against medium" in capsys.readouterr().out
 
 
+async def test_the_scoreboards_commit_is_read_before_the_run_saves_its_fixtures(
+    tmp_path: Path,
+    app_engine: AsyncEngine,
+    owner_engine: AsyncEngine,
+    database_settings: Settings,
+) -> None:
+    """Saving fixtures dirties the working tree, so a commit read after would end in `-dirty`."""
+    fixtures = tmp_path / "fixtures"
+    reads: list[bool] = []
+
+    def git() -> str:
+        reads.append(fixtures.exists())
+        return "after-fixtures" if fixtures.exists() else "before-fixtures"
+
+    board_json = tmp_path / "board.json"
+    await run.run_cli(
+        args(tmp_path, "--yes", "--json", str(board_json)),
+        env=make_env(tmp_path, app_engine, owner_engine, database_settings, git=git),
+    )
+
+    assert json.loads(board_json.read_text(encoding="utf-8"))["commit"] == "before-fixtures"
+    assert reads == [False], "read once, at the start"
+
+
+@pytest.mark.parametrize(
+    "baseline",
+    [
+        {"effort": "low", "commit": "abc", "items": []},
+        {"metrics": [], "effort": "low", "commit": "abc", "items": []},
+        {"metrics": {}, "commit": "abc", "items": []},
+        {"metrics": {}, "effort": "low", "items": []},
+        {"metrics": {}, "effort": "low", "commit": "abc", "items": {}},
+        {"metrics": {}, "effort": "low", "commit": "abc", "items": [{"trial": 1}]},
+        {
+            "metrics": {},
+            "effort": "low",
+            "commit": "abc",
+            "items": [{"trial": 1, "item": "a", "judge": "pass"}],
+        },
+        {
+            "metrics": {},
+            "effort": "low",
+            "commit": "abc",
+            "items": [{"trial": 1, "item": "a", "judge": {"lines": {}}}],
+        },
+    ],
+)
+async def test_a_compare_file_of_the_wrong_shape_is_refused_before_anything_runs(
+    tmp_path: Path,
+    app_engine: AsyncEngine,
+    owner_engine: AsyncEngine,
+    database_settings: Settings,
+    capsys: pytest.CaptureFixture[str],
+    baseline: dict[str, Any],
+) -> None:
+    bad = tmp_path / "bad.json"
+    bad.write_text(json.dumps(baseline), encoding="utf-8")
+
+    code = await run.run_cli(
+        args(tmp_path, "--yes", "--compare", str(bad)),
+        env=make_env(tmp_path, app_engine, owner_engine, database_settings),
+    )
+
+    assert code == 2
+    assert "--compare" in capsys.readouterr().err
+    assert not (tmp_path / "fixtures").exists(), "nothing ran, so nothing was recorded"
+
+
+async def test_a_failing_comparison_after_an_aborted_run_does_not_claim_the_files_were_lost(
+    tmp_path: Path,
+    app_engine: AsyncEngine,
+    owner_engine: AsyncEngine,
+    database_settings: Settings,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    low = tmp_path / "low"
+    low.mkdir()
+    low_json = low / "board.json"
+    await run.run_cli(
+        args(low, "--yes", "--json", str(low_json)),
+        env=make_env(low, app_engine, owner_engine, database_settings),
+    )
+
+    async def aborting(self: Any) -> Any:
+        raise RuntimeError("the run broke")
+
+    def broken(*_args: Any, **_kwargs: Any) -> Any:
+        raise RuntimeError("the comparison broke")
+
+    monkeypatch.setattr(run.EvalRun, "run", aborting)
+    monkeypatch.setattr(run.scoreboard, "compare", broken)
+    medium = tmp_path / "medium"
+    medium.mkdir()
+    medium_json = medium / "board.json"
+    capsys.readouterr()
+
+    code = await run.run_cli(
+        args(medium, "--yes", "--json", str(medium_json), "--compare", str(low_json)),
+        env=make_env(medium, app_engine, owner_engine, database_settings),
+    )
+
+    assert code == 2
+    assert medium_json.exists()
+    assert "could not be written" not in capsys.readouterr().err
+
+
+async def test_the_scoreboard_and_traces_are_written_before_the_comparison_is_built(
+    tmp_path: Path,
+    app_engine: AsyncEngine,
+    owner_engine: AsyncEngine,
+    database_settings: Settings,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    low = tmp_path / "low"
+    low.mkdir()
+    low_json = low / "board.json"
+    await run.run_cli(
+        args(low, "--yes", "--json", str(low_json)),
+        env=make_env(low, app_engine, owner_engine, database_settings),
+    )
+
+    def broken(*_args: Any, **_kwargs: Any) -> Any:
+        raise RuntimeError("the comparison broke")
+
+    monkeypatch.setattr(run.scoreboard, "compare", broken)
+    medium = tmp_path / "medium"
+    medium.mkdir()
+    medium_json, traces = medium / "board.json", medium / "traces.json"
+
+    code = await run.run_cli(
+        args(
+            medium,
+            "--yes",
+            "--json",
+            str(medium_json),
+            "--traces",
+            str(traces),
+            "--compare",
+            str(low_json),
+        ),
+        env=make_env(medium, app_engine, owner_engine, database_settings),
+    )
+
+    assert code == 2
+    assert json.loads(medium_json.read_text(encoding="utf-8"))["effort"]
+    assert traces.exists()
+
+
 # --- The judge's failures ---------------------------------------------------------------------
 
 
@@ -1876,7 +2025,7 @@ async def ledger_rows_with(owner_engine: AsyncEngine, amount: str) -> int:
         )
 
 
-async def test_a_slow_tenant_delete_does_not_stop_the_ledger_delete(
+async def test_a_slow_cleanup_leaves_the_tenant_and_the_ledger_rows_for_the_next_run(
     app_engine: AsyncEngine,
     owner_engine: AsyncEngine,
     monkeypatch: pytest.MonkeyPatch,
@@ -1884,17 +2033,17 @@ async def test_a_slow_tenant_delete_does_not_stop_the_ledger_delete(
 ) -> None:
     import asyncio
 
-    real_delete = run._delete_fixed_tenant
+    real_remove = run._remove_fixed_sandbox
     state = {"calls": 0}
 
-    async def slow(engine: AsyncEngine) -> None:
+    async def slow(engine: AsyncEngine, rows: Any) -> None:
         state["calls"] += 1
-        if state["calls"] == 1:  # the delete at the start, before the sandbox exists
-            await real_delete(engine)
+        if state["calls"] == 1:  # the sweep at the start, before the sandbox exists
+            await real_remove(engine, rows)
             return
         await asyncio.sleep(5)
 
-    monkeypatch.setattr(run, "_delete_fixed_tenant", slow)
+    monkeypatch.setattr(run, "_remove_fixed_sandbox", slow)
     monkeypatch.setattr(run, "CLEANUP_TIMEOUT_SECONDS", 0.3)
     before = await daily_ids(owner_engine)
     try:
@@ -1909,11 +2058,16 @@ async def test_a_slow_tenant_delete_does_not_stop_the_ledger_delete(
             owner_engine=owner_engine,
         )
 
-        assert sorted(await daily_ids(owner_engine)) == sorted(before)
+        # Nothing was removed, and the warning says so.
+        assert sorted(await daily_ids(owner_engine)) != sorted(before)
         assert str(run.TENANT_ID) in caplog.text
         assert "left behind" in caplog.text
+        monkeypatch.setattr(run, "_remove_fixed_sandbox", real_remove)
+        # The next run's sweep removes both.
+        async with run.fixed_sandbox(app_engine, owner_engine):
+            assert sorted(await daily_ids(owner_engine)) == sorted(before)
     finally:
-        await real_delete(owner_engine)
+        await real_remove(owner_engine, [])
 
 
 async def test_a_cleanup_failure_does_not_hide_the_runs_own_error(
@@ -1922,10 +2076,18 @@ async def test_a_cleanup_failure_does_not_hide_the_runs_own_error(
     monkeypatch: pytest.MonkeyPatch,
     caplog: pytest.LogCaptureFixture,
 ) -> None:
-    async def broken(*_args: Any, **_kwargs: Any) -> None:
+    real_remove = run._remove_fixed_sandbox
+    calls = 0
+
+    async def broken(engine: AsyncEngine, rows: Any) -> None:
+        nonlocal calls
+        calls += 1
+        if calls == 1:  # the sweep at the start still works
+            await real_remove(engine, rows)
+            return
         raise RuntimeError("the ledger delete broke")
 
-    monkeypatch.setattr(run, "delete_daily_rows_matching", broken)
+    monkeypatch.setattr(run, "_remove_fixed_sandbox", broken)
 
     with pytest.raises(ReplayMiss, match="the item missed"):
         async with run.fixed_sandbox(app_engine, owner_engine):
@@ -1934,13 +2096,50 @@ async def test_a_cleanup_failure_does_not_hide_the_runs_own_error(
     assert "the ledger delete broke" in caplog.text
 
 
+async def test_a_failed_spend_read_leaves_the_tenant_for_the_next_run(
+    app_engine: AsyncEngine, owner_engine: AsyncEngine, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    real_read = run._read_eval_spend
+    calls = 0
+
+    async def flaky(engine: AsyncEngine) -> Any:
+        nonlocal calls
+        calls += 1
+        if calls == 1:  # the sweep at the start
+            return await real_read(engine)
+        raise RuntimeError("the read broke")
+
+    monkeypatch.setattr(run, "_read_eval_spend", flaky)
+    try:
+        with pytest.raises(RuntimeError, match="the read broke"):
+            async with run.fixed_sandbox(app_engine, owner_engine):
+                pass
+        async with owner_engine.connect() as connection:
+            left = await connection.scalar(
+                text("SELECT count(*) FROM tenants WHERE id = :id"), {"id": run.TENANT_ID}
+            )
+        assert left == 1, "without its spend rows the tenant is not removed"
+    finally:
+        monkeypatch.setattr(run, "_read_eval_spend", real_read)
+        async with run.fixed_sandbox(app_engine, owner_engine):
+            pass
+
+
 async def test_a_cleanup_failure_after_a_clean_run_is_raised(
     app_engine: AsyncEngine, owner_engine: AsyncEngine, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    async def broken(*_args: Any, **_kwargs: Any) -> None:
+    real_remove = run._remove_fixed_sandbox
+    calls = 0
+
+    async def broken(engine: AsyncEngine, rows: Any) -> None:
+        nonlocal calls
+        calls += 1
+        if calls == 1:  # the sweep at the start still works
+            await real_remove(engine, rows)
+            return
         raise RuntimeError("the ledger delete broke")
 
-    monkeypatch.setattr(run, "delete_daily_rows_matching", broken)
+    monkeypatch.setattr(run, "_remove_fixed_sandbox", broken)
 
     with pytest.raises(RuntimeError, match="the ledger delete broke"):
         async with run.fixed_sandbox(app_engine, owner_engine):

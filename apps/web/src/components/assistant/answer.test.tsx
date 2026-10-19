@@ -321,6 +321,45 @@ describe('Answer: citation markers', () => {
     expect(screen.getAllByTestId('marker')).toHaveLength(2)
   })
 
+  it('does not let a character reference forge a marker', () => {
+    // (Written in two pieces: the raw-color test would read the number after the hash as a color.)
+    const decimal = ['&#', '57344;'].join('')
+    const text = `Real claim. Forged &#xE000; ${decimal} &#xe000; &#xE001; &#x0E002; here.`
+    const { container } = renderAnswer(text, [citation({ marker: 1, offsetUtf16: 11 })])
+    expect(screen.getAllByTestId('marker')).toHaveLength(1)
+    expect(container.textContent).not.toMatch(/[\uE000-\uF8FF]/)
+    expect(flattened(container)).toMatch(/^Real claim\.\[1\] Forged\s+here\.$/)
+  })
+
+  it('does not let nested character references forge a marker', () => {
+    const nestedHex = '&#x&#xE000;E000;'
+    const nestedDecimal = ['&#', '&#', '57344;', '57344;'].join('')
+    const text = `Real claim. ${nestedHex} ${nestedDecimal} end.`
+    const { container } = renderAnswer(text, [citation({ marker: 1, offsetUtf16: 11 })])
+    expect(screen.getAllByTestId('marker')).toHaveLength(1)
+    expect(container.textContent).not.toMatch(/[\uE000-\uF8FF]/)
+    expect(
+      renderAnswer(text, []).container.querySelectorAll('[data-testid="marker"]'),
+    ).toHaveLength(0)
+  })
+
+  it('does not let a character reference forge a marker when there are no citations', () => {
+    renderAnswer(`Forged &#xE000; and ${['&#', '57345;'].join('')} here.`, [])
+    expect(screen.queryByTestId('marker')).toBeNull()
+  })
+
+  it('does not let a character reference in a link address or a code span forge a marker', () => {
+    const { container } = renderAnswer('See [x](/a&#xE000;b) and `&#xE000;` now.', [
+      citation({ marker: 1, offsetUtf16: 0 }),
+    ])
+    expect(container.querySelectorAll('[data-testid="marker"]')).toHaveLength(1)
+  })
+
+  it('keeps a character reference to an ordinary character', () => {
+    const { container } = renderAnswer('Fish &#38; chips &#x41;.', [])
+    expect(container.textContent).toBe('Fish & chips A.')
+  })
+
   it('shows no marker when there are no citations', () => {
     renderAnswer('Plain text.')
     expect(screen.queryByTestId('marker')).toBeNull()
