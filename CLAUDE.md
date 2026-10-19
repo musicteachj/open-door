@@ -158,10 +158,12 @@ the owner's explicit agreement first.
 
 ## AI development rules
 
-- **A change to a prompt, a tool description or schema, or the guard needs the offline evals green
-  and a smoke run before its PR** (`make eval-live YES=1`, about $1.20, cap $2). Put the scoreboard
-  change in the PR description. **A release gets the full run** (`make eval-live SET=full YES=1`,
-  about $14, cap $16).
+- **A change to a prompt, a tool description or schema, the guard, or the retrieval needs a full
+  run before its PR** (`make eval-live SET=full YES=1`, estimated at $14, cap $16; the run of
+  2026-10-19 cost $8.02). CI replays the full set offline, and a smoke run re-records only its own
+  items, so CI stays red until the full run is committed. Use smoke runs (`make eval-live YES=1`,
+  about $0.65, cap $2) to try wording before that. Put the scoreboard change in the PR description.
+  **A release gets the full run too**, unless the last one already covers everything it ships.
 - **Model IDs are pinned.** A new model is adopted only after an eval comparison.
 - **No paid AI calls on push or PR.** CI replays recorded fixtures. Live evals are a manual
   workflow with a budget cap.

@@ -216,7 +216,7 @@ def test_the_guard_schema_matches_what_the_parser_accepts() -> None:
 
 
 def test_the_guards_limits_and_tag_are_defined_once_here() -> None:
-    assert GUARD_TIMEOUT_SECONDS == 4
+    assert GUARD_TIMEOUT_SECONDS == 10
     assert GUARD_MAX_TOKENS == 1024
     assert GUARD_NEW_MESSAGE_TAG == "new_message"
 

@@ -23,7 +23,13 @@ The judge is not part of it: its results are printed and recorded.
 
 **Live evidence** (`live_evidence`): what the traces' per-call usage and events show about a run,
 so the owner can check things a test can't (the cache is read, the guard answers, a citation's text
-is really in the section it points to).
+is really in the section it points to, how long the guard takes).
+
+The guard's latency (`guard_latency_ms`) is over the guard calls the real model answered, timed by
+the recorder in milliseconds. A call answered from a recording has no duration and is left out, and
+so is a call that ended in an error or a timeout (it reports no usage, so it has no entry; the
+guard-unavailable count is where those show). The percentiles are nearest rank: the p-th percentile
+of n sorted values is the value at rank ceil(p * n / 100).
 """
 
 from collections import defaultdict
@@ -201,6 +207,30 @@ def _in_section(cited: str, section: str) -> bool:
     ).replace("\n", "")
 
 
+def _nearest_rank(sorted_values: Sequence[int], percent: int) -> int:
+    """The `percent`th percentile of values already sorted, by the nearest-rank method."""
+    # ceil(percent * n / 100) in integers, so no float rounding can move the rank.
+    return sorted_values[-(-percent * len(sorted_values) // 100) - 1]
+
+
+def guard_latency(calls: Iterable[Mapping[str, Any]]) -> dict[str, int | None]:
+    """The count, p50, p95, and max of the live guard calls' durations in milliseconds. With none,
+    the count is 0 and the rest are None."""
+    durations = sorted(
+        call["duration_ms"]
+        for call in calls
+        if call["kind"] == "guard" and call["duration_ms"] is not None
+    )
+    if not durations:
+        return {"count": 0, "p50": None, "p95": None, "max": None}
+    return {
+        "count": len(durations),
+        "p50": _nearest_rank(durations, 50),
+        "p95": _nearest_rank(durations, 95),
+        "max": durations[-1],
+    }
+
+
 def live_evidence(records: Sequence[ItemRecord]) -> dict[str, Any]:
     """What the traces show about the live behavior: tokens and cache reads for every call, the
     guard, the status notes, and whether each citation's text is in the section it cites."""
@@ -223,6 +253,7 @@ def live_evidence(records: Sequence[ItemRecord]) -> dict[str, Any]:
                     "output_tokens": call.output_tokens,
                     "cache_read_tokens": call.cache_read_tokens,
                     "cache_write_tokens": call.cache_write_tokens,
+                    "duration_ms": call.duration_ms,
                 }
             )
             if call.kind != "model":
@@ -256,6 +287,7 @@ def live_evidence(records: Sequence[ItemRecord]) -> dict[str, Any]:
             )
     return {
         "calls": calls,
+        "guard_latency_ms": guard_latency(calls),
         "cache_read_after_an_items_first_call": cache_after_first_call,
         "cache_read_on_an_item_after_the_first": cache_after_first_item,
         "guard_unavailable_count": sum(
@@ -393,6 +425,18 @@ def _dollars(amount: str | None) -> str:
     return "-" if amount is None else f"${Decimal(amount):.2f}"
 
 
+def _guard_latency_line(latency: Mapping[str, Any], unavailable: int) -> str:
+    """The latency of the live guard calls, with the turns whose guard never answered beside it
+    (they have no time, so the percentiles leave them out)."""
+    left_out = f"({unavailable} unavailable, not timed)."
+    if not latency["count"]:
+        return f"Guard latency: no live guard calls {left_out}"
+    return (
+        f"Guard latency over {latency['count']} live calls:"
+        f" p50 {latency['p50']} ms, p95 {latency['p95']} ms, max {latency['max']} ms {left_out}"
+    )
+
+
 def render(result: Mapping[str, Any]) -> str:
     """The report a person reads at the end of a run."""
     metrics = result["metrics"]
@@ -472,6 +516,7 @@ def render(result: Mapping[str, Any]) -> str:
         "Citations whose text is not in the section:"
         f" {evidence['citation_text']['not_found_count']}"
         f" of {evidence['citation_text']['checked']}.",
+        _guard_latency_line(evidence["guard_latency_ms"], evidence["guard_unavailable_count"]),
     ]
     return "\n".join(lines)
 

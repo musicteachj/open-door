@@ -55,10 +55,10 @@ eval-retrieval: ## Score handbook search against the labeled questions (needs `m
 
 # Replays the recorded assistant answers through the real loop, tools, graders, and judge reading, so
 # it needs no key and no network. A prompt, tool, or retrieval change makes a request miss its
-# recording: re-record with `make eval-live YES=1`. Until the full run is recorded (Phase 4, Stage 6),
-# only the smoke set has recordings. One run at a time.
+# recording: re-record with `make eval-live SET=full YES=1` (a smoke run re-records only its own
+# items, and this replays the full set). One run at a time.
 eval-offline: ## Replay the recorded assistant evals (needs `make db`); no network. See evals/README.md
-	cd $(API) && uv run python ../../evals/assistant/run.py --mode offline --set smoke --check
+	cd $(API) && uv run python ../../evals/assistant/run.py --mode offline --set full --check
 
 # PAID. Without YES=1 (exactly 1: YES=0 or YES=no still only prints) it prints the set, the item count, the estimated cost, and the cap, and calls
 # nothing. SET=smoke (about $1.20, cap $2), SET=full (about $14, cap $16), or SET=effort (the smoke
@@ -114,7 +114,7 @@ check-api: ## Lint, type-check, migrate, load the handbook, and test the API; co
 	cd $(API) && uv run alembic check
 	cd $(API) && uv run pytest
 	cd $(API) && uv run python ../../evals/retrieval/run.py --check
-	cd $(API) && uv run python ../../evals/assistant/run.py --mode offline --set smoke --check
+	cd $(API) && uv run python ../../evals/assistant/run.py --mode offline --set full --check
 	cd $(API) && uv run python scripts/export_openapi.py --check
 
 check-web: ## Lint, format-check, type-check, test, and build the web app; confirm the client

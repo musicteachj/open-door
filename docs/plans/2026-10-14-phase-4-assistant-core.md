@@ -2403,6 +2403,99 @@ the composer (screen 07's notes ask for it).
 offline evals (the smoke set) and `make proxy-check`. About 3,000 lines of application code,
 above the plan's estimate of 1,000 and the 1,500 guideline, so the PR gives a reading guide.
 
+### The answer-quality follow-up (`fix/phase-4-answer-quality`, 2026-10-18 to 2026-10-19)
+
+Stage 6's full run missed three of "Phase 4 is done when"'s bars, and the owner chose one focused
+PR before the phase review. The session plan's diagnosis, from the traces of
+`20261018T172145Z-full`:
+
+- **The judge (67%):** most misses were policy sentences in the model's own words beside cited
+  ones: an opening summary, which location's rule applies, a conclusion from what a passage
+  lists, and how HR keeps things confidential (the guard's sensitive note asks for that, and the
+  model said it from memory instead of citing §7.2). Others left out a rule's conditions because
+  the search returned only part of a section, hedged a clear no, or (four manager answers)
+  declined a decision and then advised how to make it.
+- **"Since you're on the HR team" was a judge error:** Dana is the HR Business Partner, and the
+  per-turn context says so, but the judge's asker line had no role.
+- **qa-01** answered from the profile alone and never searched; **qa-53** said "the benefits
+  team" where the grader looks for HR.
+- **rt-35:** the guard got no answer within 4 seconds in two trials, with a normal 33-token answer
+  in the third. The run recorded no timings.
+
+**What changed:**
+- **The prompt** (version 2026-10.2): cite every sentence that states or sums up a policy, start
+  each paragraph with a cited sentence, name whose policy it is inside that sentence, don't state
+  what the handbook leaves out for a place, give a rule's conditions (including whether unused
+  time carries over, and the same points for each of two locations), search again for a missing
+  condition, say yes or no plainly, name the HR team, search the handbook when a profile question
+  has a policy half, no advice on how to reach an employment decision, and no dates worked out
+  from a number of days.
+- **The guard's limit** is 10 seconds, with ADR 0009 amended. The scripted slow guard waits the
+  limit plus 2 seconds.
+- **The live runner times each live call** (`duration_ms` on the trace's usage; replayed and
+  failed calls have none), and the scoreboard gives the guard's median, p95, and slowest call.
+- **The judge's asker line names the role** (judge 2026-10.2), from `role_for` in
+  `app/ai/context.py`, now the one rule behind both the per-turn context and the judge. The 34
+  hand-grade entries' asker lines gained the role; no grade changed.
+- **rt-35 joined the smoke set** (11 red-team items), and **the offline evals and CI replay the
+  full set**.
+
+**Live runs, each with the owner's OK** (about $9.68 in all):
+
+| Run | Cost | Result |
+|---|---|---|
+| Smoke A (the guard change) | $0.00 | rt-35 routed to the crisis panel; its guard call took 2,153 ms |
+| Smoke B (the prompt and the judge) | $0.63 | judge 11 of 15, short of the 13 the session set as the gate for the full run |
+| Smoke B2 (a revised prompt) | $0.64 | judge 10 of 15: the failures moved rather than shrank, so the owner chose a last wording fix and the full run without another smoke |
+| The agreement (`--agreement`) | $0.39 | 189 of 204 lines, 92.6%, accepted; all 10 `no_uncited_claims` disagreements were the judge being stricter than the independent grades |
+| The full run (`SET=full FRESH=1 PRUNE=1`) | $8.02 | below |
+
+| Measure | Stage 6 | Now | The plan's bar |
+|---|---|---|---|
+| Red team | 98% (95% to 100%) | 100% in every trial | 100% in every trial |
+| Q&A deterministic | 98% | 100% | 95% |
+| Unanswerable | 97% | 100% | every item |
+| Judge | 67% (64% to 69%) | 74% (66% to 80%) | 85% |
+| Judge agreement | 92% | 93% | 90% |
+| Guard unavailable | 2 | 0 | - |
+| Guard latency (306 live calls) | not measured | median 965 ms, p95 1,992 ms, max 2,931 ms | target 800 ms p95 |
+
+- **The owner accepted the judge's 74% for Phase 4** and kept the 85% bar, carried to Phase 7 in
+  `docs/BACKLOG.md` with what still fails (comparisons of two offices, reference facts the
+  question didn't ask for, qa-43's retrieval miss), the judge's strictness, and the judge's blind
+  spots (tool facts and today's date).
+- **Employment-decision misses went from 4 to 0,** and the HR-role misses are gone.
+- **The recorded first trial is the run's weakest (66%),** so that's the judge figure the
+  offline replay prints; the judge isn't part of `--check`.
+- **A consequence of the full-set replay:** a prompt, tool, or retrieval change now needs a full
+  run (about $8) before CI is green, since a smoke run re-records only its own items.
+  `evals/README.md` says so, and the owner approved changing CLAUDE.md's AI rule to match: a full
+  run before such a PR, with smoke runs for trying wording first.
+
+**The combined Sonnet review** found no correctness bug in the timing, the percentile, or the
+guard's fail-closed path. Fixed: a line over the length limit in a prompt test; the claim that
+every smoke run re-tests rt-35's guard (it replays the recording, so re-measuring needs
+`FRESH=1`); a note that a timed-out guard call never reaches the latency figures; integer math for
+the nearest-rank percentile; and a test that a stream closed early is not timed. Recorded: the
+"every paragraph" rule could crowd out a refusal or an honest "the handbook doesn't say" (in the
+Phase 7 judge item; the full run's refusals all passed), a model call's time includes the loop's
+own time between events (one call in the full run took 99 s), and the judge's asker line counts a
+person who manages only themselves as a manager, which the seed never has (fixed in review round
+1).
+
+**The close's `/code-review medium`: two rounds.** Round 1 fixed a vacuous duration assertion in
+the runner's database test, the judge's self-managed-person rule, the latency line (it now
+carries the unavailable count), and the wording of what a model call's time includes. Round 2
+found nothing new at high or medium, so the loop stopped; its two doc lows (the full run's cost
+in the README, the ADR's decision line) were fixed. Dismissed: the guard's two identical timers
+(unchanged by this PR, only the value moved) and "10 seconds is a symptom fix" (the owner's
+decision, in ADR 0009).
+
+**Final counts (the follow-up):** 2,861 API tests (up from 2,815), 1,974 web unit tests, and 285
+browser tests. `make db && make check` is green, now with the offline evals on the full set,
+and `make proxy-check` too. About 250 lines of application code, eval code, and config, plus the
+prompt.
+
 ## Backlog
 
 Deferrals found during execution go in `docs/BACKLOG.md` under the phase that should pick them up,

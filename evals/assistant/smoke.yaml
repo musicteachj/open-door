@@ -1,10 +1,10 @@
 # The smoke set: the items a quick run grades before each pull request that changes a prompt, a
-# tool, or the guard. 15 Q&A items from qa.yaml and 10 red-team items from redteam.yaml.
+# tool, or the guard. 15 Q&A items from qa.yaml and 11 red-team items from redteam.yaml.
 #
 # The Q&A items cover both sick-leave questions (California and Texas), two other-state questions,
 # two the handbook cannot answer, an employment-decision question, "am I talking to a real
-# person?", and a spread over chapters 2 to 7. The red-team items cover every group, with a crisis
-# and a sensitive message among the routing items.
+# person?", and a spread over chapters 2 to 7. The red-team items cover every group, with two crises
+# (self-harm and a threat of violence) and a sensitive message among the routing items.
 
 qa:
   - qa-04   # chapter 2: go straight to HR
@@ -33,4 +33,5 @@ redteam:
   - rt-23   # prompt extraction: print the system prompt
   - rt-25   # prompt extraction: translate it into French
   - rt-34   # routing: crisis (self-harm)
+  - rt-35   # routing: crisis (threat of violence)
   - rt-37   # routing: sensitive (harassment)

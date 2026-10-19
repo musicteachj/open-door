@@ -103,26 +103,6 @@ should pick it up. When one is done, delete it here and record it in the changel
   covered today by Atlanta employees in the directory and Georgia askers in the eval. (Phase 3
   stage 6.)
 
-## Phase 4: assistant core
-
-- **The answer-quality follow-up, before the phase review** (the owner's choice, 2026-10-18). Stage
-  6's full live run (`evals/assistant/runs/20261018T172145Z-full.json`, $6.78) missed three of the
-  plan's "Phase 4 is done" bars, and one focused PR fixes them, each change with its smoke run:
-  - **The judge passed 67% against 85%:** mostly a policy sentence without a citation inside an
-    otherwise cited answer (48 rubric lines over three trials), and four manager answers that
-    decline a discipline or promotion decision but then suggest process steps ("document the
-    dates first"). The earlier findings belong to the same prompt pass: Colorado FAMLI's partial
-    pay left out, Denver's sick leave not contrasted with the asker's California rule, and "Since
-    you work in HR yourself" inferred from the per-turn context. qa-01 cited nothing in all three
-    trials, and qa-53 once didn't offer HR. (Phase 4 stage 3 and stage 6.)
-  - **The red team passed 98% against 100%:** the crisis item rt-35 (a threat of violence) hit the
-    guard's 4-second timeout in two of three trials and failed closed to "can't answer right
-    now". That text still gives 911 and 988, but the crisis panel is the right answer, and the
-    item went unrecorded, so the full set can't replay offline yet. Give the guard more time
-    (and check ADR 0009's reasoning for 4 seconds).
-  - **Then a fresh full run** that records rt-35, and switch `make eval-offline` and CI from the
-    smoke set to the full set, as `evals/README.md` says.
-
 ## Phase 5: time off
 
 - **Show team coverage beside a manager's approval.** When Marcus reviews a request, show who else
@@ -198,6 +178,37 @@ Source for both: [the Phase 1 spec](specs/2026-10-03-phase-1-tenancy-identity-pe
   what to write next. The question text is user-written, so it's untrusted data, and it's redacted
   for guard-flagged turns. Fold the "design notes" idea into the tour and the "How it's built" page
   rather than adding a third explainer. (2026-10-06 design brainstorm.)
+
+- **Reach the judge's 85% bar.** Phase 4's fresh full run (2026-10-19,
+  `evals/assistant/runs/20261019T152212Z-full.json`) passed the judge at 74% (66% to 80% over three
+  trials), up from 67%; the owner accepted it for Phase 4 and kept the bar. What still fails: a
+  comparison of two offices written as one uncited sentence (qa-44, qa-45), facts in the reference
+  answer the question didn't ask for (qa-23's 48 hours, qa-38's 6 sessions), qa-43's retrieval miss
+  below, qa-33's eligibility timing, and "you" used for another state's rule (qa-42). Settle the
+  judge's strictness first (below), then decide whether the rest is the prompt, the rubric, or the
+  reference answers. The next prompt change also needs a full run, since CI now replays the full
+  set. One more for that pass, from the follow-up's review: "start every paragraph with a cited
+  sentence" and "don't state what the handbook leaves out for a place" could crowd out a
+  refusal, the AI disclosure, or an honest "the handbook doesn't say" for another state. The full
+  run's refusals, disclosures, and unanswerable items all passed, so it isn't biting yet; carve
+  those out explicitly when the prompt next changes. (Phase 4 answer-quality follow-up.)
+- **Search misses Colorado's sick-leave carryover passage.** Asked from Denver, "Colorado sick
+  leave carry over unused payout" returns other passages of CO-4.3 but never its "Unused hours
+  carry over" one, so qa-43 ("how many sick days in Denver?") leaves out a key fact in every
+  trial. Add the query to the retrieval eval's labeled questions and find out why the short
+  passage loses (its length, or the "Carryover" heading alone). (Phase 4 answer-quality
+  follow-up, smoke run B2.)
+- **The judge is stricter about citations than the grades it was validated against.** In the
+  agreement run of 2026-10-19 (189 of 204 lines, 92.6%), all 10 disagreements on
+  `no_uncited_claims` were the judge saying no where the independent grader said yes. Its reasons
+  sometimes contradict themselves ("sits before marker [2] ... which is fine; however ..."). Before
+  Phase 7's model comparison leans on the judge, look at those 10 and decide whether the rubric's
+  "at or before a marker" wording needs tightening. (Phase 4 answer-quality follow-up.)
+- **The judge can't see tool facts or today's date.** It grades a fact from the asker's own profile
+  ("your profile lists your personal email") as an uncited policy claim, and a date the assistant
+  worked out from today's date as unsupported. Pass the trace's non-handbook tool results and the
+  turn's date to the judge, or say in the rubric that profile facts are not policy claims.
+  (Phase 4 stage 6 full run, qa-09 and qa-31.)
 
 ## Phase 8: hardening and deploy-readiness
 

@@ -54,6 +54,7 @@ import hashlib
 import json
 import os
 import tempfile
+import time
 from collections import Counter
 from collections.abc import AsyncIterator, Callable, Mapping
 from dataclasses import dataclass
@@ -590,16 +591,30 @@ class RecordingTransport(_MissLog):
     transport is not called. A run that wants every request called live again gives it an empty
     store.
 
+    Each call it makes live (the real transport answered) is timed with a monotonic clock, in
+    `timings`, until the next item is set: a model call from the call to the end of its stream, a
+    guard call from the call to its answer. A call answered from a recording has no entry, and nor
+    does a call that ended in an error, since no usage is reported for it.
+
     Set `current_item` to the eval item being run before each item. A call that ends without a
     record (a transient failure, an untyped error, or a stream closed early) is listed in `skipped`
     with the reason, until the next item is set. Call `settle` after each item (see the module's
     note on a stream the loop closes on a canary)."""
 
-    def __init__(self, inner: Transport, store: FixtureStore) -> None:
+    def __init__(
+        self,
+        inner: Transport,
+        store: FixtureStore,
+        *,
+        clock: Callable[[], float] = time.monotonic,
+    ) -> None:
         super().__init__()
         self.inner = inner
         self.store = store
+        self._clock = clock
         self.skipped: list[Skipped] = []
+        # (kind, fingerprint, occurrence) -> milliseconds, for the live calls of the current item.
+        self.timings: dict[tuple[Kind, str, int], int] = {}
         # Streams the consumer closed early with no error, awaiting the turn's outcome.
         self._pending: list[Record] = []
 
@@ -607,6 +622,10 @@ class RecordingTransport(_MissLog):
         self.skipped = []
         self._pending = []
         self.misses = []
+        self.timings = {}
+
+    def _timed(self, kind: Kind, key: str, occurrence: int, started: float) -> None:
+        self.timings[(kind, key, occurrence)] = round((self._clock() - started) * 1000)
 
     @property
     def has_pending_close(self) -> bool:
@@ -629,6 +648,7 @@ class RecordingTransport(_MissLog):
                 yield event
             return
         captured: list[dict[str, Any]] = []
+        started = self._clock()
         events = self.inner.stream(request)
         # Replaced when the call ends in a way that was recorded. GeneratorExit and cancellation
         # are not Exceptions, so a stream closed early falls through to this reason.
@@ -637,6 +657,7 @@ class RecordingTransport(_MissLog):
             async for event in events:
                 captured.append(encode_event(event))
                 yield event
+            self._timed("model", key, occurrence, started)
             self._record(key, "model", occurrence, events=tuple(captured))
             unrecorded = None
         except GeneratorExit:
@@ -688,6 +709,7 @@ class RecordingTransport(_MissLog):
         recorded = self._own(key, occurrence, "guard")
         if recorded is not None:
             return self._serve_guard(recorded, key)
+        started = self._clock()
         try:
             result = await self.inner.classify(request)
         except RECORDED_ERRORS as error:
@@ -701,6 +723,7 @@ class RecordingTransport(_MissLog):
             reason = f"ended by {type(error).__name__}, not recorded"
             self._skip(key, "guard", occurrence, reason)
             raise
+        self._timed("guard", key, occurrence, started)
         self._record(key, "guard", occurrence, result=encode_guard_result(result))
         return result
 

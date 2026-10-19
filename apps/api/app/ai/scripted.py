@@ -22,6 +22,7 @@ from app.ai.pricing import SCRIPTED_MODEL, IterationUsage, Usage
 from app.ai.text import one_line
 from app.ai.transport import (
     GUARD_NEW_MESSAGE_TAG,
+    GUARD_TIMEOUT_SECONDS,
     Finished,
     GuardCategory,
     GuardKind,
@@ -299,13 +300,14 @@ def _finished(
 
 class ScriptedTransport:
     """`silence_seconds` and `slow_guard_seconds` are what the silence and slow-guard scenarios
-    wait; tests shorten them. `delta_delay_seconds` paces the text, for watching it stream."""
+    wait (the slow guard waits 2 seconds past the guard's limit); tests shorten them.
+    `delta_delay_seconds` paces the text, for watching it stream."""
 
     def __init__(
         self,
         *,
         silence_seconds: float = 45,
-        slow_guard_seconds: float = 6,
+        slow_guard_seconds: float = GUARD_TIMEOUT_SECONDS + 2,
         delta_delay_seconds: float = 0,
         scenarios: Sequence[Scenario] | None = None,
     ) -> None:
@@ -405,7 +407,8 @@ class ScriptedTransport:
     async def classify(self, request: GuardRequest) -> GuardResult:
         text = _guard_text(request.messages)
         if self._triggered(text, "slow_guard"):
-            # It does not enforce the 4-second limit itself: the caller's timeout is what is tested.
+            # It does not enforce the guard's time limit itself: the caller's timeout is what
+            # is tested.
             await asyncio.sleep(self.slow_guard_seconds)
         if self._triggered(text, "guard_failure"):
             raise GuardUnavailable("scripted guard failure")

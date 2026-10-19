@@ -76,7 +76,7 @@ sandbox (a fixed tenant ID, anchor date, and "today", so the seeded IDs and the 
 
 | Set | What it runs | Trials | Cost (about) | Hard cap | Effort |
 |---|---|---|---|---|---|
-| `smoke` | the 15 Q&A and 10 red-team items listed in `smoke.yaml` | 1 | $1.20 | $2.00 | low |
+| `smoke` | the 15 Q&A and 11 red-team items listed in `smoke.yaml` | 1 | $1.20 | $2.00 | low |
 | `full` | every item in `qa.yaml` and `redteam.yaml` | 3 | $14 | $16 | low |
 | `effort` | the smoke items at medium effort, compared with a low-effort smoke run | 1 | $1.50 | $2.00 | medium |
 
@@ -130,6 +130,18 @@ calls that couldn't be recorded, and a `live_evidence` block read from the trace
 tokens (input, output, cache read, cache write), whether the cache was read after an item's first
 call and on any item after the first, how many turns had no guard verdict, the status notes shown
 (with samples), and whether each citation's cited text is really in the section it points to.
+Every call also carries `duration_ms`, measured by the recorder with a monotonic clock. A guard
+call is timed from the call to its answer. A model call is timed from the call to the end of its
+stream, which includes the loop's own time between events. When the stream has several attempts (a
+retry or a fallback), the whole time sits on the first attempt. A call answered from a recording was
+not timed, so its `duration_ms` is `null`. A call that ended in an error or a timeout reports no
+usage and has no entry at all. `guard_latency_ms` sums
+up the live guard calls as a count, p50, p95, and max in milliseconds (nearest-rank percentiles),
+and the printed report shows it on one line. Set the p95 beside the guard's 800 ms target. A guard
+call that timed out is never in these figures, only in the unavailable count, so read the two
+together. A run times only the calls it makes live: an unchanged guard request is replayed from
+its recording, so measuring the guard again needs `FRESH=1` (each guard call costs about a tenth
+of a cent) or a changed guard prompt.
 `--traces PATH` writes every item's trace, with the judge's input and verdict.
 
 ### Running them
@@ -179,8 +191,12 @@ tool, the retrieval, the handbook, or the rubric changes the requests, so they n
 their recordings: the run fails with a replay miss naming the item, and the answer is to re-record,
 which is also the live check the change needs.
 
-Until the full run is recorded (Phase 4, Stage 6), only the smoke items have recordings, so
-`make eval-offline` and CI run `--set smoke`. Stage 6 switches them to the full set.
+`make eval-offline` and CI replay the full set (every red-team and Q&A item, the first trial of
+the last full run). They ran the smoke set until the answer-quality follow-up of Phase 4 recorded a
+full run that replays cleanly. One consequence: a change to a prompt, a tool, or the retrieval
+changes every item's requests, and a smoke run re-records only the smoke items, so CI stays red
+until a full run records the rest (the runner estimates $14, cap $16; the full run of 2026-10-19 cost
+$8.02). Plan a prompt change's runs with that in mind.
 
 ### Costs and caps
 

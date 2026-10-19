@@ -890,7 +890,7 @@ async def test_a_slow_guard_is_unavailable(
         await asyncio.sleep(5)
         return httpx2.Response(200, json=guard_message())
 
-    assert GUARD_TIMEOUT_SECONDS == 4
+    assert GUARD_TIMEOUT_SECONDS == 10
     monkeypatch.setattr(anthropic_transport, "GUARD_TIMEOUT_SECONDS", 0.05)
 
     with pytest.raises(GuardUnavailable) as raised:

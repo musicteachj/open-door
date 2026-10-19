@@ -19,6 +19,7 @@ from app.ai.scripted import (
 )
 from app.ai.transport import (
     GUARD_NEW_MESSAGE_TAG,
+    GUARD_TIMEOUT_SECONDS,
     Finished,
     GuardRequest,
     GuardUnavailable,
@@ -540,7 +541,7 @@ def test_the_defaults_suit_the_proxy_check_and_the_guard_limit() -> None:
     transport = ScriptedTransport()
 
     assert transport.silence_seconds == 45
-    assert transport.slow_guard_seconds == 6  # above the guard's 4-second limit
+    assert transport.slow_guard_seconds > GUARD_TIMEOUT_SECONDS  # so the slow guard times out
 
 
 async def test_an_apostrophe_may_be_straight_or_curly() -> None:

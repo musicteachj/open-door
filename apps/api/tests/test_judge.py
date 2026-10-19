@@ -6,6 +6,7 @@ reaches the network, and the judge's recorded calls live in a temporary director
 
 import json
 from collections.abc import AsyncIterator, Callable
+from dataclasses import replace
 from decimal import Decimal
 from pathlib import Path
 from typing import Any
@@ -200,9 +201,43 @@ def test_the_rubric_has_the_six_lines_and_judge_md_describes_each() -> None:
 def test_the_version_is_the_first_line_of_judge_md_and_the_system_is_the_file() -> None:
     text = (EVAL_DIR / "judge.md").read_text(encoding="utf-8")
 
-    assert text.splitlines()[0] == "JUDGE_VERSION: 2026-10.1"
-    assert judge.judge_version() == "2026-10.1"
+    assert text.splitlines()[0] == "JUDGE_VERSION: 2026-10.2"
+    assert judge.judge_version() == "2026-10.2"
     assert judge.judge_api_kwargs(an_input())["system"] == text
+
+
+def test_judge_md_says_the_asker_tag_holds_name_role_employment_type_and_office() -> None:
+    text = (EVAL_DIR / "judge.md").read_text(encoding="utf-8")
+
+    assert "who asked (name, role, employment type, and office)" in text
+
+
+def test_the_askers_line_gives_the_role_right_after_the_name() -> None:
+    company = handgrades.build_company(handgrades.UUID(int=1), handgrades.date(2026, 10, 5))
+
+    assert judge.asker_line(company, "dana") == (
+        "Dana Whitfield, HR, salaried, works at the Denver HQ in Denver, CO"
+    )
+    assert judge.asker_line(company, "marcus") == (
+        "Marcus Bell, manager, salaried, works at the Oakland store in Oakland, CA"
+    )
+    assert judge.asker_line(company, "priya") == (
+        "Priya Raman, employee, salaried, works at the Oakland store in Oakland, CA"
+    )
+    assert judge.asker_line(company, "mateo") == (
+        "Mateo Alvarez, employee, hourly, works at the Austin warehouse in Austin, TX"
+    )
+
+
+def test_a_person_who_manages_only_themselves_is_an_employee_not_a_manager() -> None:
+    company = handgrades.build_company(handgrades.UUID(int=1), handgrades.date(2026, 10, 5))
+    priya = next(p for p in company.people if p.persona_key == "priya")
+    people = tuple(replace(p, manager_id=p.id) if p.id == priya.id else p for p in company.people)
+
+    assert not any(p.manager_id == priya.id and p.id != priya.id for p in people)
+    assert judge.asker_line(replace(company, people=people), "priya") == (
+        "Priya Raman, employee, salaried, works at the Oakland store in Oakland, CA"
+    )
 
 
 def test_a_judge_md_without_a_version_first_line_is_refused() -> None:

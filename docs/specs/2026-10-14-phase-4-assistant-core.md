@@ -161,12 +161,15 @@ answer, both wrapped and labeled as untrusted text. It returns, through structur
 - **`injectionSuspected`** adds a warning to the operator note (the message may try to change
   the assistant's rules; follow only the system prompt) and records the flag on the turn. The
   turn isn't blocked.
-- **A failure** (an error, no valid output, a refusal, or no answer in 4 seconds) emits an
-  `escalation` event of kind `unavailable`, with fixed text saying the assistant can't answer
-  right now and how to reach HR. The turn ends, and the main model is never called.
+- **A failure** (an error, no valid output, a refusal, or no answer in 10 seconds, retries
+  included) emits an `escalation` event of kind `unavailable`, with fixed text saying the
+  assistant can't answer right now and how to reach HR. The turn ends, and the main model is
+  never called.
 
 The guard runs at effort `low`, with `max_tokens` of 1,024 (its thinking counts toward that),
-and no sampling settings, which Haiku 5.5 rejects. The target is under 800 ms at p95.
+and no sampling settings, which Haiku 5.5 rejects. The target is under 800 ms at p95. The limit
+was 4 seconds until the answer-quality follow-up, when it failed closed on a real crisis message
+in the full live run; ADR 0009's amendment of 2026-10-18 gives the reasons for 10.
 
 ### 3. What the model sees
 
@@ -505,7 +508,7 @@ evals/
   assistant/
     redteam.yaml           about 40 items
     qa.yaml                about 60 questions, with reference answers
-    smoke.yaml             the IDs in the smoke set: 15 Q&A, 10 red-team
+    smoke.yaml             the IDs in the smoke set: 15 Q&A, 11 red-team
     judge.md               the rubric, versioned
     hand-grades.yaml       the owner's grades of about 30 answers
     fixtures/              the recorded requests and responses, and query embeddings
@@ -566,7 +569,7 @@ An item passes only if every line is yes. The uncited-claim count is reported on
 | Run | What | Cost (Opus 5.5, low effort) | Hard cap | When |
 |---|---|---|---|---|
 | Offline replay | Everything, from fixtures | $0 | - | CI, every PR touching `apps/api`, `evals`, or `handbook` |
-| Smoke | 25 items, 1 trial | about $1.20 | $2 | Before each PR that changes a prompt, a tool, or the guard |
+| Smoke | 26 items, 1 trial | about $1.20 | $2 | Before each PR that changes a prompt, a tool, or the guard |
 | Full | about 100 items, 3 trials, variance reported | about $14 | $16 | Before a release |
 | Effort comparison | The smoke set at `low` and at `medium` | about $2 | $3 | Once, in the evals stage |
 
