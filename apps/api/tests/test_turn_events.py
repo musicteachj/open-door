@@ -1,7 +1,6 @@
 """The turn's events as the stream will send them: camelCase, and the spec's payloads."""
 
 from datetime import date
-from decimal import Decimal
 from uuid import UUID
 
 from app.ai.citations import CitationEvent
@@ -35,7 +34,7 @@ def test_each_event_serializes_to_the_specs_payload() -> None:
         deep_link="/handbook/CA-4.3?passage=p2",
         cited_text="text",
     )
-    usage = TurnUsage(10, 2, Decimal("0.012500"))
+    usage = TurnUsage(10, 2)
     assert TurnStarted(TURN).to_json() == {"turnId": str(TURN)}
     assert Status("Searching the handbook…").to_json() == {"text": "Searching the handbook…"}
     assert TextDelta("Hi").to_json() == {"text": "Hi"}
@@ -106,7 +105,7 @@ def test_the_stream_names_match_the_spec() -> None:
 
 
 def test_an_incomplete_answer_is_marked_on_the_completed_event_only_when_it_is() -> None:
-    usage = TurnUsage(1, 1, Decimal(0))
+    usage = TurnUsage(1, 1)
     assert "incomplete" not in TurnCompleted(TURN, "m", usage).to_json()
     assert TurnCompleted(TURN, "m", usage, incomplete=True).to_json()["incomplete"] is True
 

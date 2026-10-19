@@ -50,6 +50,7 @@ jobs:
               - 'apps/web/openapi.json'
               - 'evals/**'
               - 'handbook/**'
+              - 'scripts/proxy-check/**'
               - 'compose.yaml'
               - '.github/workflows/ci.yml'
             web:
@@ -108,8 +109,8 @@ jobs:
       # --locked fails if uv.lock is out of date with pyproject.toml instead of quietly updating it.
       - run: uv sync --locked
       # ../../evals holds the retrieval eval's runner; --config gives it the API's lint rules.
-      - run: uv run ruff check . ../../evals --config pyproject.toml
-      - run: uv run ruff format --check . ../../evals --config pyproject.toml
+      - run: uv run ruff check . ../../evals ../../scripts/proxy-check --config pyproject.toml
+      - run: uv run ruff format --check . ../../evals ../../scripts/proxy-check --config pyproject.toml
       - run: uv run mypy
       - name: Domain and policy code import no framework
         run: uv run lint-imports

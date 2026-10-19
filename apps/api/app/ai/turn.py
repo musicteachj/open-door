@@ -28,6 +28,7 @@ an answer, a tool result, or the canary: only IDs, exception types, and timings.
 import asyncio
 import json
 import logging
+import re
 import time
 import unicodedata
 from collections.abc import (
@@ -39,7 +40,7 @@ from collections.abc import (
     Sequence,
 )
 from contextlib import aclosing
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime, timedelta
 from decimal import Decimal
 from functools import partial
@@ -275,11 +276,10 @@ class Error:
 @dataclass(frozen=True)
 class TurnUsage:
     """The turn's main-model tokens over every attempt of every call (the guard's are not
-    included), and its cost in dollars (the guard's included)."""
+    included). Cost stays in the trace (`ai_turns`) and never rides on an event."""
 
     input_tokens: int
     output_tokens: int
-    cost_usd: Decimal
 
     def to_json(self) -> dict[str, Any]:
         return {
@@ -497,6 +497,73 @@ def _budget_code(scope: str) -> ErrorCode:
 def _clock() -> float:
     """Seconds on the monotonic clock. The one place the turn reads time, so a test can move it."""
     return time.monotonic()
+
+
+_LONE_SURROGATE = re.compile("[\ud800-\udfff]")
+
+
+def without_lone_surrogates(text: str) -> str:
+    """The text with each lone surrogate replaced by U+FFFD. Python strings can hold one (a model
+    that cuts an emoji between two deltas), but UTF-16 and the database cannot encode it. Done
+    once where model text enters the turn, so the shown text, offsets, and stored answer agree."""
+    return _LONE_SURROGATE.sub("\ufffd", text)
+
+
+def _has_lone_surrogate(value: Any) -> bool:
+    """Whether any string in a JSON-like value holds a lone surrogate."""
+    if isinstance(value, str):
+        return _LONE_SURROGATE.search(value) is not None
+    if isinstance(value, list):
+        return any(_has_lone_surrogate(item) for item in value)
+    if isinstance(value, dict):
+        return any(_has_lone_surrogate(k) or _has_lone_surrogate(v) for k, v in value.items())
+    return False
+
+
+def _scrub(value: Any) -> Any:
+    """`without_lone_surrogates` over every string in a JSON-like value."""
+    if isinstance(value, str):
+        return without_lone_surrogates(value)
+    if isinstance(value, list):
+        return [_scrub(item) for item in value]
+    if isinstance(value, dict):
+        return {_scrub(key): _scrub(item) for key, item in value.items()}
+    return value
+
+
+_SIGNED_BLOCKS = ("thinking", "redacted_thinking")
+
+
+def _scrubbed_message(message: dict[str, Any]) -> dict[str, Any]:
+    """The finished message, scrubbed, except its thinking blocks: they go back to the model with
+    their signatures, so they must stay exactly as they came."""
+    content = message.get("content")
+    if not isinstance(content, list):
+        return {key: _scrub(value) for key, value in message.items()}
+    return {
+        **{key: _scrub(value) for key, value in message.items() if key != "content"},
+        "content": [
+            block
+            if isinstance(block, dict) and block.get("type") in _SIGNED_BLOCKS
+            else _scrub(block)
+            for block in content
+        ],
+    }
+
+
+def scrubbed(event: Any) -> Any:
+    """The transport's event with lone surrogates replaced in its text, in the one place events
+    enter the loop: the shown text, the notes, and the finished message (which is stored and sent
+    back to the model, and holds the tool_use blocks the loop runs) all agree."""
+    if isinstance(event, StatusNote | ModelText):
+        if _LONE_SURROGATE.search(event.text) is None:
+            return event
+        return replace(event, text=without_lone_surrogates(event.text))
+    if isinstance(event, Finished):
+        if not _has_lone_surrogate(event.message):
+            return event
+        return replace(event, message=_scrubbed_message(event.message))
+    return event
 
 
 def utf16_length(text: str) -> int:
@@ -981,6 +1048,7 @@ class TurnRun:
                     event = await self._within(_next_event, stream)
                     if event is None:
                         break
+                    event = scrubbed(event)
                     if isinstance(event, StatusNote):
                         text_of_note = one_line(event.text)
                         if _has_canary(self.sent_tail + self.held + text_of_note):
@@ -1188,9 +1256,7 @@ class TurnRun:
                 self.incomplete = True
             elif finished.stop_reason == "refusal":
                 self.refusal = True
-                self.shown.clear()
-                self.shown_units = 0
-                self.citations.clear()
+                self._forget_what_was_shown()
                 self.taken_back_answer = None
                 self.fail("refusal")
                 return
@@ -1362,10 +1428,14 @@ class TurnRun:
 
         Crisis and "guard unavailable" escalations went out as soon as they were known. A message
         the guard never read gets the "can't answer right now" text (911, 988, HR); a sensitive
-        one gets the HR contact whether the turn answered or failed. A stopped turn gets neither.
+        one gets the HR contact whether the turn answered, failed, or was stopped (the stop's
+        closing event rarely reaches anyone, but the audit and the reload's panel do). A stopped
+        turn that the guard never read has nothing to offer.
         """
-        if self.status not in ("completed", "failed"):
+        if self.status not in ("completed", "failed", "stopped"):
             return None
+        if self.status == "stopped":
+            return "sensitive" if self.sensitive else None
         if self.unscreened:
             return "unavailable"
         return "sensitive" if self.sensitive else None
@@ -1396,10 +1466,7 @@ class TurnRun:
                 TurnCompleted(
                     self.turn_id,
                     self.last_served_by,
-                    TurnUsage(
-                        *self._tokens(),
-                        self.cost_usd,
-                    ),
+                    TurnUsage(*self._tokens()),
                     incomplete=self.incomplete,
                 )
             ]
@@ -1478,6 +1545,8 @@ class TurnRun:
 
     def _audited_escalation(self) -> str | None:
         if self.budget_stopped:
+            # Set only where the guard could not run, so the message is unscreened. A late stop at
+            # the model call leaves it unset and takes `_late_escalation` below (sensitive).
             return "unavailable"  # No event goes out, but the unscreened stop is audited.
         if self.status == "crisis":
             return "crisis"

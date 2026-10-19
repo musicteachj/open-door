@@ -168,6 +168,14 @@ def test_the_buffering_control_fails_when_the_keep_alives_still_arrive_on_time()
     assert any("holds the stream back" in problem for problem in problems)
 
 
+def test_the_buffering_control_fails_on_an_error_status() -> None:
+    """An error response has no keep-alives either, so it must not pass for a holding proxy."""
+    errored = timeline([], status=502, content_encoding=None, ended_cleanly=True)
+    assert any("not 200" in problem for problem in check.problems_in_buffering_control(errored))
+    # A status that never arrived (the proxy held even the headers) is the expected hold.
+    assert check.problems_in_buffering_control(timeline([], status=0, ended_cleanly=False)) == []
+
+
 def test_the_buffering_control_ignores_keep_alives_after_the_listening_time() -> None:
     marks = [event(0.1, "turn.started"), comment(5.5), comment(6.5)]
     held = timeline(marks, content_encoding="gzip", total_seconds=7.0)

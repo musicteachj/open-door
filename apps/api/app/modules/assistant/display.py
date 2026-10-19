@@ -46,12 +46,13 @@ def escalation_kind(
     text, and a sensitive message got the HR contact after its answer or its error. A budget stop
     before the guard ran has none (its error text already gives 911 and 988, and there is no
     verdict). A sensitive turn that hits the budget later, at the model call, does get the
-    sensitive escalation, as its stream did: sensitive topics go to a person (invariant 6)."""
+    sensitive escalation, as its stream did, and so does one the person stopped or whose stream was
+    cut: sensitive topics go to a person on every ending (invariant 6)."""
     if status == "crisis":
         return "crisis"
     if status == "guard_unavailable":
         return "unavailable"
-    if status not in ("completed", "failed"):
+    if status not in ("completed", "failed", "stopped"):
         return None
     if error_code == ABANDONED_CODE:
         # Its task died, so its stream sent nothing: no escalation, only the plain error.

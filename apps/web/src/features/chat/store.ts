@@ -257,7 +257,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
         draft,
         // The old message is about the old text. The warning stays only while the number does.
         sendError: null,
-        warning: kindOfPersonalData(draft) === null ? null : state.warning,
+        warning:
+          state.warning !== null && kindOfPersonalData(draft) === null ? null : state.warning,
       }
     }),
 
@@ -307,7 +308,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
           // The first event means the server took the question, so it is no longer a draft. Text
           // typed since then stays.
           draft:
-            event.type === 'turn.started' && origin === 'composer' && state.draft === question
+            event.type === 'turn.started' &&
+            origin === 'composer' &&
+            trimLikePython(state.draft) === trimmed
               ? ''
               : state.draft,
           // "Still answering" is about this answer, which has now ended.
@@ -451,7 +454,9 @@ function endWithoutClosingEvent(
       turn: null,
       sendError: conversationCopy.sendFailed,
       draft:
-        turn.accepted && origin === 'composer' && state.draft === turn.question ? '' : state.draft,
+        turn.accepted && origin === 'composer' && trimLikePython(state.draft) === turn.question
+          ? ''
+          : state.draft,
     }))
     if (turn.accepted) deps.invalidateConversation()
     return
@@ -482,6 +487,9 @@ function failSend(error: unknown, deps: SendDeps) {
   }
   const type = error.problem?.type
   if (error.status === 409 && type === 'turn-running') {
+    // Keep saying "still answering", and read the conversation so the running turn shows and the
+    // poller picks it up.
+    deps.invalidateConversation()
     set({ ...cleared, sendError: deps.texts.stillAnswering })
   } else if (
     error.status === 409 &&
@@ -500,7 +508,8 @@ function failSend(error: unknown, deps: SendDeps) {
   } else if (error.status === 404) {
     // The conversation it was sent to is gone (or was never this person's): forget it, so the
     // next question uses the server's current one.
-    set({ ...cleared, conversationId: null, sendError: conversationCopy.sendFailed })
+    // Its turns that were waiting for a saved copy belonged to the old conversation, so they go.
+    set({ ...cleared, conversationId: null, settling: [], sendError: conversationCopy.sendFailed })
     deps.forgetConversation()
   } else {
     if (error.status === 401) deps.onUnauthorized()

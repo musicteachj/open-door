@@ -28,8 +28,33 @@ type AnswerProps = {
 // A marker goes into the text as one private-use character (U+E000 plus the citation's index in
 // the array), and the rehype step below turns it into a marker element. Private use is a range
 // nothing writes on purpose, and the model's own are dropped first, so it can't forge a marker.
+// That includes a numeric character reference to one ("&#xE000;"), which the Markdown parser would
+// turn into the real character after the drop.
 const PLACEHOLDER_BASE = 0xe000
 const PRIVATE_USE = /[\uE000-\uF8FF]/g
+// What the parser decodes: up to six hex digits or seven decimal ones, and the closing ";".
+const NUMERIC_REFERENCE = /&#(?:[xX]([0-9a-fA-F]{1,6})|([0-9]{1,7}));/g
+const PRIVATE_USE_FIRST = 0xe000
+const PRIVATE_USE_LAST = 0xf8ff
+
+/**
+ * The text without the model's own private-use characters, written out or as a reference. Repeated
+ * until nothing changes, because removing one piece can join its neighbors into a new reference
+ * ("&#x&#xE000;E000;" becomes "&#xE000;"). Each pass only shortens the text, so it ends.
+ */
+function withoutPrivateUse(text: string): string {
+  let current = text
+  for (;;) {
+    const next = current
+      .replace(PRIVATE_USE, '')
+      .replace(NUMERIC_REFERENCE, (reference, hex, decimal) => {
+        const code = hex === undefined ? Number.parseInt(decimal, 10) : Number.parseInt(hex, 16)
+        return code >= PRIVATE_USE_FIRST && code <= PRIVATE_USE_LAST ? '' : reference
+      })
+    if (next === current) return current
+    current = next
+  }
+}
 const PLACEHOLDER_PATTERN = /([\uE000-\uF8FF])/
 
 const MARKER_TAG = 'od-marker'
@@ -151,7 +176,7 @@ function stepToClaimEnd(start: number, text: string): number {
 function withPlaceholders(text: string, citations: CitationOut[]): string {
   // Nothing to place: no scan for link addresses and no rebuild, only the model's own private-use
   // characters dropped, which must happen either way.
-  if (citations.length === 0) return text.replace(PRIVATE_USE, '')
+  if (citations.length === 0) return withoutPrivateUse(text)
   const protectedSpans: Protected = {
     links: linkAddressSpans(text),
     autolinks: autolinkSpans(text),
@@ -167,11 +192,11 @@ function withPlaceholders(text: string, citations: CitationOut[]): string {
   let out = ''
   let from = 0
   for (const slot of slots) {
-    out += text.slice(from, slot.at).replace(PRIVATE_USE, '')
+    out += withoutPrivateUse(text.slice(from, slot.at))
     out += String.fromCharCode(PLACEHOLDER_BASE + slot.index)
     from = slot.at
   }
-  out += text.slice(from).replace(PRIVATE_USE, '')
+  out += withoutPrivateUse(text.slice(from))
   return out
 }
 

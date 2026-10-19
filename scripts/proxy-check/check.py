@@ -208,8 +208,14 @@ def problems_in_buffering_control(timeline: Timeline) -> list[str]:
     """Through the second nginx, which gzips (and so holds back) the stream, no keep-alive may
     arrive in the listening time. (gzip holds even the response headers, so often nothing at all
     arrives.) If keep-alives arrive, the pass run's timing assertions could not tell a holding
-    proxy from a good one."""
+    proxy from a good one. A status that does arrive must be 200: an error response (a 502 from
+    the proxy, a 429 from the API) has no keep-alives either, and would pass for a holding proxy."""
     problems: list[str] = []
+    if timeline.status not in (0, 200):
+        problems.append(
+            f"Through the holding proxy the response status was {timeline.status}, not 200, so "
+            "the control did not hold a working stream."
+        )
     seen = keep_alives_in(timeline, BUFFERING_LISTEN_SECONDS)
     if seen >= KEEP_ALIVES_MINIMUM:
         problems.append(
@@ -494,22 +500,24 @@ def owner_database_url() -> str:
     sys.path.insert(0, str(API_DIR))
     from app.core.config import Settings
 
-    settings = Settings()  # type: ignore[call-arg]
+    settings = Settings()
     url = settings.migration_database_url
     if url is None:
         raise CheckError("MIGRATION_DATABASE_URL is not set, so the check cannot clean up.")
-    return str(url).replace("postgresql+asyncpg://", "postgresql://")
+    return str(url)
 
 
 async def database_now(url: str) -> Any:
     """The database's own clock, so the cleanup window does not depend on this machine's."""
-    import asyncpg
+    from sqlalchemy import text
+    from sqlalchemy.ext.asyncio import create_async_engine
 
-    connection = await asyncpg.connect(url)
+    engine = create_async_engine(url)
     try:
-        return await connection.fetchval("SELECT now()")
+        async with engine.connect() as connection:
+            return await connection.scalar(text("SELECT now()"))
     finally:
-        await connection.close()
+        await engine.dispose()
 
 
 async def clean_up_database(url: str, tenant_ids: list[str], started_at: Any) -> None:
@@ -517,36 +525,24 @@ async def clean_up_database(url: str, tenant_ids: list[str], started_at: Any) ->
     rows its own turns wrote.
 
     The daily ledger has no tenant, so nothing cascades. Like `evals/assistant/run.py`, this reads
-    the sandbox's own `ai_spend` rows before the sandbox is deleted, then deletes one daily row for
-    each, of the same kind and amount and the same instant (a reservation's two rows are written in
-    one transaction, so their `created_at` is equal). A row is taken only if it is also no older
-    than the run's start. Another sandbox's row would need the same kind, amount, and
-    microsecond."""
-    import asyncpg
+    the sandbox's own `ai_spend` rows, then deletes one daily row for each, of the same kind and
+    amount and the same instant, and the sandboxes, in one transaction (the shared
+    `app.db.spend_cleanup`). A row is taken only if it is also no older than the run's start.
+    Another sandbox's row would need the same kind, amount, and microsecond."""
+    from uuid import UUID
 
-    connection = await asyncpg.connect(url)
+    from sqlalchemy.ext.asyncio import create_async_engine
+
+    from app.db.spend_cleanup import remove_sandboxes, spend_rows_of
+
+    ids = [UUID(tenant_id) for tenant_id in tenant_ids]
+    engine = create_async_engine(url)
     try:
-        own = await connection.fetch(
-            "SELECT kind, amount_usd, created_at FROM ai_spend"
-            " WHERE tenant_id = ANY($1::uuid[]) AND created_at >= $2",
-            tenant_ids,
-            started_at,
-        )
-        for tenant_id in tenant_ids:
-            await connection.execute("DELETE FROM tenants WHERE id = $1::uuid", tenant_id)
-        for row in own:
-            await connection.execute(
-                "DELETE FROM ai_spend_daily WHERE id = ("
-                " SELECT id FROM ai_spend_daily"
-                " WHERE kind = $1 AND amount_usd = $2 AND created_at = $3 AND created_at >= $4"
-                " ORDER BY id LIMIT 1)",
-                row["kind"],
-                row["amount_usd"],
-                row["created_at"],
-                started_at,
-            )
+        async with engine.connect() as connection:
+            rows = await spend_rows_of(connection, ids, not_before=started_at) if ids else []
+        await remove_sandboxes(engine, ids, rows, not_before=started_at)
     finally:
-        await connection.close()
+        await engine.dispose()
 
 
 # --- The runs -----------------------------------------------------------------------

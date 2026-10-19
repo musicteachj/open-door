@@ -98,6 +98,23 @@ describe('the docked panel (a wide window)', () => {
     )
   })
 
+  it('does not read the conversation again when the panel opens', async () => {
+    const { user } = signedIn()
+    const [marker] = await markers(CA_MARKER)
+    let reads = 0
+    const count = ({ request }: { request: Request }) => {
+      if (new URL(request.url).pathname.endsWith('/assistant/conversations/current')) reads++
+    }
+    server.events.on('request:start', count)
+    try {
+      await user.click(marker!)
+      await panel()
+      expect(reads).toBe(0)
+    } finally {
+      server.events.removeListener('request:start', count)
+    }
+  })
+
   it('does not scroll the window to the top when a marker opens the panel', async () => {
     const { user } = signedIn()
     const [marker] = await markers(CA_MARKER)

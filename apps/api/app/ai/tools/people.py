@@ -126,15 +126,18 @@ class FindInput(ToolInput):
     def _query_fits(cls, value: str | None) -> str | None:
         if value is None:
             return None
-        if len(value.strip()) > MAX_PEOPLE_QUERY_CHARACTERS:
-            msg = f"use at most {MAX_PEOPLE_QUERY_CHARACTERS} characters"
-            raise ValueError(msg)
         try:
             # The handbook search's own cleaning: control, format, and surrogate characters go.
-            return clean_query(value)
+            # Measured after, as `search_handbook` does, so padding that cleans away doesn't
+            # reject a valid query.
+            cleaned = clean_query(value, max_characters=None)
         except ValueError:
             msg = "is empty. Leave 'query' out to list everyone in the scope"
             raise ValueError(msg) from None
+        if len(cleaned) > MAX_PEOPLE_QUERY_CHARACTERS:
+            msg = f"use at most {MAX_PEOPLE_QUERY_CHARACTERS} characters"
+            raise ValueError(msg)
+        return cleaned
 
 
 async def run_profile(raw_input: dict[str, Any], ctx: ToolContext) -> ToolOutcome:

@@ -314,7 +314,48 @@ version (`0.x.y` while the app is being built, `1.0.0` when it is complete).
     and `httpx2`, the HTTP library it is built on, as a runtime dependency rather than a test-only
     one.
 
+### Fixed
+
+- **Small fixes from the Phase 4 review** (Phase 4, phase review).
+  - **The conversation page:**
+    - Under a budget stop, "Ask again" and "Try again" are hidden like Retry. Before, they sent a
+      question the server refused, and it vanished without a word.
+    - A "still answering" reply now loads the turn that's running.
+    - A conversation that no longer exists stops being checked for unfinished answers.
+    - A question with spaces around it is no longer sent twice when the connection drops before
+      the answer starts.
+    - A reply that isn't an answer stream (a misconfigured proxy's page) counts as a failed send
+      and keeps the question in the box.
+    - Opening a source no longer reloads the whole conversation.
+  - **The assistant:**
+    - A broken character in the model's text (a lone UTF-16 surrogate) becomes a replacement
+      character, instead of failing the turn and leaving the conversation busy for 10 minutes.
+    - The directory search measures the model's query after cleaning it, as the handbook search
+      already did.
+  - **The evals and the proxy check:**
+    - Their cleanup deletes the run's daily spending rows and its sandbox in one transaction, and
+      the eval keeps its sandbox when it can't read the sandbox's spending, so a failure can't
+      leave rows behind that fill the shared daily cap.
+    - The scoreboard's commit is read before the run saves its recordings, so it is no longer
+      always marked "dirty".
+    - A wrong `--compare` file is refused before any paid call.
+    - The proxy check's holding control fails on an error response.
+    - CI now runs the proxy check's own tests when only its script changes, and lint and type
+      checks cover it.
+
 ### Security
+
+- **A stopped sensitive question still reaches HR, and the model can't fake a citation** (Phase 4,
+  phase review). The whole-phase review found no high issues and these two medium ones:
+  - A question the safety check marked sensitive (harassment, for example) that the person then
+    stopped got no HR contact panel and no audit event, live or after a reload. Sensitive topics go
+    to a person on every ending now, including a stop (invariants 6 and 7).
+  - The model could write an HTML character reference (`&#xE000;`) that the answer renderer
+    turned into a working citation marker, so an uncited sentence looked cited (invariant 4). Those
+    references are now dropped before the markers are placed.
+
+  The personal-data check also catches a Social Security number written as nine digits in a row, or
+  with dots or slashes between its groups, in the API and the browser alike.
 
 - **One visitor can't stall the API, and a question can't get stuck** (Phase 4, stage 4). An Opus
   security review of the routes and the stream found one high issue, now fixed: about 15

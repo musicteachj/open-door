@@ -727,6 +727,40 @@ describe('a turn that is streaming, stopped, or has failed', () => {
     expect(screen.queryByRole('button', { name: 'Retry' })).not.toBeInTheDocument()
   })
 
+  it('shows no Ask again or Try again when a budget banner has turned the composer off', async () => {
+    signedInWith(
+      conversationOut({
+        budget: {
+          sandboxReached: false,
+          dailyReached: true,
+          sandboxRemainingCents: 0,
+          banner: { kind: 'daily', message: 'Today’s demo budget is reached.' },
+        },
+        turns: [
+          turnOut({ id: 't-1', question: 'One?', status: 'stopped', answerText: 'Un' }),
+          turnOut({
+            id: 't-2',
+            question: 'Two?',
+            status: 'guard_unavailable',
+            answerText: '',
+            guard: null,
+            escalation: {
+              kind: 'unavailable',
+              message: 'We can’t answer right now.',
+              hrContact: [DANA],
+            },
+          }),
+        ],
+      }),
+    )
+    renderApp({ at: '/ask' })
+    await screen.findByRole('textbox', { name: 'Ask Open Door' })
+    expect(screen.getByText('Stopped')).toBeInTheDocument()
+    expect(screen.getByText('We can’t answer right now.')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Ask again' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Try again' })).not.toBeInTheDocument()
+  })
+
   it('shows an incomplete answer with its note and its feedback', async () => {
     signedInWith(conversationOut({ turns: [cited({ incomplete: true })] }))
     renderApp({ at: '/ask' })

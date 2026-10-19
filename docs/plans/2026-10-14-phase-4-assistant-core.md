@@ -2496,6 +2496,97 @@ browser tests. `make db && make check` is green, now with the offline evals on t
 and `make proxy-check` too. About 250 lines of application code, eval code, and config, plus the
 prompt.
 
+### The phase review (`fix/phase-4-review`, 2026-10-19)
+
+Task 44's review, against `73b4942`, in two parts run side by side, with no paid AI calls:
+
+- **`/code-review high`, three runs, one per area** (the owner's choice: the scoped diff was about
+  17,000 lines, against about 3,000 for Phase 1's review, so one run risked the session limit):
+  the API (`apps/api/app`, migrations, scripts, `pyproject.toml`); the eval runner, judge, and
+  scoreboard, the proxy check, the `Makefile`, and `.github`; and `apps/web/src` without the
+  generated client, tests, and the gallery.
+- **One Fable 5.1 security reviewer,** briefed with the invariants, the spec's Security seams, and
+  the seams between the stages, against the local stack on the scripted model. It found no high
+  or medium issue and one low, which the API run also found (the first medium below). What it
+  proved held: the database grants are exactly the spec's (`INSERT` and `SELECT` on the six AI
+  tables, `UPDATE` on `ai_turns` only for its outcome and trace columns); every `UPDATE`,
+  `DELETE`, and `TRUNCATE` on the append-only tables is refused, and a finished turn can't be
+  rewritten (`OD002`); another persona, HR included, sees none of a person's conversations and
+  gets 404 through the API; CSRF and the same-origin check refuse every new state-changing route;
+  the tools' strict schemas refuse any "whose data" input; the crisis text is the same live and on
+  reload, and the injection flag is never shown; a persona switch mid-turn leaves the turn and its
+  audit with the person who asked; no question text reaches the logs.
+
+**Fixed, each test first and mutation-proved:**
+- **Medium: a sensitive turn that ended `stopped` got no HR panel and no `escalation.offered`
+  audit,** live or on reload (invariants 6 and 7). Stage 2's loop had chosen "a stopped turn gets
+  neither", against its own note that a sensitive turn routes to HR on every ending. Both the loop
+  and the display now treat a stop like an answer or a failure; an abandoned turn and a budget
+  stop before the guard still get nothing.
+- **Medium: the model could forge a citation marker** with a numeric character reference
+  (`&#xE000;`), which the Markdown parser decoded into the private-use character the renderer uses
+  for markers, after the raw text had been cleaned (invariant 4). The references are now dropped
+  too, repeated until the text stops changing, since the combined review showed a single pass
+  could be beaten by nesting (`&#x&#xE000;E000;`).
+- **Lows:** the personal-data check catches nine digits in a row and dots or slashes between an
+  SSN's groups (the owner's choice), in both copies and the shared cases; a lone UTF-16 surrogate
+  from the model is replaced once, where events leave the transport, so the stored answer, its
+  offsets, and the next call's history agree (thinking blocks are left as they came, since they go back to the model with their signatures); under a budget stop, "Ask again" and "Try again"
+  are hidden like Retry; a 409 `turn-running` refetches the conversation; a 404 clears the turns
+  still settling; the draft is compared trimmed on both paths; a 2xx that isn't an event stream is
+  a failed send; `find_people` measures its query after cleaning; CI's `api` filter, ruff, and
+  mypy cover the proxy check (its database code moved to SQLAlchemy to type-check); the holding
+  control fails on an error status; the eval's and the proxy check's cleanup remove the daily
+  rows and the sandbox in one transaction, through one shared helper
+  (`app/db/spend_cleanup.py`), matched one row to one row as before; the scoreboard's commit is
+  read before the run saves fixtures; a wrong `--compare` file is refused before any call; the
+  em-dash check skips the hand grades (copied model answers); and four cleanups (the composer's
+  personal-data scan only while a warning shows, the source panel no longer refetching the
+  conversation, the unused `TurnUsage.cost_usd` removed, the refusal branch using
+  `_forget_what_was_shown()`).
+- **Checked, no change:** the combined review asked whether a late budget stop of a sensitive turn
+  is audited as `unavailable`. It isn't: `budget_stopped` is set only in the guard's stage, and a
+  stop at the model call is audited as `sensitive`, as the stream sends it. A test now asserts it.
+
+**Backlogged, with the reason** (in `docs/BACKLOG.md`): trial 1's recordings when a fresh run stops
+in a later trial (before Phase 5's full run); two eval cost-report gaps (Phase 7); the crisis panel
+when the crisis turn's final write fails, one exit for the canary check, and a closing event for
+crisis and "can't answer" turns (Phase 8).
+
+**Dismissed:** the question checks running in both the route and `start_turn_run` (Stage 2's
+deliberate re-check for the race), and `pendingStop` being unreachable from today's page (Stage
+6's deliberate guard for a Stop before `turn.started`).
+
+No fix changed a prompt, a tool's description or schema, the guard, or retrieval, and `make
+eval-offline` replays the full set unchanged, so the 2026-10-19 full run stays the evidence for
+`v0.4.0`.
+
+**The fixes' combined Sonnet review** found the nested-reference bypass above (high), a lone
+surrogate surviving in the finished message and tool inputs (medium: the scrub moved to the one
+place events leave the transport), and a missing one-row-to-one-row cleanup test; all fixed.
+
+**The close's `/code-review medium`: two rounds.** Round 1 found two mediums, both fixed: the
+eval's cleanup removed its sandbox even when reading the sandbox's spend had failed (now it leaves
+both for the next run), and CI's own ruff steps didn't cover the proxy check. Its lows fixed: the
+SSN rule's mixed joins refused "was my $125.00 2026 bonus taxed?" (now dash and space may mix, but
+dots or slashes must be used for both joins), the stream client cancels a body it refuses, the
+em-dash exemption covers only the copied answers (`hand-grades.yaml`, not the hand-written key),
+a dead scrub branch, and the baseline file's judge shape. Round 2's one medium was a false
+positive (an abandoned turn can't have a stored guard verdict: only `finish_turn` writes it), so
+the loop stopped there; its lows were fixed (two comments, a fast path in the scrub, one shared
+spend read) or backlogged (announcing the HR panel a stopped turn's saved copy adds). Dismissed:
+a surrogate pair split across two deltas becomes two replacement characters (the API streams
+UTF-8, so it doesn't split pairs), one `DELETE` per spend row in the cleanup (unchanged, local),
+code spans losing a private-use reference (safety first), and a raw-length bound for
+`find_people` (the model's `max_tokens` bounds it).
+
+**Final counts (the phase review):** 2,893 API tests (up from 2,861), 1,993 web unit tests (up
+from 1,974), and 285 browser tests. `make db && make check` is green, with the offline evals on the
+full set and `make proxy-check`. One earlier `make check` saw the proxy check's heartbeat control
+end its silent stream at 11 seconds instead of being cut by nginx at 20; it passed on its own
+straight after and in the final run, and nothing in the fixes touches the stream's timing. About
+370 lines of application code, eval code, scripts, and config.
+
 ## Backlog
 
 Deferrals found during execution go in `docs/BACKLOG.md` under the phase that should pick them up,

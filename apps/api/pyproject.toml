@@ -50,7 +50,7 @@ select = ["E", "W", "F", "I", "N", "UP", "B", "SIM", "ASYNC", "DTZ", "S", "PT", 
 [tool.mypy]
 strict = true
 plugins = ["pydantic.mypy"]
-files = ["app", "tests", "scripts", "migrations", "../../evals"]
+files = ["app", "tests", "scripts", "migrations", "../../evals", "../../scripts/proxy-check"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

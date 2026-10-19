@@ -1,6 +1,10 @@
 {
   "about": "Shared vectors for the personal-data check. The API (app/ai/personal_data.py) and the web app's copy both read this file, so the two cannot drift. 'caught' texts must be flagged, 'passes' texts must not. Every number here is made up. Both copies normalize the text first, in this order, and then match ASCII digits only ([0-9], never a Unicode-aware digit class): (1) Unicode NFKC normalization; (2) drop every character in category Cf (format characters such as the zero-width space and joiners); (3) map every character in category Zs (space separators such as the no-break space and the thin space) to an ASCII space; (4) map every character in category Pd (dashes such as the non-breaking hyphen, en dash, and minus-like dashes) to an ASCII hyphen-minus. Full-width digits become ASCII digits in step 1.",
   "caught": [
+    {"text": "123-45 6789", "why": "Social Security number with a dash and a space"},
+    {"text": "123456789", "why": "Social Security number as nine bare digits"},
+    {"text": "123.45.6789", "why": "Social Security number with dots"},
+    {"text": "123/45/6789", "why": "Social Security number with slashes"},
     {"text": "My SSN is 123-45-6789.", "why": "Social Security number with dashes"},
     {"text": "123 45 6789", "why": "Social Security number with spaces"},
     {"text": "ssn:123-45-6789, please update", "why": "Social Security number next to punctuation"},
@@ -30,6 +34,10 @@
     {"text": "4111\u20131111\u20131111\u20131111", "why": "card number with en dashes"}
   ],
   "passes": [
+    {"text": "5551234567", "why": "ten bare digits, a phone number, is longer than a Social Security number"},
+    {"text": "was my $125.00 2026 bonus taxed?", "why": "an amount and a year, not an SSN with mixed joins"},
+    {"text": "123.45 6789", "why": "mixed dot and space joins are not flagged"},
+    {"text": "Due 2026.10.19", "why": "an ISO date with dots"},
     {"text": "Call 1-800-555-0137 for the EAP.", "why": "the EAP number in the handbook"},
     {"text": "My number is (512) 555-0142.", "why": "phone number"},
     {"text": "512-555-0142", "why": "phone number with dashes"},

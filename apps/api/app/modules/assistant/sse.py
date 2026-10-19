@@ -53,8 +53,9 @@ def encode_event(event: TurnEvent) -> bytes:
     is always one line and cannot end the event early.
     """
     data = json.dumps(event.to_json(), separators=(",", ":"), ensure_ascii=False)
-    # Model output can hold a lone surrogate, which UTF-8 cannot encode: it becomes "?" and does
-    # not end the stream.
+    # The turn loop replaces a lone surrogate in model text with U+FFFD before anything is sent.
+    # `errors="replace"` is the last defense: if one still got here (UTF-8 cannot encode it), it
+    # becomes "?" and does not end the stream.
     return f"event: {event.name}\ndata: {data}\n\n".encode(errors="replace")
 
 

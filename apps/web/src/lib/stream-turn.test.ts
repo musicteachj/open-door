@@ -1,5 +1,5 @@
 import { delay, http, HttpResponse } from 'msw'
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { stubAbsoluteUrls } from '@/test/absolute-urls'
 import { server } from '@/test/msw'
 import { ApiError } from './api-fetch'
@@ -320,6 +320,26 @@ describe('streamTurn: a response that is not a stream', () => {
     expect(error).toBeInstanceOf(ApiError)
     expect(error.status).toBe(502)
     expect(error.problem).toBeNull()
+  })
+
+  it('treats a 2xx that is not an event stream as a failed send, before it is accepted', async () => {
+    const cancel = vi.fn<() => Promise<void>>(() => Promise.resolve())
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+      ok: true,
+      status: 200,
+      headers: new Headers({ 'Content-Type': 'text/html' }),
+      body: { cancel },
+    } as unknown as Response)
+    const onResponse = vi.fn<() => void>()
+    const error = (await streamTurn(CONVERSATION, 'Hi', {
+      onEvent: () => {},
+      onResponse,
+    }).catch((caught: unknown) => caught)) as ApiError
+    expect(error).toBeInstanceOf(ApiError)
+    expect(error.status).toBe(200)
+    expect(onResponse).not.toHaveBeenCalled()
+    expect(cancel).toHaveBeenCalledTimes(1)
+    fetchSpy.mockRestore()
   })
 
   it('lets a network failure through as it is', async () => {

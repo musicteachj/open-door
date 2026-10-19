@@ -19,7 +19,9 @@ export const NARROW_WINDOW_QUERY = '(max-width: 1279px)'
 
 /** The group name ("California addendum") of a cited passage, for the eyebrow while it loads. */
 function useGroupName(key: string): string | undefined {
-  const conversation = useGetCurrentConversation().data
+  // The page's own query reads the conversation; this one only watches the cache. A second
+  // observer that could fetch would read it again every time the panel opens.
+  const conversation = useGetCurrentConversation({ query: { enabled: false } }).data
   const liveCitations = useChatStore((s) => s.turn?.citations)
   const settling = useChatStore((s) => s.settling)
   // Worked out again only when the conversation is read again or the live answer's citations
