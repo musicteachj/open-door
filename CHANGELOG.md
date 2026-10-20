@@ -10,6 +10,22 @@ version (`0.x.y` while the app is being built, `1.0.0` when it is complete).
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-10-20
+
+Phase 4: the assistant core, read-only. Anyone in a sandbox can ask the assistant an HR question
+in plain language on `/ask` and get a streamed answer whose every policy sentence cites the
+handbook, with "Show your work", "Was this right?", and Stop. A small, fast guard model screens
+each message first: a crisis gets fixed, human-written text (911, the 988 Lifeline, the EAP) and
+never reaches the main model; a sensitive topic gets an answer and the HR partner's contact; and
+if the guard can't answer, the assistant fails closed. Three read-only tools act only for the
+signed-in person (the handbook search, their own profile, and the directory). Spending is capped
+per sandbox and per day by an insert-only ledger reserved before each call. Development, the
+browser tests, and a strict reverse-proxy check run on a scripted stand-in for the model, and CI
+replays recorded answers. The last full live eval run (2026-10-19, $8.02) scored the red team, the
+citation checks, and the unanswerable questions at 100% in every trial, and the judge at 74% (the
+85% bar moves to Phase 7). The phase closed with a whole-phase review, a Fable 5.1 security review,
+a release review, and their fixes.
+
 ### Changed
 
 - **The assistant cites every policy sentence and stays out of decisions** (Phase 4, answer-quality
