@@ -130,14 +130,16 @@ In order, each refusing with a problem response before the stream opens:
 
 1. **The session** (401) and **CSRF** (403), as every state-changing route.
 2. **The conversation** belongs to the asker (404 otherwise, never 403), and its pinned versions
-   are current (409 `conversation-outdated`, and the UI offers a new conversation). A history
-   past 80,000 tokens, estimated the way the budget estimates input, is refused with 409
-   `history-too-long`, and the UI offers a new conversation the same way (added in Stage 4).
+   are current (409 `conversation-outdated`, and the UI offers a new conversation).
 3. **The question:** 1 to 2,000 characters after trimming (422). **The personal-data check:**
    something that looks like a Social Security number or a card number is refused (422
    `personal-data`), so it's never stored or sent.
-4. **One turn at a time:** a second turn while one is running gets 409 `turn-running`.
-5. **Budgets:** if the sandbox or the day has no room for the guard and one model call, 429
+4. **The history:** a history past 80,000 tokens, estimated the way the budget estimates input,
+   is refused with 409 `history-too-long`, and the UI offers a new conversation the same way
+   (added in Stage 4; moved after the question's checks in the v0.4.0 release review, so a
+   question's own problem is reported first and a refused question never reads the history).
+5. **One turn at a time:** a second turn while one is running gets 409 `turn-running`.
+6. **Budgets:** if the sandbox or the day has no room for the guard and one model call, 429
    `budget-sandbox` or `budget-daily`. The banner explains which.
 
 ### 2. The guard

@@ -66,8 +66,12 @@ export function kindOfPersonalData(text: string): PersonalDataKind | null {
   const read = normalized(text)
   if (SSN.test(read)) return 'ssn'
   for (const match of read.matchAll(CARD_CANDIDATE)) {
-    const digits = match[0].replace(/[^0-9]/g, '')
-    if (digits.length >= 13 && digits.length <= 19 && passesLuhn(digits)) return 'card'
+    // The optional last group of a grouped match may be the next number ("4242 4242 4242 4242
+    // 123" is a card and a CVV), so the match is tried whole and without its last group.
+    for (const candidate of [match[0], match[0].replace(/[ -][0-9]{1,4}$/, '')]) {
+      const digits = candidate.replace(/[^0-9]/g, '')
+      if (digits.length >= 13 && digits.length <= 19 && passesLuhn(digits)) return 'card'
+    }
   }
   return null
 }

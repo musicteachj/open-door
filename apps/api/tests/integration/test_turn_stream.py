@@ -122,8 +122,21 @@ async def test_a_conversation_pinned_to_an_old_prompt_is_409_conversation_outdat
     assert await turn_rows(app_engine, tenant_id, person_id) == []
 
 
+@pytest.mark.parametrize(
+    ("question", "status_code", "problem"),
+    [
+        (SICK, 409, "history-too-long"),
+        # The question is judged before the history's length, as the spec orders the checks.
+        (SSN, 422, "personal-data"),
+        ("   ", 422, None),
+    ],
+)
 async def test_a_history_past_80000_tokens_is_refused_as_history_too_long(
-    browser: Browser, app_engine: AsyncEngine
+    browser: Browser,
+    app_engine: AsyncEngine,
+    question: str,
+    status_code: int,
+    problem: str | None,
 ) -> None:
     tenant_id, person_id = sign_in(browser)
     conversation_id = new_conversation(browser)["id"]
@@ -149,10 +162,11 @@ async def test_a_history_past_80000_tokens_is_refused_as_history_too_long(
             .values(status="stopped", ended_at=text("now()"))
         )
 
-    response = ask(browser, conversation_id)
+    response = ask(browser, conversation_id, question)
 
-    assert response.status_code == 409
-    assert response.json()["type"] == "history-too-long"
+    assert response.status_code == status_code
+    if problem is not None:
+        assert response.json()["type"] == problem
     assert len(await turn_rows(app_engine, tenant_id, person_id)) == 1  # Only the earlier one.
 
 

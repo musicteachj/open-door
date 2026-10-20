@@ -65,7 +65,11 @@ def kind_of_personal_data(text: str) -> PersonalDataKind | None:
     if _SSN.search(text):
         return "ssn"
     for match in _CARD_CANDIDATE.finditer(text):
-        digits = re.sub(r"[^0-9]", "", match.group())
-        if 13 <= len(digits) <= 19 and _passes_luhn(digits):
-            return "card"
+        # The optional last group of a grouped match may be the next number ("4242 4242 4242 4242
+        # 123" is a card and a CVV), so the match is tried whole and without its last group.
+        candidate = match.group()
+        for read in (candidate, re.sub(r"[ -][0-9]{1,4}$", "", candidate)):
+            digits = re.sub(r"[^0-9]", "", read)
+            if 13 <= len(digits) <= 19 and _passes_luhn(digits):
+                return "card"
     return None

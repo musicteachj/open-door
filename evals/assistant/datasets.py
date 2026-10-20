@@ -157,7 +157,7 @@ class _Problems:
 
     def persona(self, item: dict[str, Any], where: str) -> str | None:
         persona = item.get("asker")
-        if persona in PERSONAS:
+        if isinstance(persona, str) and persona in PERSONAS:
             return str(persona)
         self.add(where, f"unknown asker {persona!r} (known: {', '.join(PERSONAS)})")
         return None
@@ -240,7 +240,9 @@ def load_qa(path: Path = QA_PATH) -> list[QaItem]:
         if kind in ("answerable", "other_state") and not expect:
             problems.add(where, f"a {kind} item needs `expect` sections")
         location_code = raw.get("location_code")
-        if location_code is not None and location_code not in LOCATION_STATES:
+        if location_code is not None and not (
+            isinstance(location_code, str) and location_code in LOCATION_STATES
+        ):
             problems.add(where, f"unknown location_code {location_code!r}")
             location_code = None
         if kind == "other_state" and location_code is None:

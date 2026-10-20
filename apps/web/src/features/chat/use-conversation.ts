@@ -206,14 +206,21 @@ function invalidateConversation(queryClient: QueryClient) {
 // home and the conversation are different components, and one replaces the other while this is
 // still in flight). Forgotten when the person changes or a new conversation is started on purpose.
 let creating: { promise: Promise<string> } | null = null
+// The new conversation "Start a new conversation" is creating on purpose. A second click while it
+// is in flight is ignored, and a send waits for it (see `send`), so a question is not sent to the
+// old conversation only to be aborted when the new one begins.
+let startingNew: Promise<boolean> | null = null
+// A send is waiting for `startingNew`.
+let sendWaiting = false
 registerReset(() => {
   creating = null
+  startingNew = null
+  sendWaiting = false
 })
 
 /**
  * Sending, stopping, and starting over. `send` does nothing until the API's texts have loaded (the
- * page waits for them, so this only guards a send that races the page). Retry and Ask again send
- * the live turn's own question again.
+ * page waits for them, so this only guards a send that races the page).
  */
 export function useConversationActions() {
   const queryClient = useQueryClient()
@@ -266,6 +273,24 @@ export function useConversationActions() {
 
   const send = useCallback(
     async (question: string, origin?: SendOrigin) => {
+      // A new conversation is being created: the question goes to it, once it exists. A second
+      // send meanwhile is ignored, so it does not queue behind the first and be refused as "still
+      // answering" (its draft stays).
+      if (startingNew !== null) {
+        if (sendWaiting) return
+        sendWaiting = true
+        let created: boolean
+        try {
+          created = await startingNew
+        } finally {
+          sendWaiting = false
+        }
+        if (!created) {
+          // The conversation could not be created: not to the old one. The draft stays.
+          useChatStore.setState({ sendError: conversationCopy.sendFailed })
+          return
+        }
+      }
       let ready: SendDeps | null
       try {
         ready = await deps()
@@ -286,25 +311,31 @@ export function useConversationActions() {
       .stop({ invalidateConversation: () => void invalidateConversation(queryClient) })
   }, [queryClient])
 
-  /** Retry (after an error) and Ask again (after Stop): the live turn's question, sent again. */
-  const askAgain = useCallback(async () => {
-    const question = useChatStore.getState().turn?.question
-    if (question !== undefined) await send(question, 'again')
-  }, [send])
-
   /** "Start a new conversation": a new one on the server, and the old one's live turn dropped. */
-  const startNewConversation = useCallback(async () => {
-    try {
-      creating = null
-      const created = await createConversation()
-      useChatStore.getState().beginConversation(created.id)
-      await invalidateConversation(queryClient)
-    } catch {
-      useChatStore.setState({ sendError: conversationCopy.sendFailed })
+  const startNewConversation = useCallback(async (): Promise<void> => {
+    if (startingNew !== null) {
+      await startingNew
+      return
     }
+    creating = null
+    const starting: Promise<boolean> = createConversation()
+      .then(async (created) => {
+        useChatStore.getState().beginConversation(created.id)
+        await invalidateConversation(queryClient)
+        return true
+      })
+      .catch(() => {
+        useChatStore.setState({ sendError: conversationCopy.sendFailed })
+        return false
+      })
+      .finally(() => {
+        if (startingNew === starting) startingNew = null
+      })
+    startingNew = starting
+    await starting
   }, [createConversation, queryClient])
 
-  return { send, stop, askAgain, startNewConversation, ready: texts !== undefined }
+  return { send, stop, startNewConversation, ready: texts !== undefined }
 }
 
 /** Thumbs up or down on an answer. The conversation is read again so the answer shows its feedback. */

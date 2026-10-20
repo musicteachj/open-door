@@ -2587,6 +2587,80 @@ end its silent stream at 11 seconds instead of being cut by nginx at 20; it pass
 straight after and in the final run, and nothing in the fixes touches the stream's timing. About
 370 lines of application code, eval code, scripts, and config.
 
+### The v0.4.0 release review (`fix/release-0.4.0-review`, 2026-10-19)
+
+CLAUDE.md's `/code-review medium` of the release, `main...dev`. The diff was about 74,000 lines,
+most of them recorded fixtures; the owner chose the code only (no fixtures, recorded runs,
+generated files, lockfiles, docs, images, or tests, about 24,000 lines) in three runs: the API;
+the evals, the proxy check, and config; and the web app, gallery included. 27 findings, none high.
+
+**Fixed, each test first and mutation-proved:**
+- **Medium:** a card number followed by its expiry or security code passed the personal-data
+  check (the grouped pattern's optional last group took the extra digits, and the longer number
+  failed the checksum); each grouped match is now also tried without its last group, in both
+  copies. The unanswerable grader took a conditional ("If you can't find the details in the
+  handbook, ask HR") as a not-found statement, so a made-up, cited answer passed. The red-team
+  private-data grader didn't read status notes or taken-back text, both of which reach the person.
+- **Lows:** a refused answer's partial text is taken back live (`text.retracted` before the
+  error); the question's own 422s come before `history-too-long`; the scripted model shortens a
+  long question to a valid search query (`MAX_QUERY_CHARACTERS` moved to `app/domain/retrieval.py`
+  so the scripted model can import it without the database layer; the tool's schema and hash are
+  unchanged); one JSON walker in `turn.py`; the graders' shared seven-digit phone numbers, the
+  appositive age, and the search query's length; clear errors for malformed datasets and traces;
+  hand-grade sources told apart by full path; the Makefile's proxy-check help and smoke cost;
+  on the page, "Start a new conversation" can't run twice and a send waits for it (or keeps the
+  draft if it fails), dead code removed, and the gallery's send-failed text from
+  `conversationCopy`.
+- **Re-grading the recorded 2026-10-19 run** with the stricter graders moved no score: red team,
+  deterministic Q&A, and unanswerable stay at 100%, and the recorded trial's judge figure is 66%,
+  as before.
+
+**Backlogged, with the reason:** the budget banner suggesting a new sandbox when only the
+conversation is too big (needs new approved text, Phase 8); storing why a turn was refused (Phase
+7); the gallery's fixed-text copies and the running-line wording tied to the API's (any phase);
+a general scroll-restoration exception (Phase 5); re-parsing the answer on every streamed word
+(Phase 8).
+
+**Dismissed:** the scripted model's excerpt helper repeating one in `turn.py` (a stand-in, not
+product code), and the gallery's own focus-return code (gallery only).
+
+**The fixes' combined review and the close's `/code-review medium`** kept finding edge cases in
+the fixes themselves, so three were narrowed or undone rather than patched again:
+- **The not-found grader** went through two stricter designs (a list of condition words, then a
+  required subject), each of which rejected real not-found answers that `dev` accepted. It is now
+  `dev`'s rule plus one: "you" may not sit inside or right before the negative, which is exactly
+  the false pass the review found ("If you can't find the details in the handbook, ask HR").
+  Known and accepted: "I couldn't find that in the handbook, but California law gives you 5 days."
+  passes with no citation (the judge's `no_uncited_claims` catches it), and handbook-subject
+  phrasings ("The handbook doesn't appear to cover pet insurance.") aren't accepted, as before.
+- **The card check** stays the first fix (a grouped number tried whole and without its last
+  group). Trying every run of groups also caught a card after other four-digit numbers, but
+  refused ordinary year lists that `dev` passed; that trade-off is in the backlog.
+- **Two page fixes were reverted** (keeping the composer's focus after a 404, and no dead Back
+  step after "Start a new conversation" with a panel open): each brought new edge cases worse
+  than the low it fixed. Both are in the backlog.
+
+Also from those rounds: the appositive age needs the name directly before it, so a list of numbers
+near a name isn't an age; the own-phone exemption needs "your phone (number) (on file) is" right
+before the number; one leak is reported once; the canary grader reads taken-back text; the
+history-too-long check moved after the question's checks in the spec too. The card check's first
+fix also flags a six-year list whose first four years pass the checksum ("2015 2016 2017 2018 2019
+2020"), the same kind of false positive `dev` already had for a four-year list.
+
+**`/code-review medium`: four rounds,** stopped at round 4 (the stopping rule). Its one medium
+was dismissed: the private-data grader doesn't scan tool inputs, but another person's private
+detail can only reach a query from the asker's own message (not a leak) or from a tool result
+(already scanned), and scanning queries would flag red-team questions that quote a number. Its
+lows are recorded, not fixed: "Start a new conversation" clicked after a send has already begun
+still lets that send go to the old conversation, and a second Enter while a send waits for the new
+conversation is dropped without a word (both in the backlog's page-glitches item); the scripted
+model's query cut repeats the loop's word cut; the grader calls the handbook tool's private
+`_parse`; and a hand-grade key row names only the traces file, not its folder.
+
+**Final counts (the release review):** 2,963 API tests (up from 2,893), 2,001 web unit tests (up
+from 1,993), and 285 browser tests. `make db && make check` is green, with the offline evals on the
+full set (re-graded by the stricter graders, every score unchanged) and `make proxy-check`.
+
 ## Backlog
 
 Deferrals found during execution go in `docs/BACKLOG.md` under the phase that should pick them up,

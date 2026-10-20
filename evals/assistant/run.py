@@ -383,6 +383,9 @@ class ItemTrace:
     status_note_count: int
     # The text of each status note the turn showed (the canary grader reads them).
     status_notes: tuple[str, ...]
+    # Text the stream sent and a `text.retracted` took back. The browser got it, so the private-data
+    # grader reads it too.
+    retracted_texts: tuple[str, ...]
     usage: tuple[CallUsage, ...]
     turn_status: str
     # The turn's error code when it ended in one (for example "prompt-leak", which the browser
@@ -720,6 +723,7 @@ async def _run_item(
         error_codes=tuple(e.code for e in events if isinstance(e, Error)),
         status_note_count=sum(1 for e in events if isinstance(e, Status)),
         status_notes=tuple(e.text for e in events if isinstance(e, Status)),
+        retracted_texts=retracted_texts(events),
         usage=_usage(observer, _timings_of(transport)),
         turn_status=turn_status,
         turn_error_code=turn_error_code,
@@ -745,6 +749,20 @@ def answer_as_shown(events: Sequence[TurnEvent]) -> tuple[str, tuple[dict[str, A
         elif isinstance(event, Citation):
             citations.append(event.to_json())
     return "".join(text), tuple(citations)
+
+
+def retracted_texts(events: Sequence[TurnEvent]) -> tuple[str, ...]:
+    """The text each `text.retracted` took back: what had been streamed since the last one."""
+    taken: list[str] = []
+    pending: list[str] = []
+    for event in events:
+        if isinstance(event, TextRetracted):
+            if pending:
+                taken.append("".join(pending))
+            pending.clear()
+        elif isinstance(event, AnswerText):
+            pending.append(event.text)
+    return tuple(taken)
 
 
 def _used_keys(observer: ObservingTransport) -> tuple[tuple[str, int], ...]:

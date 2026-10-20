@@ -384,6 +384,20 @@ async def test_priya_gets_the_california_section_cited(
     assert "CA-4.3" in sections
 
 
+async def test_a_600_character_question_still_gets_a_cited_answer_from_the_scripted_model(
+    app_engine: AsyncEngine, seeded_sandbox: SeedCompany
+) -> None:
+    # The scripted model searches with the question, and the tool refuses a query over 500
+    # characters, so the long question must be shortened to a query that fits.
+    question = (SICK + " Please be thorough about it.") * 20
+    assert 500 < len(question) <= 2000
+    env = await make_env(app_engine, seeded_sandbox, persona="priya")
+    events = await env.ask(question)
+
+    assert isinstance(events[-1], TurnCompleted)
+    assert of_type(events, Citation), "a cited answer, not the not-found text"
+
+
 async def test_mateo_gets_4_3_and_never_a_state_addendum(
     app_engine: AsyncEngine, seeded_sandbox: SeedCompany
 ) -> None:
@@ -585,6 +599,7 @@ async def test_a_refusal_is_an_error_with_no_text_and_the_budget_settled(
 
     assert events[-1] == Error("refusal", ERROR_TEXTS["refusal"])
     assert not of_type(events, TextDelta)
+    assert not of_type(events, TextRetracted)
     rows = await env.messages()
     assert [(r.role, r.content[0]["text"]) for r in rows] == [("user", "scripted safety refusal")]
     turn = await env.last_turn()
@@ -606,6 +621,9 @@ async def test_a_refusal_after_some_text_discards_the_text(
     assert isinstance(events[-1], Error)
     assert (await env.last_turn()).answer_text == ""
     assert roles(await env.messages()) == ["user"]
+    # The client already has the partial text, so it is told to drop it before the error.
+    assert of_type(events, TextDelta)
+    assert isinstance(events[-2], TextRetracted)
 
 
 async def test_max_tokens_keeps_the_text_marks_it_incomplete_and_maps_its_citations(

@@ -158,6 +158,9 @@ class Candidate:
     item: str
     qa_kind: str | None
     judge_input: JudgeInput
+    # The file's full resolved path, which tells two files with one name apart (the key file shows
+    # only `source_file`).
+    source_path: str = ""
 
 
 @dataclass(frozen=True)
@@ -186,10 +189,22 @@ def read_candidates(path: Path) -> list[Candidate]:
         traces = document["traces"]
     except (OSError, ValueError, KeyError, TypeError) as error:
         raise HandGradesError(f"{path}: not a saved-traces file ({error})") from error
+    if not isinstance(traces, list) or not all(
+        isinstance(t, Mapping) and "item_id" in t for t in traces
+    ):
+        raise HandGradesError(f"{path}: not a saved-traces file (each trace needs an item_id)")
     found: list[Candidate] = []
     for trace in traces:
         data = trace.get("judge_input")
-        if data is None or not str(data.get("answer", "")).strip():
+        if data is None:
+            continue
+        try:
+            judge_input = JudgeInput.from_json(data)
+        except (KeyError, TypeError, ValueError, AttributeError) as error:
+            raise HandGradesError(
+                f"{path}: not a saved-traces file (judge_input of {trace['item_id']!r}: {error!r})"
+            ) from error
+        if not judge_input.answer.strip():
             continue
         found.append(
             Candidate(
@@ -198,7 +213,8 @@ def read_candidates(path: Path) -> list[Candidate]:
                 commit=commit,
                 item=str(trace["item_id"]),
                 qa_kind=trace.get("qa_kind"),
-                judge_input=JudgeInput.from_json(data),
+                judge_input=judge_input,
+                source_path=str(path.resolve()),
             )
         )
     return found
@@ -248,14 +264,14 @@ def _flawed(
     wrong_state = _wrong_state(files, qa_by_id, company)
     entries = [wrong_state]
     # No two flaws share a source answer: the California answer is already taken.
-    taken: set[tuple[str, str]] = {(wrong_state.source.source_file, WRONG_STATE_ANSWER_FROM)}
+    taken: set[tuple[str, str]] = {(wrong_state.source.source_path, WRONG_STATE_ANSWER_FROM)}
 
     def pick(candidates: list[Candidate], what: str) -> Candidate:
-        free = [c for c in candidates if (c.source_file, c.item) not in taken]
+        free = [c for c in candidates if (c.source_path, c.item) not in taken]
         if not free:
             raise HandGradesError(f"no real answer is left to make the {what} answer from")
         chosen = rng.choice(free)
-        taken.add((chosen.source_file, chosen.item))
+        taken.add((chosen.source_path, chosen.item))
         return chosen
 
     with_citations = [c for c in pool if c.qa_kind == "answerable" and c.judge_input.passages]

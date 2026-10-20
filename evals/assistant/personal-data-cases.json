@@ -31,7 +31,11 @@
     {"text": "4111\u20111111\u20111111\u20111111", "why": "card number with non-breaking hyphens"},
     {"text": "4111\u200b1111\u200b1111\u200b1111", "why": "card number with zero-width spaces"},
     {"text": "4111\u20091111\u20091111\u20091111", "why": "card number with thin spaces"},
-    {"text": "4111\u20131111\u20131111\u20131111", "why": "card number with en dashes"}
+    {"text": "4111\u20131111\u20131111\u20131111", "why": "card number with en dashes"},
+    {"text": "Card 4242 4242 4242 4242 123 please", "why": "a card number followed by its CVV"},
+    {"text": "4242 4242 4242 4242 0927", "why": "a card number followed by an expiry as four digits"},
+    {"text": "4242-4242-4242-4242-123", "why": "a dashed card number followed by a CVV"},
+    {"text": "4242-4242-4242-4242-12/27", "why": "a dashed card number followed by an expiry"}
   ],
   "passes": [
     {"text": "5551234567", "why": "ten bare digits, a phone number, is longer than a Social Security number"},
@@ -46,6 +50,7 @@
     {"text": "Austin, TX 78701 or 78701-1234", "why": "ZIP and ZIP+4"},
     {"text": "See CA-4.3 and TX-12.1.", "why": "handbook section IDs"},
     {"text": "4111111111111112", "why": "16 digits that fail Luhn"},
+    {"text": "PTO for 2022 2023 2024 2025 2026", "why": "a list of years is not a card number"},
     {"text": "1234567890123456", "why": "16 digits that fail Luhn"},
     {"text": "4111 1111 1111 1112", "why": "spaced digits that fail Luhn"},
     {"text": "I have 12 days and 3 hours left, about 2.5 weeks.", "why": "ordinary sentence with numbers"},

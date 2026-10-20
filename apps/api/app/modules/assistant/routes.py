@@ -7,7 +7,8 @@ here, never a 403, and an ID can't be probed.
 
 **The stream's checks run before it opens**, each a problem response and not an event, in the
 spec's order: the conversation (404), its pins (409 `conversation-outdated`), the question (422, and
-422 `personal-data`), a turn already running (409 `turn-running`), and the budget (429). The
+422 `personal-data`), a conversation too long to continue (409 `history-too-long`), a turn already
+running (409 `turn-running`), and the budget (429). The
 `running` check is a read, and the budget is checked before the turn's row is added, so a refused
 request leaves nothing behind. A race between these checks and the start can still end inside the
 stream, as an `error` event.
@@ -417,11 +418,6 @@ async def admit_question(
             raise HTTPException(status.HTTP_404_NOT_FOUND, NO_CONVERSATION)
         if conversation_is_outdated(conversation):
             raise outdated_refusal()
-        history = await model_history(db, conversation.id)
-        if history_tokens(history) > HISTORY_REFUSE_TOKENS:
-            # Too long to send again. The page offers a new conversation (the GET's
-            # `historyTooLong` says so too), and tells it apart from an outdated one.
-            raise history_too_long_refusal()
 
         # 3. The question.
         question = raw_question.strip()
@@ -433,6 +429,14 @@ async def admit_question(
         if kind_of_personal_data(question) is not None:
             # Never echoed back or logged, only that it looked like a number we must not take.
             raise personal_data_refusal()
+
+        # Read only now, so a refused question does not load it.
+        history = await model_history(db, conversation.id)
+        # Judged after the question, with the other 409s. Too long to send again: the page offers
+        # a new conversation (the GET's `historyTooLong` says so too), and tells it apart from an
+        # outdated one.
+        if history_tokens(history) > HISTORY_REFUSE_TOKENS:
+            raise history_too_long_refusal()
 
         # 4. One turn at a time. A read, so a refusal writes nothing.
         if await has_running_turn(db, conversation.id):

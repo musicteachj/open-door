@@ -37,7 +37,7 @@ function isProblem(body: unknown): body is Problem {
  * switching persona both replace it. The name must match exactly, so `x__Host-od_csrf` and
  * `__Host-od_csrf_old` never count. The value is sent as the browser stores it, undecoded.
  */
-export function readCsrfToken(): string | null {
+function readCsrfToken(): string | null {
   for (const part of document.cookie.split(';')) {
     const separator = part.indexOf('=')
     if (separator === -1) continue
@@ -46,7 +46,7 @@ export function readCsrfToken(): string | null {
   return null
 }
 
-export function isSameOrigin(url: string): boolean {
+function isSameOrigin(url: string): boolean {
   try {
     return new URL(url, window.location.origin).origin === window.location.origin
   } catch {

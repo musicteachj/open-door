@@ -61,7 +61,7 @@ eval-offline: ## Replay the recorded assistant evals (needs `make db`); no netwo
 	cd $(API) && uv run python ../../evals/assistant/run.py --mode offline --set full --check
 
 # PAID. Without YES=1 (exactly 1: YES=0 or YES=no still only prints) it prints the set, the item count, the estimated cost, and the cap, and calls
-# nothing. SET=smoke (about $1.20, cap $2), SET=full (about $14, cap $16), or SET=effort (the smoke
+# nothing. SET=smoke (about $0.65, cap $2), SET=full (about $14, cap $16), or SET=effort (the smoke
 # items at medium effort, about $1.50, cap $2; its recordings go to a git-ignored folder, and
 # COMPARE=<a low-effort scoreboard> prints the two side by side). A run reuses the recordings it
 # already has and calls only requests that changed. FRESH=1 calls everything live again. PRUNE=1
@@ -132,12 +132,14 @@ e2e: ## Run the browser tests in Chromium, against the real API and a build with
 	cd $(WEB) && npx playwright install chromium
 	cd $(WEB) && npm run e2e
 
-# Runs the turn stream through nginx with a 20-second read timeout: the pass run (a 45-second
-# silence that the heartbeat must carry), the control run (heartbeat off; nginx must cut it), and
-# the shutdown run (SIGTERM mid-stream; the turn must be saved as stopped). It starts the API on
-# :8200 and nginx on :8201 itself, with the scripted model, and needs Docker and the seeded
-# database (`make db`). About two minutes; don't run it beside other database-heavy work.
-proxy-check: ## Run the turn stream through a strict nginx: the pass, control, and shutdown runs (needs `make db` and Docker)
+# Runs the turn stream through nginx with a 20-second read timeout, in five runs: the pass run (a
+# 45-second silence that the heartbeat must carry), the holding reference and the holding control
+# (a one-second heartbeat through the normal nginx and through one that gzips the stream; only the
+# gzipping one may hold events back), the heartbeat control (heartbeat off; nginx must cut the
+# silent stream), and the shutdown run (SIGTERM mid-stream; the turn must be saved as stopped). It
+# starts the API on :8200 and nginx on :8201 itself, with the scripted model, and needs Docker and
+# the seeded database (`make db`). About two minutes; don't run it beside other database-heavy work.
+proxy-check: ## Run the turn stream through a strict nginx: the pass, holding, heartbeat control, and shutdown runs (needs `make db` and Docker)
 	cd $(API) && uv run python ../../scripts/proxy-check/check.py
 
 # Local only: `make check` and CI never run it. The specimen pages load React and Babel from
