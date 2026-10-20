@@ -22,6 +22,7 @@
   /* Layout */
   --sidebar-width: 248px; /* Left navigation */
   --rail-width: 340px; /* Right rail on the assistant home */
+  --panel-width: 420px; /* Docked side panels: the passage panel and the time-off request form */
   --content-max: 760px; /* Composer and Try asking measure */
   --sheet-inset: 12px; /* Gap between the window edge and the content sheet */
   --control-height: 40px; /* Buttons and nav items */

@@ -1,0 +1,476 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="design_doc_mode" content="canvas">
+<link rel="stylesheet" href="styles.css">
+<template id="__bundler_thumbnail"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><rect width="100" height="100" fill="#59256A"></rect><g fill="none" stroke="#F5F7F8" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"><rect x="40" y="26" width="20" height="10" rx="2"></rect><path d="M60 31h5a5 5 0 0 1 5 5v31a5 5 0 0 1-5 5H35a5 5 0 0 1-5-5V36a5 5 0 0 1 5-5h5"></path><path d="m41 53 6 6 12-12"></path></g></svg></template>
+<style>body{margin:0;background:#ECEEEF;font-family:'Instrument Sans',system-ui,sans-serif;-webkit-font-smoothing:antialiased}a{color:#59256A}a:hover{color:#461B54}textarea::placeholder{color:#66737B}@keyframes od-spin{to{transform:rotate(360deg)}}@media (prefers-reduced-motion:reduce){.od-spin{animation-duration:2.4s!important}}.dv-turn{padding:40px 44px 32px;border-bottom:1px solid rgba(0,0,0,.08);scroll-margin-top:16px}.dv-thd{display:flex;align-items:baseline;gap:10px;margin:0 0 8px}.dv-tid{font:600 10px ui-monospace,Menlo,monospace;padding:3px 7px;background:#1a1a1a;color:#fff;border-radius:4px;text-decoration:none}.dv-tname{font:600 13px/1.2 system-ui,sans-serif;color:#1a1a1a}.dv-note{font:12px/1.55 system-ui,sans-serif;color:rgba(0,0,0,.6);max-width:1100px;margin:0 0 24px}.dv-opts{display:flex;flex-wrap:wrap;gap:56px;align-items:flex-start;max-width:2936px}.dv-opt{flex:none;display:flex;flex-direction:column;gap:12px;scroll-margin-top:16px}.dv-oid{font:600 10.5px ui-monospace,Menlo,monospace;padding:3px 7px;background:rgba(0,0,0,.08);color:#1a1a1a;border-radius:5px;text-decoration:none}.dv-olabel{display:flex;align-items:baseline;gap:8px;font:400 12px/1.3 system-ui,sans-serif;color:rgba(0,0,0,.6);max-width:1440px}.dv-card{max-width:100%;background:#fff;border:1px solid rgba(0,0,0,.08);border-radius:8px;box-shadow:0 1px 3px rgba(0,0,0,.06);overflow:hidden}.dv-opt:target .dv-oid{background:#2a78d6;color:#fff}</style>
+</helmet>
+<section class="dv-turn" id="t1" data-screen-label="09 Approvals">
+<div class="dv-thd"><a class="dv-tid" href="#t1">1</a><span class="dv-tname">Screen 09: Approvals (Phase 5)</span></div>
+<p class="dv-note">Marcus Bell's Approvals page, full width with no right rail. Each waiting request is a card: who, what, how much, what they'll have left, when it was sent, and who else on the team is off those days. The page states facts only and never suggests a decision. Approve and Deny carry equal weight: both are secondary buttons on the card, and each opens the alert dialog from screen 08, with its full-window scrim and a primary confirm button. Coming up and Recent decisions reuse the screen 08 request row, with the person added. <a class="dv-oid" href="#desktop-default">desktop-default</a> is live: approve or deny either request, add a note, and watch the nav count, the lists, the toast, and focus update. The component library is in <a class="dv-oid" href="#components">components</a>.</p>
+<div class="dv-opts">
+<sc-for list="{{ frames }}" as="f" hint-placeholder-count="2">
+<div class="dv-opt" id="{{ f.id }}">
+<div class="dv-olabel"><a class="dv-oid" href="{{ f.href }}">{{ f.id }}</a>{{ f.label }}</div>
+<div class="dv-card" ref="{{ f.rootRef }}" style="width:1442px">
+<div style="position:relative;display:flex;gap:{{ f.sbGap }};height:{{ f.frameH }};min-height:900px;padding:{{ f.rootPad }};box-sizing:border-box;background:var(--surface);font-family:var(--font-sans);color:var(--ink)">
+  <sc-for list="{{ f.sidebars }}" as="sb" hint-placeholder-count="1">
+    <div style="flex:none;display:flex;flex-direction:column;gap:12px">
+      <sc-if value="{{ sb.hasCap }}" hint-placeholder-val="{{ false }}"><p style="margin:0;width:248px;min-height:40px;font-size:13px;line-height:20px;color:var(--ink-muted);text-wrap:pretty">{{ sb.cap }}</p></sc-if>
+      <aside style="width:248px;flex:1;display:flex;flex-direction:column;padding:28px 16px 20px 20px;box-sizing:border-box;border:{{ sb.bd }};border-radius:{{ sb.rad }}">
+        <div style="display:flex;align-items:center;gap:12px;padding:0 8px 32px"><img src="assets/logo-mark.svg" width="32" height="32" alt=""><div style="display:flex;flex-direction:column;gap:2px"><span style="font-size:16px;line-height:20px;font-weight:600;letter-spacing:-0.01em">Open Door</span><span style="font-size:12px;line-height:16px;color:var(--ink-muted)">Juniper Row</span></div></div>
+        <nav aria-label="Main" style="display:flex;flex-direction:column;gap:2px">
+          <sc-if value="{{ sb.askCur }}" hint-placeholder-val="{{ false }}"><a href="#" aria-current="page" style="display:flex;align-items:center;gap:12px;height:40px;padding:0 12px;border-radius:var(--radius-md);background:var(--primary-tint);color:var(--ink);font-size:14px;line-height:20px;font-weight:600;text-decoration:none" style-focus="outline:2px solid var(--focus-ring);outline-offset:2px"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z"></path></svg>Ask</a></sc-if>
+          <sc-if value="{{ sb.askNot }}" hint-placeholder-val="{{ true }}"><a href="#" style="display:flex;align-items:center;gap:12px;height:40px;padding:0 12px;border-radius:var(--radius-md);color:var(--ink-nav);font-size:14px;line-height:20px;font-weight:500;text-decoration:none" style-hover="background:var(--neutral-hover);color:var(--ink)" style-focus="outline:2px solid var(--focus-ring);outline-offset:2px"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z"></path></svg>Ask</a></sc-if>
+          <a href="#" style="display:flex;align-items:center;gap:12px;height:40px;padding:0 12px;border-radius:var(--radius-md);color:var(--ink-nav);font-size:14px;line-height:20px;font-weight:500;text-decoration:none" style-hover="background:var(--neutral-hover);color:var(--ink)" style-focus="outline:2px solid var(--focus-ring);outline-offset:2px"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="4" rx="2"></rect><path d="M16 2v4M8 2v4M3 10h18"></path></svg>Time off</a>
+          <a href="#" style="display:flex;align-items:center;gap:12px;height:40px;padding:0 12px;border-radius:var(--radius-md);color:var(--ink-nav);font-size:14px;line-height:20px;font-weight:500;text-decoration:none" style-hover="background:var(--neutral-hover);color:var(--ink)" style-focus="outline:2px solid var(--focus-ring);outline-offset:2px"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"></path></svg>Directory</a>
+          <a href="#" style="display:flex;align-items:center;gap:12px;height:40px;padding:0 12px;border-radius:var(--radius-md);color:var(--ink-nav);font-size:14px;line-height:20px;font-weight:500;text-decoration:none" style-hover="background:var(--neutral-hover);color:var(--ink)" style-focus="outline:2px solid var(--focus-ring);outline-offset:2px"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"></path><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"></path></svg>Handbook</a>
+          <sc-if value="{{ sb.apCur }}" hint-placeholder-val="{{ true }}"><a href="#" aria-current="page" style="display:flex;align-items:center;gap:12px;height:40px;padding:0 12px;border-radius:var(--radius-md);background:var(--primary-tint);color:var(--ink);font-size:14px;line-height:20px;font-weight:600;text-decoration:none" style-focus="outline:2px solid var(--focus-ring);outline-offset:2px"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect width="8" height="4" x="8" y="2" rx="1"></rect><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"></path><path d="m9 14 2 2 4-4"></path></svg><span style="flex:1">Approvals</span><sc-if value="{{ sb.hasCount }}" hint-placeholder-val="{{ true }}"><span style="min-width:20px;height:20px;padding:0 6px;box-sizing:border-box;border-radius:9999px;background:var(--primary);color:var(--on-primary);display:inline-flex;align-items:center;justify-content:center;font-size:12px;line-height:16px;font-weight:600;font-variant-numeric:tabular-nums"><span aria-hidden="true">{{ sb.count }}</span><span style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)">, {{ sb.count }} waiting</span></span></sc-if></a></sc-if>
+          <sc-if value="{{ sb.apNot }}" hint-placeholder-val="{{ false }}"><a href="#" style="display:flex;align-items:center;gap:12px;height:40px;padding:0 12px;border-radius:var(--radius-md);background:{{ sb.apBg }};color:{{ sb.apFg }};outline:{{ sb.apOl }};outline-offset:2px;font-size:14px;line-height:20px;font-weight:500;text-decoration:none" style-hover="background:var(--neutral-hover);color:var(--ink)" style-focus="outline:2px solid var(--focus-ring);outline-offset:2px"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect width="8" height="4" x="8" y="2" rx="1"></rect><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"></path><path d="m9 14 2 2 4-4"></path></svg><span style="flex:1">Approvals</span><sc-if value="{{ sb.hasCount }}" hint-placeholder-val="{{ true }}"><span style="min-width:20px;height:20px;padding:0 6px;box-sizing:border-box;border-radius:9999px;background:var(--primary);color:var(--on-primary);display:inline-flex;align-items:center;justify-content:center;font-size:12px;line-height:16px;font-weight:600;font-variant-numeric:tabular-nums"><span aria-hidden="true">{{ sb.count }}</span><span style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)">, {{ sb.count }} waiting</span></span></sc-if></a></sc-if>
+        </nav>
+        <div style="flex:1"></div>
+        <a href="#" style="display:flex;align-items:center;gap:12px;height:40px;padding:0 12px;margin-bottom:12px;border-radius:var(--radius-md);color:var(--ink-nav);font-size:14px;line-height:20px;font-weight:500;text-decoration:none" style-hover="background:var(--neutral-hover);color:var(--ink)" style-focus="outline:2px solid var(--focus-ring);outline-offset:2px"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="m16 18 6-6-6-6M8 6l-6 6 6 6"></path></svg>How it's built</a>
+        <button type="button" aria-haspopup="menu" aria-expanded="false" style="display:flex;align-items:center;gap:12px;width:100%;min-height:61px;padding:12px 8px;border:0;border-top:1px solid var(--border);background:transparent;font-family:inherit;text-align:left;cursor:pointer;color:var(--ink)" style-hover="background:var(--neutral-hover)" style-focus="outline:2px solid var(--focus-ring);outline-offset:2px">
+          <span style="width:36px;height:36px;flex:none;border-radius:9999px;background:var(--primary-tint);display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:600">{{ sb.ini }}</span>
+          <span style="flex:1;min-width:0;display:flex;flex-direction:column;gap:2px"><span style="font-size:14px;line-height:18px;font-weight:600">{{ sb.name }}</span><span style="font-size:12px;line-height:16px;color:var(--ink-muted)">{{ sb.title }}</span></span>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="flex:none;color:var(--ink-muted)"><path d="m7 15 5 5 5-5M7 9l5-5 5 5"></path></svg>
+        </button>
+      </aside>
+    </div>
+  </sc-for>
+
+  <sc-if value="{{ f.isHome }}" hint-placeholder-val="{{ false }}">
+  <main style="flex:1;min-width:0;padding:12px 12px 12px 0;box-sizing:border-box">
+    <div style="height:100%;background:var(--surface-raised);border:1px solid var(--border);border-radius:var(--radius-xl);overflow:hidden;display:grid;grid-template-columns:minmax(0,1fr) 340px">
+      <section style="padding:120px 72px 48px 80px;display:flex;flex-direction:column;min-width:0">
+        <h1 style="margin:0 0 36px;font-size:48px;line-height:56px;font-weight:600;letter-spacing:-0.025em">Good morning, Marcus.</h1>
+        <div style="max-width:760px;border:1px solid var(--input-border);border-radius:var(--radius-lg);background:var(--surface-raised);box-shadow:var(--shadow-xs)" style-hover="border-color:var(--input-border-hover)">
+          <div style="height:84px;box-sizing:border-box;padding:20px 24px 8px;font-size:18px;line-height:28px;color:var(--ink-placeholder)">Ask about time off, pay, benefits, or policy…</div>
+          <div style="display:flex;align-items:center;gap:16px;padding:12px 12px 12px 24px;border-top:1px solid var(--border-subtle)">
+            <div style="flex:1;display:flex;align-items:center;gap:8px;font-size:13px;line-height:20px;color:var(--ink-muted)"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="flex:none"><circle cx="12" cy="12" r="10"></circle><path d="M12 16v-4M12 8h.01"></path></svg>Open Door is an AI assistant. It can make mistakes, and it always shows its sources.</div>
+            <button type="button" style="height:40px;padding:0 14px 0 16px;border:0;border-radius:var(--radius-md);background:var(--primary);color:var(--on-primary);display:flex;align-items:center;gap:8px;font-family:inherit;font-size:14px;font-weight:600;cursor:pointer;flex:none" style-hover="background:var(--primary-hover)" style-focus="outline:2px solid var(--focus-ring);outline-offset:2px">Ask<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M12 5l7 7-7 7"></path></svg></button>
+          </div>
+        </div>
+        <div style="max-width:760px;margin-top:48px;display:flex;flex-direction:column;gap:8px">
+          <div style="font-size:13px;line-height:20px;color:var(--ink-muted)">Try asking</div>
+          <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));column-gap:32px">
+            <sc-for list="{{ f.qs }}" as="q" hint-placeholder-count="4"><button type="button" style="display:flex;align-items:center;justify-content:space-between;gap:12px;height:52px;padding:0 12px;border:0;border-bottom:1px solid var(--border-subtle);background:transparent;font-family:inherit;font-size:15px;color:var(--ink);text-align:left;cursor:pointer" style-hover="background:var(--primary-tint)" style-focus="outline:2px solid var(--focus-ring);outline-offset:2px;position:relative;z-index:1">{{ q.t }}<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="flex:none"><path d="M5 12h14M12 5l7 7-7 7"></path></svg></button></sc-for>
+          </div>
+        </div>
+      </section>
+      <aside style="border-left:1px solid var(--border-subtle);background:var(--surface-sunken);padding:28px 32px 32px;display:flex;flex-direction:column">
+        <div style="display:flex;justify-content:flex-end"><span style="display:inline-flex;align-items:center;gap:8px;height:28px;padding:0 12px;border:1px solid var(--border);border-radius:9999px;background:var(--surface-raised);font-size:12px;line-height:16px;color:var(--ink-muted);font-variant-numeric:tabular-nums;white-space:nowrap"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><path d="M12 6v6l4 2"></path></svg>Sandbox resets in 21 h</span></div>
+        <h2 style="margin:64px 0 0;font-size:13px;line-height:20px;font-weight:400;color:var(--ink-muted);padding-bottom:12px;border-bottom:1px solid var(--border)">At a glance</h2>
+        <div style="display:flex;flex-direction:column">
+          <sc-for list="{{ f.glance }}" as="g" hint-placeholder-count="4"><a href="#" aria-label="{{ g.aria }}" style="display:flex;align-items:center;gap:12px;padding:20px 12px;margin:0 -12px;border-bottom:1px solid var(--border-subtle);border-radius:var(--radius-md);color:var(--ink);text-decoration:none" style-hover="background:var(--primary-tint);color:var(--ink)" style-focus="outline:2px solid var(--focus-ring);outline-offset:2px;position:relative;z-index:1">
+            <span style="flex:1;min-width:0;display:flex;flex-direction:column;gap:2px"><span style="display:flex;align-items:center;gap:10px"><span style="font-size:32px;line-height:40px;font-weight:600;letter-spacing:-0.01em;font-variant-numeric:tabular-nums;white-space:nowrap">{{ g.v }}</span><sc-if value="{{ g.marker }}" hint-placeholder-val="{{ false }}"><span style="width:8px;height:8px;border-radius:9999px;background:var(--marker)"></span></sc-if></span><span style="font-size:14px;line-height:20px;color:var(--ink-muted)">{{ g.c }}</span></span>
+            <span style="display:flex;align-items:center;gap:4px;font-size:13px;line-height:20px;font-weight:600;color:var(--primary)">{{ g.d }}<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"></path></svg></span>
+          </a></sc-for>
+        </div>
+      </aside>
+    </div>
+  </main>
+  </sc-if>
+
+  <sc-if value="{{ f.isPage }}" hint-placeholder-val="{{ true }}">
+  <main style="flex:1;min-width:0;padding:12px 12px 12px 0;box-sizing:border-box">
+    <div style="position:relative;height:{{ f.sheetH }};min-height:876px;box-sizing:border-box;background:var(--surface-raised);border:1px solid var(--border);border-radius:var(--radius-xl);overflow:hidden">
+      <div style="height:{{ f.sheetH }};overflow:{{ f.ovf }}">
+        <div style="max-width:1040px;padding:40px 56px 72px">
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:24px">
+            <h1 style="margin:0;font-size:var(--text-h1);line-height:var(--leading-h1);font-weight:600;letter-spacing:var(--tracking-h1)">Approvals</h1>
+            <span style="display:inline-flex;align-items:center;gap:8px;height:28px;padding:0 12px;border:1px solid var(--border);border-radius:9999px;font-size:12px;line-height:16px;color:var(--ink-muted);font-variant-numeric:tabular-nums;white-space:nowrap"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><path d="M12 6v6l4 2"></path></svg>Sandbox resets in 21 h</span>
+          </div>
+
+          <sc-if value="{{ f.loading }}" hint-placeholder-val="{{ false }}">
+            <div aria-busy="true" style="margin-top:40px">
+              <div aria-hidden="true"><span style="display:block;height:16px;width:160px;border-radius:6px;background:var(--surface-hover)"></span><span style="display:block;height:12px;width:420px;margin-top:14px;border-radius:6px;background:var(--surface-hover)"></span></div>
+              <div aria-hidden="true" style="display:flex;flex-direction:column;gap:16px;margin-top:20px">
+                <sc-for list="{{ f.skCards }}" as="c" hint-placeholder-count="2">
+                  <div style="padding:20px 24px;border:1px solid var(--border);border-radius:var(--radius-lg)">
+                    <div style="display:flex;align-items:center;gap:12px"><span style="width:40px;height:40px;border-radius:9999px;background:var(--surface-hover)"></span><span style="display:flex;flex-direction:column;gap:8px"><span style="height:12px;width:{{ c.a }};border-radius:6px;background:var(--surface-hover)"></span><span style="height:10px;width:{{ c.b }};border-radius:5px;background:var(--surface-hover)"></span></span></div>
+                    <div style="display:flex;align-items:flex-end;justify-content:space-between;margin-top:16px;padding-top:16px;border-top:1px solid var(--border-subtle)"><span style="display:flex;flex-direction:column;gap:10px"><span style="height:14px;width:{{ c.c }};border-radius:7px;background:var(--surface-hover)"></span><span style="height:10px;width:180px;border-radius:5px;background:var(--surface-hover)"></span><span style="height:10px;width:260px;border-radius:5px;background:var(--surface-hover)"></span><span style="height:10px;width:{{ c.d }};margin-top:12px;border-radius:5px;background:var(--surface-hover)"></span></span><span style="display:flex;gap:12px"><span style="width:92px;height:40px;border-radius:var(--radius-md);background:var(--surface-hover)"></span><span style="width:72px;height:40px;border-radius:var(--radius-md);background:var(--surface-hover)"></span></span></div>
+                  </div>
+                </sc-for>
+              </div>
+              <div aria-hidden="true" style="margin-top:48px"><span style="display:block;height:16px;width:180px;border-radius:6px;background:var(--surface-hover)"></span>
+                <div style="margin-top:28px;border-top:1px solid var(--border)">
+                  <sc-for list="{{ f.skRows }}" as="s" hint-placeholder-count="3">
+                    <div style="display:grid;grid-template-columns:220px minmax(0,1fr) 220px;column-gap:24px;align-items:center;height:72px;padding:0 12px;border-bottom:1px solid var(--border-subtle)"><span style="display:flex;align-items:center;gap:10px"><span style="width:32px;height:32px;border-radius:9999px;background:var(--surface-hover)"></span><span style="height:12px;width:{{ s.a }};border-radius:6px;background:var(--surface-hover)"></span></span><span style="display:flex;flex-direction:column;gap:10px"><span style="height:12px;width:{{ s.b }};border-radius:6px;background:var(--surface-hover)"></span><span style="height:10px;width:120px;border-radius:5px;background:var(--surface-hover)"></span></span><span style="height:24px;width:{{ s.c }};border-radius:var(--radius-xs);background:var(--surface-hover)"></span></div>
+                  </sc-for>
+                </div>
+              </div>
+              <span style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)">Loading approvals</span>
+            </div>
+          </sc-if>
+
+          <sc-if value="{{ f.error }}" hint-placeholder-val="{{ false }}">
+            <div style="display:flex;justify-content:center;padding:160px 0 80px">
+              <div style="max-width:480px;display:flex;flex-direction:column;align-items:center;gap:12px;text-align:center">
+                <h2 style="margin:0;font-size:var(--text-h1);line-height:var(--leading-h1);font-weight:600;letter-spacing:var(--tracking-h1);text-wrap:balance">Something went wrong on our side.</h2>
+                <p style="margin:0;font-size:var(--text-body);line-height:var(--leading-body);color:var(--ink-muted);text-wrap:pretty">Your approvals didn’t load. Try again in a moment. If it keeps happening, this reference helps us find it:</p>
+                <p style="margin:0;display:flex;align-items:center;gap:8px;font-size:var(--text-small);line-height:20px;color:var(--ink-muted)">Reference<code style="padding:2px 8px;border:1px solid var(--border);border-radius:var(--radius-xs);background:var(--surface-sunken);font-family:var(--font-mono);font-size:13px;line-height:20px;color:var(--ink);user-select:all">9e2f41b3</code></p>
+                <div style="display:flex;gap:12px;margin-top:12px"><button type="button" onClick="{{ f.retry }}" style="height:40px;padding:0 16px;border:0;border-radius:var(--radius-md);background:var(--primary);color:var(--on-primary);display:inline-flex;align-items:center;gap:8px;font-family:var(--font-sans);font-size:14px;font-weight:600;cursor:pointer" style-hover="background:var(--primary-hover)" style-focus="outline:2px solid var(--focus-ring);outline-offset:2px"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"></path><path d="M3 3v5h5"></path></svg>Retry</button></div>
+              </div>
+            </div>
+          </sc-if>
+
+          <sc-if value="{{ f.ready }}" hint-placeholder-val="{{ true }}">
+            <section aria-labelledby="{{ f.key }}--wh" style="margin-top:40px">
+              <h2 id="{{ f.key }}--wh" data-wh="true" tabindex="-1" style="margin:0;display:flex;align-items:center;gap:10px;font-size:var(--text-h2);line-height:var(--leading-h2);font-weight:600;outline:0">Waiting for you<sc-if value="{{ f.hasW }}" hint-placeholder-val="{{ true }}"><span style="min-width:24px;height:24px;padding:0 8px;box-sizing:border-box;border:1px solid var(--border-strong);border-radius:9999px;display:inline-flex;align-items:center;justify-content:center;font-size:13px;line-height:20px;font-weight:600;font-variant-numeric:tabular-nums"><span style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)">, </span>{{ f.wCount }}</span></sc-if></h2>
+              <p style="margin:6px 0 0;font-size:14px;line-height:20px;color:var(--ink-muted);text-wrap:pretty">PTO requests from your direct reports, oldest first. Sick time is recorded, not approved, so it appears only under Coming up.</p>
+              <sc-if value="{{ f.noW }}" hint-placeholder-val="{{ false }}"><p style="margin:20px 0 0;padding:24px;border:1px solid var(--border);border-radius:var(--radius-lg);font-size:15px;line-height:24px;color:var(--ink-muted);text-wrap:pretty">Nothing is waiting for you. When someone on your team asks for time off, it shows up here.</p></sc-if>
+              <ul role="list" style="margin:20px 0 0;padding:0;list-style:none;display:flex;flex-direction:column;gap:16px">
+                <sc-for list="{{ f.waiting }}" as="w" hint-placeholder-count="2">
+                  <li data-card="{{ w.id }}" style="display:flex;flex-direction:column;gap:16px;padding:20px 24px;border:1px solid var(--border);border-radius:var(--radius-lg);background:{{ w.bg }}">
+                    <div style="display:flex;align-items:center;justify-content:space-between;gap:12px 16px;flex-wrap:wrap">
+                      <div style="display:flex;align-items:center;gap:12px;min-width:0">
+                        <span aria-hidden="true" style="width:40px;height:40px;flex:none;border-radius:9999px;background:{{ w.avBg }};color:var(--ink);display:flex;align-items:center;justify-content:center;font-size:14px;line-height:20px;font-weight:600">{{ w.ini }}</span>
+                        <div style="display:flex;flex-direction:column;min-width:0"><h3 style="margin:0;font-size:15px;line-height:24px;font-weight:600;color:{{ w.fg }}">{{ w.name }}</h3><span style="font-size:13px;line-height:20px;color:var(--ink-muted)">{{ w.title }}</span></div>
+                      </div>
+                      <sc-if value="{{ w.ok }}" hint-placeholder-val="{{ true }}"><span style="font-size:13px;line-height:20px;color:var(--ink-muted);font-variant-numeric:tabular-nums">{{ w.sent }}</span></sc-if>
+                      <sc-if value="{{ w.conflict }}" hint-placeholder-val="{{ false }}"><span style="display:inline-flex;align-items:center;gap:6px;height:24px;padding:0 8px;border:1px solid var(--border-strong);border-radius:var(--radius-xs);background:var(--surface-raised);font-size:13px;line-height:20px;font-weight:500;color:var(--ink-muted);white-space:nowrap"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"></circle><path d="m4.9 4.9 14.2 14.2"></path></svg>Canceled</span></sc-if>
+                    </div>
+                    <div style="display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:end;gap:16px 32px;padding-top:16px;border-top:1px solid var(--border-subtle)">
+                      <div style="display:flex;flex-direction:column;gap:2px;min-width:0">
+                        <p style="margin:0;font-size:17px;line-height:26px;font-weight:600;color:{{ w.fg }};font-variant-numeric:tabular-nums;text-wrap:pretty">{{ w.dates }}</p>
+                        <p style="margin:0;font-size:14px;line-height:20px;color:var(--ink-muted);font-variant-numeric:tabular-nums">{{ w.meta }}</p>
+                        <p style="margin:0;font-size:14px;line-height:20px;color:{{ w.fg }};font-variant-numeric:tabular-nums">{{ w.after }}</p>
+                        <div style="display:flex;align-items:flex-start;gap:10px;margin-top:12px">
+                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex:none;margin-top:2px;color:var(--ink-muted)"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"></path></svg>
+                          <div style="display:flex;flex-direction:column;min-width:0"><span style="font-size:13px;line-height:20px;color:var(--ink-muted)">Team coverage</span><sc-for list="{{ w.cov }}" as="c" hint-placeholder-count="1"><span style="font-size:14px;line-height:20px;color:{{ w.fg }};font-variant-numeric:tabular-nums;text-wrap:pretty">{{ c.t }}</span></sc-for></div>
+                        </div>
+                      </div>
+                      <sc-if value="{{ w.ok }}" hint-placeholder-val="{{ true }}">
+                        <div style="display:flex;gap:12px">
+                          <button type="button" data-approve="{{ w.id }}" aria-label="{{ w.apAria }}" onClick="{{ w.approve }}" style="height:40px;padding:0 16px;border:1px solid var(--border-strong);border-radius:var(--radius-md);background:var(--surface-raised);color:var(--ink);outline:{{ w.apOl }};outline-offset:2px;font-family:var(--font-sans);font-size:14px;line-height:20px;font-weight:600;cursor:pointer" style-hover="background:var(--surface-hover);border-color:var(--border-strong-hover)" style-focus="outline:2px solid var(--focus-ring);outline-offset:2px">Approve</button>
+                          <button type="button" data-deny="{{ w.id }}" aria-label="{{ w.dnAria }}" onClick="{{ w.deny }}" style="height:40px;padding:0 16px;border:1px solid var(--border-strong);border-radius:var(--radius-md);background:var(--surface-raised);color:var(--ink);font-family:var(--font-sans);font-size:14px;line-height:20px;font-weight:600;cursor:pointer" style-hover="background:var(--surface-hover);border-color:var(--border-strong-hover)" style-focus="outline:2px solid var(--focus-ring);outline-offset:2px">Deny</button>
+                        </div>
+                      </sc-if>
+                    </div>
+                    <sc-if value="{{ w.conflict }}" hint-placeholder-val="{{ false }}"><div role="alert" style="display:flex;align-items:flex-start;gap:10px;padding:12px 14px;background:var(--danger-tint);border:1px solid var(--danger-border);border-radius:var(--radius-md)"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex:none;margin-top:2px;color:var(--danger)"><circle cx="12" cy="12" r="10"></circle><path d="M12 8v4M12 16h.01"></path></svg><p style="margin:0;font-size:14px;line-height:20px">{{ w.conflictMsg }}</p></div></sc-if>
+                  </li>
+                </sc-for>
+              </ul>
+            </section>
+
+            <sc-for list="{{ f.lists }}" as="g" hint-placeholder-count="2">
+              <section aria-labelledby="{{ g.hid }}" style="margin-top:48px">
+                <h2 id="{{ g.hid }}" style="margin:0;font-size:var(--text-h2);line-height:var(--leading-h2);font-weight:600">{{ g.title }}</h2>
+                <p style="margin:6px 0 0;font-size:14px;line-height:20px;color:var(--ink-muted)">{{ g.sub }}</p>
+                <div style="margin-top:16px;border-top:1px solid var(--border)">
+                  <sc-if value="{{ g.none }}" hint-placeholder-val="{{ false }}"><p style="margin:0;padding:16px 12px;border-bottom:1px solid var(--border-subtle);font-size:14px;line-height:20px;color:var(--ink-muted)">{{ g.noneText }}</p></sc-if>
+                  <ul role="list" style="margin:0;padding:0;list-style:none">
+                    <sc-for list="{{ g.rows }}" as="r" hint-placeholder-count="2">
+                      <li style="display:grid;grid-template-columns:minmax(0,220px) minmax(0,1fr) minmax(0,220px);column-gap:24px;row-gap:10px;align-items:center;padding:14px 12px;border-bottom:1px solid var(--border-subtle);transition:background-color 150ms" style-hover="background:var(--surface-sunken)">
+                        <div style="display:flex;align-items:center;gap:10px;min-width:0"><span aria-hidden="true" style="width:32px;height:32px;flex:none;border-radius:9999px;background:var(--primary-tint);display:flex;align-items:center;justify-content:center;font-size:12px;line-height:16px;font-weight:600">{{ r.ini }}</span><span style="font-size:14px;line-height:20px;font-weight:600">{{ r.name }}</span></div>
+                        <div style="display:flex;flex-direction:column;gap:2px;min-width:0"><span style="font-size:15px;line-height:24px;font-weight:600;font-variant-numeric:tabular-nums;text-wrap:pretty">{{ r.dates }}</span><span style="font-size:14px;line-height:20px;color:var(--ink-muted);font-variant-numeric:tabular-nums">{{ r.meta }}</span></div>
+                        <div style="display:flex;flex-direction:column;align-items:flex-start;gap:4px;min-width:0">
+                          <span style="display:inline-flex;align-items:center;gap:6px;height:24px;padding:0 8px;border:1px solid var(--border-strong);border-radius:var(--radius-xs);background:var(--surface-raised);font-size:13px;line-height:20px;font-weight:500;color:var(--ink);white-space:nowrap">
+                            <sc-if value="{{ r.bOk }}" hint-placeholder-val="{{ true }}"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:var(--success)"><circle cx="12" cy="12" r="10"></circle><path d="m9 12 2 2 4-4"></path></svg></sc-if>
+                            <sc-if value="{{ r.bDen }}" hint-placeholder-val="{{ false }}"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:var(--ink)"><circle cx="12" cy="12" r="10"></circle><path d="m15 9-6 6M9 9l6 6"></path></svg></sc-if>
+                            <sc-if value="{{ r.bRec }}" hint-placeholder-val="{{ false }}"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:var(--success)"><rect width="8" height="4" x="8" y="2" rx="1"></rect><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"></path><path d="m9 14 2 2 4-4"></path></svg></sc-if>
+                            {{ r.status }}
+                          </span>
+                          <sc-if value="{{ r.hasBy }}" hint-placeholder-val="{{ false }}"><span style="font-size:13px;line-height:20px;color:var(--ink-muted);font-variant-numeric:tabular-nums">{{ r.by }}</span></sc-if>
+                        </div>
+                        <sc-if value="{{ r.hasNote }}" hint-placeholder-val="{{ false }}">
+                          <div style="grid-column:2 / -1;display:flex;flex-direction:column;gap:2px;max-width:600px;padding:10px 14px;background:var(--surface-sunken);border:1px solid var(--border-subtle);border-radius:var(--radius-md)"><span style="font-size:13px;line-height:20px;color:var(--ink-muted)">Your note</span><p style="margin:0;font-size:14px;line-height:22px;text-wrap:pretty">{{ r.note }}</p></div>
+                        </sc-if>
+                      </li>
+                    </sc-for>
+                  </ul>
+                </div>
+              </section>
+            </sc-for>
+          </sc-if>
+        </div>
+      </div>
+
+      <div style="position:absolute;right:24px;bottom:24px;z-index:15">
+        <div role="status" aria-live="polite">
+          <sc-if value="{{ f.hasToast }}" hint-placeholder-val="{{ false }}">
+            <div style="display:flex;align-items:center;gap:12px;min-width:320px;max-width:460px;box-sizing:border-box;padding:12px 8px 12px 16px;background:var(--surface-raised);border:1px solid var(--border);border-radius:var(--radius-md);box-shadow:var(--shadow-md)">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex:none;color:var(--success)"><circle cx="12" cy="12" r="10"></circle><path d="m9 12 2 2 4-4"></path></svg>
+              <p style="flex:1;margin:0;font-size:14px;line-height:20px;text-wrap:pretty">{{ f.toast }}</p>
+              <button type="button" aria-label="Dismiss" onClick="{{ f.dismiss }}" style="width:32px;height:32px;flex:none;border:0;border-radius:var(--radius-sm);background:transparent;color:var(--ink-muted);display:flex;align-items:center;justify-content:center;cursor:pointer" style-hover="background:var(--neutral-hover);color:var(--ink)" style-focus="outline:2px solid var(--focus-ring);outline-offset:2px"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"></path></svg></button>
+            </div>
+          </sc-if>
+        </div>
+      </div>
+    </div>
+  </main>
+  </sc-if>
+
+  <sc-if value="{{ f.dlg }}" hint-placeholder-val="{{ false }}">
+    <div style="position:absolute;inset:0;z-index:20;display:flex;align-items:center;justify-content:center;padding:24px;background:var(--scrim)">
+      <div role="alertdialog" aria-modal="true" aria-labelledby="{{ f.key }}--dt" aria-describedby="{{ f.key }}--db" onKeyDown="{{ f.d.onKey }}" style="width:480px;max-width:100%;box-sizing:border-box;padding:24px;background:var(--surface-raised);border-radius:var(--radius-xl);box-shadow:var(--shadow-md);display:flex;flex-direction:column;gap:8px">
+        <h2 id="{{ f.key }}--dt" style="margin:0;font-size:var(--text-h2);line-height:var(--leading-h2);font-weight:600;text-wrap:pretty">{{ f.d.title }}</h2>
+        <p id="{{ f.key }}--db" style="margin:0;font-size:15px;line-height:24px;color:var(--ink-muted);font-variant-numeric:tabular-nums;text-wrap:pretty">{{ f.d.body }}</p>
+        <sc-if value="{{ f.d.isDeny }}" hint-placeholder-val="{{ false }}">
+          <div style="display:flex;flex-direction:column;gap:6px;margin-top:12px">
+            <label for="{{ f.key }}--note" style="font-size:14px;line-height:20px;font-weight:600">{{ f.d.noteLabel }}</label>
+            <textarea id="{{ f.key }}--note" data-note="true" rows="4" maxLength="300" value="{{ f.d.note }}" onChange="{{ f.d.onNote }}" disabled="{{ f.d.busy }}" aria-describedby="{{ f.key }}--nh {{ f.key }}--nc" style="display:block;width:100%;box-sizing:border-box;padding:10px 12px;border:1px solid {{ f.d.taBd }};box-shadow:{{ f.d.taSh }};border-radius:var(--radius-md);background:{{ f.d.taBg }};font-family:var(--font-sans);font-size:15px;line-height:24px;color:{{ f.d.taFg }};resize:vertical;outline:0" style-hover="border-color:var(--input-border-hover)" style-focus="border-color:var(--primary);box-shadow:var(--shadow-focus-halo)"></textarea>
+            <div style="display:flex;justify-content:space-between;gap:16px;font-size:13px;line-height:20px;color:var(--ink-muted)"><span id="{{ f.key }}--nh">{{ f.d.helper }}</span><span id="{{ f.key }}--nc" style="flex:none;font-variant-numeric:tabular-nums">{{ f.d.count }} of 300</span></div>
+            <span aria-live="polite" style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)">{{ f.d.srCount }}</span>
+          </div>
+        </sc-if>
+        <div style="display:flex;justify-content:flex-end;flex-wrap:wrap;gap:12px;margin-top:16px">
+          <button type="button" data-back="true" disabled="{{ f.d.busy }}" onClick="{{ f.d.back }}" style="height:40px;padding:0 16px;border:1px solid var(--border-strong);border-radius:var(--radius-md);background:var(--surface-raised);color:{{ f.d.backFg }};outline:{{ f.d.backOl }};outline-offset:2px;font-family:var(--font-sans);font-size:14px;line-height:20px;font-weight:600;cursor:pointer" style-hover="background:var(--surface-hover);border-color:var(--border-strong-hover)" style-focus="outline:2px solid var(--focus-ring);outline-offset:2px">Go back</button>
+          <sc-if value="{{ f.d.apIdle }}" hint-placeholder-val="{{ true }}"><button type="button" onClick="{{ f.d.ok }}" style="height:40px;padding:0 16px;border:0;border-radius:var(--radius-md);background:var(--primary);color:var(--on-primary);font-family:var(--font-sans);font-size:14px;line-height:20px;font-weight:600;cursor:pointer" style-hover="background:var(--primary-hover)" style-focus="outline:2px solid var(--focus-ring);outline-offset:2px">Approve</button></sc-if>
+          <sc-if value="{{ f.d.apBusy }}" hint-placeholder-val="{{ false }}"><button type="button" aria-disabled="true" aria-busy="true" style="height:40px;padding:0 16px;border:0;border-radius:var(--radius-md);background:var(--primary);color:var(--on-primary);display:inline-flex;align-items:center;gap:8px;font-family:var(--font-sans);font-size:14px;line-height:20px;font-weight:600;cursor:progress">{{ spinner }}Approving…</button></sc-if>
+          <sc-if value="{{ f.d.dnIdle }}" hint-placeholder-val="{{ false }}"><button type="button" onClick="{{ f.d.ok }}" style="height:40px;padding:0 16px;border:0;border-radius:var(--radius-md);background:var(--primary);color:var(--on-primary);font-family:var(--font-sans);font-size:14px;line-height:20px;font-weight:600;cursor:pointer" style-hover="background:var(--primary-hover)" style-focus="outline:2px solid var(--focus-ring);outline-offset:2px">Deny</button></sc-if>
+          <sc-if value="{{ f.d.dnBusy }}" hint-placeholder-val="{{ false }}"><button type="button" aria-disabled="true" aria-busy="true" style="height:40px;padding:0 16px;border:0;border-radius:var(--radius-md);background:var(--primary);color:var(--on-primary);display:inline-flex;align-items:center;gap:8px;font-family:var(--font-sans);font-size:14px;line-height:20px;font-weight:600;cursor:progress">{{ spinner }}Denying…</button></sc-if>
+        </div>
+      </div>
+    </div>
+  </sc-if>
+</div>
+</div>
+</div>
+</sc-for>
+</div>
+</section>
+<section class="dv-turn" id="components" data-screen-label="09 Approvals components">
+<div class="dv-thd"><a class="dv-tid" href="#components">C</a><span class="dv-tname">Approvals components</span></div>
+<p class="dv-note">The component library card, rendered from components/approvals/ plus the changed RequestRow and NavItem. Every state shown is a real prop or data-state on the component.</p>
+<iframe src="components/approvals/approvals.card.html" title="Approvals components" ref="{{ cardRef }}" style="width:1180px;height:3600px;border:1px solid rgba(0,0,0,.08);border-radius:8px;background:#fff"></iframe>
+</section>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  state = { fs: {} };
+  roots = {};
+  timers = {};
+  componentWillUnmount() { Object.values(this.timers).forEach(clearTimeout); clearInterval(this.fitTimer); }
+  cardRef = el => {
+    if (!el || el === this.cardEl) return;
+    this.cardEl = el;
+    const fit = () => { try { const doc = el.contentDocument; if (!doc || !doc.body) return; const h = doc.body.scrollHeight; if (h > 200 && Math.abs(el.offsetHeight - h - 24) > 4) el.style.height = (h + 24) + 'px'; } catch (err) {} };
+    el.addEventListener('load', fit);
+    let n = 0; clearInterval(this.fitTimer);
+    this.fitTimer = setInterval(() => { fit(); if (++n > 40) clearInterval(this.fitTimer); }, 250);
+  };
+  init() {
+    const pad = n => String(n).padStart(2, '0');
+    this.WD = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+    this.MO = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+    this.key = d => d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate());
+    this.parse = k => new Date(+k.slice(0, 4), +k.slice(5, 7) - 1, +k.slice(8, 10));
+    this.add = (k, n) => { const d = this.parse(k); d.setDate(d.getDate() + n); return this.key(d); };
+    this.long = k => { const d = this.parse(k); return this.WD[d.getDay()] + ', ' + this.MO[d.getMonth()] + ' ' + d.getDate(); };
+    this.md = k => { const d = this.parse(k); return this.MO[d.getMonth()] + ' ' + d.getDate(); };
+    this.T = '2026-10-20';
+    this.P = {
+      zara: { name: 'Zara Bautista', first: 'Zara', title: 'Department Lead, Apparel', ini: 'ZB', avail: 62 },
+      priya: { name: 'Priya Raman', first: 'Priya', title: 'Visual Merchandiser', ini: 'PR', avail: 84 },
+      leo: { name: 'Leo Nakamura', first: 'Leo', title: 'Sales Associate', ini: 'LN' },
+      vikram: { name: 'Vikram Morales', first: 'Vikram', title: 'Department Lead, Home', ini: 'VM' },
+      malik: { name: 'Malik Flores', first: 'Malik', title: 'Front End Lead', ini: 'MF' }
+    };
+    this.R0 = [
+      { id: 'w1', p: 'zara', type: 'pto', s: '2026-11-09', e: '2026-11-10', h: 16, st: 'waiting', sent: '2026-10-17' },
+      { id: 'w2', p: 'priya', type: 'pto', s: '2026-10-30', e: '2026-10-30', h: 8, st: 'waiting', sent: '2026-10-20' },
+      { id: 'c1', p: 'malik', type: 'sick', s: '2026-10-22', e: '2026-10-22', h: 3, st: 'recorded' },
+      { id: 'c2', p: 'vikram', type: 'pto', s: '2026-11-10', e: '2026-11-10', h: 8, st: 'approved' },
+      { id: 'd1', p: 'priya', type: 'pto', s: '2026-12-23', e: '2026-12-23', h: 8, st: 'approved', on: '2026-10-05' },
+      { id: 'd2', p: 'leo', type: 'pto', s: '2026-10-14', e: '2026-10-16', h: 24, st: 'approved', on: '2026-10-02' },
+      { id: 'd3', p: 'priya', type: 'pto', s: '2026-08-28', e: '2026-08-28', h: 8, st: 'denied', on: '2026-08-20', note: 'We’re short-staffed for the back-to-school sale that week. Could you pick another Friday?' }
+    ];
+  }
+  hrs(n) { return n + (n === 1 ? ' hour' : ' hours'); }
+  days(n) { const d = n / 8; return d === 1 ? '1 day' : (Math.round(d * 100) / 100) + ' days'; }
+  amt(r) { return r.type === 'pto' ? this.hrs(r.h) + ' (' + this.days(r.h) + ')' : this.hrs(r.h); }
+  dates(r) { return r.s === r.e ? this.long(r.s) : this.long(r.s) + ' to ' + this.long(r.e); }
+  shortRange(r) {
+    if (r.s === r.e) return this.md(r.s);
+    const a = this.parse(r.s), b = this.parse(r.e);
+    return a.getMonth() === b.getMonth() ? this.md(r.s) + ' to ' + b.getDate() : this.md(r.s) + ' to ' + this.md(r.e);
+  }
+  coverage(r, reqs) {
+    const out = [];
+    reqs.forEach(o => {
+      if (o.p === r.p || !(o.st === 'approved' || o.st === 'recorded')) return;
+      const s = o.s > r.s ? o.s : r.s, e = o.e < r.e ? o.e : r.e;
+      if (s > e) return;
+      const ds = [];
+      for (let x = s; x <= e; x = this.add(x, 1)) { const wd = this.parse(x).getDay(); if (wd !== 0 && wd !== 6) ds.push(x); }
+      if (!ds.length) return;
+      out.push({ t: 'Also off: ' + this.P[o.p].name + ', ' + (ds.length === 1 ? this.long(ds[0]) : this.long(ds[0]) + ' to ' + this.long(ds[ds.length - 1])) + ' · ' + (o.type === 'pto' ? 'PTO' : 'Sick time') });
+    });
+    if (!out.length) out.push({ t: r.s === r.e ? 'No one else on your team is off that day.' : 'No one else on your team is off those days.' });
+    return out;
+  }
+  sidebar(o) {
+    const ap = o.ap === true;
+    const p = o.p || { ini: 'MB', name: 'Marcus Bell', title: 'Store Manager' };
+    return {
+      cap: o.cap || '', hasCap: !!o.cap, askCur: !!o.ask, askNot: !o.ask,
+      apCur: o.show !== false && ap, apNot: o.show !== false && !ap,
+      apBg: o.hover ? 'var(--neutral-hover)' : 'transparent', apFg: o.hover ? 'var(--ink)' : 'var(--ink-nav)', apOl: o.ring ? '2px solid var(--focus-ring)' : 'none',
+      count: o.count || 0, hasCount: (o.count || 0) > 0, ini: p.ini, name: p.name, title: p.title,
+      bd: o.spec ? '1px solid var(--border)' : '0', rad: o.spec ? 'var(--radius-xl)' : '0'
+    };
+  }
+  frame(cfg) {
+    const k = cfg.id, T = this.T, kind = cfg.kind || 'page';
+    const base = { status: 'ready', reqs: this.R0, dlg: null, toast: null, conflict: null, ring: null, dRing: null };
+    const cur = s => Object.assign({}, base, cfg.init || {}, s.fs[k] || {});
+    const st = cur(this.state);
+    const upd = fn => this.setState(s => ({ fs: { ...s.fs, [k]: { ...(s.fs[k] || {}), ...fn(cur(s)) } } }));
+    const set = p => upd(() => p);
+    const focusSel = sel => setTimeout(() => { const r = this.roots[k]; const el = r && r.querySelector(sel); if (el) el.focus(); }, 40);
+    const reqs = st.reqs;
+    const navCount = reqs.filter(r => r.st === 'waiting').length;
+    const out = {
+      id: k, key: k, href: '#' + k, label: cfg.label, rootRef: el => { if (el) this.roots[k] = el; },
+      isHome: kind === 'home', isPage: kind === 'page', sbGap: '0', rootPad: '0',
+      frameH: cfg.full ? 'auto' : '900px', sheetH: cfg.full ? 'auto' : '100%', ovf: cfg.full ? 'visible' : 'auto', dlg: false, d: {}
+    };
+    if (kind === 'nav') {
+      const priya = { ini: 'PR', name: 'Priya Raman', title: 'Visual Merchandiser' };
+      return Object.assign(out, {
+        sbGap: '24px', rootPad: '32px 52px',
+        sidebars: [
+          this.sidebar({ spec: true, ap: true, count: 2, cap: 'Approvals is the current page, 2 waiting. Accessible name: "Approvals, 2 waiting".' }),
+          this.sidebar({ spec: true, ask: true, count: 2, hover: true, cap: 'On another page, with the pointer on Approvals.' }),
+          this.sidebar({ spec: true, ask: true, count: 1, ring: true, cap: 'Keyboard focus on Approvals after one decision: 1 waiting.' }),
+          this.sidebar({ spec: true, ask: true, count: 0, cap: 'Nothing waiting: no count. Accessible name: "Approvals".' }),
+          this.sidebar({ spec: true, ask: true, show: false, p: priya, cap: 'Priya Raman, an employee: no Approvals item.' })
+        ]
+      });
+    }
+    if (kind === 'home') {
+      return Object.assign(out, {
+        sidebars: [this.sidebar({ ask: true, count: navCount })],
+        qs: ['What’s waiting for my approval?', 'Who on my team is off this week?', 'How many sick days do I get?', 'Who do I talk to about a concern?'].map(t => ({ t })),
+        glance: [['72 hours', 'PTO available', 'Time off', false], ['0', 'requests pending', 'Time off', false], [String(navCount), 'approvals waiting', 'Approvals', navCount > 0], ['Sep 12', 'Handbook updated', 'Handbook', false]]
+          .map(([v, c, d, m]) => ({ v, c, d, marker: m, aria: v + ' ' + c + '. Open ' + d }))
+      });
+    }
+    const toast = msg => {
+      upd(() => ({ toast: msg }));
+      if (cfg.live) { clearTimeout(this.timers[k + 't']); this.timers[k + 't'] = setTimeout(() => set({ toast: null }), 6000); }
+    };
+    const wl = reqs.filter(r => r.st === 'waiting' || r.id === st.conflict).sort((a, b) => a.sent < b.sent ? -1 : 1);
+    const waiting = wl.map(r => {
+      const p = this.P[r.p], conflict = r.id === st.conflict, sr = this.shortRange(r);
+      return {
+        id: r.id, ini: p.ini, name: p.name, title: p.title, ok: !conflict, conflict,
+        bg: conflict ? 'var(--surface-sunken)' : 'var(--surface-raised)', fg: conflict ? 'var(--ink-muted)' : 'var(--ink)', avBg: conflict ? 'var(--surface-hover)' : 'var(--primary-tint)',
+        sent: 'Sent ' + (r.sent === T ? 'today' : this.md(r.sent)), dates: this.dates(r), meta: 'PTO · ' + this.amt(r),
+        after: this.hrs(p.avail) + ' (' + this.days(p.avail) + ') available after this',
+        cov: this.coverage(r, reqs), conflictMsg: p.first + ' canceled this request.',
+        apAria: 'Approve ' + p.name + '’s PTO, ' + sr, dnAria: 'Deny ' + p.name + '’s PTO, ' + sr,
+        apOl: st.ring === r.id ? '2px solid var(--focus-ring)' : 'none',
+        approve: () => { set({ dlg: { kind: 'approve', id: r.id, note: '', phase: null }, dRing: null, ring: null }); focusSel('[data-back]'); },
+        deny: () => { set({ dlg: { kind: 'deny', id: r.id, note: '', phase: null }, dRing: null, ring: null }); focusSel('[data-note]'); }
+      };
+    });
+    const LBL = { approved: 'Approved', denied: 'Denied', recorded: 'Recorded' };
+    const row = (r, decided) => {
+      const p = this.P[r.p];
+      return {
+        ini: p.ini, name: p.name, dates: this.dates(r), meta: (r.type === 'pto' ? 'PTO' : 'Sick time') + ' · ' + this.amt(r),
+        status: LBL[r.st], bOk: r.st === 'approved', bDen: r.st === 'denied', bRec: r.st === 'recorded',
+        hasBy: decided && !!r.on, by: decided && r.on ? LBL[r.st] + ' ' + (r.on === T ? 'today' : this.md(r.on)) : '',
+        hasNote: decided && !!r.note, note: r.note ? '“' + r.note + '”' : ''
+      };
+    };
+    const horizon = this.add(T, 30), since = this.add(T, -90);
+    const coming = reqs.filter(r => (r.st === 'approved' || r.st === 'recorded') && r.e >= T && r.s <= horizon).sort((a, b) => a.s < b.s ? -1 : a.s > b.s ? 1 : 0);
+    const recent = reqs.filter(r => r.on && r.on >= since && (r.st === 'approved' || r.st === 'denied')).sort((a, b) => a.on < b.on ? 1 : a.on > b.on ? -1 : 0);
+    const lists = [
+      { hid: k + '--cu', title: 'Coming up on your team', sub: 'Approved and recorded time off in the next 30 days, soonest first.', none: !coming.length, noneText: 'No time off on your team in the next 30 days.', rows: coming.map(r => row(r, false)) },
+      { hid: k + '--rd', title: 'Recent decisions', sub: 'Your decisions from the last 90 days, newest first.', none: !recent.length, noneText: 'No decisions in the last 90 days.', rows: recent.map(r => row(r, true)) }
+    ];
+    const dr = st.dlg ? reqs.find(r => r.id === st.dlg.id) : null;
+    let d = {};
+    if (dr) {
+      const p = this.P[dr.p], dl = st.dlg, busy = dl.phase === 'deciding', deny = dl.kind === 'deny';
+      const note = dl.note || '', n = note.length;
+      const close = () => { set({ dlg: null, dRing: null }); focusSel('[data-' + (deny ? 'deny' : 'approve') + '="' + dr.id + '"]'); };
+      const ok = () => {
+        if (busy) return;
+        upd(c => ({ dlg: { ...c.dlg, phase: 'deciding' }, dRing: null }));
+        const trimmed = note.trim();
+        const msg = deny ? (trimmed ? 'Denied. ' + p.first + ' will see your note on the Time off page.' : 'Denied. ' + p.first + ' will see it on the Time off page.') : 'Approved. ' + p.first + ' will see it on the Time off page.';
+        const next = wl.find(r => r.id !== dr.id && r.st === 'waiting' && r.id !== st.conflict);
+        clearTimeout(this.timers[k + 'd']);
+        this.timers[k + 'd'] = setTimeout(() => {
+          upd(c => ({ dlg: null, reqs: c.reqs.map(r => r.id === dr.id ? Object.assign({}, r, { st: deny ? 'denied' : 'approved', on: T, note: deny && trimmed ? trimmed : undefined }) : r) }));
+          toast(msg);
+          focusSel(next ? '[data-approve="' + next.id + '"]' : '[data-wh]');
+        }, 1200);
+      };
+      const onKey = e => {
+        if (e.key === 'Escape') { e.preventDefault(); if (!busy) close(); return; }
+        if (e.key !== 'Tab') return;
+        const els = Array.from(e.currentTarget.querySelectorAll('button:not([disabled]), textarea:not([disabled])'));
+        if (!els.length) return;
+        const first = els[0], last = els[els.length - 1], a = document.activeElement;
+        if (e.shiftKey && a === first) { e.preventDefault(); last.focus(); }
+        else if (!e.shiftKey && a === last) { e.preventDefault(); first.focus(); }
+      };
+      const facts = this.dates(dr) + ', ' + this.amt(dr) + '.';
+      const taFocus = st.dRing === 'note';
+      d = {
+        title: (deny ? 'Deny ' : 'Approve ') + p.name + '’s PTO?',
+        body: deny ? facts : facts + ' ' + p.first + ' will see it on the Time off page.',
+        isDeny: deny, busy, onKey, back: close, ok,
+        apIdle: !deny && !busy, apBusy: !deny && busy, dnIdle: deny && !busy, dnBusy: deny && busy,
+        backFg: busy ? 'var(--disabled-fg)' : 'var(--ink)', backOl: st.dRing === 'back' ? '2px solid var(--focus-ring)' : 'none',
+        noteLabel: 'Note to ' + p.first + ' (optional)', helper: p.first + ' will see this note. Up to 300 characters.',
+        note, count: String(n), srCount: n >= 280 ? (300 - n) + ' characters left' : '',
+        onNote: e => { const v = e.target.value.slice(0, 300); upd(c => ({ dlg: { ...c.dlg, note: v }, dRing: null })); },
+        taBd: taFocus ? 'var(--primary)' : busy ? 'var(--disabled-bg)' : 'var(--input-border)', taSh: taFocus ? 'var(--shadow-focus-halo)' : 'none',
+        taBg: busy ? 'var(--disabled-bg)' : 'var(--surface-raised)', taFg: busy ? 'var(--disabled-fg)' : 'var(--ink)'
+      };
+    }
+    const wCount = wl.filter(r => r.st === 'waiting').length;
+    return Object.assign(out, {
+      sidebars: [this.sidebar({ ap: true, count: navCount })],
+      loading: st.status === 'loading', error: st.status === 'error', ready: st.status === 'ready',
+      retry: () => { set({ status: 'loading' }); this.timers[k + 'r'] = setTimeout(() => set({ status: 'ready' }), 1000); },
+      skCards: [{ a: '120px', b: '170px', c: '380px', d: '300px' }, { a: '110px', b: '130px', c: '200px', d: '280px' }],
+      skRows: [{ a: '100px', b: '200px', c: '96px' }, { a: '120px', b: '260px', c: '84px' }, { a: '90px', b: '180px', c: '96px' }],
+      waiting, wCount: String(wCount), hasW: wCount > 0, noW: !wl.length, lists,
+      dlg: !!dr, d,
+      hasToast: !!st.toast, toast: st.toast || '', dismiss: () => set({ toast: null })
+    });
+  }
+  renderVals() {
+    if (!this.R0) this.init();
+    const R = this.R0, T = this.T;
+    const decided = (st, note) => R.map(r => r.id === 'w1' ? Object.assign({}, r, { st, on: T, note }) : r);
+    const NOTE = 'Inventory runs November 9 and 10 this year. Could you move this a week later?';
+    const frames = [
+      { id: 'desktop-default', live: true, label: 'Default, live. Approve or Deny opens the confirm dialog; deciding updates the nav count, the lists, and the toast.' },
+      { id: 'desktop-default-full', full: true, label: 'Default at full height: both waiting requests, Coming up, and every recent decision, including the August 28 denial with your note.' },
+      { id: 'desktop-approve-confirm', label: 'Approve: one confirm step. Focus starts on "Go back".', init: { dlg: { kind: 'approve', id: 'w1', note: '' }, dRing: 'back' } },
+      { id: 'desktop-deny-confirm', label: 'Deny, with a typed note. Focus is in the note field; the counter updates as Marcus types.', init: { dlg: { kind: 'deny', id: 'w1', note: NOTE }, dRing: 'note' } },
+      { id: 'desktop-deciding', label: 'Deciding: the confirm button shows "Approving…" and Go back is disabled until the engine answers.', init: { dlg: { kind: 'approve', id: 'w1', note: '', phase: 'deciding' } } },
+      { id: 'desktop-approved', label: 'Approved: toast, Zara at the top of Recent decisions ("Approved today") and in Coming up, nav count 1. Focus moves to Priya’s Approve.', init: { reqs: decided('approved'), toast: 'Approved. Zara will see it on the Time off page.', ring: 'w2' } },
+      { id: 'desktop-denied', label: 'Denied with a note: toast, Zara at the top of Recent decisions with "Your note", nav count 1. Focus moves to Priya’s Approve.', init: { reqs: decided('denied', NOTE), toast: 'Denied. Zara will see your note on the Time off page.', ring: 'w2' } },
+      { id: 'desktop-conflict', label: 'Conflict: Zara canceled while Marcus was looking, so the decision was refused. The card is muted, shows Canceled, and has no actions.', init: { reqs: R.map(r => r.id === 'w1' ? Object.assign({}, r, { st: 'canceled' }) : r), conflict: 'w1', ring: 'w2' } },
+      { id: 'desktop-empty', label: 'Empty: nothing waiting. Coming up and Recent decisions still show, and the nav has no count.', init: { reqs: R.filter(r => r.st !== 'waiting') } },
+      { id: 'desktop-loading', label: 'Loading: static skeletons for the cards and rows', init: { status: 'loading' } },
+      { id: 'desktop-error', label: 'Error loading the page: the global error pattern, with Retry (it works)', init: { status: 'error' } },
+      { id: 'desktop-nav-manager', kind: 'nav', label: 'Navigation as Marcus: Approvals and its count in each state, with Priya’s employee nav for comparison.' },
+      { id: 'desktop-home-manager', kind: 'home', label: 'Assistant home as Marcus: "At a glance" with Marcus’s PTO, Marcus’s own requests, approvals waiting (cinnamon marker), and the handbook line.' }
+    ];
+    const spinner = React.createElement('svg', { className: 'od-spin', width: 16, height: 16, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: 2, strokeLinecap: 'round', 'aria-hidden': true, style: { animation: 'od-spin 0.9s linear infinite', flex: 'none' } }, React.createElement('path', { d: 'M21 12a9 9 0 1 1-6.219-8.56' }));
+    return { frames: frames.map(c => this.frame(c)), spinner, cardRef: this.cardRef };
+  }
+}
+</script>
+</body>
+</html>

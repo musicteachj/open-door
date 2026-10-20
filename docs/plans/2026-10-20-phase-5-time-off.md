@@ -181,8 +181,8 @@ only for a stubborn bug, then back.
   38's phase review diffs against it.
 - **In Stage 4's PR:** the owner approves the handbook additions (the wording is in the spec), and
   OKs each paid run: the smokes, the agreement run, and the November full run.
-- **Before Stage 5:** the Phase 5 screens are designed in Claude Design from the design brief and
-  synced into `docs/design/screens/` in their own docs PR. Stages 1 to 4 don't wait.
+- **Before Stage 5:** done. The Phase 5 screens (08 to 10) were designed and approved on 2026-10-20,
+  and synced into `docs/design/screens/` in their own docs PR.
 - **Docker Desktop is running,** and `make setup` and `make db` have run.
 
 ## File map
@@ -456,9 +456,9 @@ actions, and the time-off service with its audit events. Nothing is reachable ov
 - [ ] **Tests first:** the matrix gains a row per action and relationship: self, another employee,
       a direct manager, a manager two levels up, and HR. In particular:
   - Marcus decides Priya's pending PTO; the COO (two levels up) can read it but not decide it;
-    Dana reads but doesn't decide; Priya can't decide her own
+    Dana reads but doesn't decide; and Priya can't decide a request of Priya's own
   - nobody decides a sick record, or a request that isn't pending
-  - Priya cancels her approved PTO the day before its first day, not on it
+  - Priya cancels an approved PTO request the day before its first day, not on it
   - `load_actor` returns Marcus's 5 direct reports and 44 in all
 - [ ] **Known:** `RULES` maps an action to `Callable[[Actor, PersonResource], bool]` today. Widen
       it to the two resource types without loosening deny-by-default. The matrix test's
@@ -573,7 +573,10 @@ the tests insert them through the service.
   - a decision on a request that's no longer pending is a 409
   - `scope=waiting` returns only pending PTO from direct reports; `scope=team` everyone below
   - the default window and the 200-row limit
-  - team coverage on `GET /requests/{id}`, for its direct manager only
+  - team coverage on `GET /requests/{id}` and on each `scope=waiting` row, for its direct manager
+    only, counting approved and recorded time off (a waiting request doesn't count)
+  - `GET /time-off/calendar`: the caller's scheduled weekdays, the location's holidays with names
+    (across a year boundary), and the earliest day per type (today for PTO, 30 days back for sick)
 - [ ] **Known:** follow `people/routes.py`: `SignedInDep`, `authorize()`, `problem_responses`. Every
       response carries both `amountMinutes` and its label.
 
@@ -689,7 +692,7 @@ the other eval changes, and a committed full run. The PR waits for the full run.
     two named exceptions (`person_name` on the balance and request tools); the optional-property
     limit is raised with its reason (under 16 of the API's 24)
   - `person_name` matches only people the actor may read: Priya asking for Leo's balance gets a
-    tool error that names no one she can't read; an ambiguous name lists the matches' names and
+    tool error that names no one Priya can't read; an ambiguous name lists the matches' names and
     titles
   - `check_time_off` writes nothing (row counts before and after)
   - each proposal tool writes one proposal and `proposal.created`, and nothing else; a refusal
