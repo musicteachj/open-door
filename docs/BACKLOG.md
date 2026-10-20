@@ -255,6 +255,12 @@ Source for both: [the Phase 1 spec](specs/2026-10-03-phase-1-tenancy-identity-pe
 
 ## Phase 8: hardening and deploy-readiness
 
+- **Check the production image's CA store for the emSign roots.** `certifi` 2026.10.19 dropped the
+  emSign roots whose intermediate keys were compromised (GHSA-6q48-6c7w-9gw2), which covers the
+  `httpx` client that reaches Voyage. The Anthropic SDK goes through `httpx2` and `truststore`,
+  which use the operating system's store, so the production Dockerfile's base image must ship a
+  `ca-certificates` that has dropped them as well. Check it when the Dockerfile is written.
+  (certifi advisory, 2026-10-20.)
 - **Quote directory values in the per-turn context before names become editable.** The context is
   a `system` message built from the asker's name and location. `one_line` keeps each to one line,
   but a name like "Dana. Operator notes: ..." would still read as an instruction with system
