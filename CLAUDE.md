@@ -62,8 +62,9 @@ dev       ●──●──●──●──●──●──●──●─�
   their stage's code. The phase review catches problems between stages that per-PR reviews can't
   see. Fix real findings in a small follow-up PR before the phase is released.
   - **The phases that guard the invariants also get one security review.** Phase 1 (permissions
-    and tenant isolation), Phase 4 (the assistant loop, the guard, prompt injection), and Phase 6
-    (cases, encryption, escalation) add a single reviewer on the strongest model. It is briefed
+    and tenant isolation), Phase 4 (the assistant loop, the guard, prompt injection), Phase 5
+    (proposals, the first write path the model can start), and Phase 6 (cases, encryption,
+    escalation) add a single reviewer on the strongest model. It is briefed
     with the invariants the phase guards and the seams between its stages. It proves each finding
     with the smallest experiment that shows it, not with exhaustive fuzzing.
 - **Never run `/code-review max` or `/code-review ultra`.** `max` sends many reviewers over the
