@@ -40,6 +40,7 @@ from app.ai.transport import (
     count_search_results,
     iter_search_results,
 )
+from app.domain.retrieval import MAX_QUERY_CHARACTERS
 
 SCENARIOS_PATH: Final = Path(__file__).with_name("scripted_scenarios.json")
 
@@ -298,6 +299,20 @@ def _finished(
     )
 
 
+def _query_of(question: str) -> str:
+    """The question as a search query: the tool refuses more than `MAX_QUERY_CHARACTERS`, so a
+    longer question is cut on a word boundary."""
+    query = " ".join(question.split())
+    if len(query) <= MAX_QUERY_CHARACTERS:
+        return query
+    cut = query[:MAX_QUERY_CHARACTERS]
+    if not query[MAX_QUERY_CHARACTERS].isspace():
+        space = cut.rfind(" ")
+        if space > 0:
+            cut = cut[:space]
+    return cut.rstrip()
+
+
 class ScriptedTransport:
     """`silence_seconds` and `slow_guard_seconds` are what the silence and slow-guard scenarios
     wait (the slow guard waits 2 seconds past the guard's limit); tests shorten them.
@@ -351,7 +366,9 @@ class ScriptedTransport:
 
         # The default, not_found, long_answer, silence, and working_note all begin by searching.
         digest = hashlib.sha256(f"{question}|{_tool_calls_so_far(messages)}".encode()).hexdigest()
-        call = ToolCall(f"toolu_scripted_{digest[:12]}", "search_handbook", {"query": question})
+        call = ToolCall(
+            f"toolu_scripted_{digest[:12]}", "search_handbook", {"query": _query_of(question)}
+        )
         content: list[dict[str, Any]] = []
         if behavior == "working_note":
             # Text before the search: the turn streams it, then takes it back at the tool call.

@@ -30,3 +30,13 @@ def test_scrubbing_a_finished_message_leaves_thinking_blocks_as_they_came() -> N
     assert content[0] == thinking
     assert content[1] == redacted
     assert content[2] == {"type": "text", "text": "Done �"}
+
+
+def test_a_lone_surrogate_is_found_in_a_string_a_key_a_list_and_a_tuple() -> None:
+    from app.ai.turn import _has_lone_surrogate
+
+    assert _has_lone_surrogate(f"a{LONE}")
+    assert _has_lone_surrogate({f"k{LONE}": 1})
+    assert _has_lone_surrogate({"k": [1, {"v": f"x{LONE}"}]})
+    assert _has_lone_surrogate({"k": (f"x{LONE}",)})
+    assert not _has_lone_surrogate({"k": ["fine", 3, None, ("ok",)]})

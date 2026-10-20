@@ -1308,6 +1308,63 @@ def test_no_two_flaws_are_made_from_the_same_source_answer(tmp_path: Path) -> No
     assert len(set(sources)) == len(sources) == 4
 
 
+def test_two_files_with_one_name_in_different_folders_are_distinct_sources(
+    tmp_path: Path,
+) -> None:
+    (tmp_path / "a").mkdir()
+    (tmp_path / "b").mkdir()
+    files = [
+        handgrades.read_candidates(traces_file(tmp_path / folder / "traces.json", effort="low"))
+        for folder in ("a", "b")
+    ]
+    # Two answers to one item, one from each file, and nothing else the flaws could be made from.
+    keep = {"qa-14", "qa-27"}
+    pool = [c for candidates in files for c in candidates if c.item in keep]
+    pool += [c for c in files[0] if c.item == "qa-57"]
+    assert {c.source_file for c in pool} == {"traces.json"}
+    assert len({c.source_path for c in pool}) == 2
+    company = handgrades.build_company(handgrades.UUID(int=1), handgrades.date(2026, 10, 5))
+
+    class TakesTheFirst:
+        def choice(self, candidates: list[Any]) -> Any:
+            return candidates[0]
+
+    entries = handgrades._flawed(pool, TakesTheFirst(), files, QA_BY_ID, company)
+
+    assert len(entries) == 4
+
+
+@pytest.mark.parametrize(
+    "traces",
+    [[1], [{"judge_input": None}], ["x"], {"a": 1}, [None]],
+)
+def test_a_traces_file_with_malformed_entries_is_a_clear_error(tmp_path: Path, traces: Any) -> None:
+    path = tmp_path / "traces.json"
+    document = {"run": {"set": "smoke", "effort": "low"}, "traces": traces}
+    path.write_text(json.dumps(document), encoding="utf-8")
+
+    with pytest.raises(handgrades.HandGradesError, match="not a saved-traces file"):
+        handgrades.read_candidates(path)
+
+
+@pytest.mark.parametrize(
+    "judge_input",
+    ["text", 5, [1], {"answer": "a"}, {"answer": "a", "passages": 5}],
+)
+def test_a_trace_with_a_malformed_judge_input_is_a_clear_error(
+    tmp_path: Path, judge_input: Any
+) -> None:
+    path = tmp_path / "traces.json"
+    document = {
+        "run": {"set": "smoke", "effort": "low"},
+        "traces": [{"item_id": "qa-01", "judge_input": judge_input}],
+    }
+    path.write_text(json.dumps(document), encoding="utf-8")
+
+    with pytest.raises(handgrades.HandGradesError, match="not a saved-traces file"):
+        handgrades.read_candidates(path)
+
+
 # --- A damaged judge recording ----------------------------------------------------------------
 
 

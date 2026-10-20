@@ -24,8 +24,8 @@ from app.ai.tools.base import (
     text_block,
 )
 from app.db.tenancy import tenant_session
+from app.domain.retrieval import MAX_QUERY_CHARACTERS
 from app.modules.handbook.search import (
-    MAX_QUERY_CHARACTERS,
     Hit,
     clean_query,
     embed_query,

@@ -14,9 +14,9 @@ from app.db.models import HandbookSection
 from app.db.tenancy import TenantContext, tenant_session
 from app.domain.handbook.applicability import Asker, applies
 from app.domain.handbook.models import Audience
+from app.domain.retrieval import MAX_QUERY_CHARACTERS
 from app.modules.handbook.asker import load_asker
 from app.modules.handbook.search import (
-    MAX_QUERY_CHARACTERS,
     clean_query,
     embed_query,
     pinned_version_id,

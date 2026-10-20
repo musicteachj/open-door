@@ -135,6 +135,22 @@ async def test_the_first_call_searches_the_handbook_with_the_question() -> None:
     }
 
 
+async def test_a_question_over_the_search_limit_is_searched_as_a_shorter_query_on_a_word() -> None:
+    from app.domain.retrieval import MAX_QUERY_CHARACTERS
+
+    words = "sick leave policy "
+    question = words * 60
+    assert len(question) > MAX_QUERY_CHARACTERS
+
+    _status, call, _finished = await collect(ScriptedTransport(), a_request(user(question)))
+
+    assert isinstance(call, ToolCall)
+    query = call.input["query"]
+    assert 0 < len(query) <= MAX_QUERY_CHARACTERS
+    assert question.startswith(query)
+    assert query.split(" ")[-1] in words.split()
+
+
 async def test_the_second_call_cites_the_first_result_by_its_place_in_the_conversation() -> None:
     transport = ScriptedTransport()
     first_request = a_request(user(QUESTION))

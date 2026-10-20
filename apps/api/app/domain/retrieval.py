@@ -10,6 +10,10 @@ from uuid import UUID
 
 RRF_K = 60
 
+# A question is a sentence or two. The cap bounds what one search can cost. Here, not beside the
+# search, so the scripted model can cut its query to fit without loading the database layer.
+MAX_QUERY_CHARACTERS = 500
+
 
 @dataclass(frozen=True, slots=True)
 class ChunkKey:

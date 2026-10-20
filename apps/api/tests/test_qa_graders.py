@@ -272,6 +272,15 @@ def test_a_confident_answer_with_a_citation_and_no_not_found_statement_fails() -
         "I couldn't find that in this handbook.",
         "I couldn't find that in the company handbook.",
         "I couldn't find that in the Juniper Row handbook.",
+        "I couldn't find anything about pet bereavement in the handbook's leave policies.",
+        "I couldn't find a pet insurance policy in the handbook; the closest is the benefits"
+        " overview [1].",
+        "I couldn't find that in the handbook, which says nothing about pet insurance.",
+        "When you asked about pets, I couldn't find anything in the handbook.",
+        "Whether you're full-time or part-time, I couldn't find a rule in the handbook.",
+        "I searched, but couldn't find anything about pet insurance in the handbook.",
+        "I also couldn't find anything in the handbook about that.",
+        "I wasn't able to locate anything in the handbook on that.",
         "I couldn't find that in Juniper Row's handbook.",
         "I couldn't find anything on section 4.3 in the handbook.",
         "I couldn't find a 3.5 percent rule in the handbook, e.g. for parking.",
@@ -309,10 +318,44 @@ def test_close_paraphrases_of_the_not_found_statement_pass(sentence: str) -> Non
         "I couldn't find that? It is in our handbook.",
         "I couldn't find that in the way of the big old handbook.",
         "I couldn't find that in a long list of other things like the handbook.",
+        "I don't have the details, but you can find them in the handbook.",
     ],
 )
 def test_statements_that_are_not_a_not_found_statement_fail(sentence: str) -> None:
     result = graders.grade_unanswerable(trace(answer_text=f"{sentence} Ask the HR team."))
+
+    assert_fails(result, mentioning="couldn't find")
+
+
+@pytest.mark.parametrize(
+    "sentence",
+    [
+        "When I looked, I couldn't find that in the handbook, so please ask HR.",
+        "Once I searched, I couldn't find it in the handbook.",
+    ],
+)
+def test_a_when_or_once_clause_about_the_assistant_is_still_a_not_found_statement(
+    sentence: str,
+) -> None:
+    result = graders.grade_unanswerable(trace(answer_text=f"{sentence} Ask HR."))
+
+    assert result.passed is True, result.reasons
+
+
+@pytest.mark.parametrize(
+    "answer",
+    [
+        "You get 5 days of bereavement leave [1]. If you can't find the details in the handbook, "
+        "ask HR.",
+        "When you can't find a rule in the handbook, ask HR.",
+        "Unless you can't find it in the handbook, you get 5 days [1]. Ask HR.",
+        "You can't find that in the handbook. Ask HR.",
+    ],
+)
+def test_a_conditional_or_an_answer_that_borrows_the_phrase_is_not_a_not_found_statement(
+    answer: str,
+) -> None:
+    result = graders.grade_unanswerable(trace(answer_text=answer, citations=cites("4.3")))
 
     assert_fails(result, mentioning="couldn't find")
 
@@ -718,6 +761,32 @@ questions:
         "qa-9: needs a question",
     ):
         assert expected in text, text
+
+
+@pytest.mark.parametrize("value", ["[priya]", "{a: b}", "[]"])
+def test_an_asker_or_location_code_that_is_a_list_or_mapping_is_a_problem_not_a_crash(
+    tmp_path: Path, value: str
+) -> None:
+    path = write(
+        tmp_path,
+        f"""
+questions:
+  - {{id: qa-1, asker: {value}, kind: answerable, question: q, reference: r, expect: ["4.3"]}}
+  - id: qa-2
+    asker: priya
+    kind: other_state
+    question: q
+    reference: r
+    expect: ["4.3"]
+    location_code: {value}
+""",
+    )
+
+    with pytest.raises(datasets.DatasetError) as caught:
+        datasets.load_qa(path)
+
+    assert "qa-1: unknown asker" in str(caught.value)
+    assert "qa-2: unknown location_code" in str(caught.value)
 
 
 def test_a_section_that_is_not_in_the_handbook_is_reported_with_its_item(tmp_path: Path) -> None:

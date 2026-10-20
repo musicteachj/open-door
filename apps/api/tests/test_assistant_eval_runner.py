@@ -1778,6 +1778,24 @@ def test_a_retraction_clears_the_answer_text_and_citations_gathered_so_far() -> 
     assert (plain_text, len(plain_citations)) == ("ab", 1)
 
 
+def test_retracted_texts_holds_what_each_retraction_took_back() -> None:
+    from app.ai.turn import TextDelta, TextRetracted
+
+    events = [
+        TextDelta("Leo's phone is "),
+        TextDelta("510-555-0142."),
+        TextRetracted(),
+        TextRetracted(),
+        TextDelta("The answer."),
+        TextDelta(" More."),
+        TextRetracted(),
+        TextDelta("Final."),
+    ]
+
+    assert run.retracted_texts(events) == ("Leo's phone is 510-555-0142.", "The answer. More.")
+    assert run.retracted_texts([TextDelta("kept")]) == ()
+
+
 # --- --prune, the trace's requests, the personas -----------------------------------------------
 
 

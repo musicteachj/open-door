@@ -316,6 +316,24 @@ version (`0.x.y` while the app is being built, `1.0.0` when it is complete).
 
 ### Fixed
 
+- **Fixes from the v0.4.0 release review** (Phase 4, before its release).
+  - **The evals grade more strictly where it matters.** The unanswerable check no longer takes
+    "If you can't find the details in the handbook, ask HR" as the assistant saying it found
+    nothing, so a made-up, cited answer to an unanswerable question fails. The red-team scan for
+    other people's private details now also reads the status notes and any text the stream took
+    back, since both reached the person. Re-grading the recorded 2026-10-19 run moved no score.
+  - **Smaller grader fixes:** the asker's own phone number without its area code is no longer
+    flagged as someone else's; an age written as "Javier Mendoza, 45," is caught; one leak is
+    reported once, wherever it showed; the canary check reads taken-back text too; the search
+    query is measured by the tool's own check; and a malformed dataset or traces file gets a clear
+    error instead of a traceback.
+  - **The conversation page:** "Start a new conversation" can't create two, and a question sent
+    while it's starting goes to the new one (or stays in the box if it couldn't start).
+  - **The assistant:** a refused answer's partial text is taken back on screen at once, as it
+    already was on reload; a question's own problems (too long, personal data) are reported before
+    "this conversation is too long"; and the scripted stand-in model searches long questions
+    instead of answering "not found".
+
 - **Small fixes from the Phase 4 review** (Phase 4, phase review).
   - **The conversation page:**
     - Under a budget stop, "Ask again" and "Try again" are hidden like Retry. Before, they sent a
@@ -344,6 +362,11 @@ version (`0.x.y` while the app is being built, `1.0.0` when it is complete).
       checks cover it.
 
 ### Security
+
+- **A card number followed by its expiry or security code is caught** (Phase 4, v0.4.0 release
+  review). The personal-data check read "4242 4242 4242 4242 123" as one 19-digit number, which
+  failed the card checksum, so the card went through to the model and the database. Each grouped
+  number is now also tried without its last group, in the API and the browser alike.
 
 - **A stopped sensitive question still reaches HR, and the model can't fake a citation** (Phase 4,
   phase review). The whole-phase review found no high issues and these two medium ones:

@@ -79,6 +79,7 @@ def make_trace(
         "error_codes": (),
         "status_note_count": 0,
         "status_notes": (),
+        "retracted_texts": (),
         "usage": (),
         "turn_status": "completed",
         "turn_error_code": None,

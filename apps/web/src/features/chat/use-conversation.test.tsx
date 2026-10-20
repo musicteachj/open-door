@@ -456,24 +456,6 @@ describe('sending through the hooks', () => {
     await act(() => sending)
   })
 
-  it('asks the same question again from the live turn', async () => {
-    installAssistantApi({ conversation: conversationOut() })
-    let calls = 0
-    const posted = onTurn(() =>
-      ++calls === 1
-        ? eventStream(started, ['error', { code: 'internal', message: 'Oops.', requestId: null }])
-        : eventStream(started, completed),
-    )
-    const { wrapper } = setup()
-    const { result } = renderHook(useAll, { wrapper })
-    await waitFor(() => expect(result.current.actions.ready).toBe(true))
-    await waitFor(() => expect(result.current.conversation.isSuccess).toBe(true))
-    await act(() => result.current.actions.send('Sick days?'))
-    expect(useChatStore.getState().status).toBe('error')
-    await act(() => result.current.actions.askAgain())
-    expect(posted.map((p) => p.question)).toEqual(['Sick days?', 'Sick days?'])
-  })
-
   it('checks who is signed in after a 401 on the send', async () => {
     installAssistantApi({ conversation: conversationOut() })
     let meReads = 0
@@ -687,6 +669,121 @@ describe('starting a new conversation', () => {
     await act(() => result.current.startNewConversation())
     expect(useChatStore.getState().sendError).toBe('Something went wrong sending that.')
     expect(useChatStore.getState().conversationId).toBeNull()
+  })
+})
+
+describe('starting a new conversation while one is being created', () => {
+  /** A create route that answers only when the test lets it. */
+  function gatedCreate() {
+    let release: () => void = () => {}
+    const gate = new Promise<void>((resolve) => (release = resolve))
+    const created = { count: 0 }
+    server.use(
+      http.post(url('/api/v1/assistant/conversations'), async () => {
+        created.count++
+        await gate
+        return HttpResponse.json(conversationOut(), { status: 201 })
+      }),
+    )
+    return { created, release }
+  }
+
+  it('does not send to the old conversation when the new one could not be created, and keeps the draft', async () => {
+    installAssistantApi({ conversation: conversationOut({ id: 'old-1', turns: [turnOut()] }) })
+    server.use(
+      http.post(url('/api/v1/assistant/conversations'), async () => {
+        await delay(50)
+        return new HttpResponse(null, { status: 500 })
+      }),
+    )
+    const posted = onTurn(() => eventStream(started, completed))
+    const { wrapper } = setup()
+    const { result } = renderHook(() => useConversationActions(), { wrapper })
+    await waitFor(() => expect(result.current.ready).toBe(true))
+    useChatStore.setState({ draft: 'Sick days?' })
+    await act(async () => {
+      const starting = result.current.startNewConversation()
+      const sending = result.current.send('Sick days?')
+      await Promise.all([starting, sending])
+    })
+    expect(posted).toEqual([])
+    expect(useChatStore.getState()).toMatchObject({
+      draft: 'Sick days?',
+      sendError: 'Something went wrong sending that.',
+    })
+  })
+
+  it('ignores a second send while the first waits, so it is not refused as still answering', async () => {
+    installAssistantApi({ conversation: conversationOut({ id: 'old-1', turns: [turnOut()] }) })
+    const { release } = gatedCreate()
+    const stream = openStream()
+    const posted = onTurn(() => stream.response())
+    const { wrapper } = setup()
+    const { result } = renderHook(() => useConversationActions(), { wrapper })
+    await waitFor(() => expect(result.current.ready).toBe(true))
+    useChatStore.setState({ draft: 'Sick days?' })
+    let starting!: Promise<void>
+    let first!: Promise<void>
+    let second!: Promise<void>
+    act(() => {
+      starting = result.current.startNewConversation()
+      first = result.current.send('Sick days?')
+      second = result.current.send('Sick days?')
+    })
+    release()
+    await act(async () => {
+      await Promise.all([starting, second])
+      await new Promise((resolve) => setTimeout(resolve, 50))
+    })
+    expect(posted.map((p) => p.question)).toEqual(['Sick days?'])
+    expect(useChatStore.getState().sendError).toBeNull()
+    stream.push(...started)
+    stream.close()
+    await act(() => first)
+  })
+
+  it('ignores a second click, so only one conversation is created', async () => {
+    installAssistantApi({ conversation: conversationOut({ turns: [turnOut()] }) })
+    const { created, release } = gatedCreate()
+    const { wrapper } = setup()
+    const { result } = renderHook(() => useConversationActions(), { wrapper })
+    await waitFor(() => expect(result.current.ready).toBe(true))
+    let first!: Promise<void>
+    let second!: Promise<void>
+    act(() => {
+      first = result.current.startNewConversation()
+      second = result.current.startNewConversation()
+    })
+    release()
+    await act(async () => {
+      await Promise.all([first, second])
+    })
+    expect(created.count).toBe(1)
+    expect(useChatStore.getState().conversationId).toBe(CONVERSATION_ID)
+  })
+
+  it('holds a send until the new conversation exists, then sends to it, keeping the draft', async () => {
+    installAssistantApi({ conversation: conversationOut({ id: 'old-1', turns: [turnOut()] }) })
+    const { release } = gatedCreate()
+    const posted = onTurn(() => eventStream(started, completed))
+    const { wrapper } = setup()
+    const { result } = renderHook(() => useConversationActions(), { wrapper })
+    await waitFor(() => expect(result.current.ready).toBe(true))
+    useChatStore.setState({ draft: 'Sick days?' })
+    let starting!: Promise<void>
+    let sending!: Promise<void>
+    act(() => {
+      starting = result.current.startNewConversation()
+      sending = result.current.send('Sick days?')
+    })
+    await new Promise((resolve) => setTimeout(resolve, 50))
+    expect(posted).toEqual([])
+    expect(useChatStore.getState().draft).toBe('Sick days?')
+    release()
+    await act(async () => {
+      await Promise.all([starting, sending])
+    })
+    expect(posted.map((p) => p.conversationId)).toEqual([CONVERSATION_ID])
   })
 })
 

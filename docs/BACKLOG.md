@@ -10,6 +10,22 @@ should pick it up. When one is done, delete it here and record it in the changel
   Vitest suite runs, on a clean `dev` too, and pass alone. Raise their waits or find the slow
   path. (Phase 4 stage 6.)
 
+- **Small conversation-page glitches the v0.4.0 release review left alone.** When a
+  remembered conversation turns out to be gone (a 404 on send), the page drops to "Loading…" while
+  it reloads, and the composer loses focus. And "Start a new conversation" with a source panel open
+  replaces the panel's history entry, leaving a Back step that changes nothing. The release review
+  tried fixes for both, and each brought new edge cases (a stale Forward step, a conversation id
+  missed on a send that created it), so they were reverted. Also: "Start a new conversation"
+  clicked after a send has already begun still lets that send go to the old conversation, and a
+  second Enter while a send waits for the new conversation is dropped without a word. Fix them with
+  the page's next real change, with browser tests. (v0.4.0 release review.)
+- **Tie the gallery's fixed texts and the running lines to the API's.** The conversation gallery
+  keeps word-for-word copies of the owner-approved fixed texts (crisis, "can't answer right now",
+  both budget texts, "still answering", the personal-data warning), and the chat store merges a
+  tool's "Searching the handbook…" step only when the API's status text matches the web's running
+  line exactly. Nothing fails if either side is reworded. Share the texts the way the
+  personal-data cases are shared (one file both sides read), or add a check. (v0.4.0 release
+  review.)
 - **Locally, the browser tests can reuse a stale server.** `playwright.config.ts` sets
   `reuseExistingServer` off CI, so a preview already on 4173, or an older API on 8100, is tested
   without a rebuild, and `make check` can pass or fail against old code. CI always starts fresh
@@ -139,6 +155,12 @@ should pick it up. When one is done, delete it here and record it in the changel
 
 Source for both: [the Phase 1 spec](specs/2026-10-03-phase-1-tenancy-identity-permissions.md#later-phases).
 
+- **Make the scroll-restoration exception general.** `use-scroll-restoration.ts` special-cases the
+  source panel's `?source=` parameter (an import from the chat feature into the app shell), while
+  the panel's navigations already pass `preventScrollReset`. Phase 5's first panel that lives in
+  the URL (a confirm card, say) would jump to the top until another parameter is hard-coded. Mark
+  such navigations in history state and honor that for push, replace, and back instead. (v0.4.0
+  release review.)
 - **Keep trial 1's recordings when a fresh run stops in a later trial.** With `FRESH=1` (and
   `PRUNE=1`), `evals/assistant/run.py` saves recordings only when every item ran and was judged in
   every trial, but only trial 1 is ever recorded. A run stopped by its cap, or a judge call with no
@@ -180,6 +202,12 @@ Source for both: [the Phase 1 spec](specs/2026-10-03-phase-1-tenancy-identity-pe
   handbook (no title contains " | " and no passage starts a line with "/handbook/"), but keeping
   the source, title, and passages as fields on the trace would remove the round trip. (Phase 4
   stage 3 `/code-review medium`.) Moved from Phase 4 at its close: it belongs with the scoreboard generator.
+
+- **Store why a turn was refused.** The Anthropic transport builds `Finished.stop_details` (the
+  refusal's category and explanation) and documents it as information for the audit trail, but
+  nothing stores it: a refused turn records only that it was refused. The console is the first to
+  need the reason; store it on the turn (and in the data inventory) or drop the field. (v0.4.0
+  release review.)
 
 - **Report the questions the handbook couldn't answer.** The console lists them, so HR can see
   what to write next. The question text is user-written, so it's untrusted data, and it's redacted
@@ -233,6 +261,13 @@ Source for both: [the Phase 1 spec](specs/2026-10-03-phase-1-tenancy-identity-pe
   weight. Names come only from the seed today. Before any route edits a person, allow only name
   characters, or put the values in the context as quoted JSON. (Phase 4 stage 2 Opus security
   review.) Moved from Phase 4 at its close: no route edits a name yet, and hardening reviews the prompt inputs.
+- **Catch a card number written after other four-digit numbers.** "Room 2401 4242 4242 4242 4242"
+  passes the personal-data check: the grouped pattern takes the leading number as the card's first
+  group, and that 20-digit number fails the length check. Trying every run of groups inside a
+  longer run catches it, but also refuses ordinary year lists ("PTO for 2022 2023 2024 2025 2026")
+  about one time in ten, since those are card-shaped and pass the checksum by chance. The v0.4.0
+  release review tried it and went back; decide with the other personal-data gaps here, in both
+  copies. (v0.4.0 release review.)
 - **Catch personal data written in non-Latin digits.** The check normalizes the text (NFKC,
   format characters dropped, Unicode spaces and dashes mapped to ASCII) and then matches ASCII
   digits only, so the browser's copy can follow the same steps. An SSN written in Arabic-Indic or
@@ -281,6 +316,16 @@ Source for both: [the Phase 1 spec](specs/2026-10-03-phase-1-tenancy-identity-pe
   turn replaces the live one (the stream is already closed when they press Stop), and a saved
   panel doesn't announce itself, so a screen-reader user isn't told it appeared. Announce a panel
   that a settling turn adds. For the accessibility audit. (Phase 4 phase review.)
+- **Say "start a new conversation" when only the conversation is too big for the budget.** The
+  room a question needs is sized with the conversation's whole history, so near the 80,000-token
+  limit (or in an outdated conversation) the banner and the 429 say the sandbox has reached its
+  limit and suggest a new sandbox, when a new conversation would fit. The right message is new
+  fixed text, so it needs the owner's wording and approval first. (v0.4.0 release review.)
+- **Don't re-parse the whole answer on every streamed word.** Each `text.delta` re-runs the
+  marker placement and react-markdown over the full text, and the thread follows the end each
+  time, so the work grows with the square of the answer's length. Batch deltas per animation frame
+  in the store, or memoize finished blocks; measure on a low-end phone first. (v0.4.0 release
+  review.)
 - **Give the app's database login a `statement_timeout`.** The engine sets none, so a hung query
   waits forever. The assistant's end-of-turn writes are bounded in code (10 seconds), but other
   requests aren't. A role-level `statement_timeout` (and `idle_in_transaction_session_timeout`)

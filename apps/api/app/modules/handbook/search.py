@@ -25,7 +25,7 @@ from app.ai.embeddings import DIMENSIONS, Embedder, is_unit_vector
 from app.db.models import HandbookChunk, HandbookSection, HandbookVersion, Location, Tenant
 from app.domain.handbook.applicability import Asker, audience_label
 from app.domain.handbook.models import Audience
-from app.domain.retrieval import Fused, fuse
+from app.domain.retrieval import MAX_QUERY_CHARACTERS, Fused, fuse
 from app.modules.handbook.queries import fulltext_candidates, vector_candidates
 
 logger = logging.getLogger(__name__)
@@ -33,9 +33,6 @@ logger = logging.getLogger(__name__)
 # Control and format characters (they include the excerpt markers), lone surrogates, private use,
 # and unassigned code points. A lone surrogate can't be encoded for the database at all.
 _DROPPED_CATEGORIES = frozenset({"Cc", "Cf", "Cs", "Co", "Cn"})
-
-# A question is a sentence or two. The cap bounds what one search can cost.
-MAX_QUERY_CHARACTERS = 500
 
 
 @dataclass(frozen=True, slots=True)

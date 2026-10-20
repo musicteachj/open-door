@@ -440,15 +440,19 @@ def _tail_start(text: str) -> int:
     return max(_keep_from(text, len(FOLDED_CANARY) - 1), len(text) - MAX_HELD_CHARACTERS, 0)
 
 
-def _strings(value: Any) -> Iterator[str]:
+def _strings(value: Any, *, keys: bool = False) -> Iterator[str]:
+    """Every string in a JSON-like value (a tuple counts as a list), and with `keys` the keys of
+    its mappings too. The one walk behind the canary check and the surrogate check."""
     if isinstance(value, str):
         yield value
     elif isinstance(value, dict):
-        for item in value.values():
-            yield from _strings(item)
+        for key, item in value.items():
+            if keys:
+                yield from _strings(key)
+            yield from _strings(item, keys=keys)
     elif isinstance(value, list | tuple):
         for item in value:
-            yield from _strings(item)
+            yield from _strings(item, keys=keys)
 
 
 def _holds_the_canary(event: TurnEvent) -> bool:
@@ -510,21 +514,15 @@ def without_lone_surrogates(text: str) -> str:
 
 
 def _has_lone_surrogate(value: Any) -> bool:
-    """Whether any string in a JSON-like value holds a lone surrogate."""
-    if isinstance(value, str):
-        return _LONE_SURROGATE.search(value) is not None
-    if isinstance(value, list):
-        return any(_has_lone_surrogate(item) for item in value)
-    if isinstance(value, dict):
-        return any(_has_lone_surrogate(k) or _has_lone_surrogate(v) for k, v in value.items())
-    return False
+    """Whether any string in a JSON-like value, mapping keys included, holds a lone surrogate."""
+    return any(_LONE_SURROGATE.search(text) for text in _strings(value, keys=True))
 
 
 def _scrub(value: Any) -> Any:
     """`without_lone_surrogates` over every string in a JSON-like value."""
     if isinstance(value, str):
         return without_lone_surrogates(value)
-    if isinstance(value, list):
+    if isinstance(value, list | tuple):
         return [_scrub(item) for item in value]
     if isinstance(value, dict):
         return {_scrub(key): _scrub(item) for key, item in value.items()}
@@ -1256,6 +1254,10 @@ class TurnRun:
                 self.incomplete = True
             elif finished.stop_reason == "refusal":
                 self.refusal = True
+                if self.shown:
+                    # The client holds this partial text (and its citations); tell it to drop
+                    # them before the refusal error, or they would stay beside it.
+                    yield self._seen(TextRetracted())
                 self._forget_what_was_shown()
                 self.taken_back_answer = None
                 self.fail("refusal")
