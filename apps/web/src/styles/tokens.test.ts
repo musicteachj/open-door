@@ -7,9 +7,9 @@
 //
 //   --space-N                      no variable of its own: Tailwind's spacing scale is
 //                                  `--spacing` (4px) times N, so the value must equal N * 4px
-//   --sidebar-width, --rail-width, --content-max, --sheet-inset, --control-height,
-//   --control-height-sm, --row-height
-//                                  --spacing-sidebar, -rail, -content, -sheet, -control,
+//   --sidebar-width, --rail-width, --panel-width, --content-max, --sheet-inset,
+//   --control-height, --control-height-sm, --row-height
+//                                  --spacing-sidebar, -rail, -panel, -content, -sheet, -control,
 //                                  -control-sm, -row (so w-sidebar, h-control, inset-sheet)
 //   --weight-X                     --font-weight-X
 //   --leading-X                    --text-X--line-height
@@ -41,6 +41,7 @@ const exportFiles: Record<string, string> = Object.fromEntries(
 const LAYOUT_NAMES: Record<string, string> = {
   'sidebar-width': 'spacing-sidebar',
   'rail-width': 'spacing-rail',
+  'panel-width': 'spacing-panel',
   'content-max': 'spacing-content',
   'sheet-inset': 'spacing-sheet',
   'control-height': 'spacing-control',
