@@ -10,6 +10,19 @@ version (`0.x.y` while the app is being built, `1.0.0` when it is complete).
 
 ## [Unreleased]
 
+### Fixed
+
+- **The web theme has the Phase 5 design tokens** (between Phase 5 stages, 2026-10-20). The
+  screens PR (#63) added eight tokens to the design export: the warning, danger, and apricot tints
+  and borders, the scrim behind a confirm dialog, and the docked panel's width. It didn't add them
+  to the web app's theme. The test that checks the theme against the export failed, but CI runs
+  the web checks only when the web app changes, so that docs-only PR never ran it. The seven colors
+  are now in the theme, and the panel width maps to the existing `--spacing-panel` (so
+  `w-panel`), like the other layout widths. CI now also runs the web unit tests when a file they
+  read outside the web app changes (`docs/design/`, the personal-data cases shared with the evals,
+  and the API's seeded people), the browser tests when the handbook changes, and the API tests
+  when the `Makefile` or `.gitignore` changes (the eval runner's tests read both).
+
 ### Security
 
 - **`certifi` updated to 2026.10.19 (between phases, 2026-10-20).** The certificate bundle the API's

@@ -167,6 +167,11 @@ Source for both: [the Phase 1 spec](specs/2026-10-03-phase-1-tenancy-identity-pe
   room, in trial 2 or 3 throws away trial 1's complete, already paid recordings. Gate the save (and
   the prune) on trial 1 alone. The last full run used $8.02 of a $16 cap, so it hasn't bitten;
   Phase 5's new tools will need a full run, so fix it first. (Phase 4 phase review.)
+- **Put the existing overlays and panels on the new tokens** (Stage 5). The bottom sheet's backdrop
+  is `bg-ink/40`, darker than the design's `scrim` (0.32) that the confirm dialog will use; check
+  the design and move it onto `bg-scrim` if they should match. The gallery's handbook and
+  conversation sections size their docked panels with `w-[420px]` in four places; use `w-panel`.
+  (Theme-token fix review, 2026-10-20.)
 
 ## Phase 6: cases and escalation
 
@@ -437,6 +442,13 @@ From the Phase 1 review ([the spec's Later phases](specs/2026-10-03-phase-1-tena
 - **Database TLS with certificate checks, and secret rotation** for the three database URLs.
 - **Deletion from backups.** A sandbox deleted from the database still exists in backups until
   they expire. Document how long, or exclude sandbox data from them.
+- **Check CI's path filters automatically.** Each CI job runs only when its filter's paths change,
+  and the filters list by hand the files outside each app that its tests read (`docs/design/`,
+  the handbook, the personal-data cases, the seed, the `Makefile`). A test that reads would
+  otherwise not run on the PR that breaks it, as happened after #63. A small check could find
+  every path a test reads outside its app and fail if no filter covers it. The theme tokens'
+  test could also check the other way, that every theme token has a source in the design export.
+  (Theme-token fix review, 2026-10-20.)
 
 ## Phase 9: deploy to AWS
 
