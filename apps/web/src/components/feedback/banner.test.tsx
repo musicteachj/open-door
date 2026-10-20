@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react'
+import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 import { Banner } from './banner'
@@ -41,5 +41,17 @@ describe('Banner', () => {
   it('has no Dismiss button without onDismiss', () => {
     render(<Banner message={MESSAGE} />)
     expect(screen.queryByRole('button')).not.toBeInTheDocument()
+  })
+
+  it('shows an action beside the message, and wraps it under the text when there is no room', () => {
+    render(<Banner message={MESSAGE} action={<button type="button">Start fresh</button>} />)
+    const status = screen.getByRole('status')
+    expect(within(status).getByRole('button', { name: 'Start fresh' })).toBeInTheDocument()
+    expect(status).toHaveClass('flex-wrap')
+  })
+
+  it('does not wrap a banner that has no action', () => {
+    render(<Banner message={MESSAGE} />)
+    expect(screen.getByRole('status')).not.toHaveClass('flex-wrap')
   })
 })

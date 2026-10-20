@@ -14,6 +14,9 @@ records are never rewritten.
 | [0006](0006-no-redux.md) | TanStack Query and Zustand, no Redux | Accepted | 2026-09-29 |
 | [0007](0007-session-lifetime.md) | Sessions last as long as the sandbox, with no idle timeout | Accepted | 2026-10-03 |
 | [0008](0008-handbook-retrieval.md) | Hybrid handbook search in Postgres, with embeddings cached in the repository | Accepted | 2026-10-07 |
+| [0009](0009-assistant-turn-and-guard.md) | Each turn is screened by a guard first, and fails closed | Accepted | 2026-10-14 |
+| [0010](0010-scripted-model-and-replay.md) | A scripted model for development and tests, and recorded replay for CI's evals | Accepted | 2026-10-14 |
+| [0011](0011-insert-only-budget-ledger.md) | AI budgets are an insert-only ledger, reserved before each call | Accepted | 2026-10-14 |
 
 New records copy this shape:
 

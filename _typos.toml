@@ -18,6 +18,15 @@ ines = "ines"
 # "ot" is how employees write "overtime" in the retrieval eval's questions.
 ot = "ot"
 
+[default.extend-identifiers]
+# pydantic-settings' own spelling of the hook a Settings class overrides. Only this identifier is
+# allowed; "customise" in prose still fails.
+settings_customise_sources = "settings_customise_sources"
+# asyncio's own exception name. Only this identifier is allowed; "cancelled" in prose still fails.
+CancelledError = "CancelledError"
+# anyio's own attribute name on a cancel scope.
+cancelled_caught = "cancelled_caught"
+
 [files]
 extend-exclude = [
     # Generated files: their spelling comes from their source.

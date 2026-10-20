@@ -1,0 +1,484 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="design_doc_mode" content="canvas">
+<link rel="stylesheet" href="styles.css">
+<style>body{margin:0;background:#ECEEEF;font-family:'Instrument Sans',system-ui,sans-serif;-webkit-font-smoothing:antialiased}a{color:#59256A}a:hover{color:#461B54}textarea::placeholder{color:#66737B}textarea:disabled::placeholder{color:#87939A}.dv-turn{padding:40px 44px 32px;border-bottom:1px solid rgba(0,0,0,.08);scroll-margin-top:16px}.dv-thd{display:flex;align-items:baseline;gap:10px;margin:0 0 8px}.dv-tid{font:600 10px ui-monospace,Menlo,monospace;padding:3px 7px;background:#1a1a1a;color:#fff;border-radius:4px;text-decoration:none}.dv-tname{font:600 13px/1.2 system-ui,sans-serif;color:#1a1a1a}.dv-note{font:12px/1.55 system-ui,sans-serif;color:rgba(0,0,0,.6);max-width:980px;margin:0 0 24px}.dv-opts{display:flex;flex-wrap:wrap;gap:56px;align-items:flex-start;max-width:2936px}.dv-opt{flex:none;display:flex;flex-direction:column;gap:12px;scroll-margin-top:16px}.dv-oid{font:600 10.5px ui-monospace,Menlo,monospace;padding:3px 7px;background:rgba(0,0,0,.08);color:#1a1a1a;border-radius:5px;text-decoration:none}.dv-olabel{display:flex;align-items:baseline;gap:8px;font:400 12px/1.3 system-ui,sans-serif;color:rgba(0,0,0,.6);max-width:1440px}.dv-card{max-width:100%;background:#fff;border:1px solid rgba(0,0,0,.08);border-radius:8px;box-shadow:0 1px 3px rgba(0,0,0,.06);overflow:hidden}.dv-opt:target .dv-oid{background:#2a78d6;color:#fff}</style>
+</helmet>
+<section class="dv-turn" id="t1" data-screen-label="07 Conversation">
+<div class="dv-thd"><a class="dv-tid" href="#t1">1</a><span class="dv-tname">Screen 07: Conversation (/ask)</span></div>
+<p class="dv-note">The first question turns the assistant home into this view. The greeting and "Try asking" leave, the thread fills the column, and the composer docks at the bottom. The right rail stays, and the source panel takes its place while it's open. Answers carry an "AI" label and inline markers numbered by source. The same numbers appear on the source chips below, so marker 1 and chip 1 point to the same section. Sensitive, crisis, and can't-answer messages are bordered panels with a header band. They have no "AI" label, sources, or feedback, and each one ends with the HR contacts. The crisis panel's band is ink, the only dark band in the product. Status lines and steps are announced politely, and errors stay inside the message they belong to. <a class="dv-oid" href="#1a">1a</a> is live. Every frame below is also clickable. Each frame's caption names its screenshot file.</p>
+<div class="dv-opts">
+<sc-for list="{{ frames }}" as="f" hint-placeholder-count="2">
+<div class="dv-opt" id="{{ f.oid }}">
+<div class="dv-olabel"><a class="dv-oid" href="{{ f.href }}">{{ f.oid }}</a><span style="flex:1">{{ f.label }}</span><span style="font-family:ui-monospace,Menlo,monospace;font-size:11px;color:rgba(0,0,0,.5);white-space:nowrap">{{ f.file }}</span></div>
+<div class="dv-card" style="width:1442px;max-width:none" data-shot="{{ f.id }}">
+<div ref="{{ f.rootRef }}" onKeyDown="{{ f.onKey }}" style="display:flex;height:900px;background:var(--surface);font-family:var(--font-sans);color:var(--ink)">
+  <aside style="width:248px;flex:none;display:flex;flex-direction:column;padding:28px 16px 20px 20px;box-sizing:border-box">
+    <div style="display:flex;align-items:center;gap:12px;padding:0 8px 32px"><img src="assets/logo-mark.svg" width="32" height="32" alt=""><div style="display:flex;flex-direction:column;gap:2px"><span style="font-size:16px;line-height:20px;font-weight:600;letter-spacing:-0.01em">Open Door</span><span style="font-size:12px;line-height:16px;color:var(--ink-muted)">Juniper Row</span></div></div>
+    <nav aria-label="Main" style="display:flex;flex-direction:column;gap:2px">
+      <a href="/ask" aria-current="page" style="display:flex;align-items:center;gap:12px;height:40px;padding:0 12px;border-radius:var(--radius-md);background:var(--primary-tint);color:var(--ink);font-size:14px;line-height:20px;font-weight:600;text-decoration:none" style-focus="outline:2px solid var(--focus-ring);outline-offset:2px"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z"></path></svg>Ask</a>
+      <a href="/time-off" style="display:flex;align-items:center;gap:12px;height:40px;padding:0 12px;border-radius:var(--radius-md);color:var(--ink-nav);font-size:14px;line-height:20px;font-weight:500;text-decoration:none" style-hover="background:var(--neutral-hover);color:var(--ink)" style-focus="outline:2px solid var(--focus-ring);outline-offset:2px"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="4" rx="2"></rect><path d="M16 2v4M8 2v4M3 10h18"></path></svg>Time off</a>
+      <a href="/directory" style="display:flex;align-items:center;gap:12px;height:40px;padding:0 12px;border-radius:var(--radius-md);color:var(--ink-nav);font-size:14px;line-height:20px;font-weight:500;text-decoration:none" style-hover="background:var(--neutral-hover);color:var(--ink)" style-focus="outline:2px solid var(--focus-ring);outline-offset:2px"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"></path></svg>Directory</a>
+      <a href="/handbook" style="display:flex;align-items:center;gap:12px;height:40px;padding:0 12px;border-radius:var(--radius-md);color:var(--ink-nav);font-size:14px;line-height:20px;font-weight:500;text-decoration:none" style-hover="background:var(--neutral-hover);color:var(--ink)" style-focus="outline:2px solid var(--focus-ring);outline-offset:2px"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"></path><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"></path></svg>Handbook</a>
+    </nav>
+    <div style="flex:1"></div>
+    <a href="/how-its-built" style="display:flex;align-items:center;gap:12px;height:40px;padding:0 12px;margin-bottom:12px;border-radius:var(--radius-md);color:var(--ink-nav);font-size:14px;line-height:20px;font-weight:500;text-decoration:none" style-hover="background:var(--neutral-hover);color:var(--ink)" style-focus="outline:2px solid var(--focus-ring);outline-offset:2px"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="m16 18 6-6-6-6M8 6l-6 6 6 6"></path></svg>How it's built</a>
+    <button type="button" aria-label="{{ f.pAria }}" style="display:flex;align-items:center;gap:12px;width:100%;padding:12px 8px;border:0;border-top:1px solid var(--border);background:transparent;font-family:inherit;text-align:left;cursor:pointer;color:var(--ink)" style-hover="background:var(--neutral-hover)" style-focus="outline:2px solid var(--focus-ring);outline-offset:2px">
+      <span style="width:36px;height:36px;flex:none;border-radius:9999px;background:var(--primary-tint);display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:600">{{ f.pInitials }}</span>
+      <span style="flex:1;min-width:0;display:flex;flex-direction:column;gap:2px"><span style="font-size:14px;line-height:18px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ f.pName }}</span><span style="font-size:12px;line-height:16px;color:var(--ink-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ f.pTitle }}</span></span>
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="flex:none;color:var(--ink-muted)"><path d="m7 15 5 5 5-5M7 9l5-5 5 5"></path></svg>
+    </button>
+  </aside>
+  <main style="flex:1;min-width:0;padding:12px 12px 12px 0;box-sizing:border-box">
+    <div style="height:100%;box-sizing:border-box;display:flex;flex-direction:column;background:var(--surface-raised);border:1px solid var(--border);border-radius:var(--radius-xl);overflow:hidden">
+      <sc-if value="{{ f.hasBanner }}" hint-placeholder-val="{{ false }}">
+        <div role="status" style="flex:none;display:flex;align-items:center;gap:12px;padding:10px 12px 10px 20px;border-bottom:1px solid var(--border);background:var(--surface-sunken)">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="flex:none;color:var(--warning)"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"></path><path d="M12 9v4M12 17h.01"></path></svg>
+          <p style="flex:1;margin:0;font-size:14px;line-height:20px;color:var(--ink);text-wrap:pretty">{{ f.bannerText }}</p>
+          <sc-if value="{{ f.bannerAction }}" hint-placeholder-val="{{ false }}"><button type="button" style="flex:none;height:32px;padding:0 12px;border:1px solid var(--border-strong);border-radius:var(--radius-sm);background:var(--surface-raised);color:var(--ink);font-family:var(--font-sans);font-size:13px;line-height:20px;font-weight:600;cursor:pointer" style-hover="background:var(--surface-hover);border-color:var(--border-strong-hover)" style-focus="outline:2px solid var(--focus-ring);outline-offset:2px">Start a new sandbox</button></sc-if>
+        </div>
+      </sc-if>
+      <div style="flex:1;min-height:0;display:flex">
+        <section aria-label="Conversation" style="flex:1;min-width:0;display:flex;flex-direction:column">
+          <div style="flex:none;display:flex;align-items:center;gap:16px;padding:20px 40px 0">
+            <p style="flex:1;min-width:0;margin:0;font-size:13px;line-height:20px;color:var(--ink-muted);text-wrap:pretty">Conversations are deleted with your sandbox after 24 hours.</p>
+            <button type="button" style="flex:none;display:inline-flex;align-items:center;gap:8px;height:32px;padding:0 10px;border:0;border-radius:var(--radius-sm);background:transparent;color:var(--ink);font-family:var(--font-sans);font-size:13px;line-height:20px;font-weight:600;cursor:pointer" style-hover="background:var(--neutral-hover)" style-focus="outline:2px solid var(--focus-ring);outline-offset:2px"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.375 2.625a1 1 0 0 1 3 3l-9.013 9.014a2 2 0 0 1-.853.506l-2.873.84a.5.5 0 0 1-.62-.62l.84-2.873a2 2 0 0 1 .506-.852z"></path></svg>Start a new conversation</button>
+            <span style="flex:none;display:inline-flex;align-items:center;gap:8px;height:28px;padding:0 12px;border:1px solid var(--border);border-radius:9999px;font-size:12px;line-height:16px;color:var(--ink-muted);font-variant-numeric:tabular-nums;white-space:nowrap"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><path d="M12 6v6l4 2"></path></svg>Sandbox resets in 21 h</span>
+          </div>
+
+          <div style="position:relative;flex:1;min-height:0;overflow:auto;padding:24px 40px 16px;display:flex;flex-direction:column;justify-content:{{ f.justify }}">
+            <div style="flex:none;display:flex;flex-direction:column;gap:32px;max-width:760px">
+              <sc-for list="{{ f.msgs }}" as="m" hint-placeholder-count="2">
+                <sc-if value="{{ m.isUser }}" hint-placeholder-val="{{ true }}">
+                  <div data-user="true" style="align-self:flex-end;max-width:520px;padding:10px 16px;background:var(--surface-hover);border-radius:var(--radius-lg);font-size:15px;line-height:24px;color:var(--ink);text-wrap:pretty"><span style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)">You asked: </span>{{ m.text }}</div>
+                </sc-if>
+                <sc-if value="{{ m.isItem }}" hint-placeholder-val="{{ false }}">
+                  <div aria-busy="{{ m.busy }}" style="display:flex;flex-direction:column;gap:14px;max-width:680px">
+                    <sc-if value="{{ m.aiLabel }}" hint-placeholder-val="{{ true }}">
+                      <div style="display:flex;align-items:center;gap:8px"><span style="display:inline-flex;align-items:center;height:20px;padding:0 6px;box-sizing:border-box;border:1px solid var(--border-strong);border-radius:var(--radius-xs);font-size:11px;line-height:16px;font-weight:600;letter-spacing:.03em;color:var(--ink)">AI</span><span style="font-size:13px;line-height:20px;color:var(--ink-muted)">Open Door</span></div>
+                    </sc-if>
+                    <sc-if value="{{ m.hasSteps }}" hint-placeholder-val="{{ false }}">
+                      <ul role="status" aria-live="polite" style="margin:0;padding:0;list-style:none;display:flex;flex-direction:column;gap:6px">
+                        <sc-for list="{{ m.steps }}" as="s" hint-placeholder-count="1">
+                          <li style="display:flex;align-items:center;gap:8px;font-size:14px;line-height:20px;color:{{ s.color }}"><sc-if value="{{ s.done }}" hint-placeholder-val="{{ false }}"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="flex:none"><path d="M20 6 9 17l-5-5"></path></svg></sc-if><sc-if value="{{ s.cur }}" hint-placeholder-val="{{ true }}"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="flex:none;color:var(--primary)"><path d="M21 12a9 9 0 1 1-6.219-8.56"></path></svg></sc-if>{{ s.text }}</li>
+                        </sc-for>
+                      </ul>
+                    </sc-if>
+                    <sc-if value="{{ m.hasParas }}" hint-placeholder-val="{{ true }}">
+                      <div aria-live="{{ m.live }}" style="display:flex;flex-direction:column;gap:12px">
+                        <sc-for list="{{ m.paras }}" as="pa" hint-placeholder-count="2">
+                          <p style="margin:0;font-size:15px;line-height:24px;color:var(--ink);text-wrap:pretty"><sc-for list="{{ pa.segs }}" as="sg" hint-placeholder-count="1"><sc-if value="{{ sg.isText }}" hint-placeholder-val="{{ true }}"><span>{{ sg.text }}</span></sc-if><sc-if value="{{ sg.isLink }}" hint-placeholder-val="{{ false }}"><a href="{{ sg.href }}" style="color:var(--primary);font-weight:600;text-decoration:underline;text-decoration-thickness:1px;text-underline-offset:3px;border-radius:2px" style-hover="color:var(--primary-hover)" style-focus="outline:2px solid var(--focus-ring);outline-offset:2px">{{ sg.text }}</a></sc-if><sc-if value="{{ sg.isMk }}" hint-placeholder-val="{{ false }}"><button type="button" data-mk="{{ sg.mk }}" aria-label="{{ sg.aria }}" aria-expanded="{{ sg.exp }}" onClick="{{ sg.open }}" style="display:inline-flex;align-items:center;justify-content:center;min-width:20px;height:20px;padding:0 5px;margin:0 1px 0 4px;vertical-align:1px;box-sizing:border-box;border:1px solid {{ sg.bd }};border-radius:var(--radius-xs);background:{{ sg.bg }};font-family:var(--font-sans);font-size:12px;line-height:16px;font-weight:600;color:var(--ink);font-variant-numeric:tabular-nums;cursor:pointer;transition:background-color 150ms,border-color 150ms" style-hover="border-color:var(--primary);background:var(--primary-tint)" style-focus="outline:2px solid var(--focus-ring);outline-offset:2px">{{ sg.n }}</button></sc-if></sc-for><sc-if value="{{ pa.caret }}" hint-placeholder-val="{{ false }}"><span aria-hidden="true" style="display:inline-block;width:2px;height:18px;margin-left:3px;vertical-align:-4px;border-radius:1px;background:var(--ink-muted)"></span></sc-if></p>
+                        </sc-for>
+                      </div>
+                    </sc-if>
+                    <sc-if value="{{ m.stopped }}" hint-placeholder-val="{{ false }}">
+                      <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+                        <p role="status" style="display:flex;align-items:center;gap:8px;margin:0;font-size:13px;line-height:20px;font-weight:600;color:var(--ink-muted)"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect width="14" height="14" x="5" y="5" rx="2"></rect></svg>Stopped</p>
+                        <button type="button" style="display:inline-flex;align-items:center;gap:6px;height:32px;padding:0 12px;border:1px solid var(--border-strong);border-radius:var(--radius-sm);background:var(--surface-raised);color:var(--ink);font-family:var(--font-sans);font-size:13px;line-height:20px;font-weight:600;cursor:pointer" style-hover="background:var(--surface-hover);border-color:var(--border-strong-hover)" style-focus="outline:2px solid var(--focus-ring);outline-offset:2px"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"></path><path d="M3 3v5h5"></path></svg>Ask again</button>
+                      </div>
+                    </sc-if>
+                    <sc-if value="{{ m.err }}" hint-placeholder-val="{{ false }}">
+                      <div role="alert" style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+                        <p style="display:flex;align-items:center;gap:8px;margin:0;font-size:14px;line-height:20px;color:var(--danger)"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="flex:none"><circle cx="12" cy="12" r="10"></circle><path d="M12 8v4M12 16h.01"></path></svg>Something went wrong partway through this answer, so it's incomplete.</p>
+                        <button type="button" style="display:inline-flex;align-items:center;gap:6px;height:32px;padding:0 12px;border:1px solid var(--border-strong);border-radius:var(--radius-sm);background:var(--surface-raised);color:var(--ink);font-family:var(--font-sans);font-size:13px;line-height:20px;font-weight:600;cursor:pointer" style-hover="background:var(--surface-hover);border-color:var(--border-strong-hover)" style-focus="outline:2px solid var(--focus-ring);outline-offset:2px"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"></path><path d="M3 3v5h5"></path></svg>Retry</button>
+                      </div>
+                    </sc-if>
+                    <sc-if value="{{ m.hasContacts }}" hint-placeholder-val="{{ false }}">
+                      <div style="display:flex;flex-direction:column;gap:2px;padding:4px 20px 8px;border:1px solid var(--border);border-radius:var(--radius-lg)">
+                        <h3 style="margin:12px 0 0;font-size:13px;line-height:20px;font-weight:600">HR contacts</h3>
+                        <p style="margin:0 0 4px;font-size:13px;line-height:20px;color:var(--ink-muted)">A person on the HR team reads and answers these, not the AI.</p>
+                        <ul role="list" style="margin:0;padding:0;list-style:none">
+                          <sc-for list="{{ m.hr }}" as="h" hint-placeholder-count="2">
+                            <li style="display:flex;align-items:center;gap:12px;padding:12px 0;border-top:1px solid var(--border-subtle)">
+                              <span aria-hidden="true" style="width:36px;height:36px;flex:none;border-radius:9999px;background:var(--primary-tint);display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:600"><sc-if value="{{ h.isPerson }}" hint-placeholder-val="{{ true }}">{{ h.ini }}</sc-if><sc-if value="{{ h.isTeam }}" hint-placeholder-val="{{ false }}"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"></path></svg></sc-if></span>
+                              <span style="flex:1;min-width:0;display:flex;flex-direction:column"><span style="font-size:15px;line-height:22px;font-weight:600">{{ h.name }}</span><span style="font-size:13px;line-height:18px;color:var(--ink-muted)">{{ h.role }}</span></span>
+                              <a href="{{ h.mailto }}" style="font-size:14px;line-height:20px;font-weight:600;color:var(--primary);text-decoration:underline;text-decoration-thickness:1px;text-underline-offset:3px;border-radius:2px;white-space:nowrap" style-hover="color:var(--primary-hover)" style-focus="outline:2px solid var(--focus-ring);outline-offset:2px">{{ h.email }}</a>
+                            </li>
+                          </sc-for>
+                        </ul>
+                      </div>
+                    </sc-if>
+                    <sc-if value="{{ m.hasPanel }}" hint-placeholder-val="{{ false }}">
+                      <section aria-labelledby="{{ m.hid }}" style="border:1px solid var(--border-strong);border-radius:var(--radius-xl);overflow:hidden;background:var(--surface-raised)">
+                        <sc-if value="{{ m.isCrisis }}" hint-placeholder-val="{{ false }}"><div style="display:flex;align-items:center;gap:10px;padding:12px 24px;background:var(--ink);color:var(--on-primary)"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="flex:none"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"></path></svg><h2 id="{{ m.hid }}" style="margin:0;font-size:15px;line-height:22px;font-weight:600">Reach a person right now</h2></div></sc-if>
+                        <sc-if value="{{ m.isSens }}" hint-placeholder-val="{{ false }}"><div style="display:flex;align-items:center;gap:10px;padding:12px 24px;background:var(--surface-sunken);border-bottom:1px solid var(--border);color:var(--ink)"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="flex:none"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"></path></svg><h2 id="{{ m.hid }}" style="margin:0;font-size:15px;line-height:22px;font-weight:600">A person in HR handles this, not the AI</h2></div></sc-if>
+                        <sc-if value="{{ m.isUnav }}" hint-placeholder-val="{{ false }}"><div style="display:flex;align-items:center;gap:10px;padding:12px 24px;background:var(--surface-sunken);border-bottom:1px solid var(--border);color:var(--ink)"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="flex:none;color:var(--danger)"><circle cx="12" cy="12" r="10"></circle><path d="M12 8v4M12 16h.01"></path></svg><h2 id="{{ m.hid }}" style="margin:0;font-size:15px;line-height:22px;font-weight:600">Can't answer right now</h2></div></sc-if>
+                        <div style="display:flex;flex-direction:column;gap:16px;padding:18px 24px 12px">
+                          <sc-if value="{{ m.isCrisis }}" hint-placeholder-val="{{ false }}">
+                            <div style="display:flex;flex-direction:column;gap:12px;font-size:16px;line-height:26px;color:var(--ink)">
+                              <p style="margin:0;text-wrap:pretty">I’m an AI assistant, and what you wrote sounds serious, so I want to make sure you can reach a person right now.</p>
+                              <ul style="margin:0;padding-left:22px;display:flex;flex-direction:column;gap:8px">
+                                <li style="text-wrap:pretty">If you or someone else is in immediate danger, <a href="tel:911" style="color:var(--primary);font-weight:600;text-decoration:underline;text-decoration-thickness:1px;text-underline-offset:3px;border-radius:2px" style-hover="color:var(--primary-hover)" style-focus="outline:2px solid var(--focus-ring);outline-offset:2px">call 911</a>.</li>
+                                <li style="text-wrap:pretty"><a href="tel:988" style="color:var(--primary);font-weight:600;text-decoration:underline;text-decoration-thickness:1px;text-underline-offset:3px;border-radius:2px" style-hover="color:var(--primary-hover)" style-focus="outline:2px solid var(--focus-ring);outline-offset:2px">Call or text 988</a> to reach the 988 Suicide &amp; Crisis Lifeline, or chat at <a href="https://chat.988lifeline.org" style="color:var(--primary);font-weight:600;text-decoration:underline;text-decoration-thickness:1px;text-underline-offset:3px;border-radius:2px" style-hover="color:var(--primary-hover)" style-focus="outline:2px solid var(--focus-ring);outline-offset:2px">chat.988lifeline.org</a>. It’s free, confidential, and available 24/7.</li>
+                                <li style="text-wrap:pretty">The Juniper Row Employee Assistance Program (EAP) offers free, confidential counseling, 24 hours a day: <a href="tel:18005550137" style="color:var(--primary);font-weight:600;text-decoration:underline;text-decoration-thickness:1px;text-underline-offset:3px;border-radius:2px;font-variant-numeric:tabular-nums;white-space:nowrap" style-hover="color:var(--primary-hover)" style-focus="outline:2px solid var(--focus-ring);outline-offset:2px">1-800-555-0137</a>.</li>
+                                <li style="text-wrap:pretty">You can also talk to someone on the HR team. Their contact details are below.</li>
+                              </ul>
+                              <p style="margin:0">You don’t have to go through this alone.</p>
+                            </div>
+                          </sc-if>
+                          <sc-if value="{{ m.isSens }}" hint-placeholder-val="{{ false }}"><p style="margin:0;font-size:16px;line-height:26px;text-wrap:pretty">A person on the HR team should help with this, and they handle it confidentially. Their contact details are below.</p></sc-if>
+                          <sc-if value="{{ m.isUnav }}" hint-placeholder-val="{{ false }}">
+                            <p style="margin:0;font-size:16px;line-height:26px;text-wrap:pretty">I’m an AI assistant, and I can’t answer right now. Please try again in a moment. If you or someone else is in danger, call 911, or call or text 988 to reach the 988 Suicide &amp; Crisis Lifeline. For anything else that can’t wait, the HR team can help directly. Their contact details are below.</p>
+                            <div><button type="button" style="display:inline-flex;align-items:center;gap:6px;height:32px;padding:0 12px;border:1px solid var(--border-strong);border-radius:var(--radius-sm);background:var(--surface-raised);color:var(--ink);font-family:var(--font-sans);font-size:13px;line-height:20px;font-weight:600;cursor:pointer" style-hover="background:var(--surface-hover);border-color:var(--border-strong-hover)" style-focus="outline:2px solid var(--focus-ring);outline-offset:2px"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"></path><path d="M3 3v5h5"></path></svg>Try again</button></div>
+                          </sc-if>
+                          <div style="display:flex;flex-direction:column;gap:2px">
+                            <h3 style="margin:0;font-size:13px;line-height:20px;font-weight:600">HR contacts</h3>
+                            <p style="margin:0 0 4px;font-size:13px;line-height:20px;color:var(--ink-muted)">A person on the HR team reads and answers these, not the AI.</p>
+                            <ul role="list" style="margin:0;padding:0;list-style:none">
+                              <sc-for list="{{ m.hr }}" as="h" hint-placeholder-count="2">
+                                <li style="display:flex;align-items:center;gap:12px;padding:12px 0;border-top:1px solid var(--border-subtle)">
+                                  <span aria-hidden="true" style="width:36px;height:36px;flex:none;border-radius:9999px;background:var(--primary-tint);display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:600"><sc-if value="{{ h.isPerson }}" hint-placeholder-val="{{ true }}">{{ h.ini }}</sc-if><sc-if value="{{ h.isTeam }}" hint-placeholder-val="{{ false }}"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"></path></svg></sc-if></span>
+                                  <span style="flex:1;min-width:0;display:flex;flex-direction:column"><span style="font-size:15px;line-height:22px;font-weight:600">{{ h.name }}</span><span style="font-size:13px;line-height:18px;color:var(--ink-muted)">{{ h.role }}</span></span>
+                                  <a href="{{ h.mailto }}" style="font-size:14px;line-height:20px;font-weight:600;color:var(--primary);text-decoration:underline;text-decoration-thickness:1px;text-underline-offset:3px;border-radius:2px;white-space:nowrap" style-hover="color:var(--primary-hover)" style-focus="outline:2px solid var(--focus-ring);outline-offset:2px">{{ h.email }}</a>
+                                </li>
+                              </sc-for>
+                            </ul>
+                          </div>
+                          <sc-if value="{{ m.isSens }}" hint-placeholder-val="{{ false }}"><a href="/handbook/7.2" style="align-self:flex-start;display:inline-flex;align-items:center;gap:6px;font-size:14px;line-height:20px;font-weight:600;color:var(--primary);text-decoration:underline;text-decoration-thickness:1px;text-underline-offset:3px;border-radius:2px" style-hover="color:var(--primary-hover)" style-focus="outline:2px solid var(--focus-ring);outline-offset:2px">How confidential HR cases work, §7.2</a></sc-if>
+                        </div>
+                      </section>
+                    </sc-if>
+                    <sc-if value="{{ m.hasChips }}" hint-placeholder-val="{{ true }}">
+                      <div style="display:flex;flex-direction:column;gap:8px;margin-top:2px">
+                        <p style="margin:0;font-size:13px;line-height:20px;color:var(--ink-muted)">Sources</p>
+                        <div style="display:flex;flex-wrap:wrap;gap:8px">
+                          <sc-for list="{{ m.chips }}" as="c" hint-placeholder-count="2">
+                            <button type="button" data-mk="{{ c.mk }}" aria-label="{{ c.aria }}" aria-expanded="{{ c.exp }}" onClick="{{ c.open }}" style="display:inline-flex;align-items:center;gap:8px;height:32px;padding:0 12px 0 6px;border:1px solid {{ c.bd }};border-radius:var(--radius-sm);background:{{ c.bg }};font-family:var(--font-sans);font-size:13px;line-height:20px;color:var(--ink);cursor:pointer;white-space:nowrap;transition:background-color 150ms,border-color 150ms" style-hover="border-color:var(--primary);background:var(--primary-tint)" style-focus="outline:2px solid var(--focus-ring);outline-offset:2px"><span style="display:inline-flex;align-items:center;justify-content:center;min-width:20px;height:20px;padding:0 5px;box-sizing:border-box;border:1px solid var(--border-strong);border-radius:var(--radius-xs);background:var(--surface-raised);font-size:12px;line-height:16px;font-weight:600;font-variant-numeric:tabular-nums">{{ c.n }}</span>{{ c.label }}</button>
+                          </sc-for>
+                        </div>
+                      </div>
+                    </sc-if>
+                    <sc-if value="{{ m.hasActions }}" hint-placeholder-val="{{ true }}">
+                      <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;min-height:32px">
+                        <sc-if value="{{ m.fbAsk }}" hint-placeholder-val="{{ true }}">
+                          <div role="group" aria-labelledby="{{ m.fid }}" style="display:flex;align-items:center;gap:10px">
+                            <span id="{{ m.fid }}" style="font-size:13px;line-height:20px;color:var(--ink-muted)">Was this right?</span>
+                            <div style="display:flex;gap:6px">
+                              <button type="button" aria-pressed="false" onClick="{{ m.yes }}" style="height:32px;padding:0 12px;border:1px solid var(--border-strong);border-radius:var(--radius-sm);background:var(--surface-raised);color:var(--ink);font-family:var(--font-sans);font-size:13px;line-height:20px;font-weight:600;cursor:pointer" style-hover="background:var(--surface-hover);border-color:var(--border-strong-hover)" style-focus="outline:2px solid var(--focus-ring);outline-offset:2px">Yes</button>
+                              <button type="button" aria-pressed="{{ m.noP }}" onClick="{{ m.no }}" style="height:32px;padding:0 12px;border:1px solid {{ m.noBd }};border-radius:var(--radius-sm);background:{{ m.noBg }};color:var(--ink);font-family:var(--font-sans);font-size:13px;line-height:20px;font-weight:600;cursor:pointer" style-hover="border-color:var(--border-strong-hover)" style-focus="outline:2px solid var(--focus-ring);outline-offset:2px">No</button>
+                            </div>
+                          </div>
+                        </sc-if>
+                        <sc-if value="{{ m.fbThanks }}" hint-placeholder-val="{{ false }}"><p role="status" style="display:flex;align-items:center;gap:8px;margin:0;font-size:13px;line-height:20px;color:var(--ink)"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="flex:none;color:var(--success)"><circle cx="12" cy="12" r="10"></circle><path d="m9 12 2 2 4-4"></path></svg>{{ m.thanks }}</p></sc-if>
+                        <span style="flex:1"></span>
+                        <sc-if value="{{ m.hasWork }}" hint-placeholder-val="{{ true }}">
+                          <button type="button" aria-expanded="{{ m.wExp }}" aria-controls="{{ m.wid }}" onClick="{{ m.toggleWork }}" style="display:inline-flex;align-items:center;gap:6px;height:32px;padding:0 8px 0 10px;border:0;border-radius:var(--radius-sm);background:transparent;color:var(--ink);font-family:var(--font-sans);font-size:13px;line-height:20px;font-weight:600;cursor:pointer" style-hover="background:var(--neutral-hover)" style-focus="outline:2px solid var(--focus-ring);outline-offset:2px">Show your work<sc-if value="{{ m.wClosed }}" hint-placeholder-val="{{ true }}"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="color:var(--ink-muted)"><path d="m6 9 6 6 6-6"></path></svg></sc-if><sc-if value="{{ m.wOpen }}" hint-placeholder-val="{{ false }}"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="color:var(--ink-muted)"><path d="m18 15-6-6-6 6"></path></svg></sc-if></button>
+                        </sc-if>
+                      </div>
+                    </sc-if>
+                    <sc-if value="{{ m.fbForm }}" hint-placeholder-val="{{ false }}">
+                      <form onSubmit="{{ m.send }}" style="display:flex;flex-direction:column;gap:8px;margin:0;padding:16px;border:1px solid var(--border);border-radius:var(--radius-lg)">
+                        <label for="{{ m.rid }}" style="font-size:14px;line-height:20px;font-weight:600">What was wrong? <span style="font-weight:400;color:var(--ink-muted)">Optional</span></label>
+                        <textarea id="{{ m.rid }}" rows="3" maxLength="500" value="{{ m.reason }}" onChange="{{ m.onReason }}" aria-describedby="{{ m.cid }}" placeholder="For example, it cited the wrong state" style="display:block;width:100%;box-sizing:border-box;padding:10px 12px;border:1px solid var(--input-border);border-radius:var(--radius-md);background:var(--surface-raised);font-family:var(--font-sans);font-size:15px;line-height:24px;color:var(--ink);resize:vertical;outline:0;transition:border-color 150ms,box-shadow 150ms" style-hover="border-color:var(--input-border-hover)" style-focus="border-color:var(--focus-ring);box-shadow:var(--shadow-focus-halo)"></textarea>
+                        <div style="display:flex;align-items:center;gap:8px">
+                          <span id="{{ m.cid }}" style="flex:1;font-size:13px;line-height:20px;color:var(--ink-muted);font-variant-numeric:tabular-nums">{{ m.count }} of 500 characters</span>
+                          <button type="button" onClick="{{ m.cancel }}" style="height:32px;padding:0 12px;border:0;border-radius:var(--radius-sm);background:transparent;color:var(--ink);font-family:var(--font-sans);font-size:13px;line-height:20px;font-weight:600;cursor:pointer" style-hover="background:var(--neutral-hover)" style-focus="outline:2px solid var(--focus-ring);outline-offset:2px">Cancel</button>
+                          <button type="submit" style="height:32px;padding:0 14px;border:0;border-radius:var(--radius-sm);background:var(--primary);color:var(--on-primary);font-family:var(--font-sans);font-size:13px;line-height:20px;font-weight:600;cursor:pointer" style-hover="background:var(--primary-hover)" style-focus="outline:2px solid var(--focus-ring);outline-offset:2px">Send feedback</button>
+                        </div>
+                      </form>
+                    </sc-if>
+                    <sc-if value="{{ m.wOpen }}" hint-placeholder-val="{{ false }}">
+                      <div id="{{ m.wid }}" style="display:flex;flex-direction:column;gap:16px;padding:16px 20px 18px;border:1px solid var(--border);border-radius:var(--radius-lg);background:var(--surface-sunken)">
+                        <div style="display:flex;flex-direction:column;gap:2px">
+                          <p style="display:flex;align-items:center;gap:8px;margin:0;font-size:14px;line-height:20px;font-weight:600;color:var(--ink)"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="flex:none;color:var(--ink-muted)"><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"></path><path d="m9 12 2 2 4-4"></path></svg>{{ m.w.safety }}</p>
+                          <sc-if value="{{ m.w.hasNote }}" hint-placeholder-val="{{ false }}"><p style="margin:0 0 0 24px;font-size:13px;line-height:20px;color:var(--ink-muted);text-wrap:pretty">{{ m.w.note }}</p></sc-if>
+                        </div>
+                        <div style="display:flex;flex-direction:column;gap:6px">
+                          <h3 style="margin:0;font-size:13px;line-height:20px;font-weight:600">Tools called</h3>
+                          <sc-if value="{{ m.w.noTools }}" hint-placeholder-val="{{ false }}"><p style="margin:0;font-size:14px;line-height:20px;color:var(--ink-muted)">None</p></sc-if>
+                          <ul role="list" style="margin:0;padding:0;list-style:none;display:flex;flex-direction:column;gap:6px">
+                            <sc-for list="{{ m.w.tools }}" as="t" hint-placeholder-count="2">
+                              <li style="display:flex;align-items:center;gap:8px;font-size:14px;line-height:20px"><sc-if value="{{ t.isSearch }}" hint-placeholder-val="{{ true }}"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="flex:none;color:var(--ink-muted)"><circle cx="11" cy="11" r="8"></circle><path d="m21 21-4.3-4.3"></path></svg></sc-if><sc-if value="{{ t.isProfile }}" hint-placeholder-val="{{ false }}"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="flex:none;color:var(--ink-muted)"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg></sc-if>{{ t.text }}</li>
+                            </sc-for>
+                          </ul>
+                        </div>
+                        <div style="display:flex;flex-direction:column;gap:6px">
+                          <h3 style="margin:0;font-size:13px;line-height:20px;font-weight:600">Sections retrieved</h3>
+                          <sc-if value="{{ m.w.noSec }}" hint-placeholder-val="{{ false }}"><p style="margin:0;font-size:14px;line-height:20px;color:var(--ink-muted)">None</p></sc-if>
+                          <ul role="list" style="margin:0;padding:0;list-style:none">
+                            <sc-for list="{{ m.w.sec }}" as="x" hint-placeholder-count="3">
+                              <li style="display:grid;grid-template-columns:64px minmax(0,1fr) auto;column-gap:12px;align-items:baseline;padding:6px 0;border-top:1px solid var(--border-subtle);font-size:14px;line-height:20px"><span style="color:var(--ink-muted);font-variant-numeric:tabular-nums">{{ x.num }}</span><span>{{ x.title }}<span style="color:var(--ink-muted)"> · {{ x.group }}</span></span><span style="font-size:13px;color:{{ x.color }};font-weight:{{ x.weight }};font-variant-numeric:tabular-nums;white-space:nowrap">{{ x.status }}</span></li>
+                            </sc-for>
+                          </ul>
+                        </div>
+                      </div>
+                    </sc-if>
+                  </div>
+                </sc-if>
+              </sc-for>
+            </div>
+          </div>
+
+          <div style="flex:none;display:flex;flex-direction:column;gap:10px;padding:12px 40px 24px">
+            <div style="max-width:760px;display:flex;flex-direction:column;gap:10px">
+              <sc-if value="{{ f.cmp.long }}" hint-placeholder-val="{{ false }}">
+                <div role="status" style="display:flex;align-items:center;gap:12px;padding:8px 8px 8px 16px;border:1px solid var(--border);border-radius:var(--radius-md);background:var(--surface-sunken)">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="flex:none;color:var(--ink-muted)"><circle cx="12" cy="12" r="10"></circle><path d="M12 16v-4M12 8h.01"></path></svg>
+                  <p style="flex:1;margin:0;font-size:14px;line-height:20px;color:var(--ink);text-wrap:pretty">This conversation is getting long, so answers may miss details from earlier messages. A new conversation starts clean.</p>
+                  <button type="button" style="flex:none;height:32px;padding:0 12px;border:1px solid var(--border-strong);border-radius:var(--radius-sm);background:var(--surface-raised);color:var(--ink);font-family:var(--font-sans);font-size:13px;line-height:20px;font-weight:600;cursor:pointer" style-hover="background:var(--surface-hover);border-color:var(--border-strong-hover)" style-focus="outline:2px solid var(--focus-ring);outline-offset:2px">Start a new conversation</button>
+                </div>
+              </sc-if>
+              <form onSubmit="{{ f.cmp.submit }}" style="margin:0">
+                <div onMouseEnter="{{ f.cmp.onEnter }}" onMouseLeave="{{ f.cmp.onLeave }}" style="border:1px solid {{ f.cmp.border }};box-shadow:{{ f.cmp.shadow }};border-radius:var(--radius-lg);background:{{ f.cmp.bg }};transition:border-color 150ms,box-shadow 150ms">
+                  <textarea aria-label="Ask Open Door" aria-describedby="{{ f.cmp.did }}" rows="{{ f.cmp.rows }}" maxLength="2000" disabled="{{ f.cmp.off }}" value="{{ f.cmp.text }}" onChange="{{ f.cmp.onChange }}" onKeyDown="{{ f.cmp.onKey }}" onFocus="{{ f.cmp.onFocus }}" onBlur="{{ f.cmp.onBlur }}" placeholder="{{ f.cmp.placeholder }}" style="display:block;width:100%;box-sizing:border-box;border:0;outline:0;resize:none;font-family:var(--font-sans);font-size:var(--text-body-lg);line-height:var(--leading-body-lg);color:var(--ink);background:transparent;padding:14px 20px 6px"></textarea>
+                  <div style="display:flex;align-items:center;gap:16px;padding:10px 10px 10px 20px;border-top:1px solid var(--border-subtle)">
+                    <p id="{{ f.cmp.did }}" style="flex:1;display:flex;align-items:center;gap:8px;margin:0;font-size:13px;line-height:20px;color:var(--ink-muted)"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="flex:none"><circle cx="12" cy="12" r="10"></circle><path d="M12 16v-4M12 8h.01"></path></svg>Open Door is an AI assistant. It can make mistakes, and it always shows its sources.</p>
+                    <sc-if value="{{ f.cmp.isAsk }}" hint-placeholder-val="{{ true }}"><button type="submit" style="flex:none;height:40px;padding:0 14px 0 16px;border:0;border-radius:var(--radius-md);background:var(--primary);color:var(--on-primary);display:flex;align-items:center;gap:8px;font-family:var(--font-sans);font-size:14px;font-weight:600;cursor:pointer" style-hover="background:var(--primary-hover)" style-focus="outline:2px solid var(--focus-ring);outline-offset:2px">Ask<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M12 5l7 7-7 7"></path></svg></button></sc-if>
+                    <sc-if value="{{ f.cmp.isStop }}" hint-placeholder-val="{{ false }}"><button type="button" style="flex:none;height:40px;padding:0 16px 0 14px;border:1px solid var(--border-strong);border-radius:var(--radius-md);background:var(--surface-raised);color:var(--ink);display:flex;align-items:center;gap:8px;font-family:var(--font-sans);font-size:14px;font-weight:600;cursor:pointer" style-hover="background:var(--surface-hover);border-color:var(--border-strong-hover)" style-focus="outline:2px solid var(--focus-ring);outline-offset:2px"><svg width="14" height="14" viewBox="0 0 24 24" style="flex:none"><rect width="12" height="12" x="6" y="6" rx="2" fill="currentColor"></rect></svg>Stop</button></sc-if>
+                    <sc-if value="{{ f.cmp.off }}" hint-placeholder-val="{{ false }}"><button type="button" disabled="" style="flex:none;height:40px;padding:0 14px 0 16px;border:0;border-radius:var(--radius-md);background:var(--disabled-bg);color:var(--disabled-fg);display:flex;align-items:center;gap:8px;font-family:var(--font-sans);font-size:14px;font-weight:600;cursor:not-allowed">Ask<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M12 5l7 7-7 7"></path></svg></button></sc-if>
+                  </div>
+                </div>
+              </form>
+              <sc-if value="{{ f.cmp.hint }}" hint-placeholder-val="{{ false }}"><p role="status" style="margin:0;padding:0 4px;font-size:13px;line-height:20px;color:var(--ink-muted);font-variant-numeric:tabular-nums">{{ f.cmp.hintText }}</p></sc-if>
+              <sc-if value="{{ f.cmp.pii }}" hint-placeholder-val="{{ false }}"><p role="alert" style="display:flex;align-items:center;gap:8px;margin:0;padding:0 4px;font-size:14px;line-height:20px;color:var(--ink)"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="flex:none;color:var(--warning)"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"></path><path d="M12 9v4M12 17h.01"></path></svg>That looks like a Social Security or card number. Please take it out; I can’t take those.</p></sc-if>
+              <sc-if value="{{ f.cmp.sendErr }}" hint-placeholder-val="{{ false }}"><p role="alert" style="display:flex;align-items:center;gap:8px;margin:0;padding:0 4px;font-size:14px;line-height:20px;color:var(--danger)"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="flex:none"><circle cx="12" cy="12" r="10"></circle><path d="M12 8v4M12 16h.01"></path></svg>I’m still answering your last question.</p></sc-if>
+              <sc-if value="{{ f.cmp.off }}" hint-placeholder-val="{{ false }}"><p style="margin:0;padding:0 4px;font-size:13px;line-height:20px;color:var(--ink-muted)">You can still use the <a href="/handbook" style="color:var(--primary);font-weight:600;text-decoration:underline;text-decoration-thickness:1px;text-underline-offset:3px;border-radius:2px" style-hover="color:var(--primary-hover)" style-focus="outline:2px solid var(--focus-ring);outline-offset:2px">Handbook</a> and the <a href="/directory" style="color:var(--primary);font-weight:600;text-decoration:underline;text-decoration-thickness:1px;text-underline-offset:3px;border-radius:2px" style-hover="color:var(--primary-hover)" style-focus="outline:2px solid var(--focus-ring);outline-offset:2px">Directory</a>.</p></sc-if>
+            </div>
+          </div>
+        </section>
+
+        <sc-if value="{{ f.railOpen }}" hint-placeholder-val="{{ true }}">
+          <aside aria-label="Your summary" style="width:340px;flex:none;box-sizing:border-box;padding:28px 32px 32px;border-left:1px solid var(--border-subtle);background:var(--surface-sunken);overflow:auto">
+            <div style="font-size:13px;line-height:20px;color:var(--ink-muted);padding-bottom:12px;border-bottom:1px solid var(--border)">At a glance</div>
+            <div style="display:flex;flex-direction:column">
+              <sc-for list="{{ f.glance }}" as="g" hint-placeholder-count="3">
+                <a href="{{ g.href }}" aria-label="{{ g.aria }}" style="display:flex;align-items:center;gap:12px;padding:20px 12px;margin:0 -12px;border-bottom:1px solid var(--border-subtle);border-radius:var(--radius-md);color:var(--ink);text-decoration:none" style-hover="background:var(--primary-tint);color:var(--ink)" style-focus="outline:2px solid var(--focus-ring);outline-offset:2px;position:relative;z-index:1">
+                  <span style="flex:1;min-width:0;display:flex;flex-direction:column;gap:2px">
+                    <span style="display:flex;align-items:center;gap:10px"><span style="font-size:32px;line-height:40px;font-weight:600;letter-spacing:-0.01em;font-variant-numeric:tabular-nums">{{ g.v }}</span><sc-if value="{{ g.mk }}" hint-placeholder-val="{{ false }}"><span style="width:8px;height:8px;border-radius:50%;background:var(--marker)"></span></sc-if></span>
+                    <span style="font-size:14px;line-height:20px;color:var(--ink-muted)">{{ g.cap }}</span>
+                  </span>
+                  <span style="display:flex;align-items:center;gap:4px;font-size:13px;line-height:20px;font-weight:600;color:var(--primary)">{{ g.dest }}<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"></path></svg></span>
+                </a>
+              </sc-for>
+            </div>
+          </aside>
+        </sc-if>
+        <sc-if value="{{ f.panelOpen }}" hint-placeholder-val="{{ false }}">
+          <div style="width:420px;flex:none;height:100%;border-left:1px solid var(--border)">
+            <dc-import name="Passage Panel" state="open" eyebrow="{{ f.pp.eyebrow }}" title="{{ f.pp.title }}" applies="{{ f.pp.applies }}" marker="{{ f.pp.marker }}" updated="{{ f.pp.updated }}" before="{{ f.pp.before }}" cited="{{ f.pp.cited }}" after="{{ f.pp.after }}" href="{{ f.pp.href }}" on-close="{{ f.closePanel }}" on-open="{{ f.noop }}" hint-size="420px,100%" style="height:100%"></dc-import>
+          </div>
+        </sc-if>
+      </div>
+    </div>
+  </main>
+</div>
+</div>
+</div>
+</sc-for>
+</div>
+</section>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  state = { fs: {} };
+  els = {};
+  data() {
+    if (this._d) return this._d;
+    const M = (m, p) => ({ m, p }), L = (l, href) => ({ l, href });
+    const SRC = {
+      'CA-4.3': ['Handbook CA-4.3 · California addendum', 'Sick leave', 'California employees', 'Sep 12, 2026', 'CA'],
+      '4.3': ['Handbook §4.3 · Time off', 'Sick leave', 'Everyone', 'Aug 3, 2026', ''],
+      '4.2': ['Handbook §4.2 · Time off', 'Holidays', 'Everyone', 'Jan 6, 2026', ''],
+      'CA-3.2': ['Handbook CA-3.2 · California addendum', 'Overtime', 'Hourly staff in California', 'Sep 12, 2026', 'H-CA'],
+      '3.2': ['Handbook §3.2 · Hours and pay', 'Overtime', 'Hourly staff', 'Sep 12, 2026', 'H'],
+      '7.1': ['Handbook §7.1 · Privacy and confidential cases', 'Your personal information', 'Everyone', 'Aug 3, 2026', '']
+    };
+    const T = {
+      ca1: 'California employees receive 40 hours (5 days) of paid sick leave at the start of each calendar year. Unused sick leave does not carry over, and it is not paid out when employment ends.',
+      ca2: 'You can use sick leave for your own illness, injury, or preventive care, or to care for a family member. You do not need to give a reason beyond that the time is sick leave.',
+      ca3: 'If you know about the need ahead of time, such as a scheduled appointment, tell your manager in advance. Otherwise, tell them as soon as you can.',
+      s2: 'Full-time employees receive 24 hours (3 days) of paid sick leave at the start of each calendar year. Part-time employees receive an amount based on their scheduled hours.',
+      s3: "Tell your manager before your shift starts, or as soon as you can. You don't need to share medical details. If you'd rather talk about a health matter privately, contact HR.",
+      s4: 'Unused sick leave does not carry over to the next year and is not paid out when employment ends, unless a state addendum says otherwise.'
+    };
+    const PASS = {
+      'CA-4.3#p1': ['', T.ca1, T.ca2], 'CA-4.3#p2': [T.ca1, T.ca2, T.ca3], '4.3#p3': [T.s2, T.s3, T.s4],
+      '4.2#p1': ['', "Juniper Row observes six paid holidays each year: New Year's Day, Memorial Day, Independence Day, Labor Day, Thanksgiving Day, and Christmas Day.", 'Denver HQ also closes the day after Thanksgiving.'],
+      '3.2#p1': ['', 'Hourly staff are paid overtime at 1.5 times their regular rate for hours worked over 40 in a workweek. Salaried staff are not eligible for overtime.', "Overtime needs your manager's approval before you work it. If you work overtime without approval, you are still paid for it."],
+      'CA-3.2#p1': ['', 'In California, overtime is owed for hours worked over 8 in a workday or 40 in a workweek, and double time for hours over 12 in a workday.', ''],
+      '7.1#p1': ['', 'Your home address, personal phone number, birth date, and emergency contacts are private. Only you and the HR team can see them.', 'Coworkers and managers can see your work email, title, department, and location in the Directory.']
+    };
+    const W = {
+      sick: { safety: 'Safety check: no concerns', tools: [['u', 'Read your profile: Oakland store, California, salaried'], ['s', 'Searched the handbook: sick leave'], ['s', 'Searched the handbook: California sick leave']], sec: [['CA-4.3', 'Sick leave', 'California addendum', 'Cited as 1'], ['§4.3', 'Sick leave', 'Company handbook', 'Cited as 2'], ['CO-4.3', 'Sick leave', 'Colorado addendum', 'Not cited'], ['§4.1', 'Paid time off', 'Company handbook', 'Not cited']] },
+      ot: { safety: 'Safety check: no concerns', tools: [['u', 'Read your profile: Austin warehouse, Texas, hourly'], ['s', 'Searched the handbook: California overtime']], sec: [['CA-3.2', 'Overtime', 'California addendum', 'Cited as 1'], ['§3.2', 'Overtime', 'Company handbook', 'Cited as 2'], ['CO-3.2', 'Overtime', 'Colorado addendum', 'Not cited']] },
+      nf: { safety: 'Safety check: no concerns', tools: [['s', 'Searched the handbook: tuition reimbursement'], ['s', 'Searched the handbook: education benefits']], sec: [] },
+      ref: { safety: 'Safety check: no concerns', tools: [['s', 'Searched the handbook: home address privacy']], sec: [['§7.1', 'Your personal information', 'Company handbook', 'Cited as 1']] },
+      sens: { safety: 'Routed to HR guidance', note: 'Questions like this go to a person on the HR team. The assistant didn’t search the handbook or write an answer.', tools: [], sec: [] }
+    };
+    const HR = [
+      { isPerson: true, ini: 'DW', name: 'Dana Whitfield', role: 'HR Business Partner · Denver HQ', email: 'dana.whitfield@juniperrow.example' },
+      { isTeam: true, name: 'HR team', role: 'Shared inbox', email: 'hr@juniperrow.example' }
+    ].map(h => ({ ...h, mailto: 'mailto:' + h.email }));
+    const P = {
+      Priya: { name: 'Priya Raman', initials: 'PR', title: 'Visual Merchandiser', st: 'CA', type: 'Salaried', glance: [['11.5', 'days PTO available', 'Time off', false], ['1', 'request pending', 'Time off', true], ['Sep 12', 'Handbook updated', 'Handbook', false]] },
+      Mateo: { name: 'Mateo Alvarez', initials: 'MA', title: 'Warehouse Associate', st: 'TX', type: 'Hourly', glance: [['6', 'days PTO available', 'Time off', false], ['Sep 12', 'Handbook updated', 'Handbook', false]] }
+    };
+    const Q1 = { t: 'user', text: 'How many sick days do I get?' };
+    const ai = o => Object.assign({ t: 'ai', id: 'a1' }, o);
+    const sick = ai({ work: 'sick', feedback: true, paras: [
+      ['You get 5 days of paid sick leave a year, which is 40 hours. Because you work in California, the California addendum sets your amount instead of the company’s 3 days.', M('CA-4.3', 'p1')],
+      ['The full 40 hours are available at the start of each calendar year. Unused sick leave doesn’t carry over, and it isn’t paid out when you leave.', M('CA-4.3', 'p1')],
+      ['You can use it for your own illness, injury, or preventive care, or to care for a family member. You don’t need to give a reason beyond saying it’s sick leave.', M('CA-4.3', 'p2'), ' Tell your manager before your shift starts, or as soon as you can.', M('4.3', 'p3')]
+    ] });
+    const P1 = 'You get 5 days of paid sick leave a year, which is 40 hours.';
+    const streamPara = [P1, M('CA-4.3', 'p1'), ' Because you work in California, the California'];
+    const stopPara = [P1, M('CA-4.3', 'p1'), ' Because you work in California, the California addendum sets your amount'];
+    const panel = (id, kind, extra) => Object.assign({ t: 'ai', id, panel: kind }, extra || {});
+    const LONG = (() => {
+      const base = 'I’m planning time off around my sister’s wedding in March and want to get the details right before I submit anything. The wedding is in Sacramento on Saturday, March 13, and I’d like to take Thursday the 11th through Tuesday the 16th so I have time to travel and help with setup. I have 11.5 days of PTO right now and one request pending for a dentist appointment next month. If the dentist request is approved, does that come out of PTO or sick leave, and how would that change what I have left for March? I also work a Saturday shift every other week. ';
+      let s = ''; while (s.length < 1962) s += base; return s.slice(0, 1962);
+    })();
+    const shortSick = ai({ id: 'a1', feedback: true, paras: [['You get 5 days of paid sick leave a year, which is 40 hours.', M('CA-4.3', 'p1')]] });
+    const F = [
+      { id: 'cited-answer', label: 'Cited answer, live. Click a numbered marker or a source chip to open the source panel; Escape closes it and focus returns to what opened it. Try "Show your work" and "Was this right?".', msgs: [Q1, sick] },
+      { id: 'source-panel', label: 'Source panel docked beside the conversation, opened from marker 1 in the third paragraph. It takes the right rail’s place.', msgs: [Q1, sick], init: { panel: 'a1-2-1' } },
+      { id: 'streaming-searching', label: 'Streaming: a status line before any text arrives. Stop takes the Ask button’s place.', msgs: [Q1, ai({ status: 'searching', steps: [[false, 'Searching the handbook…']] })], comp: { mode: 'stop' } },
+      { id: 'streaming-text', label: 'Streaming: text arriving, with markers as each claim completes. Source chips and feedback appear when the answer finishes.', msgs: [Q1, ai({ status: 'streaming', caret: true, paras: [streamPara] })], comp: { mode: 'stop' } },
+      { id: 'streaming-progress-note', label: 'Streaming: the assistant wrote a note, then searched again. The draft text is replaced by a status line, and finished steps stay as muted lines above it.', msgs: [Q1, ai({ status: 'searching', steps: [[true, 'Searched the handbook: sick leave'], [true, 'Read §4.3 Sick leave'], [false, 'Searching the handbook again…']] })], comp: { mode: 'stop' } },
+      { id: 'stopped', label: 'Stopped answer: the partial text stays, marked "Stopped", with "Ask again".', msgs: [Q1, ai({ status: 'stopped', paras: [stopPara] })] },
+      { id: 'show-your-work', label: '"Show your work" expanded: safety check, tools called, sections retrieved.', msgs: [Q1, sick], init: { work: { a1: true } }, scroll: 'bottom' },
+      { id: 'show-your-work-routed', label: '"Show your work" on a sensitive escalation: routed to HR guidance, no tools, no sections.', msgs: [{ t: 'user', text: 'My manager keeps commenting on how I look, and it’s making me uncomfortable.' }, panel('e1', 'sensitive', { work: 'sens' })], init: { work: { e1: true } }, scroll: 'bottom' },
+      { id: 'feedback-yes', label: 'Feedback: Yes. The row is replaced by a thank-you line.', msgs: [Q1, sick], init: { fb: { a1: 'yes' } } },
+      { id: 'feedback-no', label: 'Feedback: No, with an optional reason (up to 500 characters). Cancel returns to the question.', msgs: [Q1, sick], init: { fb: { a1: 'no' }, reason: { a1: 'It didn’t say whether I need a doctor’s note.' } } },
+      { id: 'feedback-thanks', label: 'Feedback: thank-you state after sending a reason.', msgs: [Q1, sick], init: { fb: { a1: 'sent' } } },
+      { id: 'other-state', label: 'Another state’s policy, as Mateo (Austin, Texas, hourly).', as: 'Mateo', msgs: [{ t: 'user', text: 'What’s the overtime rule in California?' }, ai({ work: 'ot', feedback: true, paras: [
+        ['Here’s the California policy. Hourly staff in California are paid overtime for hours over 8 in a workday or 40 in a workweek, and double time for hours over 12 in a workday.', M('CA-3.2', 'p1')],
+        ['It doesn’t apply to you, because you work at the Austin warehouse in Texas. For you, the company policy applies: overtime is 1.5 times your regular rate for hours over 40 in a workweek.', M('3.2', 'p1')]
+      ] })] },
+      { id: 'not-found', label: 'Not found in the handbook, with an offer to contact HR.', msgs: [{ t: 'user', text: 'Is there a tuition reimbursement program?' }, ai({ work: 'nf', feedback: true, contacts: true, paras: [
+        ['I couldn’t find that in the handbook. I searched for tuition reimbursement and education benefits, and no section covers them.'],
+        ['The HR team can tell you whether Juniper Row offers anything like this.']
+      ] })] },
+      { id: 'refusal', label: 'Refusal: another employee’s home address.', msgs: [{ t: 'user', text: 'What’s Elena Baker’s home address? I want to mail her a card.' }, ai({ work: 'ref', feedback: true, paras: [
+        ['I can’t share another employee’s home address. Home addresses are private, and only the employee and HR can see them.', M('7.1', 'p1')],
+        ['If you’d like to send Elena a card, you could give it to her at work or ask HR to pass it along. Her work email and location are in the ', L('Directory', '/directory/elena-baker'), '.']
+      ] })] },
+      { id: 'sensitive', label: 'Sensitive escalation panel. No AI label, sources, or feedback.', msgs: [{ t: 'user', text: 'My manager keeps commenting on how I look, and it’s making me uncomfortable.' }, panel('e1', 'sensitive', { work: 'sens' })] },
+      { id: 'crisis', label: 'Crisis panel. Fixed text; the numbers and chat address are links.', msgs: [{ t: 'user', text: 'Everything feels hopeless lately, and I don’t know if I can keep going.' }, panel('e1', 'crisis')] },
+      { id: 'error-midstream', label: 'Error mid-stream, inside the assistant’s message. The partial text stays.', msgs: [Q1, ai({ status: 'error', paras: [streamPara] })] },
+      { id: 'cant-answer', label: '"Can’t answer right now" panel, with HR contacts.', msgs: [Q1, panel('e1', 'unavailable')] },
+      { id: 'send-error', label: 'Composer send error: Enter pressed while an answer is still streaming.', msgs: [Q1, ai({ status: 'streaming', caret: true, paras: [streamPara] })], comp: { mode: 'stop', text: 'Can I carry unused days over?', sendErr: true, focus: true } },
+      { id: 'budget-sandbox', label: 'Banner: this sandbox’s AI budget is used. Composer disabled; the conversation stays readable.', banner: 'sandbox', msgs: [Q1, sick], comp: { mode: 'off', ph: 'The assistant isn’t available in this sandbox.' } },
+      { id: 'budget-daily', label: 'Banner: today’s demo budget is reached. Composer disabled.', banner: 'daily', msgs: [Q1, sick], comp: { mode: 'off', ph: 'The assistant isn’t available until tomorrow.' } },
+      { id: 'length-hint', label: 'Composer: length hint from 1,800 characters; the box stops at 2,000.', msgs: [Q1, sick], comp: { text: LONG, rows: 4, focus: true } },
+      { id: 'personal-data', label: 'Composer: personal-data warning. Ask won’t send until the number is removed.', msgs: [Q1, sick], comp: { text: 'Can you check my last paycheck? My Social Security number is 123-45-6789.', focus: true } },
+      { id: 'long-conversation', label: 'Composer: long-conversation notice offering a new conversation.', comp: { long: true }, scroll: 'bottom', msgs: [
+        Q1, shortSick,
+        { t: 'user', text: 'Can I use it for my son’s dentist appointment?' }, ai({ id: 'a2', feedback: true, paras: [['Yes. You can use sick leave to care for a family member, and that includes taking your son to an appointment.', M('CA-4.3', 'p2')]] }),
+        { t: 'user', text: 'Do I have to tell my manager why?' }, ai({ id: 'a3', feedback: true, paras: [['No. You don’t need to give a reason beyond saying the time is sick leave.', M('CA-4.3', 'p2'), ' Tell your manager before your shift starts, or as soon as you can.', M('4.3', 'p3')]] }),
+        { t: 'user', text: 'What holidays do we have this year?' }, ai({ id: 'a4', feedback: true, paras: [['Juniper Row observes six paid holidays: New Year’s Day, Memorial Day, Independence Day, Labor Day, Thanksgiving Day, and Christmas Day.', M('4.2', 'p1')]] })
+      ] }
+    ];
+    const BANNER = {
+      sandbox: 'This demo sandbox has reached its limit for the assistant. A new sandbox starts fresh. If you or someone else is in danger, call 911, or call or text 988 to reach the 988 Suicide & Crisis Lifeline.',
+      daily: 'The demo’s daily limit for the assistant has been reached. Please try again tomorrow. If you or someone else is in danger, call 911, or call or text 988 to reach the 988 Suicide & Crisis Lifeline.'
+    };
+    return this._d = { SRC, PASS, W, HR, P, F, BANNER };
+  }
+  setF(key, patch) { this.setState(s => ({ fs: { ...s.fs, [key]: { ...(s.fs[key] || {}), ...patch } } })); }
+  focusIn(key, sel) { setTimeout(() => { const r = this.els[key]; const el = r && r.querySelector(sel); if (el) { if (!el.hasAttribute('tabindex') && el.tagName === 'H2') el.setAttribute('tabindex', '-1'); el.focus(); } }, 80); }
+  frame(c) {
+    const D = this.data(), key = c.id, P = D.P[c.as || 'Priya'];
+    const comp = Object.assign({ mode: 'ask', rows: 1, text: '', sendErr: false, long: false, focus: false, ph: '' }, c.comp || {});
+    const st = Object.assign({ panel: null, work: {}, fb: {}, reason: {}, text: comp.text, cf: comp.focus, ch: false, sendErr: comp.sendErr }, c.init || {}, this.state.fs[key] || {});
+    const set = patch => this.setF(key, patch);
+    const applies = code => !code || (code === 'H' ? P.type === 'Hourly' : code.startsWith('H-') ? (P.type === 'Hourly' && P.st === code.slice(2)) : P.st === code);
+    const close = mk => { set({ panel: null }); if (mk) this.focusIn(key, '[data-mk="' + mk + '"]'); };
+    const open = mk => () => { if (st.panel === mk) { close(mk); return; } set({ panel: mk }); this.focusIn(key, 'aside[aria-label="Handbook passage"] h2'); };
+    const mkMap = {};
+    const srcAria = (n, s) => 'Source ' + n + ': ' + D.SRC[s][0].replace(' · ', ', ');
+    const pressed = on => ({ exp: on ? 'true' : 'false', bg: on ? 'var(--primary-tint)' : 'var(--surface-raised)', bd: on ? 'var(--primary)' : 'var(--border-strong)' });
+    const msgs = c.msgs.map(m => {
+      if (m.t === 'user') return { isUser: true, text: m.text };
+      const order = [], first = {};
+      (m.paras || []).forEach(pa => pa.forEach(sg => { if (sg && sg.m) { if (!order.includes(sg.m)) order.push(sg.m); if (!first[sg.m]) first[sg.m] = sg.p; } }));
+      const paras = (m.paras || []).map((pa, pi, arr) => ({ caret: !!m.caret && pi === arr.length - 1, segs: pa.map((sg, si) => {
+        if (typeof sg === 'string') return { isText: true, text: sg };
+        if (sg.l) return { isLink: true, text: sg.l, href: sg.href };
+        const mk = m.id + '-' + pi + '-' + si, n = order.indexOf(sg.m) + 1;
+        mkMap[mk] = sg;
+        return { isMk: true, mk, n, aria: srcAria(n, sg.m), open: open(mk), ...pressed(st.panel === mk) };
+      }) }));
+      const done = !m.status;
+      const chips = done ? order.map((s, i) => { const mk = m.id + '-chip-' + s; mkMap[mk] = { m: s, p: first[s] }; return { mk, n: i + 1, label: D.SRC[s][0], aria: srcAria(i + 1, s), open: open(mk), ...pressed(st.panel === mk) }; }) : [];
+      const fb = st.fb[m.id] || null, reason = st.reason[m.id] || '';
+      const W = m.work ? D.W[m.work] : null, wOpen = !!st.work[m.id];
+      const kind = m.panel || '', pre = key + '-' + m.id;
+      return {
+        isItem: true, busy: m.status === 'streaming' || m.status === 'searching' ? 'true' : 'false', live: m.status === 'streaming' ? 'polite' : 'off',
+        aiLabel: !kind,
+        hasSteps: !!(m.steps && m.steps.length), steps: (m.steps || []).map(([d, t]) => ({ done: d, cur: !d, text: t, color: d ? 'var(--ink-muted)' : 'var(--ink)' })),
+        hasParas: paras.length > 0, paras,
+        stopped: m.status === 'stopped', err: m.status === 'error',
+        hasContacts: !!m.contacts, hr: D.HR,
+        hasPanel: !!kind, isCrisis: kind === 'crisis', isSens: kind === 'sensitive', isUnav: kind === 'unavailable', hid: pre + '-h',
+        hasChips: chips.length > 0, chips,
+        hasActions: done && (!!m.feedback || !!W),
+        fid: pre + '-fb', fbAsk: !!m.feedback && (!fb || fb === 'no'), fbThanks: fb === 'yes' || fb === 'sent',
+        thanks: fb === 'sent' ? 'Thanks for the feedback. The HR team reviews every note.' : 'Thanks for the feedback.',
+        noP: fb === 'no' ? 'true' : 'false', noBg: fb === 'no' ? 'var(--primary-tint)' : 'var(--surface-raised)', noBd: fb === 'no' ? 'var(--primary)' : 'var(--border-strong)',
+        yes: () => set({ fb: { ...st.fb, [m.id]: 'yes' } }),
+        no: () => { set({ fb: { ...st.fb, [m.id]: fb === 'no' ? null : 'no' } }); if (fb !== 'no') this.focusIn(key, '#' + CSS.escape(pre + '-r')); },
+        fbForm: fb === 'no', rid: pre + '-r', cid: pre + '-c', reason, count: reason.length,
+        onReason: e => set({ reason: { ...st.reason, [m.id]: e.target.value.slice(0, 500) } }),
+        cancel: () => set({ fb: { ...st.fb, [m.id]: null } }),
+        send: e => { e.preventDefault(); set({ fb: { ...st.fb, [m.id]: 'sent' } }); },
+        hasWork: !!W, wOpen: !!W && wOpen, wClosed: !wOpen, wExp: wOpen ? 'true' : 'false', wid: pre + '-w',
+        toggleWork: () => set({ work: { ...st.work, [m.id]: !wOpen } }),
+        w: W ? {
+          safety: W.safety, hasNote: !!W.note, note: W.note || '',
+          tools: W.tools.map(([k, t]) => ({ isSearch: k === 's', isProfile: k === 'u', text: t })), noTools: !W.tools.length,
+          sec: W.sec.map(([num, title, group, status]) => ({ num, title, group, status, color: status === 'Not cited' ? 'var(--ink-muted)' : 'var(--ink)', weight: status === 'Not cited' ? 400 : 600 })), noSec: !W.sec.length
+        } : { tools: [], sec: [] }
+      };
+    });
+    const pan = st.panel ? mkMap[st.panel] : null;
+    let pp = {};
+    if (pan) {
+      const s = D.SRC[pan.m], ps = D.PASS[pan.m + '#' + pan.p] || ['', '', ''];
+      pp = { eyebrow: s[0], title: s[1], applies: s[2], updated: s[3], marker: applies(s[4]) ? 'yes' : 'no', before: ps[0], cited: ps[1], after: ps[2], href: '/handbook/' + pan.m + '?passage=' + pan.p };
+    }
+    const txt = st.text || '', n = txt.length, off = comp.mode === 'off';
+    const pii = /\b\d{3}[- ]?\d{2}[- ]?\d{4}\b/.test(txt) || /\b(?:\d[ -]?){13,16}\b/.test(txt);
+    const submit = () => { if (comp.mode === 'stop') set({ sendErr: true }); };
+    const cmp = {
+      text: txt, rows: comp.rows, off, isAsk: comp.mode === 'ask', isStop: comp.mode === 'stop', long: comp.long,
+      placeholder: off ? comp.ph : 'Ask a follow-up question',
+      border: off ? 'var(--border)' : st.cf ? 'var(--focus-ring)' : st.ch ? 'var(--input-border-hover)' : 'var(--input-border)',
+      shadow: off ? 'none' : st.cf ? 'var(--shadow-focus-halo)' : 'var(--shadow-xs)', bg: off ? 'var(--surface-sunken)' : 'var(--surface-raised)',
+      hint: n >= 1800, hintText: n.toLocaleString('en-US') + ' of 2,000 characters' + (n >= 2000 ? '. Shorten your question to send it.' : ''),
+      pii, sendErr: !!st.sendErr, did: key + '-disc',
+      onChange: e => set({ text: e.target.value, sendErr: false }), onFocus: () => set({ cf: true }), onBlur: () => set({ cf: false }),
+      onEnter: () => set({ ch: true }), onLeave: () => set({ ch: false }),
+      onKey: e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); submit(); } },
+      submit: e => { if (e) e.preventDefault(); submit(); }
+    };
+    return {
+      id: key, label: c.label, file: 'desktop-' + key + '.png',
+      pName: P.name, pInitials: P.initials, pTitle: P.title, pAria: 'Switch persona. ' + P.name + ', ' + P.title,
+      hasBanner: !!c.banner, bannerText: c.banner ? D.BANNER[c.banner] : '', bannerAction: c.banner === 'sandbox',
+      msgs, cmp, pp, panelOpen: !!pan, railOpen: !pan,
+      glance: P.glance.map(([v, cap, dest, mk]) => ({ v, cap, dest, mk, href: dest === 'Handbook' ? '/handbook' : '/time-off', aria: v + ' ' + cap + '. Open ' + dest })),
+      closePanel: () => close(st.panel), noop: () => {},
+      onKey: e => { if (e.key === 'Escape' && st.panel) { e.stopPropagation(); close(st.panel); } },
+      rootRef: el => { if (el) this.els[key] = el; },
+      justify: c.scroll === 'bottom' ? 'flex-end' : 'flex-start'
+    };
+  }
+  renderVals() {
+    const D = this.data();
+    const frames = D.F.map((c, i) => { const oid = '1' + String.fromCharCode(97 + i); return { ...this.frame(c), oid, href: '#' + oid }; });
+    return { frames };
+  }
+}
+</script>
+</body>
+</html>

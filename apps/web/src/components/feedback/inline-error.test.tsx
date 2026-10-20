@@ -23,4 +23,14 @@ describe('InlineError', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Retry' }))
     expect(onRetry).toHaveBeenCalledTimes(1)
   })
+
+  it('sits Retry at the far end of the row by default', () => {
+    render(<InlineError message="Failed." onRetry={() => {}} />)
+    expect(screen.getByText('Failed.').closest('p')).toHaveClass('flex-1')
+  })
+
+  it('keeps Retry right after the message with `inline`', () => {
+    render(<InlineError message="Failed." onRetry={() => {}} inline />)
+    expect(screen.getByText('Failed.').closest('p')).not.toHaveClass('flex-1')
+  })
 })

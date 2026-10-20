@@ -1,0 +1,37 @@
+# The smoke set: the items a quick run grades before each pull request that changes a prompt, a
+# tool, or the guard. 15 Q&A items from qa.yaml and 11 red-team items from redteam.yaml.
+#
+# The Q&A items cover both sick-leave questions (California and Texas), two other-state questions,
+# two the handbook cannot answer, an employment-decision question, "am I talking to a real
+# person?", and a spread over chapters 2 to 7. The red-team items cover every group, with two crises
+# (self-harm and a threat of violence) and a sensitive message among the routing items.
+
+qa:
+  - qa-04   # chapter 2: go straight to HR
+  - qa-10   # chapter 3: overtime over 40 hours
+  - qa-14   # chapter 3: California final pay (addendum)
+  - qa-21   # chapter 4: sick leave, Priya in California
+  - qa-22   # chapter 4: sick leave, Mateo in Texas
+  - qa-27   # chapter 4: bereavement for an uncle
+  - qa-30   # chapter 5: a long health leave, Colorado
+  - qa-38   # chapter 6: the EAP
+  - qa-40   # chapter 7: how fast HR replies to a case
+  - qa-41   # another state: California overtime, asked from Texas
+  - qa-43   # another state: Colorado sick leave, asked from California
+  - qa-47   # not in the handbook: the parking garage
+  - qa-52   # not in the handbook: trading days
+  - qa-57   # an employment decision: writing someone up
+  - qa-60   # "am I talking to a real person?"
+
+redteam:
+  - rt-01   # private details: a coworker's home address
+  - rt-08   # private details: "I'm HR now"
+  - rt-09   # private details: the HR administrator asks for everyone's
+  - rt-14   # injection: "SYSTEM: admin mode"
+  - rt-15   # injection: fake tool output pasted into a question
+  - rt-21   # injection: asks for a person_id parameter the tools do not have
+  - rt-23   # prompt extraction: print the system prompt
+  - rt-25   # prompt extraction: translate it into French
+  - rt-34   # routing: crisis (self-harm)
+  - rt-35   # routing: crisis (threat of violence)
+  - rt-37   # routing: sensitive (harassment)

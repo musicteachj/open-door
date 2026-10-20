@@ -20,6 +20,7 @@ from collections.abc import AsyncIterator, Iterator
 from contextlib import ExitStack
 from dataclasses import dataclass
 from datetime import UTC, date, datetime, timedelta
+from decimal import Decimal
 from typing import Any, Protocol
 from uuid import UUID, uuid4
 
@@ -29,11 +30,16 @@ import pytest_asyncio
 from fastapi.testclient import TestClient
 from pydantic import PostgresDsn
 from sqlalchemy import delete, select, text
-from sqlalchemy.ext.asyncio import AsyncEngine
+from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 
 from app.core.config import Settings
 from app.db.engine import create_engine
 from app.db.models import (
+    AiConversation,
+    AiFeedback,
+    AiMessage,
+    AiSpend,
+    AiTurn,
     AuditEvent,
     Department,
     Holiday,
@@ -143,6 +149,78 @@ class SampleTenant:
     colleague_id: UUID
     # The HR partner (is_hr_admin), and the other two people's manager.
     hr_id: UUID
+
+
+@dataclass(frozen=True)
+class AssistantRows:
+    """The IDs of the assistant rows `add_assistant_rows` wrote for one person."""
+
+    conversation_id: UUID
+    turn_id: UUID
+
+
+async def write_assistant_rows(
+    session: AsyncSession, tenant_id: UUID, person_id: UUID
+) -> AssistantRows:
+    """Write a conversation, a completed turn with its two messages and a thumbs-up, and a spend
+    row, and flush them.
+
+    The session must be scoped to `person_id`: Postgres shows a person's conversations only to
+    that person, and refuses to write one for anyone else.
+    """
+    rows = AssistantRows(conversation_id=uuid4(), turn_id=uuid4())
+    session.add(
+        AiConversation(
+            id=rows.conversation_id,
+            tenant_id=tenant_id,
+            person_id=person_id,
+            model="claude-opus-5-5",
+            guard_model="claude-haiku-5-5",
+            effort="medium",
+            prompt_version="test",
+            toolset_version="test",
+        )
+    )
+    await session.flush()
+    session.add(
+        AiTurn(
+            id=rows.turn_id,
+            tenant_id=tenant_id,
+            person_id=person_id,
+            conversation_id=rows.conversation_id,
+            question="How much sick leave do I get?",
+            status="completed",
+            answer_text="You get 40 hours.",
+        )
+    )
+    await session.flush()
+    session.add_all(
+        [
+            AiMessage(
+                tenant_id=tenant_id,
+                person_id=person_id,
+                conversation_id=rows.conversation_id,
+                turn_id=rows.turn_id,
+                position=position,
+                role=role,
+                content=[{"type": "text", "text": text_}],
+            )
+            for position, role, text_ in (
+                (0, "user", "How much sick leave do I get?"),
+                (1, "assistant", "You get 40 hours."),
+            )
+        ]
+    )
+    session.add(
+        AiFeedback(tenant_id=tenant_id, person_id=person_id, turn_id=rows.turn_id, helpful=True)
+    )
+    session.add(
+        AiSpend(
+            tenant_id=tenant_id, turn_id=rows.turn_id, kind="reserve", amount_usd=Decimal("0.05")
+        )
+    )
+    await session.flush()
+    return rows
 
 
 class MakeTenant(Protocol):
@@ -295,6 +373,10 @@ def make_tenant(app_engine: AsyncEngine, created_tenant_ids: list[UUID]) -> Make
                     target_id=tenant_id,
                 )
             )
+        # The assistant's rows are visible only to the person they belong to, so the employee
+        # writes them in a transaction of their own.
+        async with tenant_session(app_engine, TenantContext(tenant_id, employee.id)) as session:
+            await write_assistant_rows(session, tenant_id, employee.id)
         return SampleTenant(tenant_id, employee.id, colleague.id, hr.id)
 
     return make
@@ -397,6 +479,50 @@ def open_browser(
 @pytest.fixture
 def browser(open_browser: OpenBrowser) -> Browser:
     return open_browser()
+
+
+@pytest.fixture
+async def daily_ledger_untouched(owner_engine: AsyncEngine) -> AsyncIterator[None]:
+    """Leave the demo-wide daily AI ledger as the test found it.
+
+    The daily ledger has no tenant, so deleting a test's sandbox leaves its rows behind, and the
+    stream tests reserve real amounts (a stopped call keeps its reservation) that would add up to
+    the day's cap. Use it with `pytest.mark.usefixtures`. Like the budget tests, such a test must
+    not run at the same time as another run.
+    """
+    async with owner_engine.connect() as connection:
+        existing: list[UUID] = list(
+            (await connection.execute(text("SELECT id FROM ai_spend_daily"))).scalars()
+        )
+    yield
+    async with owner_engine.begin() as connection:
+        await connection.execute(
+            text("DELETE FROM ai_spend_daily WHERE NOT (id = ANY(CAST(:keep AS uuid[])))"),
+            {"keep": existing},
+        )
+
+
+class OpenBrowserWith(Protocol):
+    def __call__(self, **setting_changes: Any) -> Browser: ...
+
+
+@pytest.fixture
+def open_browser_with(
+    database_settings: Settings, created_tenant_ids: list[UUID]
+) -> Iterator[OpenBrowserWith]:
+    """Open a browser on an app built with some settings changed, such as a smaller daily AI
+    budget or a shorter heartbeat. The app's lifespan runs while the test does."""
+    with ExitStack() as stack:
+
+        def open_one(**setting_changes: Any) -> Browser:
+            client = TestClient(
+                create_app(database_settings.model_copy(update=setting_changes)),
+                base_url="https://testserver",
+                headers={"Sec-Fetch-Site": "same-origin"},
+            )
+            return Browser(stack.enter_context(client), created_tenant_ids)
+
+        yield open_one
 
 
 async def audit_events(engine: AsyncEngine, tenant_id: UUID) -> list[AuditEvent]:

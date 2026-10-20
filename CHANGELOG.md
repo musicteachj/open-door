@@ -10,6 +10,425 @@ version (`0.x.y` while the app is being built, `1.0.0` when it is complete).
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-10-20
+
+Phase 4: the assistant core, read-only. Anyone in a sandbox can ask the assistant an HR question
+in plain language on `/ask` and get a streamed answer whose every policy sentence cites the
+handbook, with "Show your work", "Was this right?", and Stop. A small, fast guard model screens
+each message first: a crisis gets fixed, human-written text (911, the 988 Lifeline, the EAP) and
+never reaches the main model; a sensitive topic gets an answer and the HR partner's contact; and
+if the guard can't answer, the assistant fails closed. Three read-only tools act only for the
+signed-in person (the handbook search, their own profile, and the directory). Spending is capped
+per sandbox and per day by an insert-only ledger reserved before each call. Development, the
+browser tests, and a strict reverse-proxy check run on a scripted stand-in for the model, and CI
+replays recorded answers. The last full live eval run (2026-10-19, $8.02) scored the red team, the
+citation checks, and the unanswerable questions at 100% in every trial, and the judge at 74% (the
+85% bar moves to Phase 7). The phase closed with a whole-phase review, a Fable 5.1 security review,
+a release review, and their fixes.
+
+### Changed
+
+- **The assistant cites every policy sentence and stays out of decisions** (Phase 4, answer-quality
+  follow-up). The prompt (now version 2026-10.2) asks for a citation on every sentence that states
+  or sums up a policy, including which location's rule applies and how HR handles what people tell
+  it, and for each paragraph to start with a cited sentence. It gives a rule with its conditions
+  (who qualifies, how long they must have worked, whether it is paid, whether unused time carries
+  over), searches again when a passage mentions something it doesn't have, names the HR team when
+  it can't find an answer, and no longer works out dates from a number of days. Declining an
+  employment decision now also means no advice on how to make it ("document the dates first").
+  The full live run moved the judge from 67% to 74% (the plan's bar is 85%, carried to Phase 7),
+  and every other measure to 100%.
+- **The guard gets 10 seconds instead of 4** (Phase 4, answer-quality follow-up). In Stage 6's
+  full run the threat-of-violence item twice got no guard answer within 4 seconds and failed
+  closed instead of showing the crisis panel. The guard's measured p95 is about 2 seconds, so 4
+  seconds left no room for a retry; ADR 0009 is amended with the reasons and how 10 seconds fits
+  the turn's deadline and the AWS timeouts. The fresh full run had no guard failures.
+- **The eval judge knows the asker's role** (Phase 4, answer-quality follow-up). Its asker line
+  now says HR, manager, or employee, the same rule the assistant is told, so an HR person's
+  answer that mentions their HR role is no longer graded as a made-up claim. The judge is now
+  version 2026-10.2, and its agreement with the independent hand grades is 93%.
+- **The offline evals and CI replay the full set** (Phase 4, answer-quality follow-up), every
+  red-team and Q&A item instead of the smoke set, from a fresh full run ($8.02) that records
+  the crisis item the guard used to time out on. The smoke set gains that item too. Because a
+  smoke run re-records only its own items, CLAUDE.md's AI rule now asks for a full run before a
+  prompt, tool, guard, or retrieval PR, with smoke runs for trying wording first.
+
+- **The browser's fake assistant is gone** (Phase 4, stage 6). The home's canned reply, its
+  transport, and their tests are deleted; development and the browser tests use the server's
+  scripted model. The scripted model now cites a state addendum when its search returns one, so
+  the demo's California and Texas employees get different citations. Both Playwright configs
+  name the scripted model explicitly, so a local `.env` set to `anthropic` can't make the browser
+  tests call Anthropic.
+- **The assistant evals' first full live run is recorded** (Phase 4, stage 6): every red-team and
+  Q&A item, three trials, $6.78. Red team 98%, Q&A citation checks 98%, unanswerable items 97%,
+  and the judge 67%, short of the plan's 85%: most misses are policy sentences without a
+  citation. The crisis item twice outran the guard's 4-second timeout and failed closed (the
+  "can't answer right now" text still gives 911 and 988). The re-recorded fixtures are
+  committed; the offline evals stay on the smoke set until a focused follow-up fixes the prompt
+  and the guard's timeout and records a fresh full run.
+- **Local browser runs clean up their AI reservations** (Phase 4, stage 6). Each scripted answer
+  reserves budget in the shared development database's daily ledger, so a full browser run could
+  push the day past the $3 cap and then fail the API's own tests. The browser-test and capture
+  configs now delete the rows their run created when it ends, through
+  `apps/api/scripts/clear_browser_test_spend.py`, which takes its start time from the database's
+  own clock and refuses anything older than a day. CI skips it, since its database is new each
+  run.
+- **The composer has one failed-send message,** under the box (Phase 4, stage 6). The inline
+  error with its own Retry is gone: the question stays in the box, so Ask is the retry.
+- **The model's working notes no longer show up as answer text** (Phase 4, stage 4). When a model
+  call that wrote text ends in a tool call (as in "Missing the rate passage. Search again."), a
+  new `text.retracted` event takes that text and its citations back, and the note is shown as a
+  progress line instead. If the model then ends with nothing more to say, the taken-back text
+  returns as the answer. Nothing sent to the model changes, so the recorded evals still replay;
+  only one judge call was re-recorded ($0.01).
+- **The Anthropic Console's spend limit has its own error code,** `spend-limit` (Phase 4, stage
+  4). It shared `budget-daily` with the demo's own daily cap, so nothing after the turn could tell
+  them apart. The person still sees the daily-limit text, already approved, and the eval harness
+  reads the code instead of watching the transport.
+- **A live eval run reports what it actually paid** (Phase 4, stage 4). Calls answered from a
+  reused recording used to be counted as spend, so a run that re-recorded one $0.01 judge call
+  printed $0.40. The scoreboard's cost is now the live spend, with the reused recordings' cost
+  shown on its own line; the run's cap still counts both, which can only stop a run sooner.
+- **The app builds its model transport and embedder at startup** (Phase 4, stage 4), and refuses
+  to boot with a setup it can't serve: `scripted` in production, `replay` anywhere, or
+  `anthropic` without a key. Voyage is used only when `AI_TRANSPORT=anthropic`, so `make dev`
+  and the browser tests make no paid calls even with a Voyage key in `.env`.
+
+- **The live-eval rule names its runs** (Phase 4, stage 3). In `CLAUDE.md`, a change to a prompt,
+  a tool, or the guard needs the offline evals green and a smoke run (`make eval-live YES=1`,
+  about $1.20, cap $2) before its PR, and a release gets the full run (`SET=full`, about $14, cap
+  $16). The "Environment gotcha" note now says `env -u` is no longer needed: the settings have
+  ignored an empty exported key since stage 1.
+- **The guard's request is built in one place** (Phase 4, stage 3), a pure function that both the
+  real call and replay use, so a recording is keyed by exactly what is sent.
+
+- **No em dashes, anywhere** (Phase 4, stage 2). A new writing rule in `CLAUDE.md`, beside the
+  American English one. `make check-docs` now fails on an em dash in any file except the frozen
+  initial plan, the Claude Design handoff, recorded eval fixtures, and lockfiles. The few in the docs were empty table cells, now "-".
+- **The data inventory names Anthropic as a processor** (Phase 4, stage 2): what each turn sends
+  to it, what is never sent, and Anthropic's retention and training terms, quoted with their
+  source. Voyage now receives the assistant's search queries, not people's whole questions.
+
+### Added
+
+- **The live eval runs time each call** (Phase 4, answer-quality follow-up). Each live guard and
+  model call carries its `duration_ms` in the traces, and the scoreboard reports the guard's
+  median, p95, and slowest call. The first full run measured a median of 965 ms and a p95 of
+  1,992 ms, against the 800 ms target.
+- **The conversation page: ask Open Door a question at `/ask` and get a streamed, cited answer**
+  (Phase 4, stage 6). The first question turns the assistant home into the conversation, and a
+  reload shows it again, a stopped answer included. Every state from screen 07 is on the real
+  page now, against the real API.
+  - **The answer streams in** with its progress steps ("Searching the handbook…", then "Searched
+    the handbook: sick leave"), citation markers as each claim completes, and Stop in place of
+    Ask. Source chips, "Was this right?", and "Show your work" appear when it finishes.
+  - **A citation opens its handbook passage** beside the conversation on a wide screen (the
+    passage stays in the address, so Back closes it), and as a sheet from the bottom on a phone
+    or a narrower window, which a swipe down dismisses. Focus returns to the marker that opened
+    it.
+  - **When the handbook has no answer,** the HR contacts follow it: the HR people from the
+    directory, with their job titles and locations, then the shared HR inbox. The server decides
+    this from what it stored (a finished answer that searched the handbook and cites nothing),
+    never from the model's wording.
+  - **The sensitive, crisis, and "can't answer right now" panels** arrive with the answer and are
+    announced to screen readers once, never again on a reload. **Budget banners** come from the
+    API and disable the composer, and "Start a new sandbox" starts one as the same person.
+  - **The composer** checks for a Social Security or card number before sending, so it never
+    leaves the browser. That check and the API's share one set of test cases. Pressing Enter while
+    an answer streams says "I'm still answering your last question." and keeps the draft. Both
+    texts come from a new route, `GET /api/v1/assistant/texts`, so the web app keeps no copy of
+    the API's words.
+  - **The API sends what the design needs:** HR contacts' titles and locations, each retrieved
+    section's title and group (each section listed once), the budget banner's text, and whether
+    an answer counts as not found. `GET /api/v1/assistant/budget` gives the same budget state
+    before the first question, so the home shows a reached cap too.
+  - **Browser tests run against the real API with the scripted model:** one per acceptance
+    criterion, with an accessibility scan on each state, the demo's steps (Priya and Mateo get
+    their own states' sick leave, Leo's address is refused, the sensitive and crisis paths), a
+    persona switch mid-answer, Stop then reload, and the 390 px layout of every state. The
+    capture report now shows the real page beside each design.
+- **The conversation's components, in every state the design draws** (Phase 4, stage 5). They
+  are built and shown in the component gallery on sample data; Stage 6 connects them to the
+  live stream and the conversation API. Everything follows screen 07's design and its build
+  decisions.
+  - **Answers render a small Markdown subset as React elements:** paragraphs, bold, italic,
+    lists, and links. Raw HTML shows as plain characters, and only links to `/handbook/` or
+    `/directory/` can be clicked. Citation markers are placed where the server says, and the
+    model's own text can't fake one.
+  - **Markers and source chips are numbered by section,** so marker 1 and chip 1 always name
+    the same handbook section. Each marker still opens the exact passage it cites. (The API
+    numbers passages, so the web renumbers them in one place.)
+  - **Messages:** the person's question, and the assistant's answer with its "AI" label while
+    it streams, when it's complete, stopped ("Ask again"), cut off, or failed (the API's own
+    error text, with Retry). Progress steps show a spinner on the current step and a check on
+    the finished ones.
+  - **"Show your work"** lists the safety check's result, the tools called (in plain words, such
+    as "Searched the handbook: sick leave"; the profile step just says "Read your profile"), and
+    the sections retrieved, each "Cited as N" or "Not cited".
+  - **"Was this right?"** with Yes, or No and an optional reason of up to 500 characters, then
+    "Thanks for the feedback." Focus moves the way the design's notes say.
+  - **The crisis, sensitive, and "can't answer right now" panels** show the API's fixed text
+    word for word, are announced to screen readers when they appear, and end with the HR
+    contacts: the directory's HR people, then the shared HR inbox. "Call 911" and "call or text
+    988" are tap-to-call links in the crisis panel, the can't-answer panel, and both budget
+    banners, and the crisis panel also links the 988 chat and the EAP number. No words change.
+  - **Budget banners** for a used sandbox budget and the day's demo limit, a conversation header,
+    and the composer's new states: Stop while an answer streams, disabled at a budget cap, a
+    length hint from 1,800 characters (it blocks sending only past 2,000, counted as the API
+    counts), the personal-data warning, the send error, and the long-conversation notice. The
+    conversation's composer is one line that grows as you type.
+  - **Tests:** unit tests for every component and state, and browser tests for each gallery
+    state: an accessibility scan, no sideways scrolling at 390 px, the focus rules, and a check
+    that pressing Stop never sends a half-typed next question. The capture report pairs each
+    state with its design screenshot.
+- **The assistant's conversation routes and its streamed answers** (Phase 4, stage 4). The API
+  can now start a conversation, stream an answer to a question, show the current conversation
+  after a reload, and take "Was this right?" feedback, all under `/api/v1/assistant`. An answer
+  streams as server-sent events: progress notes, tool steps, the answer's text, each citation,
+  any escalation to HR, and the end of the turn.
+  - **Checks before anything is sent,** each its own error response: the conversation must be
+    the person's own (404 otherwise, never 403) and current, the question 1 to 2,000 characters,
+    no Social Security or card number in it, one question at a time, and room left in the
+    sandbox's and the day's AI budget. The budget check and the page's banner use one
+    calculation, so they agree.
+  - **A closed tab counts as Stop.** The partial answer is saved as "Stopped", every finished
+    model call is settled, and the next question can start. A client that stalls for 30 seconds
+    is treated the same way. A call cut off mid-stream keeps its whole reservation, because the
+    API reports output tokens only at the end of a stream.
+  - **A keep-alive comment every 15 seconds** of silence keeps proxies and load balancers from
+    cutting a slow answer, and the stream is never cached or compressed.
+  - **A deploy ends streams cleanly.** The app waits up to 12 seconds for open answers to save
+    before it closes the database, since uvicorn stops waiting for requests at its own
+    graceful-shutdown timeout.
+  - **Long conversations:** a new conversation is offered past about 60,000 tokens of history, and
+    a question is refused past 80,000, with its own error code, `history-too-long`.
+- **`make proxy-check`** (Phase 4, stage 4), also run by `make check` and in CI's browser-test
+  job. It puts a deliberately strict nginx (a 20-second read timeout, buffering on, and gzip on
+  for event streams) in front of the API with the scripted model, and makes four runs: a
+  45-second silent answer must arrive whole, uncompressed, and spread over time, kept alive by
+  the heartbeat; a second nginx that compresses anyway must hold the events back, which proves
+  the timing checks can fail; the answer with the heartbeat off must be cut at 20 seconds; and an
+  API stopped with SIGTERM mid-answer must save the turn as stopped. It takes under two minutes.
+  The API runs with `--timeout-graceful-shutdown 15`, which with the app's 12-second drain fits
+  ECS's default 30-second stop timeout.
+  - **The stream now says `Content-Encoding: identity`.** The check found that an nginx set to
+    gzip event streams compresses this one and holds every event back, despite
+    `Cache-Control: no-transform`. A proxy leaves a response alone when it already names its
+    encoding. RFC 9110 discourages `identity` in this header, but browsers accept it, and it's
+    the common way to keep proxies (CloudFront included) from compressing a stream.
+- **The personal-data check** (Phase 4, stage 4), `apps/api/app/ai/personal_data.py`. A question
+  or feedback reason that holds something shaped like a Social Security number or a card number
+  (13 to 19 digits grouped like a real card, passing the Luhn checksum) is refused before it's
+  stored or sent. Text pasted from a PDF or Word, with non-breaking spaces, Unicode dashes, or
+  full-width digits, is normalized first. Its test cases live in
+  `evals/assistant/personal-data-cases.json`, which the web app's copy will read too.
+- **`docs/AI-GOVERNANCE.md`** (Phase 4, stage 4): the AI disclosure under Article 50 of the EU AI
+  Act, the documented assessment of why the assistant isn't a high-risk system (Annex III,
+  Article 6(3) and (4), with the Digital Omnibus's new date of 2 December 2027), the models and
+  how they're pinned, the guard, and what goes to Anthropic and Voyage under which terms. Every
+  source was read on 2026-10-17.
+
+- **The assistant evals** (Phase 4, stage 3), in `evals/assistant/`. They measure what the
+  assistant does with real questions, run through the real turn loop, tools, and database.
+  - **Two question sets,** written in employees' own words before any tuning: 42 red-team items
+    (other people's private details, injection and impersonation, prompt extraction, and crisis
+    and sensitive routing) and 61 Q&A questions (10 the handbook doesn't answer, 6 about another
+    state, 4 asking for an employment decision, and "am I talking to a real person?"). A smoke set
+    of 25 covers each kind.
+  - **Graders by program:** a scan for anyone else's address, phone, personal email, birth date,
+    or age, in the many forms a model might write them; the prompt's canary; tool calls outside
+    the three tools; crisis and sensitive routing; cited sections that apply to the asker; and
+    "couldn't find that in the handbook" with an offer of HR.
+  - **A judge,** Claude Sonnet 5.5, answers yes or no on six lines for each Q&A answer: correct,
+    faithful to its passages, no uncited policy claim, says whose policy, no employment decision,
+    and says it's an AI when asked. It agrees with independent grades on 92% of lines (188 of
+    204). Those grades were written by a separate Claude Opus grader that never saw the judge's
+    verdicts, and they caught all four deliberately flawed answers. The owner chose not to grade
+    by hand, so the judge is validated against another model, not a person: a weaker check, and
+    labeled that way.
+  - **Offline replay in CI and `make check`.** Live runs record each call's response, keyed by a
+    hash of the request, and CI plays them back with no key and no network. A prompt, tool, or
+    retrieval change makes a request miss, and the run says to re-record with `make eval-live`.
+  - **`make eval-live`** runs the paid evals: smoke by default, `SET=full` or `SET=effort`, and
+    only with `YES=1`. Each run has a hard cap ($2, $16, $2) that the budget ledger enforces call
+    by call, and writes a scoreboard with the model, versions, dataset hashes, cost, and every
+    metric's spread across trials. A re-record calls the model only for requests that changed and
+    reuses every other recording; `FRESH=1` re-records everything, and `PRUNE=1` (a full run)
+    also drops recordings nothing uses. The run deletes its temporary sandbox and only its own
+    daily-ledger rows afterward.
+  - **The first live runs:** the smoke set at low effort cost $0.55 and passes every check (red
+    team, deterministic Q&A, and unanswerable all at 100%). Medium effort cost $0.66 and fixed
+    nothing, so the assistant stays at low effort. They are the first live evidence for stage 2's
+    prompts: prompt caching works, the guard's structured output never failed, and every citation
+    quotes its passage.
+- **The assistant's turn loop** (Phase 4, stage 2). Nothing is reachable from the web app yet.
+  - **One turn is one stream of typed events** (started, status, text, citation, tool started and
+    finished, escalation, error, completed). The guard reads the question first. Then the model is
+    called at most eight times, tools run at the same time and answer in one message, and every
+    call is reserved before it starts and settled once after it ends.
+  - **History is only ever added to.** A turn goes into history whole, in one write (question,
+    context, every tool round, and the answer), only when it ends with an answer. A stopped,
+    refused, or failed turn leaves just the question, and a crisis or "can't answer right now"
+    turn leaves nothing. Every crisis, sensitive, and "can't answer right now" escalation is
+    audited, and a sensitive turn that ends in an error still shows the HR contact.
+  - **A turn that is stopped, or whose client leaves, still saves** its partial answer and its
+    trace, because the closing writes are shielded from cancellation. A turn is also cut off after
+    eight minutes, inside the ten-minute rule that treats a running turn as abandoned.
+  - **An answer cut off by the output limit** keeps its text and is marked incomplete.
+- **The safety check and the fixed texts** (Phase 4, stage 2).
+  - **The guard reads every message first.** It sends the message (and a short piece of the last
+    answer) to a small model in labeled tags, and routes the verdict: crisis ends the turn with
+    fixed text, sensitive adds a note for the assistant and an HR contact, and anything unclear
+    goes to the safer route. If the check fails, times out (4 seconds), or is refused, the turn
+    ends with "can't answer right now", 911 and 988, and the HR team's details.
+  - **Every message a model must not write is a fixed text:** the crisis text, the sensitive
+    stub, "can't answer right now", and the error messages. The owner approved the
+    crisis text and the "can't answer right now" text (which also gives 911 and 988) on
+    2026-10-15. A test fails if either changes without a new approval. The two budget messages (the
+    sandbox's and the day's) also give 911 and 988, because a budget stop comes before the safety
+    check, and are approved and hashed the same way.
+  - **The HR contact** (names and work emails) is read from the directory.
+- **The assistant's prompts, per-turn context, tools, and citations** (Phase 4, stage 2). Nothing
+  is reachable from the web app yet.
+  - **The prompts are versioned text files** for the assistant and for the safety check that reads
+    each message first. A test pins each prompt's hash to its version, so a prompt can't change
+    without a new version (and the evals rule in `CLAUDE.md`).
+  - **Each turn gets a short context message** with the person's first name, role, location, and
+    employment type, the handbook version, and today's date in their location's timezone, never the
+    sandbox's anchor date.
+  - **Three read-only tools:** `search_handbook` (up to five passages as citable sources, for the
+    asker's office or a named one), `get_my_profile` (the asker's own details, audited as an
+    assistant read), and `find_people` (directory cards only, for everyone or the asker's team).
+    No tool input can name whose data to read, and a bad input comes back as an error the model can
+    correct. A new `escalation.offered` audit action is ready for the escalation offer.
+  - **Citations are mapped to handbook passages.** A citation's result and block numbers become
+    one event per cited passage, with a marker that keeps its number when a passage is cited
+    again. A citation that doesn't match what was sent is dropped and logged without its text.
+- **The assistant's storage, budgets, and model connections** (Phase 4, stage 1). Nothing is
+  reachable from the web app yet; stage 2 builds the turn on top of this.
+  - **Conversations are stored append-only.** Six new tables hold conversations, messages, turns,
+    feedback, and two spending ledgers. Messages come back exactly as they were stored, because
+    Claude Opus 5.5 refuses a history whose earlier turns have changed. A turn can be updated
+    only while it runs; once it ends, it is frozen.
+  - **AI spending is capped:** $1.00 per sandbox and $3.00 a day across every sandbox, set by
+    `AI_SANDBOX_BUDGET_USD` and `AI_DAILY_BUDGET_USD`. Before each model call, the server reserves
+    what one attempt at the call could cost, under a database lock, and settles the difference
+    afterward, so two questions at once can't both slip under a cap. If a safety decline makes a
+    call fall back to another model, the declined attempt and the fallback attempt are both
+    billed, at the fallback model's higher price for the second, which can carry the total past
+    the cap by about one attempt at that price. Prices are pinned per model, with their source.
+  - **Three ways to answer, chosen by `AI_TRANSPORT`:**
+    - `anthropic`: the real API, with server-side fallbacks and the model's progress notes
+    - `scripted`: a rule-based stand-in for Claude, and the default, which costs nothing and
+      drives the crisis, sensitive, refusal, not-found, slow, and failing paths on demand
+    - `replay`: reserved for stage 3's offline evals
+
+    A transport check refuses `scripted` or `replay` in production, and the `anthropic` transport
+    refuses to start without `ANTHROPIC_API_KEY`. Stage 4 runs both when the API starts; until
+    then nothing builds a transport. Migrations and scripts need neither.
+  - **The Anthropic Python SDK** (`anthropic` 1.13), which only the `app.ai` package may import,
+    and `httpx2`, the HTTP library it is built on, as a runtime dependency rather than a test-only
+    one.
+
+### Fixed
+
+- **Fixes from the v0.4.0 release review** (Phase 4, before its release).
+  - **The evals grade more strictly where it matters.** The unanswerable check no longer takes
+    "If you can't find the details in the handbook, ask HR" as the assistant saying it found
+    nothing, so a made-up, cited answer to an unanswerable question fails. The red-team scan for
+    other people's private details now also reads the status notes and any text the stream took
+    back, since both reached the person. Re-grading the recorded 2026-10-19 run moved no score.
+  - **Smaller grader fixes:** the asker's own phone number without its area code is no longer
+    flagged as someone else's; an age written as "Javier Mendoza, 45," is caught; one leak is
+    reported once, wherever it showed; the canary check reads taken-back text too; the search
+    query is measured by the tool's own check; and a malformed dataset or traces file gets a clear
+    error instead of a traceback.
+  - **The conversation page:** "Start a new conversation" can't create two, and a question sent
+    while it's starting goes to the new one (or stays in the box if it couldn't start).
+  - **The assistant:** a refused answer's partial text is taken back on screen at once, as it
+    already was on reload; a question's own problems (too long, personal data) are reported before
+    "this conversation is too long"; and the scripted stand-in model searches long questions
+    instead of answering "not found".
+
+- **Small fixes from the Phase 4 review** (Phase 4, phase review).
+  - **The conversation page:**
+    - Under a budget stop, "Ask again" and "Try again" are hidden like Retry. Before, they sent a
+      question the server refused, and it vanished without a word.
+    - A "still answering" reply now loads the turn that's running.
+    - A conversation that no longer exists stops being checked for unfinished answers.
+    - A question with spaces around it is no longer sent twice when the connection drops before
+      the answer starts.
+    - A reply that isn't an answer stream (a misconfigured proxy's page) counts as a failed send
+      and keeps the question in the box.
+    - Opening a source no longer reloads the whole conversation.
+  - **The assistant:**
+    - A broken character in the model's text (a lone UTF-16 surrogate) becomes a replacement
+      character, instead of failing the turn and leaving the conversation busy for 10 minutes.
+    - The directory search measures the model's query after cleaning it, as the handbook search
+      already did.
+  - **The evals and the proxy check:**
+    - Their cleanup deletes the run's daily spending rows and its sandbox in one transaction, and
+      the eval keeps its sandbox when it can't read the sandbox's spending, so a failure can't
+      leave rows behind that fill the shared daily cap.
+    - The scoreboard's commit is read before the run saves its recordings, so it is no longer
+      always marked "dirty".
+    - A wrong `--compare` file is refused before any paid call.
+    - The proxy check's holding control fails on an error response.
+    - CI now runs the proxy check's own tests when only its script changes, and lint and type
+      checks cover it.
+
+### Security
+
+- **A card number followed by its expiry or security code is caught** (Phase 4, v0.4.0 release
+  review). The personal-data check read "4242 4242 4242 4242 123" as one 19-digit number, which
+  failed the card checksum, so the card went through to the model and the database. Each grouped
+  number is now also tried without its last group, in the API and the browser alike.
+
+- **A stopped sensitive question still reaches HR, and the model can't fake a citation** (Phase 4,
+  phase review). The whole-phase review found no high issues and these two medium ones:
+  - A question the safety check marked sensitive (harassment, for example) that the person then
+    stopped got no HR contact panel and no audit event, live or after a reload. Sensitive topics go
+    to a person on every ending now, including a stop (invariants 6 and 7).
+  - The model could write an HTML character reference (`&#xE000;`) that the answer renderer
+    turned into a working citation marker, so an uncited sentence looked cited (invariant 4). Those
+    references are now dropped before the markers are placed.
+
+  The personal-data check also catches a Social Security number written as nine digits in a row, or
+  with dots or slashes between its groups, in the API and the browser alike.
+
+- **One visitor can't stall the API, and a question can't get stuck** (Phase 4, stage 4). An Opus
+  security review of the routes and the stream found one high issue, now fixed: about 15
+  questions sent at once each held a database connection while waiting for a second one, which
+  froze every request in the process for 30 seconds. The stream route now never holds one
+  connection while it takes another. A failure or a cancel right after a question was saved can
+  no longer leave it "running" for 10 minutes, and the prompt's canary check now also catches
+  the canary in capitals, spaced out, or split by Markdown. The cache of embedded search queries
+  is kept per sandbox, so a fast search can't tell a visitor that someone in another sandbox
+  asked the same thing. The review confirmed the rest: every
+  route answers 404 for another person's conversation or turn, the stream needs the CSRF token
+  and the same-origin check, and many conversations at once can't spend past the sandbox's cap.
+
+- **The assistant can't be turned against its own server or other visitors** (Phase 4, stage 2).
+  An Opus security review found no high issues and one medium, now fixed: a single model response
+  could start hundreds of tools at once. Now at most 5 run per response, 3 at a time, and 20 per
+  question. The system prompt's canary (a hidden phrase that exposes a leaked prompt) is withheld
+  from everything sent to the browser, even split across messages or padded with invisible
+  characters. The crisis text never waits more than 2 seconds on the HR contacts, and the browser
+  no longer receives cache counts or costs that could hint at another visitor's question.
+- **No one, HR included, can read another person's conversations** (Phase 4, stage 1). Every
+  assistant table that holds a sandbox's data has row-level security, which is Postgres hiding
+  rows the database session isn't allowed to see. It's scoped to the sandbox, and a second rule
+  scopes the conversation tables to the person. The one global table, the demo's daily spending
+  total, holds only dates and amounts.
+  Keys that point at a conversation or turn also name its owner, so no one can attach a row to
+  someone else's conversation even by knowing its ID. The spending ledgers refuse negative
+  reservations, out-of-range amounts, and forward-dated days; only a settlement may be dated
+  the day before, so a question that crosses midnight UTC settles on the day it reserved.
+- **An empty API key in the shell no longer hides the one in `apps/api/.env`** (Phase 4, stage
+  1). The settings ignore `ANTHROPIC_API_KEY` or `VOYAGE_API_KEY` when the shell sets it to an
+  empty string, so an agent shell that exports one empty can't shadow the real key, whatever
+  starts the process. Every other setting still fails when it's empty.
+
 ## [0.3.0] - 2026-10-14
 
 Phase 3: the handbook and its search. Juniper Row's fictional handbook (23 company sections, plus

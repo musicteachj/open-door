@@ -58,6 +58,26 @@ def problem_response(
     )
 
 
+class ProblemError(Exception):
+    """A refusal with a code of its own, which becomes the problem's `type` (RFC 9457).
+
+    `HTTPException` can't carry a `type`, and the assistant's routes need the web app to tell
+    "conversation-outdated" from "turn-running" without parsing prose. The code is the bare
+    string, such as `turn-running`. Every other route keeps using `HTTPException`.
+    """
+
+    def __init__(self, status_code: int, code: str, detail: str) -> None:
+        super().__init__(code)
+        self.status_code = status_code
+        self.code = code
+        self.detail = detail
+
+
+async def _problem_error(request: Request, exc: Exception) -> JSONResponse:
+    exc = cast(ProblemError, exc)
+    return problem_response(request, exc.status_code, exc.detail, {"type": exc.code})
+
+
 async def _http_exception(request: Request, exc: Exception) -> JSONResponse:
     exc = cast(StarletteHTTPException, exc)
     title = _title(exc.status_code)
@@ -95,6 +115,7 @@ async def _unhandled(request: Request, exc: Exception) -> JSONResponse:
 
 def install_problem_handlers(app: FastAPI) -> None:
     """Route every error the API can produce through problem details."""
+    app.add_exception_handler(ProblemError, _problem_error)
     app.add_exception_handler(StarletteHTTPException, _http_exception)
     app.add_exception_handler(RequestValidationError, _validation_error)
     app.add_exception_handler(Exception, _unhandled)

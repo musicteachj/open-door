@@ -50,6 +50,7 @@ jobs:
               - 'apps/web/openapi.json'
               - 'evals/**'
               - 'handbook/**'
+              - 'scripts/proxy-check/**'
               - 'compose.yaml'
               - '.github/workflows/ci.yml'
             web:
@@ -60,6 +61,8 @@ jobs:
             e2e:
               - 'apps/web/**'
               - 'apps/api/**'
+              - 'scripts/proxy-check/**'
+              - 'Makefile'
               - '.nvmrc'
               - '.github/workflows/ci.yml'
 
@@ -106,8 +109,8 @@ jobs:
       # --locked fails if uv.lock is out of date with pyproject.toml instead of quietly updating it.
       - run: uv sync --locked
       # ../../evals holds the retrieval eval's runner; --config gives it the API's lint rules.
-      - run: uv run ruff check . ../../evals --config pyproject.toml
-      - run: uv run ruff format --check . ../../evals --config pyproject.toml
+      - run: uv run ruff check . ../../evals ../../scripts/proxy-check --config pyproject.toml
+      - run: uv run ruff format --check . ../../evals ../../scripts/proxy-check --config pyproject.toml
       - run: uv run mypy
       - name: Domain and policy code import no framework
         run: uv run lint-imports
@@ -133,6 +136,11 @@ jobs:
       # embedding fails here: run `make embed` and commit the cache.
       - name: Handbook search finds the right sections (retrieval eval)
         run: uv run python ../../evals/retrieval/run.py --check
+      # Replays the recorded answers and judge verdicts of the full set: no Anthropic or Voyage
+      # key, no network. A request with no recording (a prompt, tool, or retrieval change) fails
+      # here: run `make eval-live SET=full YES=1` and commit the fixtures.
+      - name: Assistant evals replay the recorded answers (offline)
+        run: uv run python ../../evals/assistant/run.py --mode offline --set full --check
       - name: The committed OpenAPI schema matches the API
         run: uv run python scripts/export_openapi.py --check
 
@@ -239,6 +247,12 @@ jobs:
       - name: Browser tests
         run: npm run e2e
         working-directory: apps/web
+      # The turn stream through a strict nginx (a 20-second read timeout), on Docker and the same
+      # database the browser tests used. It starts its own API on :8200 and nginx on :8201, with
+      # the scripted model, so no paid AI calls. The job's environment already has the database
+      # URLs. About two minutes.
+      - name: Proxy check
+        run: make proxy-check
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: failure()
         with:

@@ -13,7 +13,8 @@ sandbox.
 
 **Everything in a sandbox lives for 24 hours.** `tenants.expires_at` is set to 24 hours after
 creation. Every other row belongs to a tenant and is deleted with it, through the foreign keys'
-`ON DELETE CASCADE`. A session is refused as soon as it expires, even before its row is deleted.
+`ON DELETE CASCADE`, except the handbook tables and `ai_spend_daily`, which have no tenant (see
+their sections below). A session is refused as soon as it expires, even before its row is deleted.
 The scheduled cleanup job that deletes expired sandboxes arrives in Phase 8. Until then, the
 `od_cleanup` role can delete only expired sandboxes, and tests prove it.
 
@@ -35,6 +36,8 @@ automated-decision systems apply that to the data such systems use and produce.
   transaction belongs to. The API's database login can't skip that rule. The one exception is
   `sessions`, described below.
 - **Directory fields** are visible to everyone in the same sandbox.
+- **The assistant's conversations** (messages, turns, and feedback) are visible only to the person
+  they belong to, with no HR exception. A second, restrictive Postgres rule enforces it.
 - **Private details** are visible only to the person themselves and to HR. Both the policy layer
   (`app/policy`) and a second, database-level rule enforce this.
 - **The `/me` fields** (`employmentType`, `isManager`, `isHrAdmin`, `personaKey`, and
@@ -133,14 +136,101 @@ row and creates a new one, and signing out deletes it. Deleted with the sandbox 
 | `id`, `tenant_id` | A random UUID, and the sandbox | Random rather than a sequence, so one sandbox can't estimate another's activity. |
 | `occurred_at` | When it happened (UTC) | The record. |
 | `actor_person_id`, `via` | Who acted, and how: `ui`, `assistant`, or `system` | Every action, including the assistant's from Phase 4, is attributed. |
-| `action`, `target_type`, `target_id` | What was done, and to what | Phase 1 records `sandbox.created`, `session.persona_switched`, `session.ended`, and `person_private.read`. |
-| `before`, `after` | Non-private fields only, such as `personaKey`, or the names of the private fields read | Never private values, so a privacy deletion request never means editing this log. |
+| `action`, `target_type`, `target_id` | What was done, and to what | Phase 1 records `sandbox.created`, `session.persona_switched`, `session.ended`, and `person_private.read`. Phase 4 adds `escalation.offered` (target `ai_turn`), written when the assistant shows the crisis, sensitive, or "can't answer right now" panel, and when a budget stop ends a turn before the safety check could run (`kind` `unavailable`, `reason` `budget`: the budget message carries 911 and 988 instead of a panel), and `person_private.read` with `via` `assistant` when `get_my_profile` runs. |
+| `before`, `after` | Non-private fields only, such as `personaKey`, the names of the private fields read, or an escalation's `kind` | Never private values, so a privacy deletion request never means editing this log. |
 | `proposal_id` | The confirmed proposal, from Phase 5 | Ties an executed action to what the person confirmed. |
 | `request_id` | The request's ID | Matches the event with that request's log lines. |
 
 Append-only: the API can add and read events but never change or delete them. Visible to the API
 within its own sandbox. No endpoint shows them yet. Deleted with the sandbox, which is the demo
 choice described above.
+
+### The assistant: `ai_conversations`, `ai_messages`, `ai_turns`, `ai_feedback`, `ai_spend`, `ai_spend_daily`
+
+Added in Phase 4 (migration 0008). Nothing writes to them until the assistant's turn code arrives
+later in Phase 4.
+
+**Questions and answers are stored unencrypted in Phase 4, and so are the ones the guard flagged
+as sensitive or as a crisis.** Phase 6 encrypts case narratives and flagged content together. The
+sandbox is fictional, the landing page asks visitors not to enter real personal information, and
+everything is deleted with the sandbox after 24 hours.
+
+Every ID below is a random UUID, so one sandbox can't estimate another's activity.
+
+### `ai_conversations`
+
+| Column | Holds | Why |
+|---|---|---|
+| `id`, `tenant_id`, `person_id` | IDs: the conversation, its sandbox, and the person who owns it | Identity, and the one person who may read it. |
+| `created_at` | When it began (UTC) | Finds a person's newest conversation. |
+| `model`, `guard_model`, `effort`, `prompt_version`, `toolset_version` | The pins: the assistant's model, the guard's model, the effort setting, and the prompt and tool-set versions at the start | A conversation keeps its model, prompt, and tools for its whole life, so its history stays valid and replayable. |
+
+### `ai_messages`
+
+| Column | Holds | Why |
+|---|---|---|
+| `id`, `tenant_id`, `person_id`, `conversation_id`, `turn_id` | IDs: the message, its sandbox, its owner, its conversation, and the turn that produced it | Identity and ownership. |
+| `position`, `role` | The message's place in the conversation (from 0), and `user`, `assistant`, or `system` | The model has no memory: each turn sends the history back in order. |
+| `content` | The message exactly as the model API takes it, as JSON kept byte for byte. It includes the person's question, the model's replies, and tool results such as handbook passages and the person's own directory card or private details | The history for the next turn. It is `json`, not `jsonb`, because the model's signed thinking blocks must come back unchanged. |
+| `sources` | For each handbook search result in the message, in order: the section ID, the passage IDs, the title, the group name, the audience label, the last-updated date, and the link. Null when the message has none | The conversation's list of sources, rebuilt for citations, including from turns that were stopped or failed. The result text alone can't give these back reliably. |
+| `created_at` | When it was stored (UTC) | The record. |
+
+### `ai_turns`
+
+| Column | Holds | Why |
+|---|---|---|
+| `id`, `tenant_id`, `person_id`, `conversation_id` | IDs: the turn, its sandbox, its owner, and its conversation | Identity and ownership. |
+| `question` | What the person asked | Shown after a reload. |
+| `status`, `error_code` | `running`, `completed`, `stopped`, `failed`, `crisis`, or `guard_unavailable`; and a code. A failed turn's code is the one its error event sent (`refusal`, `model-unavailable`, `budget-sandbox`, `budget-daily`, `spend-limit` (Anthropic's Console spend limit), `too-many-calls`, `internal`), or a more exact one the client sees as `internal`: `prompt-leak` (the system prompt's canary was caught and withheld), `guard-error` (the safety check couldn't run), or `abandoned`. A completed turn cut off by the output limit has `max-tokens`. | One turn runs at a time per conversation. The code explains a failure or an incomplete answer. |
+| `started_at`, `ended_at` | When the turn began and ended (UTC) | The record. |
+| `answer_text`, `citations` | The answer (a stopped turn keeps its partial text) and its citations as JSON | What the person sees after a reload. |
+| `guard_verdict` | The guard's verdict as JSON; null if the guard did not run | Phase 7's console shows why a turn was routed. The browser gets the category and kind only (`GET /assistant/conversations/current`), never `injectionSuspected`, the cost, or the cache counts. |
+| `tool_calls`, `sections_retrieved` | Each tool call (name, a short summary of its input, success, duration), and the handbook sections the search returned | What the assistant did. A search's summary holds up to 60 characters of its query (and `find_people`'s up to 40), after control characters are removed. Tool calls past the limits (5 per response, 20 per question) aren't run, and a round records them as one `skipped` entry with a `count`. The summaries never hold private values. |
+| `served_by_models`, `effort`, `prompt_version`, `toolset_version` | The model IDs that served the turn, and the settings in effect | Explains a result, and shows when a fallback happened. |
+| `input_tokens`, `output_tokens`, `cache_read_tokens`, `cache_write_tokens`, `cost_usd` | Token counts and the cost at list price | Measures cost and caching. |
+| `first_event_ms`, `total_ms` | Milliseconds to the first visible event, and in total | Measures latency. |
+| `refusal`, `fallback`, `injection_suspected` | Yes or no | Phase 7's console counts these. |
+
+### `ai_feedback`
+
+| Column | Holds | Why |
+|---|---|---|
+| `id`, `tenant_id`, `person_id`, `turn_id` | IDs: the feedback, its sandbox, its owner, and the answer it rates | One per answer. |
+| `helpful`, `reason` | A thumbs up or down, and an optional reason of at most 500 characters | So the owner can see which answers helped. |
+| `created_at` | When it was given (UTC) | The record. |
+
+### `ai_spend`
+
+| Column | Holds | Why |
+|---|---|---|
+| `id`, `tenant_id`, `turn_id` | IDs: the row, its sandbox, and the turn it belongs to | Identity. There is no person: the budget is the whole sandbox's. |
+| `kind`, `amount_usd` | `reserve` (the most a call could cost, never negative) or `settle` (the actual cost minus the reservation, so it can be negative); and the dollar amount, between -10 and 10 | The sandbox's AI budget (`AI_SANDBOX_BUDGET_USD`) is the sum. |
+| `created_at` | When it was added (UTC) | The record. |
+
+### `ai_spend_daily`
+
+Global: no sandbox, no person, no text, and outside row-level security.
+
+| Column | Holds | Why |
+|---|---|---|
+| `id` | A random UUID | Identity. |
+| `day` | The UTC date the row is added; a settle may instead carry its reservation's day, the day before | The demo's daily cap (`AI_DAILY_BUDGET_USD`) is the sum for a day across all sandboxes. |
+| `kind`, `amount_usd` | `reserve` or `settle`, and a dollar amount, with the same limits as `ai_spend` | The same reserve-then-settle ledger. |
+| `created_at` | When it was added (UTC), always the server's clock | The record, and what `day` must match. |
+
+**Who sees them.** `ai_conversations`, `ai_messages`, `ai_turns`, and `ai_feedback` are visible to the
+person they belong to and to no one else, HR included: Postgres enforces a second, restrictive rule
+on top of the sandbox rule. Phase 7 decides what the console may show. `ai_spend` is the sandbox's
+own ledger: its sum covers everyone in the sandbox, so people in one sandbox can see each other's
+turn IDs and the timing of their calls there, though never a question or an answer. A sandbox is one
+visitor playing fictional personas, so that is accepted, and no route returns these rows.
+`ai_spend_daily` holds amounts only, so it is visible to every sandbox's API session.
+
+**How long.** The first five are deleted with the sandbox, 24 hours after it is created.
+`ai_spend_daily` has no sandbox to be deleted with: its rows older than 30 days are deleted by
+Phase 8's cleanup job. The API can add rows but not change or delete them, except that a turn's
+outcome and trace columns can be updated while it is `running`. Once it ends, a trigger refuses any
+further change.
 
 ### The handbook: `handbook_versions`, `handbook_sections`, `handbook_chunks`
 
@@ -208,7 +298,86 @@ Voyage AI turns text into the vectors that handbook search compares.
 
 - **The handbook's text is sent now,** by `make embed` only, and only for passages that have no
   vector in the committed cache yet. CI and the tests never call Voyage: they read the cache.
-- **Assistant questions are sent from Phase 4,** so a question can be searched by meaning.
+- **The assistant's search queries are sent from Phase 4.** When the assistant calls
+  `search_handbook`, its query (written by the model from the person's question, up to 500
+  characters) is turned into a vector before the database is read. The person's whole question
+  isn't sent to Voyage, only that query.
+- **The API calls Voyage only when `AI_TRANSPORT=anthropic`.** With the scripted model (`make
+  dev`, the browser tests, the proxy check), search is full text only, even with a key in `.env`.
+- **Voyage's terms:** it stores API data and may use it for training unless the organization opts
+  out, which also gives zero-day retention: "customers can opt-out from Voyage storing and using
+  their data for future model training so that there is a zero-day retention of the data."
+  **Open Door's Voyage organization has opted out** (the owner, confirmed on 2026-10-17), so
+  Voyage keeps none of the text it embeds.
+
+> Source: Voyage AI, "FAQ" (docs.voyageai.com/docs/faq, last updated 2026-08-03), read on
+> 2026-10-17.
+
 - **The run-time query cache holds hashes and vectors, never text.**
 - **The committed cache files** (`handbook/embeddings/`) hold vectors keyed by hashes of the
   model, the size, and the text, not the text itself.
+
+### Anthropic (the assistant's models)
+
+Anthropic runs the models behind the assistant: Claude Opus 5.5 answers, and Claude Haiku 5.5 is
+the safety check that reads each message first. Anthropic is the data processor for the Claude API.
+
+- **What is sent, on each turn:**
+  - to the safety check: the person's new message, and up to 1,000 characters of the assistant's
+    last answer
+  - to the assistant: the system prompt, the tool definitions, the conversation so far, the new
+    question, and a short context message (the person's first name, role, location, employment
+    type, today's date, and the handbook version)
+  - the tools' results, which include handbook passages, directory cards, and, when someone asks
+    the assistant about themselves, their own private details (personal email, phone, home
+    address, and date of birth)
+- **What isn't sent:** a crisis message, or a message the safety check couldn't read, never
+  reaches the assistant model. A crisis message does go to the safety check, which is what
+  recognizes it.
+- **Nothing is sent from tests, CI, or `make dev`.** They use the scripted stand-in. Only a
+  deliberate `AI_TRANSPORT=anthropic` run or a live eval calls the API.
+- **Anthropic's terms, quoted:**
+  - Retention: "we automatically delete inputs and outputs on our backend within 30 days of
+    receipt or generation". Exceptions: inputs and outputs flagged for a usage policy violation
+    are kept "for up to 2 years and trust and safety classification scores for up to 7 years",
+    and data may be kept "as required by law".
+  - Training: "Retained data is never used for model training without your express permission."
+  - Open Door gives no such permission, sends no feedback to Anthropic, and doesn't use zero data
+    retention (ZDR), which needs a separate agreement.
+
+> Source: Anthropic, "How long do you store my organization's data?" (privacy.claude.com, last
+> updated 2026-07-01), and "API and data retention" (platform.claude.com/docs), both read on
+> 2026-10-15.
+
+### The assistant evals (`evals/assistant/`)
+
+The evals run real turns against a fictional sandbox and keep what they need to replay them. No
+real person's data is involved: every name, address, phone, email, and birth date comes from the
+seed generator.
+
+- **The eval sandbox** is a normal sandbox with a fixed ID, created at the start of a run and
+  deleted at the end through the owner login (the cascade removes its people, conversations,
+  turns, spend, and audit rows). The run also deletes the `ai_spend_daily` rows it added, and
+  only those. A crashed run's sandbox is removed at the next run's start.
+- **The recorded fixtures** (`fixtures/*.jsonl.gz`, committed): each model, guard, and judge call
+  as a hash of its request and the response the model gave (the answer text, tool calls, usage,
+  and citations). The responses can include the fictional asker's own private details, when an
+  item asks the assistant about themselves. They change only when a live run re-records them.
+- **The query embeddings** (`fixtures/embeddings.jsonl`, committed): vectors keyed by a hash of
+  the model, the size, and the text. The text itself isn't stored.
+- **The hand grades** (`hand-grades.yaml` and `hand-grades-key.yaml`, committed): 34 recorded
+  answers with their questions, cited passages, and a yes or no on each rubric line, and which 4
+  answers were planted with flaws.
+- **Each run's scoreboard and traces** (`runs/`, git-ignored, on the machine that ran it): the
+  scores, costs, and every item's answer, tool results, and guard verdict.
+- **Who receives what in a live run:** Anthropic receives the eval questions and the fictional
+  sandbox's tool results (Opus 5.5 and Haiku 5.5), and the judge (Sonnet 5.5) receives each
+  answer with its question, reference answer, and cited passages. Voyage receives the eval
+  questions' and the model's search queries, to embed them. Live runs happen only on the owner's
+  machine, with `make eval-live YES=1`; CI replays the fixtures with no network.
+
+- **Logs hold no conversation content.** The API logs IDs, timings, exception types, and stop
+  reasons, never a question, an answer, a tool result, or the system prompt. The turn stream adds
+  two fixed warnings with no fields: a client that stopped reading a stream, and streams still
+  open at shutdown (with a count). A refused question (too long, or a Social Security or card
+  number) is a problem response; the text is never logged, stored, or echoed back.

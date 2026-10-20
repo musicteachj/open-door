@@ -54,41 +54,53 @@ function isSameOrigin(url: string): boolean {
   }
 }
 
+/**
+ * Adds the CSRF token to `headers` for an unsafe method sent to this page's own origin. The token
+ * goes only there: `new URL` resolves a relative path, and a protocol-relative "//host", against
+ * the page, so the comparison sees where the request lands. Shared with the turn stream's own
+ * `fetch` (`stream-turn.ts`), so the rule exists once.
+ */
+export function applyCsrfHeader(headers: Headers, method: string, url: string): void {
+  if (SAFE_METHODS.has(method.toUpperCase()) || !isSameOrigin(url)) return
+  const token = readCsrfToken()
+  if (token !== null) headers.set(CSRF_HEADER, token)
+}
+
+function parseBody(text: string): { body: unknown; parsed: boolean } {
+  if (text === '') return { body: undefined, parsed: true }
+  try {
+    return { body: JSON.parse(text), parsed: true }
+  } catch {
+    return { body: undefined, parsed: false }
+  }
+}
+
+/** The `ApiError` for a non-2xx response whose body has been read as `text`. */
+export function apiErrorFrom(response: Response, text: string): ApiError {
+  const { body, parsed } = parseBody(text)
+  return new ApiError(
+    response.status,
+    parsed && isProblem(body) ? body : null,
+    response.headers.get('X-Request-ID'),
+  )
+}
+
 export async function apiFetch<T>(url: string, init: RequestInit = {}): Promise<T> {
   const method = (init.method ?? 'GET').toUpperCase()
   const headers = new Headers(init.headers)
 
-  // The token goes only to this page's own origin. `new URL` resolves a relative path, and a
-  // protocol-relative "//host", against the page, so the comparison sees where the request lands.
-  if (!SAFE_METHODS.has(method) && isSameOrigin(url)) {
-    const token = readCsrfToken()
-    if (token !== null) headers.set(CSRF_HEADER, token)
-  }
+  applyCsrfHeader(headers, method, url)
   if (init.body != null && !headers.has('Content-Type')) {
     headers.set('Content-Type', 'application/json')
   }
 
   // Credentials are pinned after the spread, so a caller cannot widen them.
   const response = await fetch(url, { ...init, method, headers, credentials: 'same-origin' })
-  const requestId = response.headers.get('X-Request-ID')
   const text = await response.text()
 
-  let body: unknown
-  let parsed = true
-  if (text === '') {
-    body = undefined
-  } else {
-    try {
-      body = JSON.parse(text)
-    } catch {
-      parsed = false
-    }
-  }
-
-  if (!response.ok) {
-    throw new ApiError(response.status, parsed && isProblem(body) ? body : null, requestId)
-  }
+  if (!response.ok) throw apiErrorFrom(response, text)
+  const { body, parsed } = parseBody(text)
   // A 2xx the client cannot read, such as an HTML page from a misconfigured proxy, is a failure.
-  if (!parsed) throw new ApiError(response.status, null, requestId)
+  if (!parsed) throw new ApiError(response.status, null, response.headers.get('X-Request-ID'))
   return body as T
 }

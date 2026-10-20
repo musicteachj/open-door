@@ -290,3 +290,56 @@ describe('PassagePanel closing', () => {
     expect(citation).toHaveFocus()
   })
 })
+
+describe('PassagePanel inside a dialog (landmark off, its own title element)', () => {
+  // Stands in for the sheet's dialog title: it carries the id the dialog is named by.
+  const Title = ({ children, ...props }: React.ComponentProps<'h2'>) => (
+    <h2 data-testid="dialog-title" {...props}>
+      {children}
+    </h2>
+  )
+
+  it('is not a landmark of its own, and keeps one heading: the title', () => {
+    renderWithRouter(
+      <PassagePanel {...base} state="open" view={passageView()} landmark={false} titleAs={Title} />,
+    )
+    expect(screen.queryByRole('complementary')).not.toBeInTheDocument()
+    const headings = screen.getAllByRole('heading')
+    expect(headings).toHaveLength(1)
+    expect(headings[0]).toBe(screen.getByTestId('dialog-title'))
+    expect(headings[0]).toHaveTextContent('Sick leave')
+    expect(headings[0]).toHaveAttribute('tabindex', '-1')
+  })
+
+  it('moves focus to that title when the passage shows, as it does without one', () => {
+    renderWithRouter(
+      <PassagePanel {...base} state="open" view={passageView()} landmark={false} titleAs={Title} />,
+    )
+    expect(screen.getByTestId('dialog-title')).toHaveFocus()
+  })
+
+  it.each(['loading', 'error'] as const)(
+    'still has a title while %s, so the dialog keeps a name',
+    (state) => {
+      renderWithRouter(
+        <PassagePanel
+          {...base}
+          state={state}
+          groupName="California addendum"
+          landmark={false}
+          titleAs={Title}
+        />,
+      )
+      expect(screen.getByTestId('dialog-title')).toHaveTextContent(
+        'Handbook CA-4.3 · California addendum',
+      )
+      expect(screen.getByTestId('dialog-title')).toHaveClass('sr-only')
+    },
+  )
+
+  it('is unchanged without them: a labeled aside and a plain h2', () => {
+    renderWithRouter(<PassagePanel {...base} state="open" view={passageView()} />)
+    expect(screen.getByRole('complementary', { name: 'Handbook passage' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Sick leave' }).tagName).toBe('H2')
+  })
+})

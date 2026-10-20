@@ -21,12 +21,12 @@ every stage.
 | 1 Tenancy, identity, permissions | Done. The whole-phase review found nothing high or medium; its fixes are in `fix/phase-1-review`. Released in `v0.1.0`. | `fix/phase-1-review` | [#8](https://github.com/musicteachj/open-door/pull/8), [#9](https://github.com/musicteachj/open-door/pull/9), [#10](https://github.com/musicteachj/open-door/pull/10), [#11](https://github.com/musicteachj/open-door/pull/11), [#14](https://github.com/musicteachj/open-door/pull/14) | [phase 1 plan](plans/2026-10-03-phase-1-tenancy-identity-permissions.md) | 2026-10-04 |
 | 2 Design system, shell, sandbox entry | Done. The whole-phase review found nothing high; its fixes are in `fix/phase-2-review`. Released in `v0.2.0`. | `fix/phase-2-review` | [#23](https://github.com/musicteachj/open-door/pull/23), [#24](https://github.com/musicteachj/open-door/pull/24), [#25](https://github.com/musicteachj/open-door/pull/25), [#26](https://github.com/musicteachj/open-door/pull/26), [#27](https://github.com/musicteachj/open-door/pull/27), [#28](https://github.com/musicteachj/open-door/pull/28), [#29](https://github.com/musicteachj/open-door/pull/29), [#30](https://github.com/musicteachj/open-door/pull/30), [#32](https://github.com/musicteachj/open-door/pull/32) | [phase 2 plan](plans/2026-10-05-phase-2-design-system-shell-sandbox-entry.md) | 2026-10-06 |
 | 3 Handbook and retrieval | Done. The whole-phase review found five real bugs, none high; its fixes are in `fix/phase-3-review`. Released in `v0.3.0`. Its screens are designed ([#36](https://github.com/musicteachj/open-door/pull/36)) | `fix/phase-3-review` | [#37](https://github.com/musicteachj/open-door/pull/37), [#38](https://github.com/musicteachj/open-door/pull/38), [#39](https://github.com/musicteachj/open-door/pull/39), [#40](https://github.com/musicteachj/open-door/pull/40), [#41](https://github.com/musicteachj/open-door/pull/41), [#42](https://github.com/musicteachj/open-door/pull/42), [#43](https://github.com/musicteachj/open-door/pull/43), [#44](https://github.com/musicteachj/open-door/pull/44), [#45](https://github.com/musicteachj/open-door/pull/45) | [phase 3 plan](plans/2026-10-07-phase-3-handbook-and-retrieval.md) | 2026-10-14 |
-| 4 Assistant core (read-only) | Not started | — | — | — | — |
-| 5 Time off | Not started | — | — | — | — |
-| 6 Cases and escalation | Not started | — | — | — | — |
-| 7 AI Ops console, reviewer experience, model decision | Not started | — | — | — | — |
-| 8 Hardening and deploy-readiness | Not started | — | — | — | — |
-| 9 Deploy to AWS | **Held** until the owner deploys all portfolio apps together | — | — | — | — |
+| 4 Assistant core (read-only) | Done. The whole-phase review (`/code-review high` and a Fable 5.1 security review) found two medium bugs and no high ones; its fixes are in `fix/phase-4-review`. Released in `v0.4.0` | `fix/phase-4-review` | [#48](https://github.com/musicteachj/open-door/pull/48), [#49](https://github.com/musicteachj/open-door/pull/49), [#50](https://github.com/musicteachj/open-door/pull/50), [#51](https://github.com/musicteachj/open-door/pull/51), [#52](https://github.com/musicteachj/open-door/pull/52), [#53](https://github.com/musicteachj/open-door/pull/53), [#54](https://github.com/musicteachj/open-door/pull/54), [#55](https://github.com/musicteachj/open-door/pull/55), [#56](https://github.com/musicteachj/open-door/pull/56), [#57](https://github.com/musicteachj/open-door/pull/57), [#58](https://github.com/musicteachj/open-door/pull/58), [#59](https://github.com/musicteachj/open-door/pull/59) | [phase 4 plan](plans/2026-10-14-phase-4-assistant-core.md) | 2026-10-19 |
+| 5 Time off | Not started | - | - | - | - |
+| 6 Cases and escalation | Not started | - | - | - | - |
+| 7 AI Ops console, reviewer experience, model decision | Not started | - | - | - | - |
+| 8 Hardening and deploy-readiness | Not started | - | - | - | - |
+| 9 Deploy to AWS | **Held** until the owner deploys all portfolio apps together | - | - | - | - |
 
 **Design track (owner, in Claude Design):** in progress. The design system ("aubergine and
 cinnamon", Instrument Sans) and all five Phase 2 screens (the landing page, the app shell, the
@@ -47,13 +47,19 @@ opens an Atlanta store and adds Georgia's rules and a lactation section for ever
 [`plans/2026-10-13-phase-3-stage-6-georgia.md`](plans/2026-10-13-phase-3-stage-6-georgia.md)).
 The whole-phase review's fixes merged in #44, and the release review's in #45. **Phase 3 is done
 and released in `v0.3.0`.**
-Next: plan Phase 4 (the assistant core) at effort `high`, in a fresh session. The
-owner's Voyage account is ready for Phase 4: a payment method, the training opt-out, and a budget
-alert.** Later phases' screens are designed
+Phase 4 is planned: see the
+[spec](specs/2026-10-14-phase-4-assistant-core.md), the
+[plan](plans/2026-10-14-phase-4-assistant-core.md), and ADRs
+[0009](adr/0009-assistant-turn-and-guard.md), [0010](adr/0010-scripted-model-and-replay.md), and
+[0011](adr/0011-insert-only-budget-ledger.md). Phase 4's base commit is `73b4942`. Stage 1, the
+conversation store, budgets, and transports, merged in #49, and stage 2, the loop, the guard, and
+the tools, in #50. Stage 3, the evals, merged in #51: two question sets, the
+graders, a Sonnet 5.5 judge (92% agreement with independent Claude Opus grades; the owner chose
+not to grade by hand), offline replay in CI, and `make eval-live`. Its first live runs cost $1.60
+in all, and the assistant stays at low effort. Stage 4, the stream and the routes, merged in #52: the conversation routes, the streamed answer with its checks, Stop, and heartbeat, the personal-data check, `make proxy-check` behind a strict nginx, the regenerated web client, and [`AI-GOVERNANCE.md`](AI-GOVERNANCE.md). The Voyage training opt-out is recorded (#53), and screen 07, the conversation view, is designed and synced (#54). Stage 5, the conversation components, merged in #55. Stage 6, the conversation page, merged in #56: `/ask` streams cited answers from the real API, the browser tests run against the scripted model, and the first full live eval run is recorded ($6.78). The answer-quality follow-up merged in #57: a fresh full run ($8.02) has the red team, the citation checks, and the unanswerable items at 100% in every trial, the judge at 74% (up from 67%; the owner accepted it for Phase 4, and the 85% bar moves to Phase 7 with the judge's strictness and a retrieval miss), and the guard at no failures with a 10-second limit (ADR 0009 amended); the offline evals and CI now replay the full set. The whole-phase review ran on 2026-10-19 (three `/code-review high` runs, one per area, and one Fable 5.1 security reviewer). It found no high issues and two medium ones: a sensitive question the person stopped got no HR panel or audit event, and the model could fake a citation marker. Both are fixed, with about twenty small ones, in #58, and the release review's fixes in #59; the rest is in the backlog. **Phase 4 is done and released in `v0.4.0`.** Next: Phase 5 planning (time off, approvals, and confirm cards) at effort `high`.** Later phases' screens are designed
 shortly before each phase. **Design for Phase 3 is done:** the handbook browser and the passage
 panel were approved on 2026-10-07 (see [`design/screens/06-handbook/`](design/screens/06-handbook/notes.md)),
-so Phase 3's UI stage is unblocked. **Next for design:** the conversation view, before Phase 4.
-It reuses the passage panel as its source panel. The brief's "Decisions from the 2026-10-06
+so Phase 3's UI stage is unblocked. **Design for Phase 4 is done:** the conversation view (screen 07) was synced in #54. **Next for design:** Phase 5's screens (time off, approvals, and confirm cards). The brief's "Decisions from the 2026-10-06
 brainstorm" records the rest.
 Decided on 2026-10-04, changing the original plan:
 - **Mockups are desktop only.** The build still adapts every screen to a phone's width, checked
@@ -66,7 +72,8 @@ The brief records these, and the Phase 2 decisions on the shell, the assistant h
 directory.
 
 **Releases (`dev` → `main`):** `v0.1.0` (2026-10-04): planning, Phase 0, and Phase 1. `v0.2.0`
-(2026-10-06): Phase 2. `v0.3.0` (2026-10-14): Phase 3.
+(2026-10-06): Phase 2. `v0.3.0` (2026-10-14): Phase 3. `v0.4.0`
+(2026-10-20): Phase 4.
 
 ---
 

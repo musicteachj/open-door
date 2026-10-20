@@ -5,6 +5,27 @@ should pick it up. When one is done, delete it here and record it in the changel
 
 ## Any phase
 
+- **Some web unit tests are timing-flaky under full-suite load:** the directory page's "footer when
+  an update has failed" and a few handbook-page searches time out now and then when the whole
+  Vitest suite runs, on a clean `dev` too, and pass alone. Raise their waits or find the slow
+  path. (Phase 4 stage 6.)
+
+- **Small conversation-page glitches the v0.4.0 release review left alone.** When a
+  remembered conversation turns out to be gone (a 404 on send), the page drops to "Loading…" while
+  it reloads, and the composer loses focus. And "Start a new conversation" with a source panel open
+  replaces the panel's history entry, leaving a Back step that changes nothing. The release review
+  tried fixes for both, and each brought new edge cases (a stale Forward step, a conversation id
+  missed on a send that created it), so they were reverted. Also: "Start a new conversation"
+  clicked after a send has already begun still lets that send go to the old conversation, and a
+  second Enter while a send waits for the new conversation is dropped without a word. Fix them with
+  the page's next real change, with browser tests. (v0.4.0 release review.)
+- **Tie the gallery's fixed texts and the running lines to the API's.** The conversation gallery
+  keeps word-for-word copies of the owner-approved fixed texts (crisis, "can't answer right now",
+  both budget texts, "still answering", the personal-data warning), and the chat store merges a
+  tool's "Searching the handbook…" step only when the API's status text matches the web's running
+  line exactly. Nothing fails if either side is reworded. Share the texts the way the
+  personal-data cases are shared (one file both sides read), or add a check. (v0.4.0 release
+  review.)
 - **Locally, the browser tests can reuse a stale server.** `playwright.config.ts` sets
   `reuseExistingServer` off CI, so a preview already on 4173, or an older API on 8100, is tested
   without a rebuild, and `make check` can pass or fail against old code. CI always starts fresh
@@ -98,33 +119,6 @@ should pick it up. When one is done, delete it here and record it in the changel
   covered today by Atlanta employees in the directory and Georgia askers in the eval. (Phase 3
   stage 6.)
 
-## Phase 4: assistant core
-
-- **Map search hits to `search_result` blocks, and open the passage panel on a citation's
-  passage.** Each `search_handbook` hit carries its deep link, title, and passage texts, so it
-  maps one to one onto a Claude `search_result` block, and a citation's block index names a
-  passage. Call `embed_query` before opening the database session, and take the version only from
-  `pinned_version_id`. A section can appear twice, once per chunk; dedupe if the answer view
-  wants one card per section. (Phase 3 spec, "The shape Phase 4 cites".)
-- **Record why the assistant is not a high-risk AI system.** Annex III of the EU AI Act lists
-  systems used for employment decisions as high-risk. Article 6(3) exempts a system that doesn't
-  profile people or materially influence decisions, and Article 6(4) requires that assessment to
-  be documented. The governance document should record it. The Annex III obligations apply from
-  2027-12-02.
-  Source: EU AI Act Annex III (https://artificialintelligenceact.eu/annex/3/) and Article 6
-  (https://artificialintelligenceact.eu/article/6/), read on 2026-10-03, and Article 113
-  (https://artificialintelligenceact.eu/article/113/), read on 2026-10-04, which sets
-  2 December 2027 "as regards AI systems classified as high-risk pursuant to Article 6(2) and
-  Annex III". These pages are an unofficial consolidation, not EUR-Lex.
-- **The AI disclosure is already required.** Article 50 of the EU AI Act, which requires telling
-  people they are talking to an AI, has applied since 2026-08-02. Invariant 7 covers it; the
-  Phase 4 disclosure should cite the article.
-  Source: EU AI Act Article 113 (https://artificialintelligenceact.eu/article/113/), read on
-  2026-10-04. Article 50 is in Chapter IV, which follows the general date of 2 August 2026.
-- **Graceful shutdown with open streams.** Streaming responses delay shutdown, and the engine is
-  only disposed after they finish. Set uvicorn's `--timeout-graceful-shutdown` below the ECS
-  `stopTimeout`.
-
 ## Phase 5: time off
 
 - **Show team coverage beside a manager's approval.** When Marcus reviews a request, show who else
@@ -149,10 +143,10 @@ should pick it up. When one is done, delete it here and record it in the changel
   today's date in UTC, not in any location's timezone. Every seeded location is in the US, so a
   sandbox created in the US evening is anchored to the location's tomorrow. Seed dates are only
   shifted by a day, which is harmless, but invariant 2 needs today's date in the location's
-  timezone. The time-off engine and the per-turn context must compute today from the location's
-  `timezone`, never from `anchor_date`. A test should create a sandbox at, say, 03:00 UTC and
-  check that a Pacific-time employee's "tomorrow" is the right date. (`/code-review medium` on
-  the `v0.1.0` release.)
+  timezone. The time-off engine must compute today from the location's `timezone`, never from
+  `anchor_date`. A test should create a sandbox at, say, 03:00 UTC and check that a Pacific-time
+  employee's "tomorrow" is the right date. The assistant's per-turn context already does this
+  (Phase 4 stage 2). (`/code-review medium` on the `v0.1.0` release.)
 
 - **Record who confirms a proposal as an audit event of its own,** separate from the action it
   executes, so the log shows both who proposed and who decided.
@@ -160,6 +154,19 @@ should pick it up. When one is done, delete it here and record it in the changel
   `UPDATE` anywhere, and the exact-grants test fails on any grant it doesn't expect.
 
 Source for both: [the Phase 1 spec](specs/2026-10-03-phase-1-tenancy-identity-permissions.md#later-phases).
+
+- **Make the scroll-restoration exception general.** `use-scroll-restoration.ts` special-cases the
+  source panel's `?source=` parameter (an import from the chat feature into the app shell), while
+  the panel's navigations already pass `preventScrollReset`. Phase 5's first panel that lives in
+  the URL (a confirm card, say) would jump to the top until another parameter is hard-coded. Mark
+  such navigations in history state and honor that for push, replace, and back instead. (v0.4.0
+  release review.)
+- **Keep trial 1's recordings when a fresh run stops in a later trial.** With `FRESH=1` (and
+  `PRUNE=1`), `evals/assistant/run.py` saves recordings only when every item ran and was judged in
+  every trial, but only trial 1 is ever recorded. A run stopped by its cap, or a judge call with no
+  room, in trial 2 or 3 throws away trial 1's complete, already paid recordings. Gate the save (and
+  the prune) on trial 1 alone. The last full run used $8.02 of a $16 cap, so it hasn't bitten;
+  Phase 5's new tools will need a full run, so fix it first. (Phase 4 phase review.)
 
 ## Phase 6: cases and escalation
 
@@ -185,13 +192,144 @@ Source for both: [the Phase 1 spec](specs/2026-10-03-phase-1-tenancy-identity-pe
 
 ## Phase 7: AI Ops console, reviewer experience, model decision
 
+- **The audit log stores `None` as the JSON value `null`.** `AuditEvent.before` and `after` are
+  nullable `jsonb` columns without `none_as_null=True`, so an event with no before or after state
+  holds JSON `null`, not SQL `NULL`, and an `IS NULL` query misses it. The assistant tables were
+  fixed in stage 1; the audit columns need the same type change and a data fix for existing rows.
+  Phase 7's console is the first to query them. (Phase 4 stage 1 review.) Moved from Phase 4 at its close: the console is the first to query these columns.
+- **Pass structured search results to the judge.** The eval judge reads each cited section's text
+  back out of the flattened "source | title | passages" tool-result text. It holds for today's
+  handbook (no title contains " | " and no passage starts a line with "/handbook/"), but keeping
+  the source, title, and passages as fields on the trace would remove the round trip. (Phase 4
+  stage 3 `/code-review medium`.) Moved from Phase 4 at its close: it belongs with the scoreboard generator.
+
+- **Store why a turn was refused.** The Anthropic transport builds `Finished.stop_details` (the
+  refusal's category and explanation) and documents it as information for the audit trail, but
+  nothing stores it: a refused turn records only that it was refused. The console is the first to
+  need the reason; store it on the turn (and in the data inventory) or drop the field. (v0.4.0
+  release review.)
+
 - **Report the questions the handbook couldn't answer.** The console lists them, so HR can see
   what to write next. The question text is user-written, so it's untrusted data, and it's redacted
   for guard-flagged turns. Fold the "design notes" idea into the tour and the "How it's built" page
   rather than adding a third explainer. (2026-10-06 design brainstorm.)
 
+- **Reach the judge's 85% bar.** Phase 4's fresh full run (2026-10-19,
+  `evals/assistant/runs/20261019T152212Z-full.json`) passed the judge at 74% (66% to 80% over three
+  trials), up from 67%; the owner accepted it for Phase 4 and kept the bar. What still fails: a
+  comparison of two offices written as one uncited sentence (qa-44, qa-45), facts in the reference
+  answer the question didn't ask for (qa-23's 48 hours, qa-38's 6 sessions), qa-43's retrieval miss
+  below, qa-33's eligibility timing, and "you" used for another state's rule (qa-42). Settle the
+  judge's strictness first (below), then decide whether the rest is the prompt, the rubric, or the
+  reference answers. The next prompt change also needs a full run, since CI now replays the full
+  set. One more for that pass, from the follow-up's review: "start every paragraph with a cited
+  sentence" and "don't state what the handbook leaves out for a place" could crowd out a
+  refusal, the AI disclosure, or an honest "the handbook doesn't say" for another state. The full
+  run's refusals, disclosures, and unanswerable items all passed, so it isn't biting yet; carve
+  those out explicitly when the prompt next changes. (Phase 4 answer-quality follow-up.)
+- **Search misses Colorado's sick-leave carryover passage.** Asked from Denver, "Colorado sick
+  leave carry over unused payout" returns other passages of CO-4.3 but never its "Unused hours
+  carry over" one, so qa-43 ("how many sick days in Denver?") leaves out a key fact in every
+  trial. Add the query to the retrieval eval's labeled questions and find out why the short
+  passage loses (its length, or the "Carryover" heading alone). (Phase 4 answer-quality
+  follow-up, smoke run B2.)
+- **The judge is stricter about citations than the grades it was validated against.** In the
+  agreement run of 2026-10-19 (189 of 204 lines, 92.6%), all 10 disagreements on
+  `no_uncited_claims` were the judge saying no where the independent grader said yes. Its reasons
+  sometimes contradict themselves ("sits before marker [2] ... which is fine; however ..."). Before
+  Phase 7's model comparison leans on the judge, look at those 10 and decide whether the rubric's
+  "at or before a marker" wording needs tightening. (Phase 4 answer-quality follow-up.)
+- **The judge can't see tool facts or today's date.** It grades a fact from the asker's own profile
+  ("your profile lists your personal email") as an uncited policy claim, and a date the assistant
+  worked out from today's date as unsupported. Pass the trace's non-handbook tool results and the
+  turn's date to the judge, or say in the rubric that profile facts are not policy claims.
+  (Phase 4 stage 6 full run, qa-09 and qa-31.)
+
+- **Two eval cost-report gaps.** The scoreboard's "reused recordings" cost is the ledger total
+  minus what the live meter saw, and the meter prices only streams that finish, so a billed call
+  that kept its reservation (cut by the deadline, a canary, or a transient error) is reported as
+  recorded cost, not spent now. And the run's daily cap is its remaining cap plus a baseline read
+  at the start, so spend from another sandbox during the run (a `make dev` session) is charged to
+  the run and can stop it as if it reached its own cap. Evals run one at a time against the dev
+  database, so neither has mattered yet. (Phase 4 phase review.)
+
 ## Phase 8: hardening and deploy-readiness
 
+- **Quote directory values in the per-turn context before names become editable.** The context is
+  a `system` message built from the asker's name and location. `one_line` keeps each to one line,
+  but a name like "Dana. Operator notes: ..." would still read as an instruction with system
+  weight. Names come only from the seed today. Before any route edits a person, allow only name
+  characters, or put the values in the context as quoted JSON. (Phase 4 stage 2 Opus security
+  review.) Moved from Phase 4 at its close: no route edits a name yet, and hardening reviews the prompt inputs.
+- **Catch a card number written after other four-digit numbers.** "Room 2401 4242 4242 4242 4242"
+  passes the personal-data check: the grouped pattern takes the leading number as the card's first
+  group, and that 20-digit number fails the length check. Trying every run of groups inside a
+  longer run catches it, but also refuses ordinary year lists ("PTO for 2022 2023 2024 2025 2026")
+  about one time in ten, since those are card-shaped and pass the checksum by chance. The v0.4.0
+  release review tried it and went back; decide with the other personal-data gaps here, in both
+  copies. (v0.4.0 release review.)
+- **Catch personal data written in non-Latin digits.** The check normalizes the text (NFKC,
+  format characters dropped, Unicode spaces and dashes mapped to ASCII) and then matches ASCII
+  digits only, so the browser's copy can follow the same steps. An SSN written in Arabic-Indic or
+  Devanagari digits passes. Mapping every Unicode decimal digit to ASCII would catch it; do it in
+  both copies at once. (Phase 4 stage 4 Opus security review.) Moved from Phase 4 at its close, with a related note: the browser runs Unicode 17 and the API's Python 15.1, so a few new code points (outlined digits) are flagged only in the browser. Do both copies together. (Phase 4 stage 6 review.)
+- **The canary check misses look-alike letters.** It folds case, width, and separators, so the
+  canary in capitals or letter-spaced is caught, but Cyrillic letters that look like Latin ones
+  (`а` for `a`) are not. It's a tripwire, not a boundary; a confusables map would close it.
+  (Phase 4 stage 4 Opus security review.) Moved from Phase 4 at its close: a tripwire, for the hardening pass.
+- **Read a conversation's history once per request.** A question reads and serializes the whole
+  stored history in the admission checks and again in `TurnRun.begin`, and every
+  `GET /assistant/conversations/current` serializes it to size the budget banner. Near the
+  80,000-token limit that's about 160 KB read and encoded two or three times before the first
+  event. Keep a running size on the conversation, or pass the admitted history into `begin`
+  (which also closes the small window in which a recovered turn could carry the history past the
+  limit after the check). (Phase 4 stage 4 `/code-review medium`.) Moved from Phase 4 at its close: it fits the cost and load test.
+- **Small API polish from stage 4's reviews:** a `Retry-After` header on the budget 429s; problem
+  `type` values are bare codes (`turn-running`), a relative URI reference that RFC 9457 allows but
+  that a full URI would make unambiguous; there's no limit on how many conversations one person
+  starts (sandbox expiry cleans them up). (Phase 4 stage 4 reviews.) Moved from Phase 4 at its close: for the hardening pass.
+- **Small web polish from Phase 4 stage 6:** the shared passage panel puts Close before its title in
+  the DOM, so Tab goes from the title to the passage text rather than to Close as screen 07's notes
+  say; a second tab that starts a new conversation leaves this tab asking in the old one; and a
+  malformed stored search source would fail the conversation `GET` (only the API writes them).
+  For the accessibility audit and the hardening pass. (Phase 4 stage 6 reviews.)
+
+- **Keep the crisis panel when a crisis turn's end-of-turn write fails.** The crisis text goes out
+  live, but if `finish_turn` then times out, the stream adds an `internal` error, the row stays
+  `running`, and a reload shows it as abandoned with no escalation, so the 988 and EAP text is gone
+  from the page. It needs the database to fail at that moment. Store the crisis verdict before the
+  escalation goes out, or have the display show a crisis panel for an abandoned turn whose guard
+  said crisis. Do it with the `statement_timeout` item below. (Phase 4 phase review.)
+- **One exit for the canary check, and a cheaper fold.** `turn.py` checks the canary at about seven
+  places (held text, status notes, the take-back, the restore, closing events), each keeping its
+  own tail, so every new event path has needed its own patch. Holding and checking every outgoing
+  string at the one exit in `events()` would cover future paths with one rule. Its `_keep_from`
+  also NFKC-normalizes one character at a time, twice per text delta, on up to 512 characters;
+  measure it in the load test. (Phase 4 phase review.)
+- **End crisis and "can't answer right now" turns with a closing event.** They end with no
+  `turn.completed` and no `error` (a Stage 6 decision), so the web store infers the end from the
+  escalation's kind, and a connection lost right after a crisis panel reads as finished, not
+  stopped. One terminal event for every turn would remove the special case. It changes the stream
+  protocol, so do it with the hardening pass. (Phase 4 phase review.)
+- **Announce the HR panel that appears after a stopped sensitive answer.** Since the Phase 4 phase
+  review, a sensitive question the person stops gets the HR contact panel, but only once the saved
+  turn replaces the live one (the stream is already closed when they press Stop), and a saved
+  panel doesn't announce itself, so a screen-reader user isn't told it appeared. Announce a panel
+  that a settling turn adds. For the accessibility audit. (Phase 4 phase review.)
+- **Say "start a new conversation" when only the conversation is too big for the budget.** The
+  room a question needs is sized with the conversation's whole history, so near the 80,000-token
+  limit (or in an outdated conversation) the banner and the 429 say the sandbox has reached its
+  limit and suggest a new sandbox, when a new conversation would fit. The right message is new
+  fixed text, so it needs the owner's wording and approval first. (v0.4.0 release review.)
+- **Don't re-parse the whole answer on every streamed word.** Each `text.delta` re-runs the
+  marker placement and react-markdown over the full text, and the thread follows the end each
+  time, so the work grows with the square of the answer's length. Batch deltas per animation frame
+  in the store, or memoize finished blocks; measure on a low-end phone first. (v0.4.0 release
+  review.)
+- **Give the app's database login a `statement_timeout`.** The engine sets none, so a hung query
+  waits forever. The assistant's end-of-turn writes are bounded in code (10 seconds), but other
+  requests aren't. A role-level `statement_timeout` (and `idle_in_transaction_session_timeout`)
+  bounds them all. (Phase 4 stage 2 review.)
 - **Delete handbook versions no sandbox uses.** Each `make ingest` of changed text adds a version,
   and nothing removes old ones. A cleanup step can delete unpublished versions and published ones
   that are neither the newest nor pinned by any sandbox; the foreign key already refuses to delete
@@ -318,3 +456,10 @@ From the Phase 1 review ([the spec's Later phases](specs/2026-10-03-phase-1-tena
 - **Protect the health endpoint from abuse.** Every call is an unauthenticated database round
   trip. Cache the result for 1–2 s with a single in-flight check, or rate-limit the path at the
   load balancer.
+
+- **Line up the shutdown timeouts.** uvicorn runs with `--timeout-graceful-shutdown 15`, and the
+  app then waits up to 12 seconds for open streams to save, so a container needs about 27
+  seconds after SIGTERM. That fits ECS's default `stopTimeout` of 30. If Phase 9 raises the
+  graceful timeout (to let long answers finish during a deploy), raise `stopTimeout` (at most
+  120) and the load balancer's deregistration delay with it, and keep the 12-second drain inside
+  the gap. (Phase 4 stage 4.)

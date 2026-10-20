@@ -1,14 +1,14 @@
-import { useQueryClient } from '@tanstack/react-query'
 import { Info } from 'lucide-react'
-import { Navigate, useNavigate } from 'react-router'
-import { useCreateSandbox } from '@/api/generated'
-import { signInAs, useMe } from '@/app/useMe'
+import { Navigate } from 'react-router'
+import { useMe } from '@/app/useMe'
+import { useStartSandbox } from '@/app/useStartSandbox'
 import { Logo } from '@/components/core/logo'
 import { InlineError } from '@/components/feedback/inline-error'
 import { PersonaCard } from '@/components/landing/persona-card'
 import { PERSONAS } from '@/features/personas/personas'
 import { ApiError } from '@/lib/api-fetch'
 import { AI_DISCLOSURE } from '@/lib/disclosure'
+import { SANDBOX_START_FAILED } from '@/lib/sandbox-copy'
 
 // From docs/design/screens/01-landing/notes.md. "How it's built" and the tour button are designed
 // but hidden until Phase 7 builds their destinations. Nothing here is the signed-in person's: the
@@ -24,16 +24,7 @@ const NOTICE =
 
 export function LandingPage() {
   const me = useMe()
-  const navigate = useNavigate()
-  const queryClient = useQueryClient()
-  const start = useCreateSandbox({
-    mutation: {
-      onSuccess: ({ me: person }) => {
-        signInAs(queryClient, person)
-        void navigate('/ask')
-      },
-    },
-  })
+  const start = useStartSandbox()
 
   // A signed-in visitor has nothing to choose. Cached data whose latest fetch was a 401 is not a
   // signed-in visitor: the sandbox ended, and sending them on would bounce them to the reset page.
@@ -74,7 +65,7 @@ export function LandingPage() {
           </ul>
           {start.isError && (
             <InlineError
-              message="We couldn't start a sandbox."
+              message={SANDBOX_START_FAILED}
               onRetry={() => start.mutate(start.variables)}
             />
           )}

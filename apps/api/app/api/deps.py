@@ -3,6 +3,11 @@
 from fastapi import Request
 from sqlalchemy.ext.asyncio import AsyncEngine
 
+from app.ai.embeddings import Embedder
+from app.ai.transport import Transport
+from app.core.config import Settings
+from app.modules.assistant.sse import StreamTracker
+
 
 def get_engine(request: Request) -> AsyncEngine:
     """The engine the app's lifespan created.
@@ -15,3 +20,42 @@ def get_engine(request: Request) -> AsyncEngine:
         msg = "No database engine: build the app with create_app() and run its lifespan."
         raise RuntimeError(msg)
     return engine
+
+
+def get_transport(request: Request) -> Transport:
+    """The model transport the app's lifespan built (scripted or anthropic)."""
+    transport = getattr(request.app.state, "transport", None)
+    if transport is None:
+        msg = "No model transport: build the app with create_app() and run its lifespan."
+        raise RuntimeError(msg)
+    return transport  # type: ignore[no-any-return]
+
+
+def get_embedder(request: Request) -> Embedder | None:
+    """The query embedder, or None when the search is full-text only.
+
+    None is a real answer (the scripted transport, or no Voyage key), so only a missing lifespan
+    is an error.
+    """
+    if not hasattr(request.app.state, "embedder"):
+        msg = "No embedder slot: build the app with create_app() and run its lifespan."
+        raise RuntimeError(msg)
+    return request.app.state.embedder  # type: ignore[no-any-return]
+
+
+def get_app_settings(request: Request) -> Settings:
+    """The settings the app was built with, so a route reads the same values the lifespan used."""
+    settings = getattr(request.app.state, "settings", None)
+    if not isinstance(settings, Settings):
+        msg = "No settings: build the app with create_app()."
+        raise RuntimeError(msg)
+    return settings
+
+
+def get_streams(request: Request) -> StreamTracker:
+    """The tracker of open turn streams the app's lifespan created."""
+    streams = getattr(request.app.state, "streams", None)
+    if not isinstance(streams, StreamTracker):
+        msg = "No stream tracker: build the app with create_app() and run its lifespan."
+        raise RuntimeError(msg)
+    return streams

@@ -5,8 +5,9 @@
 useDefault = true
 
 [[allowlists]]
-description = "Embedding caches: each line is a SHA-256 hash of public handbook text and its vector, never a secret"
+description = "Embedding caches: each line is a SHA-256 hash of public handbook text or an eval query and its vector, never a secret"
 paths = [
   '''^handbook/embeddings/[^/]+\.jsonl$''',
   '''^evals/retrieval/embeddings/[^/]+\.jsonl$''',
+  '''^evals/assistant/fixtures(-effort)?/embeddings\.jsonl$''',
 ]

@@ -108,7 +108,12 @@ effort costs more on every step, so match it to the work:
 ## Writing
 
 - **American English everywhere:** docs, UI copy, code comments, identifiers, and commit and PR
-  text. Write "color", "organization", "canceled", "labeled", "behavior".
+  text. Write "color", "organization", "canceled", "labeled", "behavior". `make check-docs` fails
+  on British spellings.
+- **No em dashes anywhere:** UI copy, fixed texts, prompts, the handbook, docs, code comments,
+  and commit and PR text. Use a comma, a colon, parentheses, or two sentences. An empty table cell
+  is "-". `make check-docs` fails on an em dash, except in the frozen initial plan, the Claude
+  Design handoff in `docs/design/`, recorded eval fixtures (model output), and lockfiles.
 - **Commits and pull requests must be human readable.** Someone who never saw the session should
   understand what changed and why from the message alone.
   - **Commit subject:** one plain sentence in the imperative, at most 72 characters. Say what
@@ -153,8 +158,12 @@ the owner's explicit agreement first.
 
 ## AI development rules
 
-- **A change to a prompt, tool schema, or the guard needs the offline evals green and a live eval
-  run before the PR.** Put the scoreboard change in the PR description.
+- **A change to a prompt, a tool description or schema, the guard, or the retrieval needs a full
+  run before its PR** (`make eval-live SET=full YES=1`, estimated at $14, cap $16; the run of
+  2026-10-19 cost $8.02). CI replays the full set offline, and a smoke run re-records only its own
+  items, so CI stays red until the full run is committed. Use smoke runs (`make eval-live YES=1`,
+  about $0.65, cap $2) to try wording before that. Put the scoreboard change in the PR description.
+  **A release gets the full run too**, unless the last one already covers everything it ships.
 - **Model IDs are pinned.** A new model is adopted only after an eval comparison.
 - **No paid AI calls on push or PR.** CI replays recorded fixtures. Live evals are a manual
   workflow with a budget cap.
@@ -212,6 +221,10 @@ evals/                 datasets, offline replay and live runners, scoreboard
 docs/                  roadmap, spec, plans, ADRs, design handoff, governance docs
 ```
 
+`AI_TRANSPORT` picks the model transport: `anthropic`, `scripted`, or `replay`. `scripted` is the
+default for development, the browser tests, and the proxy check. `replay` is for the eval harness
+only: the app refuses it everywhere. Production refuses anything but `anthropic`.
+
 ---
 
 ## Commands
@@ -224,9 +237,12 @@ make db         start Postgres (127.0.0.1:5433), migrate, then create the login 
 make ingest     load and publish the handbook from handbook/ and its committed embeddings
 make embed      fetch missing embeddings from Voyage (needs VOYAGE_API_KEY); commit the cache
 make eval-retrieval  score handbook search against the labeled questions (needs `make db`; no network)
+make eval-offline  replay the recorded assistant evals (needs `make db`; no network)
+make eval-live  paid; smoke by default, `SET=full` or `SET=effort`, and `YES=1` to run
 make dev        Postgres, migrations, API (:8000) and web app (:5173) together
 make check      everything CI runs; needs `make db` first
 make e2e        the browser tests (Playwright, Chromium) against the real API on :8100
+make proxy-check  the turn stream through a strict nginx (needs `make db` and Docker)
 make captures   a local report of each design beside the build (needs `make db` and a network; not in CI)
 make openapi    after changing an API route: regenerate the schema and the web client
 make audit      scan for leaked secrets and vulnerable dependencies
@@ -269,11 +285,7 @@ wipes the data.
 
 ## Environment gotcha
 
-**In a Claude agent shell, `ANTHROPIC_API_KEY` may be exported as an empty string**, and
-`pydantic-settings` gives real environment variables precedence over `.env`. The empty value then
-silently shadows the key in `apps/api/.env`. This was learned the hard way on the owner's EMS
-project. When running the API from an agent shell, unset it first:
-
-```
-env -u ANTHROPIC_API_KEY uv run uvicorn app.main:app --reload
-```
+**A Claude agent shell may export `ANTHROPIC_API_KEY` as an empty string.** The settings now ignore
+an empty or blank `ANTHROPIC_API_KEY` or `VOYAGE_API_KEY` in the environment (a settings source
+drops only those two when blank), so the key in `apps/api/.env` wins and no `env -u` is needed. It
+was learned on the owner's EMS project and fixed in Phase 4, stage 1.

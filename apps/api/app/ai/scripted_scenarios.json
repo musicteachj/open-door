@@ -1,0 +1,74 @@
+[
+  {
+    "id": "guard-crisis",
+    "trigger": "hurt myself",
+    "behavior": "guard_crisis",
+    "note": "The guard calls this a crisis (self-harm). The turn ends with the fixed crisis text and the model is never called."
+  },
+  {
+    "id": "guard-sensitive",
+    "trigger": "harass",
+    "behavior": "guard_sensitive",
+    "note": "The guard calls this sensitive (harassment or discrimination). The model answers, and the HR escalation follows."
+  },
+  {
+    "id": "guard-injection",
+    "trigger": "ignore your instructions",
+    "behavior": "guard_injection",
+    "note": "The guard flags a suspected prompt injection but calls the message ordinary. The turn is not blocked."
+  },
+  {
+    "id": "decline",
+    "trigger": "Leo's home address",
+    "behavior": "decline",
+    "note": "A normal answer that declines to share another employee's private details. No citation. This is the design's refusal screen."
+  },
+  {
+    "id": "safety-refusal",
+    "trigger": "scripted safety refusal",
+    "behavior": "safety_refusal",
+    "note": "The model refuses before writing anything (stop reason refusal), which the turn reports as the refusal error."
+  },
+  {
+    "id": "not-found",
+    "trigger": "parking garage",
+    "behavior": "not_found",
+    "note": "It searches, then says it could not find the answer in the handbook and offers HR. No citation."
+  },
+  {
+    "id": "long-answer",
+    "trigger": "scripted long answer",
+    "behavior": "long_answer",
+    "note": "A long answer in many cited text blocks, for scrolling and for the stop button."
+  },
+  {
+    "id": "silence",
+    "trigger": "scripted silence",
+    "behavior": "silence",
+    "note": "No events for 45 seconds, then it answers normally. The reverse-proxy check uses this."
+  },
+  {
+    "id": "mid-stream-error",
+    "trigger": "scripted mid-stream error",
+    "behavior": "mid_stream_error",
+    "note": "Some text, then the model becomes unavailable."
+  },
+  {
+    "id": "working-note",
+    "trigger": "scripted working note",
+    "behavior": "working_note",
+    "note": "It writes a short note, then searches, then answers with a citation. The note streams and is then taken back, so it shows as a status line and not as part of the answer."
+  },
+  {
+    "id": "slow-guard",
+    "trigger": "scripted slow guard",
+    "behavior": "slow_guard",
+    "note": "The guard takes 2 seconds longer than its time limit."
+  },
+  {
+    "id": "guard-failure",
+    "trigger": "scripted guard failure",
+    "behavior": "guard_failure",
+    "note": "The guard gives no usable answer."
+  }
+]

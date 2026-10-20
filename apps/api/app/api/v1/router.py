@@ -3,6 +3,7 @@
 from fastapi import APIRouter
 
 from app.api.v1 import health
+from app.modules.assistant import routes as assistant
 from app.modules.handbook import routes as handbook
 from app.modules.identity import routes as identity
 from app.modules.people import routes as people
@@ -14,3 +15,4 @@ api_router.include_router(sandbox.router)
 api_router.include_router(identity.router)
 api_router.include_router(people.router)
 api_router.include_router(handbook.router)
+api_router.include_router(assistant.router)

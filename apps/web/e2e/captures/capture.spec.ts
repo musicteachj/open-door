@@ -17,6 +17,17 @@ import {
   type ScreenRow,
 } from './manifest'
 import { holdRequests, problem, setSandboxLeft, startAs } from '../helpers'
+import {
+  ask,
+  askAndWaitForAnswer,
+  BUDGET_DAILY_TEXT,
+  BUDGET_SANDBOX_TEXT,
+  composerBox,
+  QUESTIONS,
+  stopButton,
+  stubConversation,
+} from '../conversation-helpers'
+import { holdNextTurnStream, SICK_LEAVE_CITATION, SICK_LEAVE_SENTENCE } from '../held-stream'
 import { holdList, isListRequest, openProfileBySearch } from '../directory-helpers'
 import { renderReport, type ReportRow } from './report'
 
@@ -272,6 +283,9 @@ async function reachScreen(page: Page, row: ScreenRow) {
         .locator('section[aria-labelledby="passage-panel-open"]')
         .evaluate((el) => el.scrollIntoView({ block: 'center' }))
       break
+    case 'conversation':
+      await reachConversation(page, row.scenario!)
+      break
     case 'home':
     case 'expiry-banner':
       await expect(page.getByRole('heading', { level: 1 })).toBeVisible()
@@ -280,6 +294,164 @@ async function reachScreen(page: Page, row: ScreenRow) {
       await expect(page.getByRole('heading', { level: 1, name: "We couldn't find that page." })).toBeVisible()
       break
   }
+}
+
+/** The question each scripted state asks, and what the capture does after the answer. */
+async function reachConversation(page: Page, scenario: NonNullable<ScreenRow['scenario']>) {
+  const feedbackNo = () => page.getByRole('button', { name: 'No' })
+  switch (scenario) {
+    case 'cited-answer':
+      await askAndWaitForAnswer(page, QUESTIONS.cited)
+      break
+    case 'source-panel':
+      await askAndWaitForAnswer(page, QUESTIONS.cited)
+      await page.locator('[data-slot="citation-marker"]').first().click()
+      await expect(page.getByRole('complementary', { name: 'Handbook passage' })).toBeVisible()
+      await expect(page.getByRole('heading', { level: 2, name: 'Sick leave' })).toBeFocused()
+      break
+    case 'streaming-searching': {
+      const stream = await holdNextTurnStream(page)
+      await ask(page, QUESTIONS.cited)
+      await stream.push('turn.started', { turnId: '00000000-0000-4000-8000-000000000001' })
+      await stream.push('status', { text: 'Searching the handbook…' })
+      await expect(stopButton(page)).toBeVisible()
+      await expect(page.getByText('Searching the handbook…')).toBeVisible()
+      break
+    }
+    case 'streaming-text': {
+      const stream = await holdNextTurnStream(page)
+      await ask(page, QUESTIONS.cited)
+      await stream.push('turn.started', { turnId: '00000000-0000-4000-8000-000000000001' })
+      await stream.push('status', { text: 'Searching the handbook…' })
+      await stream.push('tool.started', { id: 't1', name: 'search_handbook', summary: "query='sick leave'" })
+      await stream.push('tool.finished', { id: 't1', ok: true, summary: 'done', durationMs: 12 })
+      await stream.push('text.delta', { text: SICK_LEAVE_SENTENCE })
+      await stream.push('citation', { ...SICK_LEAVE_CITATION, offsetUtf16: SICK_LEAVE_SENTENCE.length })
+      await stream.push('text.delta', { text: ' This is the company rule for any state that has no sick' })
+      await expect(page.getByText('This is the company rule')).toBeVisible()
+      break
+    }
+    case 'streaming-progress-note': {
+      const stream = await holdNextTurnStream(page)
+      await ask(page, QUESTIONS.cited)
+      await stream.push('turn.started', { turnId: '00000000-0000-4000-8000-000000000001' })
+      await stream.push('status', { text: 'Searching the handbook…' })
+      await stream.push('tool.started', { id: 't1', name: 'search_handbook', summary: "query='sick leave'" })
+      await stream.push('tool.finished', { id: 't1', ok: true, summary: 'done', durationMs: 12 })
+      await stream.push('text.delta', { text: 'Let me check one more thing in the handbook first.' })
+      await stream.push('text.retracted', {})
+      await stream.push('status', { text: 'Searching the handbook again…' })
+      await expect(page.getByText('Searching the handbook again…')).toBeVisible()
+      break
+    }
+    case 'stopped':
+    case 'send-error': {
+      const stream = await holdNextTurnStream(page)
+      await ask(page, QUESTIONS.cited)
+      await stream.push('turn.started', { turnId: '00000000-0000-4000-8000-000000000001' })
+      await stream.push('status', { text: 'Searching the handbook…' })
+      await stream.push('tool.started', { id: 't1', name: 'search_handbook', summary: "query='sick leave'" })
+      await stream.push('tool.finished', { id: 't1', ok: true, summary: 'done', durationMs: 12 })
+      await stream.push('text.delta', { text: SICK_LEAVE_SENTENCE })
+      await stream.push('citation', { ...SICK_LEAVE_CITATION, offsetUtf16: SICK_LEAVE_SENTENCE.length })
+      await stream.push('text.delta', { text: ' This is the company rule for any state that has no' })
+      await expect(stopButton(page)).toBeVisible()
+      if (scenario === 'stopped') {
+        await stopButton(page).click()
+        await expect(page.getByText('Stopped', { exact: true })).toBeVisible()
+      } else {
+        await composerBox(page).fill('What about carrying unused sick days over?')
+        await composerBox(page).press('Enter')
+        await expect(page.getByRole('alert')).toBeVisible()
+      }
+      break
+    }
+    case 'show-your-work':
+      await askAndWaitForAnswer(page, QUESTIONS.cited)
+      await page.getByRole('button', { name: 'Show your work' }).click()
+      break
+    case 'show-your-work-routed':
+      await askAndWaitForAnswer(page, QUESTIONS.sensitive)
+      await page.getByRole('button', { name: 'Show your work' }).click()
+      break
+    case 'feedback-yes':
+      await askAndWaitForAnswer(page, QUESTIONS.cited)
+      await page.getByRole('button', { name: 'Yes' }).click()
+      await expect(page.getByText('Thanks for the feedback.')).toBeVisible()
+      break
+    case 'feedback-no':
+      await askAndWaitForAnswer(page, QUESTIONS.cited)
+      await feedbackNo().click()
+      await expect(page.getByRole('textbox', { name: /What was wrong/ })).toBeFocused()
+      await page.getByRole('textbox', { name: /What was wrong/ }).fill('It cited the wrong state')
+      break
+    case 'feedback-thanks':
+      await askAndWaitForAnswer(page, QUESTIONS.cited)
+      await feedbackNo().click()
+      await page.getByRole('textbox', { name: /What was wrong/ }).fill('It cited the wrong state')
+      await page.getByRole('button', { name: 'Send feedback' }).click()
+      await expect(page.getByText('Thanks for the feedback.')).toBeVisible()
+      break
+    case 'other-state':
+      await askAndWaitForAnswer(page, 'sick leave')
+      await page.getByRole('button', { name: 'Show your work' }).click()
+      break
+    case 'not-found':
+      await askAndWaitForAnswer(page, QUESTIONS.notFound)
+      break
+    case 'refusal':
+      await askAndWaitForAnswer(page, QUESTIONS.decline)
+      break
+    case 'sensitive':
+      await askAndWaitForAnswer(page, QUESTIONS.sensitive)
+      break
+    case 'crisis':
+      await ask(page, QUESTIONS.crisis)
+      await expect(page.getByRole('region', { name: 'Reach a person right now' })).toBeVisible()
+      break
+    case 'error-midstream':
+      await ask(page, QUESTIONS.midStreamError)
+      await expect(page.getByRole('alert')).toBeVisible()
+      break
+    case 'cant-answer':
+      await ask(page, QUESTIONS.guardFailure)
+      await expect(page.getByRole('region', { name: "Can't answer right now" })).toBeVisible()
+      break
+    case 'budget-sandbox':
+    case 'budget-daily': {
+      const kind = scenario === 'budget-sandbox' ? 'sandbox' : 'daily'
+      await askAndWaitForAnswer(page, QUESTIONS.cited)
+      await stubConversation(page, (body) => {
+        const message = kind === 'sandbox' ? BUDGET_SANDBOX_TEXT : BUDGET_DAILY_TEXT
+        body.budget = { ...body.budget, banner: { kind, message } }
+      })
+      await page.reload()
+      await expect(page.locator('[data-slot="banner"]').filter({ hasText: 'Lifeline' })).toBeVisible()
+      await expect(composerBox(page)).toBeDisabled()
+      break
+    }
+    case 'length-hint':
+      await askAndWaitForAnswer(page, QUESTIONS.cited)
+      await composerBox(page).fill('a'.repeat(1962))
+      await expect(page.locator('[data-slot="composer-line"]')).toHaveText('1,962 of 2,000 characters')
+      break
+    case 'personal-data':
+      await askAndWaitForAnswer(page, QUESTIONS.cited)
+      await composerBox(page).fill('My number is 123-45-6789')
+      await composerBox(page).press('Enter')
+      await expect(page.locator('[data-slot="composer-line"]')).toContainText('Social Security')
+      break
+    case 'long-conversation':
+      await askAndWaitForAnswer(page, QUESTIONS.cited)
+      await stubConversation(page, (body) => {
+        body.longHistory = true
+      })
+      await page.reload()
+      await expect(page.locator('[data-slot="composer-notice"]')).toBeVisible()
+      break
+  }
+  // The pointer is away from everything, and the page has stopped moving.
+  await page.mouse.move(1000, 600)
 }
 
 async function photographScreen(browser: Browser, row: ScreenRow): Promise<string | null> {

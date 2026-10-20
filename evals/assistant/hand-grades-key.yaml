@@ -1,0 +1,277 @@
+# The key to hand-grades-todo.yaml. Do not read it before grading.
+#
+# For each entry: where its answer came from (the run and the item), and what is wrong with it
+# (`flaw`, or `none` for a real answer). A flawed answer made from two items names the one its
+# answer came from in `answer_from`.
+
+- id: hg-01
+  source_run: effort-medium
+  source_file: 20261016T152224Z-effort-traces.json
+  commit: cfaa516c3cc15c60103ace289fd8aa00374d5403-dirty
+  item: qa-41
+  flaw: none
+  answer_from:
+
+- id: hg-02
+  source_run: smoke-low
+  source_file: 20261016T151139Z-smoke-traces.json
+  commit: cfaa516c3cc15c60103ace289fd8aa00374d5403-dirty
+  item: qa-22
+  flaw: none
+  answer_from:
+
+- id: hg-03
+  source_run: effort-medium
+  source_file: 20261016T152224Z-effort-traces.json
+  commit: cfaa516c3cc15c60103ace289fd8aa00374d5403-dirty
+  item: qa-60
+  flaw: none
+  answer_from:
+
+- id: hg-04
+  source_run: smoke-low
+  source_file: 20261016T151139Z-smoke-traces.json
+  commit: cfaa516c3cc15c60103ace289fd8aa00374d5403-dirty
+  item: qa-14
+  flaw: none
+  answer_from:
+
+- id: hg-05
+  source_run: smoke-low
+  source_file: 20261016T151139Z-smoke-traces.json
+  commit: cfaa516c3cc15c60103ace289fd8aa00374d5403-dirty
+  item: qa-52
+  flaw: none
+  answer_from:
+
+- id: hg-06
+  source_run: effort-medium
+  source_file: 20261016T152224Z-effort-traces.json
+  commit: cfaa516c3cc15c60103ace289fd8aa00374d5403-dirty
+  item: qa-43
+  flaw: none
+  answer_from:
+
+- id: hg-07
+  source_run: smoke-low
+  source_file: 20261016T151139Z-smoke-traces.json
+  commit: cfaa516c3cc15c60103ace289fd8aa00374d5403-dirty
+  item: qa-21
+  flaw: none
+  answer_from:
+
+- id: hg-08
+  source_run: effort-medium
+  source_file: 20261016T152224Z-effort-traces.json
+  commit: cfaa516c3cc15c60103ace289fd8aa00374d5403-dirty
+  item: qa-22
+  flaw: none
+  answer_from:
+
+- id: hg-09
+  source_run: effort-medium
+  source_file: 20261016T152224Z-effort-traces.json
+  commit: cfaa516c3cc15c60103ace289fd8aa00374d5403-dirty
+  item: qa-47
+  flaw: none
+  answer_from:
+
+- id: hg-10
+  source_run: smoke-low
+  source_file: 20261016T151139Z-smoke-traces.json
+  commit: cfaa516c3cc15c60103ace289fd8aa00374d5403-dirty
+  item: qa-27
+  flaw: uncited_figure
+  answer_from:
+
+- id: hg-11
+  source_run: smoke-low
+  source_file: 20261016T151139Z-smoke-traces.json
+  commit: cfaa516c3cc15c60103ace289fd8aa00374d5403-dirty
+  item: qa-41
+  flaw: none
+  answer_from:
+
+- id: hg-12
+  source_run: smoke-low
+  source_file: 20261016T151139Z-smoke-traces.json
+  commit: cfaa516c3cc15c60103ace289fd8aa00374d5403-dirty
+  item: qa-16
+  flaw: wrong_state_policy
+  answer_from: qa-14
+
+- id: hg-13
+  source_run: effort-medium
+  source_file: 20261016T152224Z-effort-traces.json
+  commit: cfaa516c3cc15c60103ace289fd8aa00374d5403-dirty
+  item: qa-14
+  flaw: none
+  answer_from:
+
+- id: hg-14
+  source_run: smoke-low
+  source_file: 20261016T151139Z-smoke-traces.json
+  commit: cfaa516c3cc15c60103ace289fd8aa00374d5403-dirty
+  item: qa-60
+  flaw: none
+  answer_from:
+
+- id: hg-15
+  source_run: smoke-low
+  source_file: 20261016T151139Z-smoke-traces.json
+  commit: cfaa516c3cc15c60103ace289fd8aa00374d5403-dirty
+  item: qa-43
+  flaw: none
+  answer_from:
+
+- id: hg-16
+  source_run: smoke-low
+  source_file: 20261016T151139Z-smoke-traces.json
+  commit: cfaa516c3cc15c60103ace289fd8aa00374d5403-dirty
+  item: qa-57
+  flaw: none
+  answer_from:
+
+- id: hg-17
+  source_run: effort-medium
+  source_file: 20261016T152224Z-effort-traces.json
+  commit: cfaa516c3cc15c60103ace289fd8aa00374d5403-dirty
+  item: qa-57
+  flaw: discipline_recommendation
+  answer_from:
+
+- id: hg-18
+  source_run: effort-medium
+  source_file: 20261016T152224Z-effort-traces.json
+  commit: cfaa516c3cc15c60103ace289fd8aa00374d5403-dirty
+  item: qa-04
+  flaw: none
+  answer_from:
+
+- id: hg-19
+  source_run: smoke-low
+  source_file: 20261016T151139Z-smoke-traces.json
+  commit: cfaa516c3cc15c60103ace289fd8aa00374d5403-dirty
+  item: qa-04
+  flaw: none
+  answer_from:
+
+- id: hg-20
+  source_run: effort-medium
+  source_file: 20261016T152224Z-effort-traces.json
+  commit: cfaa516c3cc15c60103ace289fd8aa00374d5403-dirty
+  item: qa-40
+  flaw: none
+  answer_from:
+
+- id: hg-21
+  source_run: effort-medium
+  source_file: 20261016T152224Z-effort-traces.json
+  commit: cfaa516c3cc15c60103ace289fd8aa00374d5403-dirty
+  item: qa-30
+  flaw: none
+  answer_from:
+
+- id: hg-22
+  source_run: effort-medium
+  source_file: 20261016T152224Z-effort-traces.json
+  commit: cfaa516c3cc15c60103ace289fd8aa00374d5403-dirty
+  item: qa-27
+  flaw: none
+  answer_from:
+
+- id: hg-23
+  source_run: smoke-low
+  source_file: 20261016T151139Z-smoke-traces.json
+  commit: cfaa516c3cc15c60103ace289fd8aa00374d5403-dirty
+  item: qa-27
+  flaw: none
+  answer_from:
+
+- id: hg-24
+  source_run: smoke-low
+  source_file: 20261016T151139Z-smoke-traces.json
+  commit: cfaa516c3cc15c60103ace289fd8aa00374d5403-dirty
+  item: qa-10
+  flaw: none
+  answer_from:
+
+- id: hg-25
+  source_run: smoke-low
+  source_file: 20261016T151139Z-smoke-traces.json
+  commit: cfaa516c3cc15c60103ace289fd8aa00374d5403-dirty
+  item: qa-40
+  flaw: none
+  answer_from:
+
+- id: hg-26
+  source_run: effort-medium
+  source_file: 20261016T152224Z-effort-traces.json
+  commit: cfaa516c3cc15c60103ace289fd8aa00374d5403-dirty
+  item: qa-10
+  flaw: made_up_passage
+  answer_from:
+
+- id: hg-27
+  source_run: smoke-low
+  source_file: 20261016T151139Z-smoke-traces.json
+  commit: cfaa516c3cc15c60103ace289fd8aa00374d5403-dirty
+  item: qa-38
+  flaw: none
+  answer_from:
+
+- id: hg-28
+  source_run: effort-medium
+  source_file: 20261016T152224Z-effort-traces.json
+  commit: cfaa516c3cc15c60103ace289fd8aa00374d5403-dirty
+  item: qa-10
+  flaw: none
+  answer_from:
+
+- id: hg-29
+  source_run: effort-medium
+  source_file: 20261016T152224Z-effort-traces.json
+  commit: cfaa516c3cc15c60103ace289fd8aa00374d5403-dirty
+  item: qa-52
+  flaw: none
+  answer_from:
+
+- id: hg-30
+  source_run: effort-medium
+  source_file: 20261016T152224Z-effort-traces.json
+  commit: cfaa516c3cc15c60103ace289fd8aa00374d5403-dirty
+  item: qa-21
+  flaw: none
+  answer_from:
+
+- id: hg-31
+  source_run: effort-medium
+  source_file: 20261016T152224Z-effort-traces.json
+  commit: cfaa516c3cc15c60103ace289fd8aa00374d5403-dirty
+  item: qa-38
+  flaw: none
+  answer_from:
+
+- id: hg-32
+  source_run: smoke-low
+  source_file: 20261016T151139Z-smoke-traces.json
+  commit: cfaa516c3cc15c60103ace289fd8aa00374d5403-dirty
+  item: qa-30
+  flaw: none
+  answer_from:
+
+- id: hg-33
+  source_run: smoke-low
+  source_file: 20261016T151139Z-smoke-traces.json
+  commit: cfaa516c3cc15c60103ace289fd8aa00374d5403-dirty
+  item: qa-47
+  flaw: none
+  answer_from:
+
+- id: hg-34
+  source_run: effort-medium
+  source_file: 20261016T152224Z-effort-traces.json
+  commit: cfaa516c3cc15c60103ace289fd8aa00374d5403-dirty
+  item: qa-57
+  flaw: none
+  answer_from:

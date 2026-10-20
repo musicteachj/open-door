@@ -22,10 +22,168 @@ import type {
 
 import { apiFetch } from '../lib/api-fetch'
 import type { ErrorType } from '../lib/api-fetch'
+/**
+ * The fixed refusals the composer shows before a request is sent, so the web app holds no
+ * copy of the words.
+ */
+export interface AssistantTextsOut {
+  personalData: string
+  stillAnswering: string
+}
+
 export interface AudienceOut {
   states: string[]
   employmentTypes: string[]
   locations: string[]
+}
+
+export type BudgetBannerOutKind = (typeof BudgetBannerOutKind)[keyof typeof BudgetBannerOutKind]
+
+export const BudgetBannerOutKind = {
+  sandbox: 'sandbox',
+  daily: 'daily',
+} as const
+
+/**
+ * The fixed text for the cap that stops the person: the sandbox's, or the day's.
+ */
+export interface BudgetBannerOut {
+  kind: BudgetBannerOutKind
+  message: string
+}
+
+/**
+ * Whether a turn can start. A cap counts as reached when it has less than a turn needs left,
+ * not only at zero (the 429 uses the same measure).
+ */
+export interface BudgetOut {
+  sandboxReached: boolean
+  dailyReached: boolean
+  sandboxRemainingCents: number
+  banner: BudgetBannerOut | null
+}
+
+/**
+ * A citation as the `citation` event sent it.
+ */
+export interface CitationOut {
+  marker: number
+  offsetUtf16: number
+  sectionId: string
+  passageId: string
+  title: string
+  groupName: string
+  audienceLabel: string
+  lastUpdated: string
+  deepLink: string
+  citedText: string
+}
+
+export type TurnOutStatus = (typeof TurnOutStatus)[keyof typeof TurnOutStatus]
+
+export const TurnOutStatus = {
+  running: 'running',
+  completed: 'completed',
+  stopped: 'stopped',
+  failed: 'failed',
+  crisis: 'crisis',
+  guard_unavailable: 'guard_unavailable',
+} as const
+
+/**
+ * The code the stream's `error` event had, and its fixed text.
+ */
+export interface TurnErrorOut {
+  code: string
+  message: string
+}
+
+export type EscalationOutKind = (typeof EscalationOutKind)[keyof typeof EscalationOutKind]
+
+export const EscalationOutKind = {
+  sensitive: 'sensitive',
+  crisis: 'crisis',
+  unavailable: 'unavailable',
+} as const
+
+export interface HrContactOut {
+  name: string
+  workEmail: string
+  jobTitle: string | null
+  locationName: string | null
+}
+
+/**
+ * The fixed text the stream's `escalation` event had, and the HR team to reach.
+ */
+export interface EscalationOut {
+  kind: EscalationOutKind
+  message: string
+  hrContact: HrContactOut[]
+}
+
+export type GuardOutCategory = (typeof GuardOutCategory)[keyof typeof GuardOutCategory]
+
+export const GuardOutCategory = {
+  ordinary: 'ordinary',
+  sensitive: 'sensitive',
+  crisis: 'crisis',
+} as const
+
+/**
+ * What the safety check decided. Its injection flag stays on the server.
+ */
+export interface GuardOut {
+  category: GuardOutCategory
+  kind?: string | null
+}
+
+export interface ToolCallOut {
+  name: string
+  inputSummary: string
+  ok: boolean
+  durationMs: number
+}
+
+export interface SectionOut {
+  sectionId: string
+  passageIds: string[]
+  title: string | null
+  groupName: string | null
+}
+
+export interface FeedbackOut {
+  helpful: boolean
+  reason?: string | null
+}
+
+export interface TurnOut {
+  id: string
+  question: string
+  status: TurnOutStatus
+  answerText: string
+  citations: CitationOut[]
+  incomplete: boolean
+  error: TurnErrorOut | null
+  escalation: EscalationOut | null
+  notFound: boolean
+  guard: GuardOut | null
+  toolCalls: ToolCallOut[]
+  sections: SectionOut[]
+  feedback: FeedbackOut | null
+  startedAt: string
+  endedAt: string | null
+}
+
+export interface ConversationOut {
+  id: string
+  createdAt: string
+  turns: TurnOut[]
+  hrContacts: HrContactOut[]
+  budget: BudgetOut
+  longHistory: boolean
+  historyTooLong: boolean
+  outdated: boolean
 }
 
 export interface DepartmentCount {
@@ -88,6 +246,17 @@ export interface DirectoryFacets {
 export interface DirectoryPage {
   items: DirectoryCard[]
   nextCursor: string | null
+}
+
+export interface FeedbackGivenOut {
+  turnId: string
+  helpful: boolean
+  reason?: string | null
+}
+
+export interface FeedbackIn {
+  helpful: boolean
+  reason?: string | null
 }
 
 /**
@@ -336,6 +505,11 @@ export interface SectionDetail {
   supplementedBy: SectionRef[]
   previous: SectionLink | null
   next: SectionLink | null
+}
+
+export interface TurnIn {
+  /** @maxLength 20000 */
+  question: string
 }
 
 export type ListPeopleParams = {
@@ -1882,4 +2056,644 @@ export function useGetHandbookPassage<
   }
 
   return withQueryKey(query, queryOptions.queryKey)
+}
+
+export const getGetCurrentConversationUrl = () => {
+  return `/api/v1/assistant/conversations/current`
+}
+
+/**
+ * @summary The signed-in person's newest conversation with its turns, or null
+ */
+export const getCurrentConversation = async (
+  options?: Parameters<typeof apiFetch>[1],
+): Promise<ConversationOut | null> => {
+  return apiFetch<ConversationOut | null>(getGetCurrentConversationUrl(), {
+    ...options,
+    method: 'GET',
+  })
+}
+
+export const getGetCurrentConversationQueryKey = () => {
+  return [`/api/v1/assistant/conversations/current`] as const
+}
+
+export const getGetCurrentConversationQueryOptions = <
+  TData = Awaited<ReturnType<typeof getCurrentConversation>>,
+  TError = ErrorType<Problem>,
+>(options?: {
+  query?: Partial<
+    UseQueryOptions<Awaited<ReturnType<typeof getCurrentConversation>>, TError, TData>
+  >
+  request?: SecondParameter<typeof apiFetch>
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {}
+
+  const queryKey = queryOptions?.queryKey ?? getGetCurrentConversationQueryKey()
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getCurrentConversation>>> = ({ signal }) =>
+    getCurrentConversation({ signal, ...requestOptions })
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getCurrentConversation>>,
+    TError,
+    TData
+  > & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type GetCurrentConversationQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getCurrentConversation>>
+>
+export type GetCurrentConversationQueryError = ErrorType<Problem>
+
+export function useGetCurrentConversation<
+  TData = Awaited<ReturnType<typeof getCurrentConversation>>,
+  TError = ErrorType<Problem>,
+>(
+  options: {
+    query: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof getCurrentConversation>>, TError, TData>
+    > &
+      Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getCurrentConversation>>,
+          TError,
+          Awaited<ReturnType<typeof getCurrentConversation>>
+        >,
+        'initialData'
+      >
+    request?: SecondParameter<typeof apiFetch>
+  },
+  queryClient?: QueryClient,
+): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetCurrentConversation<
+  TData = Awaited<ReturnType<typeof getCurrentConversation>>,
+  TError = ErrorType<Problem>,
+>(
+  options?: {
+    query?: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof getCurrentConversation>>, TError, TData>
+    > &
+      Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getCurrentConversation>>,
+          TError,
+          Awaited<ReturnType<typeof getCurrentConversation>>
+        >,
+        'initialData'
+      >
+    request?: SecondParameter<typeof apiFetch>
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetCurrentConversation<
+  TData = Awaited<ReturnType<typeof getCurrentConversation>>,
+  TError = ErrorType<Problem>,
+>(
+  options?: {
+    query?: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof getCurrentConversation>>, TError, TData>
+    >
+    request?: SecondParameter<typeof apiFetch>
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary The signed-in person's newest conversation with its turns, or null
+ */
+
+export function useGetCurrentConversation<
+  TData = Awaited<ReturnType<typeof getCurrentConversation>>,
+  TError = ErrorType<Problem>,
+>(
+  options?: {
+    query?: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof getCurrentConversation>>, TError, TData>
+    >
+    request?: SecondParameter<typeof apiFetch>
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+  const queryOptions = getGetCurrentConversationQueryOptions(options)
+
+  const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
+    queryKey: DataTag<QueryKey, TData, TError>
+  }
+
+  return withQueryKey(query, queryOptions.queryKey)
+}
+
+export const getGetAssistantBudgetUrl = () => {
+  return `/api/v1/assistant/budget`
+}
+
+/**
+ * The same `BudgetOut` the conversation carries, for a person with none yet: the home needs
+ * the banner before the first question. With a conversation it is that conversation's, built by
+ * the same function.
+ * @summary Whether the next question has room, before there is a conversation to ask
+ */
+export const getAssistantBudget = async (
+  options?: Parameters<typeof apiFetch>[1],
+): Promise<BudgetOut> => {
+  return apiFetch<BudgetOut>(getGetAssistantBudgetUrl(), {
+    ...options,
+    method: 'GET',
+  })
+}
+
+export const getGetAssistantBudgetQueryKey = () => {
+  return [`/api/v1/assistant/budget`] as const
+}
+
+export const getGetAssistantBudgetQueryOptions = <
+  TData = Awaited<ReturnType<typeof getAssistantBudget>>,
+  TError = ErrorType<Problem>,
+>(options?: {
+  query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof getAssistantBudget>>, TError, TData>>
+  request?: SecondParameter<typeof apiFetch>
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {}
+
+  const queryKey = queryOptions?.queryKey ?? getGetAssistantBudgetQueryKey()
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getAssistantBudget>>> = ({ signal }) =>
+    getAssistantBudget({ signal, ...requestOptions })
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getAssistantBudget>>,
+    TError,
+    TData
+  > & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type GetAssistantBudgetQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getAssistantBudget>>
+>
+export type GetAssistantBudgetQueryError = ErrorType<Problem>
+
+export function useGetAssistantBudget<
+  TData = Awaited<ReturnType<typeof getAssistantBudget>>,
+  TError = ErrorType<Problem>,
+>(
+  options: {
+    query: Partial<UseQueryOptions<Awaited<ReturnType<typeof getAssistantBudget>>, TError, TData>> &
+      Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getAssistantBudget>>,
+          TError,
+          Awaited<ReturnType<typeof getAssistantBudget>>
+        >,
+        'initialData'
+      >
+    request?: SecondParameter<typeof apiFetch>
+  },
+  queryClient?: QueryClient,
+): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetAssistantBudget<
+  TData = Awaited<ReturnType<typeof getAssistantBudget>>,
+  TError = ErrorType<Problem>,
+>(
+  options?: {
+    query?: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof getAssistantBudget>>, TError, TData>
+    > &
+      Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getAssistantBudget>>,
+          TError,
+          Awaited<ReturnType<typeof getAssistantBudget>>
+        >,
+        'initialData'
+      >
+    request?: SecondParameter<typeof apiFetch>
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetAssistantBudget<
+  TData = Awaited<ReturnType<typeof getAssistantBudget>>,
+  TError = ErrorType<Problem>,
+>(
+  options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof getAssistantBudget>>, TError, TData>>
+    request?: SecondParameter<typeof apiFetch>
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary Whether the next question has room, before there is a conversation to ask
+ */
+
+export function useGetAssistantBudget<
+  TData = Awaited<ReturnType<typeof getAssistantBudget>>,
+  TError = ErrorType<Problem>,
+>(
+  options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof getAssistantBudget>>, TError, TData>>
+    request?: SecondParameter<typeof apiFetch>
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+  const queryOptions = getGetAssistantBudgetQueryOptions(options)
+
+  const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
+    queryKey: DataTag<QueryKey, TData, TError>
+  }
+
+  return withQueryKey(query, queryOptions.queryKey)
+}
+
+export const getGetAssistantTextsUrl = () => {
+  return `/api/v1/assistant/texts`
+}
+
+/**
+ * Needs a session like every assistant route, but reads nothing of the tenant's, so it takes
+ * no transaction: only the short session lookup.
+ * @summary The fixed refusals the composer shows before a request is sent
+ */
+export const getAssistantTexts = async (
+  options?: Parameters<typeof apiFetch>[1],
+): Promise<AssistantTextsOut> => {
+  return apiFetch<AssistantTextsOut>(getGetAssistantTextsUrl(), {
+    ...options,
+    method: 'GET',
+  })
+}
+
+export const getGetAssistantTextsQueryKey = () => {
+  return [`/api/v1/assistant/texts`] as const
+}
+
+export const getGetAssistantTextsQueryOptions = <
+  TData = Awaited<ReturnType<typeof getAssistantTexts>>,
+  TError = ErrorType<Problem>,
+>(options?: {
+  query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof getAssistantTexts>>, TError, TData>>
+  request?: SecondParameter<typeof apiFetch>
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {}
+
+  const queryKey = queryOptions?.queryKey ?? getGetAssistantTextsQueryKey()
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getAssistantTexts>>> = ({ signal }) =>
+    getAssistantTexts({ signal, ...requestOptions })
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getAssistantTexts>>,
+    TError,
+    TData
+  > & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type GetAssistantTextsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getAssistantTexts>>
+>
+export type GetAssistantTextsQueryError = ErrorType<Problem>
+
+export function useGetAssistantTexts<
+  TData = Awaited<ReturnType<typeof getAssistantTexts>>,
+  TError = ErrorType<Problem>,
+>(
+  options: {
+    query: Partial<UseQueryOptions<Awaited<ReturnType<typeof getAssistantTexts>>, TError, TData>> &
+      Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getAssistantTexts>>,
+          TError,
+          Awaited<ReturnType<typeof getAssistantTexts>>
+        >,
+        'initialData'
+      >
+    request?: SecondParameter<typeof apiFetch>
+  },
+  queryClient?: QueryClient,
+): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetAssistantTexts<
+  TData = Awaited<ReturnType<typeof getAssistantTexts>>,
+  TError = ErrorType<Problem>,
+>(
+  options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof getAssistantTexts>>, TError, TData>> &
+      Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getAssistantTexts>>,
+          TError,
+          Awaited<ReturnType<typeof getAssistantTexts>>
+        >,
+        'initialData'
+      >
+    request?: SecondParameter<typeof apiFetch>
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetAssistantTexts<
+  TData = Awaited<ReturnType<typeof getAssistantTexts>>,
+  TError = ErrorType<Problem>,
+>(
+  options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof getAssistantTexts>>, TError, TData>>
+    request?: SecondParameter<typeof apiFetch>
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary The fixed refusals the composer shows before a request is sent
+ */
+
+export function useGetAssistantTexts<
+  TData = Awaited<ReturnType<typeof getAssistantTexts>>,
+  TError = ErrorType<Problem>,
+>(
+  options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof getAssistantTexts>>, TError, TData>>
+    request?: SecondParameter<typeof apiFetch>
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+  const queryOptions = getGetAssistantTextsQueryOptions(options)
+
+  const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
+    queryKey: DataTag<QueryKey, TData, TError>
+  }
+
+  return withQueryKey(query, queryOptions.queryKey)
+}
+
+export const getCreateConversationUrl = () => {
+  return `/api/v1/assistant/conversations`
+}
+
+/**
+ * @summary Start a new conversation, pinned to today's model, prompt, and tool set
+ */
+export const createConversation = async (
+  options?: Parameters<typeof apiFetch>[1],
+): Promise<ConversationOut> => {
+  return apiFetch<ConversationOut>(getCreateConversationUrl(), {
+    ...options,
+    method: 'POST',
+  })
+}
+
+export const getCreateConversationMutationKey = () => ['createConversation'] as const
+
+export const getCreateConversationMutationOptions = <
+  TError = ErrorType<Problem>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createConversation>>,
+    TError,
+    void,
+    TContext
+  >
+  request?: SecondParameter<typeof apiFetch>
+}): UseMutationOptions<Awaited<ReturnType<typeof createConversation>>, TError, void, TContext> => {
+  const mutationKey = getCreateConversationMutationKey()
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined }
+
+  const mutationFn: MutationFunction<Awaited<ReturnType<typeof createConversation>>, void> = () => {
+    return createConversation(requestOptions)
+  }
+
+  return { mutationFn, ...mutationOptions }
+}
+
+export type CreateConversationMutationResult = NonNullable<
+  Awaited<ReturnType<typeof createConversation>>
+>
+
+export type CreateConversationMutationError = ErrorType<Problem>
+
+/**
+ * @summary Start a new conversation, pinned to today's model, prompt, and tool set
+ */
+export const useCreateConversation = <TError = ErrorType<Problem>, TContext = unknown>(
+  options?: {
+    mutation?: UseMutationOptions<
+      Awaited<ReturnType<typeof createConversation>>,
+      TError,
+      void,
+      TContext
+    >
+    request?: SecondParameter<typeof apiFetch>
+  },
+  queryClient?: QueryClient,
+): UseMutationResult<Awaited<ReturnType<typeof createConversation>>, TError, void, TContext> => {
+  return useMutation(getCreateConversationMutationOptions(options), queryClient)
+}
+
+export const getGiveFeedbackUrl = (turnId: string) => {
+  return `/api/v1/assistant/turns/${turnId}/feedback`
+}
+
+/**
+ * @summary Thumbs up or down on one of the person's own completed answers, once
+ */
+export const giveFeedback = async (
+  turnId: string,
+  feedbackIn: FeedbackIn,
+  options?: Parameters<typeof apiFetch>[1],
+): Promise<FeedbackGivenOut> => {
+  const getHeaders = (
+    h?: NonNullable<RequestInit['headers']>,
+  ): Record<string, string | readonly string[]> => {
+    if (!h) return {}
+    if (h instanceof Headers) return Object.fromEntries(h.entries())
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(
+          h as Iterable<Iterable<string>>,
+          (entry) => Array.from(entry) as [string, string],
+        ),
+      )
+    }
+    const headers: Record<string, string | readonly string[]> = {}
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value
+    }
+    return headers
+  }
+  return apiFetch<FeedbackGivenOut>(getGiveFeedbackUrl(turnId), {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(feedbackIn),
+  })
+}
+
+export const getGiveFeedbackMutationKey = () => ['giveFeedback'] as const
+
+export const getGiveFeedbackMutationOptions = <
+  TError = ErrorType<Problem>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof giveFeedback>>,
+    TError,
+    GiveFeedbackMutationVariables,
+    TContext
+  >
+  request?: SecondParameter<typeof apiFetch>
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof giveFeedback>>,
+  TError,
+  GiveFeedbackMutationVariables,
+  TContext
+> => {
+  const mutationKey = getGiveFeedbackMutationKey()
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined }
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof giveFeedback>>,
+    GiveFeedbackMutationVariables
+  > = (props) => {
+    const { turnId, data } = props ?? {}
+
+    return giveFeedback(turnId, data, requestOptions)
+  }
+
+  return { mutationFn, ...mutationOptions }
+}
+
+export type GiveFeedbackMutationResult = NonNullable<Awaited<ReturnType<typeof giveFeedback>>>
+export type GiveFeedbackMutationBody = FeedbackIn
+export type GiveFeedbackMutationError = ErrorType<Problem>
+export type GiveFeedbackMutationVariables = { turnId: string; data: FeedbackIn }
+
+/**
+ * @summary Thumbs up or down on one of the person's own completed answers, once
+ */
+export const useGiveFeedback = <TError = ErrorType<Problem>, TContext = unknown>(
+  options?: {
+    mutation?: UseMutationOptions<
+      Awaited<ReturnType<typeof giveFeedback>>,
+      TError,
+      GiveFeedbackMutationVariables,
+      TContext
+    >
+    request?: SecondParameter<typeof apiFetch>
+  },
+  queryClient?: QueryClient,
+): UseMutationResult<
+  Awaited<ReturnType<typeof giveFeedback>>,
+  TError,
+  GiveFeedbackMutationVariables,
+  TContext
+> => {
+  return useMutation(getGiveFeedbackMutationOptions(options), queryClient)
+}
+
+export const getStartTurnUrl = (conversationId: string) => {
+  return `/api/v1/assistant/conversations/${conversationId}/turns`
+}
+
+/**
+ * @summary Ask a question and stream the turn as server-sent events
+ */
+export const startTurn = async (
+  conversationId: string,
+  turnIn: TurnIn,
+  options?: Parameters<typeof apiFetch>[1],
+): Promise<string> => {
+  const getHeaders = (
+    h?: NonNullable<RequestInit['headers']>,
+  ): Record<string, string | readonly string[]> => {
+    if (!h) return {}
+    if (h instanceof Headers) return Object.fromEntries(h.entries())
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(
+          h as Iterable<Iterable<string>>,
+          (entry) => Array.from(entry) as [string, string],
+        ),
+      )
+    }
+    const headers: Record<string, string | readonly string[]> = {}
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value
+    }
+    return headers
+  }
+  return apiFetch<string>(getStartTurnUrl(conversationId), {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(turnIn),
+  })
+}
+
+export const getStartTurnMutationKey = () => ['startTurn'] as const
+
+export const getStartTurnMutationOptions = <
+  TError = ErrorType<Problem>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof startTurn>>,
+    TError,
+    StartTurnMutationVariables,
+    TContext
+  >
+  request?: SecondParameter<typeof apiFetch>
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof startTurn>>,
+  TError,
+  StartTurnMutationVariables,
+  TContext
+> => {
+  const mutationKey = getStartTurnMutationKey()
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined }
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof startTurn>>,
+    StartTurnMutationVariables
+  > = (props) => {
+    const { conversationId, data } = props ?? {}
+
+    return startTurn(conversationId, data, requestOptions)
+  }
+
+  return { mutationFn, ...mutationOptions }
+}
+
+export type StartTurnMutationResult = NonNullable<Awaited<ReturnType<typeof startTurn>>>
+export type StartTurnMutationBody = TurnIn
+export type StartTurnMutationError = ErrorType<Problem>
+export type StartTurnMutationVariables = { conversationId: string; data: TurnIn }
+
+/**
+ * @summary Ask a question and stream the turn as server-sent events
+ */
+export const useStartTurn = <TError = ErrorType<Problem>, TContext = unknown>(
+  options?: {
+    mutation?: UseMutationOptions<
+      Awaited<ReturnType<typeof startTurn>>,
+      TError,
+      StartTurnMutationVariables,
+      TContext
+    >
+    request?: SecondParameter<typeof apiFetch>
+  },
+  queryClient?: QueryClient,
+): UseMutationResult<
+  Awaited<ReturnType<typeof startTurn>>,
+  TError,
+  StartTurnMutationVariables,
+  TContext
+> => {
+  return useMutation(getStartTurnMutationOptions(options), queryClient)
 }

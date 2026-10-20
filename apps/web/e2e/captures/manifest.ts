@@ -212,7 +212,7 @@ export const COMPONENT_ROWS: ComponentRow[] = [
 ]
 
 /** The screen folders the report compares, in docs/design/screens/. The other folders belong to
- * later phases (07 onward). manifest.test.ts checks that every PNG in these has a row. */
+ * later phases (08 onward). manifest.test.ts checks that every PNG in these has a row. */
 export const SCREEN_FOLDERS = [
   '01-landing',
   '02-app-shell',
@@ -220,6 +220,7 @@ export const SCREEN_FOLDERS = [
   '04-directory',
   '05-global-states',
   '06-handbook',
+  '07-conversation',
 ] as const
 
 /** How to reach each state in the build. The capture spec holds the steps for each one; they use
@@ -257,6 +258,7 @@ export type ScreenSetup =
   | 'not-applicable'
   | 'missing-section'
   | 'panel-gallery'
+  | 'conversation'
 
 /** What the build photograph shows: the whole viewport, or one region of it. */
 export type ScreenTarget = 'viewport' | 'page' | 'sidebar' | 'main' | 'rail'
@@ -271,6 +273,9 @@ export type ScreenRow = {
   /** Signed in as this person first. Left out, the visitor is not signed in. */
   persona?: 'Priya' | 'Mateo' | 'Marcus' | 'Dana'
   setup: ScreenSetup
+  /** For `conversation`: the state of the real /ask page to reach, named by the design file
+   * (desktop-<scenario>.png). capture.spec.ts holds the steps for each. */
+  scenario?: ConversationFile
   target?: ScreenTarget
   /** Photographed at this size. 1440 by 900 when left out, the width the designs are drawn at. */
   viewport?: { width: number; height: number }
@@ -288,6 +293,33 @@ const HANDBOOK_NAV =
   'Phase 5: the Time off item in the sidebar and the at-a-glance figures, and "How it\'s built" in Phase 7'
 const PHASE_5_HOME =
   'Phase 3 and Phase 5: the Time off and Handbook items and the at-a-glance figures'
+
+/**
+ * The conversation states of screen 07, by the design file's name (desktop-<file>.png). Each is
+ * the gallery's state of the same name, `conversation-<file>`, which is where the names come from.
+ */
+export type ConversationFile<Id extends string = GalleryStateId> =
+  Id extends `conversation-${infer File}` ? File : never
+
+/**
+ * A screen 07 row: the real /ask page, brought to the state by asking the scripted model a
+ * question (or, for the states it can't reach, by stubbing a response), photographed at 1440 by
+ * 900 beside the design screenshot of the same name. The steps are in capture.spec.ts.
+ */
+export const conversationRow = (
+  file: ConversationFile,
+  title: string,
+  extra: Pick<ScreenRow, 'note' | 'persona' | 'differsUntil'> = {},
+): ScreenRow => ({
+  title: `07 Conversation: ${title}`,
+  designImage: `${SCREENS}/07-conversation/desktop-${file}.png`,
+  route: '/ask',
+  persona: 'Priya',
+  setup: 'conversation',
+  scenario: file,
+  target: 'viewport',
+  ...extra,
+})
 
 export const SCREEN_ROWS: ScreenRow[] = [
   {
@@ -409,9 +441,7 @@ export const SCREEN_ROWS: ScreenRow[] = [
     persona: 'Priya',
     setup: 'composer-states',
     target: 'main',
-    note: 'A question typed, the second row hovered, the third focused (so the box has lost focus)',
-    differsUntil:
-      'Phase 4: the failed-send error, which needs a real assistant that can fail. The unit tests and the gallery cover it',
+    note: 'A question typed, the second row hovered, the third focused (so the box has lost focus). The failed-send error is the conversation page\'s send-error row below',
   },
   {
     title: '03 Assistant home: at-a-glance states',
@@ -623,18 +653,89 @@ export const SCREEN_ROWS: ScreenRow[] = [
     designImage: `${SCREENS}/06-handbook/desktop-panel-states.png`,
     route: '/gallery',
     setup: 'panel-gallery',
-    note: 'The gallery\'s open panel. The loading, error, and long-passage states are the gallery\'s other passage-panel rows above',
-    differsUntil: 'Phase 4: the panel is docked on the assistant home, where its four states can be reached',
+    note: 'The gallery\'s open panel. The loading, error, and long-passage states are the gallery\'s other passage-panel rows above. The panel docked on the real page is the next row',
   },
   {
     title: '06 Handbook: passage panel docked',
     designImage: `${SCREENS}/06-handbook/desktop-panel-docked.png`,
     route: '/ask',
     persona: 'Priya',
-    setup: 'home',
-    note: "The assistant home without the panel, which is the closest real state",
-    differsUntil: 'Phase 4: the panel docked in the right rail, opened from a citation',
+    setup: 'conversation',
+    scenario: 'source-panel',
+    target: 'viewport',
+    note: "The real conversation page: the panel docked in the right rail, opened from a citation, as Priya. The scripted model answers with the handbook's own words, so the passage differs from the design's placeholder",
   },
+
+  // Screen 07, the conversation view: the real /ask page against the real API with the scripted
+  // model, one row per screenshot. The scripted model answers with the handbook's own words, so
+  // the text differs from the design's placeholder everywhere. Priya, unless a row says otherwise.
+  conversationRow('cited-answer', 'Cited answer', {
+    note: 'Asked "How many sick days do I get?". The scripted model quotes the first passage it finds',
+  }),
+  conversationRow('source-panel', 'Source panel', {
+    note: 'The first marker pressed: the passage docked at 420 px in the rail\'s place, with focus on its title',
+  }),
+  conversationRow('streaming-searching', 'Streaming, searching', {
+    note: 'STUB: the turn\'s POST response is a stream the capture holds open after one "Searching the handbook…" step, because the scripted model finishes in milliseconds. Everything else is the real page',
+  }),
+  conversationRow('streaming-text', 'Streaming, text arriving', {
+    note: 'STUB: the turn\'s stream is held open after the search steps, some text, and its first marker',
+  }),
+  conversationRow('streaming-progress-note', 'Streaming, progress note', {
+    note: 'STUB: a draft note streams, is taken back (`text.retracted`), and the step "Searching the handbook again…" shows in its place. The design\'s "Read §4.3 Sick leave" step matches no tool event',
+  }),
+  conversationRow('stopped', 'Stopped', {
+    note: 'STUB: a held stream with some text, then the real Stop button pressed. The scripted model leaves no partial text of its own',
+  }),
+  conversationRow('show-your-work', 'Show your work', {
+    note: 'The profile line reads "Read your profile", with no private details (owner decision). The scripted model searches only, so only the search shows',
+  }),
+  conversationRow('show-your-work-routed', 'Show your work, routed', {
+    note: 'Build decision: the sensitive turn shows the assistant\'s answer, then the panel, then "Show your work" with "Routed to HR guidance" and the "also go to" note. The screenshot is not redrawn',
+  }),
+  conversationRow('feedback-yes', 'Feedback, Yes'),
+  conversationRow('feedback-no', 'Feedback, No'),
+  conversationRow('feedback-thanks', 'Feedback, thank-you', {
+    note: 'Build decision: the thank-you after a reason is "Thanks for the feedback.", the same as after Yes',
+  }),
+  conversationRow('other-state', "Another state's policy", {
+    persona: 'Mateo',
+    note: 'Mateo (Austin), asked "sick leave". The scripted model cites the California addendum when a search returns it (Priya) and otherwise the first result, so Mateo is cited §4.3, the company rule. It never says "this does not apply to you", which the design\'s answer does',
+  }),
+  conversationRow('not-found', 'Not found', {
+    note: 'Asked "Where is the parking garage?", the scripted not-found scenario',
+  }),
+  conversationRow('refusal', 'Refusal', {
+    note: 'Asked "Leo\'s home address", the scripted decline scenario. It searches nothing, so it shows no sources',
+  }),
+  conversationRow('sensitive', 'Sensitive', {
+    note: 'Build decision: the assistant\'s answer comes first, with its sources and "Was this right?", then the panel. The screenshot is not redrawn',
+  }),
+  conversationRow('crisis', 'Crisis'),
+  conversationRow('error-midstream', 'Error mid-stream', {
+    note: 'Build decision: the error shows the API\'s own text (the "internal" error), where the screenshot shows its own sentence. Only "Retry" is the design\'s',
+  }),
+  conversationRow('cant-answer', "Can't answer right now", {
+    note: 'The scripted guard failure scenario',
+  }),
+  conversationRow('send-error', 'Send error', {
+    note: 'STUB: a held stream with some text, then Enter pressed with a draft typed. The error is the page\'s own "still answering" text',
+  }),
+  conversationRow('budget-sandbox', 'Budget banner, sandbox', {
+    note: 'STUB: the conversation GET, with the budget fields changed (the scripted model can\'t spend a sandbox\'s budget)',
+  }),
+  conversationRow('budget-daily', 'Budget banner, daily', {
+    note: 'STUB: the conversation GET, with the budget fields changed',
+  }),
+  conversationRow('length-hint', 'Length hint', {
+    note: 'A draft of 1,962 characters typed into the composer',
+  }),
+  conversationRow('personal-data', 'Personal-data warning', {
+    note: 'A number shaped like a Social Security number typed, and Enter pressed. The check runs in the browser',
+  }),
+  conversationRow('long-conversation', 'Long conversation', {
+    note: 'STUB: the conversation GET, with `longHistory` on. "Show your work" stays on every finished answer, though the mockup leaves it off',
+  }),
 ]
 
 /** The slug that names a screen row's pictures: "01-landing-desktop-default". */

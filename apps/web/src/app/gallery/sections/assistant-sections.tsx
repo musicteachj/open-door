@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { Composer } from '@/components/assistant/composer'
+import { conversationCopy } from '@/components/assistant/labels'
 import { TryAskingList } from '@/components/assistant/try-asking-list'
 import { Group, Section } from '../gallery-parts'
 
@@ -43,10 +44,7 @@ export function AssistantSections() {
           <Draft initial="How many sick days do I get?" />
         </Section>
         <Section id="composer-error" title="Composer, after a failed send">
-          <Draft
-            initial="How many sick days do I get?"
-            error="Something went wrong sending that."
-          />
+          <Draft initial="How many sick days do I get?" sendError={conversationCopy.sendFailed} />
         </Section>
         <Section id="composer-busy" title="Composer, sending">
           <Draft initial="How many sick days do I get?" busy />

@@ -1,3 +1,5 @@
+from decimal import Decimal
+from pathlib import Path
 from typing import Any
 
 import pytest
@@ -19,6 +21,11 @@ def clean_environment(monkeypatch: pytest.MonkeyPatch) -> None:
         "CLEANUP_DATABASE_URL",
         "APP_ORIGIN",
         "LOG_LEVEL",
+        "ANTHROPIC_API_KEY",
+        "AI_TRANSPORT",
+        "AI_SANDBOX_BUDGET_USD",
+        "AI_DAILY_BUDGET_USD",
+        "AI_HEARTBEAT_SECONDS",
     ):
         monkeypatch.delenv(name, raising=False)
 
@@ -119,3 +126,148 @@ def test_the_app_origin_port_must_be_written_without_leading_zeros(origin: str) 
 )
 def test_the_app_origin_accepts_a_port_that_is_not_the_default_for_its_scheme(origin: str) -> None:
     assert Settings(_env_file=None, database_url=APP_URL, app_origin=origin).app_origin == origin
+
+
+@pytest.mark.parametrize("value", ["", "   "])
+def test_an_empty_anthropic_key_counts_as_unset(value: str) -> None:
+    # An agent shell may export ANTHROPIC_API_KEY as an empty string, which would shadow .env.
+    settings = Settings(_env_file=None, database_url=APP_URL, anthropic_api_key=value)
+    assert settings.anthropic_api_key is None
+
+
+def test_an_empty_voyage_key_still_counts_as_unset() -> None:
+    assert Settings(_env_file=None, database_url=APP_URL, voyage_api_key="").voyage_api_key is None
+
+
+def test_the_anthropic_key_stays_out_of_the_settings_repr() -> None:
+    settings = Settings(_env_file=None, database_url=APP_URL, anthropic_api_key="sk-ant-hunter2")
+    assert "hunter2" not in repr(settings)
+
+
+def test_the_assistant_defaults_match_the_spec() -> None:
+    settings = Settings(_env_file=None, database_url=APP_URL)
+    assert settings.anthropic_api_key is None
+    assert settings.ai_transport == "scripted"
+    assert settings.ai_sandbox_budget_usd == Decimal("1.00")
+    assert settings.ai_daily_budget_usd == Decimal("3.00")
+    assert settings.ai_heartbeat_seconds == 15
+
+
+@pytest.mark.parametrize("transport", ["scripted", "replay", "anthropic"])
+def test_settings_accept_production_with_any_transport(transport: str) -> None:
+    # Alembic, the setup scripts, and the future cleanup job build Settings in production and never
+    # call the model, so they must not need the assistant's variables. The rule that production
+    # runs `anthropic` is checked when the API starts (app.ai.transport).
+    settings = Settings(
+        _env_file=None, database_url=APP_URL, app_env="production", ai_transport=transport
+    )
+    assert settings.ai_transport == transport
+
+
+def test_production_accepts_the_anthropic_transport_with_a_key() -> None:
+    settings = Settings(
+        _env_file=None,
+        database_url=APP_URL,
+        app_env="production",
+        ai_transport="anthropic",
+        anthropic_api_key="sk-ant-test",
+    )
+    assert settings.ai_transport == "anthropic"
+
+
+@pytest.mark.parametrize("env", ["development", "test", "production"])
+@pytest.mark.parametrize("key", [None, "", " "])
+def test_settings_accept_the_anthropic_transport_with_no_key(env: str, key: str | None) -> None:
+    # Alembic, the setup scripts, and the tests build Settings and never call the model. Only
+    # building the Anthropic transport needs the key (anthropic_transport.from_settings).
+    settings = Settings(
+        _env_file=None,
+        database_url=APP_URL,
+        app_env=env,
+        ai_transport="anthropic",
+        anthropic_api_key=key,
+    )
+    assert settings.ai_transport == "anthropic"
+    assert settings.anthropic_api_key is None
+
+
+def test_an_unknown_transport_is_refused() -> None:
+    with pytest.raises(ValidationError, match="ai_transport"):
+        Settings(_env_file=None, database_url=APP_URL, ai_transport="openai")
+
+
+@pytest.mark.parametrize("field", ["ai_sandbox_budget_usd", "ai_daily_budget_usd"])
+@pytest.mark.parametrize("amount", ["0", "-1", "-0.01"])
+def test_the_budgets_must_be_positive(field: str, amount: str) -> None:
+    budgets: dict[str, Any] = {field: Decimal(amount)}
+    with pytest.raises(ValidationError, match=field):
+        Settings(_env_file=None, database_url=APP_URL, **budgets)
+
+
+def test_the_heartbeat_can_be_turned_off_but_not_negative() -> None:
+    off = Settings(_env_file=None, database_url=APP_URL, ai_heartbeat_seconds=0)
+    assert off.ai_heartbeat_seconds == 0
+    with pytest.raises(ValidationError, match="ai_heartbeat_seconds"):
+        Settings(_env_file=None, database_url=APP_URL, ai_heartbeat_seconds=-1)
+
+
+@pytest.mark.parametrize("name", ["ANTHROPIC_API_KEY", "VOYAGE_API_KEY"])
+def test_an_empty_environment_variable_does_not_override_the_env_file(
+    name: str, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    # An agent shell can export these as empty strings. That used to shadow the key in .env.
+    env_file = tmp_path / ".env"
+    env_file.write_text(f"DATABASE_URL={APP_URL}\n{name}=sk-from-the-file\n")
+    monkeypatch.setenv(name, "")
+
+    settings = Settings(_env_file=env_file)
+
+    key = settings.anthropic_api_key if name == "ANTHROPIC_API_KEY" else settings.voyage_api_key
+    assert key is not None
+    assert key.get_secret_value() == "sk-from-the-file"
+
+
+def test_an_empty_value_in_the_env_file_still_means_no_key(tmp_path: Path) -> None:
+    env_file = tmp_path / ".env"
+    env_file.write_text(f"DATABASE_URL={APP_URL}\nANTHROPIC_API_KEY=\n")
+
+    assert Settings(_env_file=env_file).anthropic_api_key is None
+
+
+def test_a_real_environment_variable_still_overrides_the_env_file(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    env_file = tmp_path / ".env"
+    env_file.write_text(f"DATABASE_URL={APP_URL}\nANTHROPIC_API_KEY=sk-from-the-file\n")
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-from-the-shell")
+
+    key = Settings(_env_file=env_file).anthropic_api_key
+
+    assert key is not None
+    assert key.get_secret_value() == "sk-from-the-shell"
+
+
+@pytest.mark.parametrize("name", ["APP_ENV", "AI_TRANSPORT"])
+def test_an_empty_environment_variable_still_fails_validation_for_other_settings(
+    name: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Only the API keys' empty values are ignored. A template that renders APP_ENV= empty must not
+    # quietly become development and skip the production checks.
+    monkeypatch.setenv(name, "")
+
+    with pytest.raises(ValidationError, match=name.lower()):
+        Settings(_env_file=None, database_url=APP_URL)
+
+
+@pytest.mark.parametrize("value", ["", "   "])
+def test_a_blank_shell_key_does_not_override_the_env_file(
+    value: str, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    env_file = tmp_path / ".env"
+    env_file.write_text(f"DATABASE_URL={APP_URL}\nANTHROPIC_API_KEY=sk-from-the-file\n")
+    monkeypatch.setenv("ANTHROPIC_API_KEY", value)
+
+    key = Settings(_env_file=env_file).anthropic_api_key
+
+    assert key is not None
+    assert key.get_secret_value() == "sk-from-the-file"
