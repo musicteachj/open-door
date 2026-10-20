@@ -10,6 +10,16 @@ version (`0.x.y` while the app is being built, `1.0.0` when it is complete).
 
 ## [Unreleased]
 
+### Security
+
+- **`certifi` updated to 2026.10.19 (between phases, 2026-10-20).** The certificate bundle the API's
+  HTTP client trusts (through `httpx`, which reaches Voyage) included the emSign root
+  certificates, whose intermediate keys were compromised. A critical advisory, GHSA-6q48-6c7w-9gw2,
+  was published that day, and the new release drops those roots. A floor in `pyproject.toml` keeps
+  any later re-resolve from going back below it. The Anthropic SDK doesn't use this bundle: it
+  trusts the operating system's store, so the deploy phase checks that the production image's CA
+  store has dropped the emSign roots too (in the backlog).
+
 ## [0.4.0] - 2026-10-20
 
 Phase 4: the assistant core, read-only. Anyone in a sandbox can ask the assistant an HR question

@@ -23,6 +23,11 @@ dependencies = [
 requires = ["uv_build>=0.12,<0.13"]
 build-backend = "uv_build"
 
+[tool.uv]
+# A floor for packages we don't depend on directly. certifi (through httpx) must be 2026.10.19 or
+# later, which drops the emSign roots whose intermediate keys were compromised (GHSA-6q48-6c7w-9gw2).
+constraint-dependencies = ["certifi>=2026.10.19"]
+
 [tool.uv.build-backend]
 module-name = "app"
 module-root = ""
