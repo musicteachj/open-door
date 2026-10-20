@@ -10,7 +10,7 @@ this spec says only how the build meets them.
 
 **Goal:** Priya asks "Book next Friday off." The assistant turns "next Friday" into a date, the
 time-off engine counts the day and the balance afterward, and a confirm card shows both. Nothing
-happens until she confirms. Marcus asks "Anything waiting on me?", sees her request, says
+happens until Priya confirms. Marcus asks "Anything waiting on me?", sees Priya's request, says
 "Approve it", and confirms a second card. The same requests, balances, and approvals work on the
 Time off and Approvals pages without the assistant. Every number comes from the engine, every
 write is made by a person, and every AI-initiated change is audited back to its proposal.
@@ -364,17 +364,20 @@ details on error:
 | Route | Does |
 |---|---|
 | `GET /balances?person=` | The balances for yourself, or a person you may read: PTO and sick, every figure with its label and its rules |
-| `GET /requests?scope=&from=&to=` | `mine`, `team` (everyone below you), or `waiting` (pending PTO from your direct reports). Defaults to 30 days back and 120 ahead, at most 200 rows |
+| `GET /requests?scope=&from=&to=` | `mine`, `team` (everyone below you), or `waiting` (pending PTO from your direct reports, each with team coverage). Defaults to 30 days back and 120 ahead, at most 200 rows. The Approvals page asks for `team` over the next 30 days ("Coming up") and the last 90 (its "Recent decisions" are the viewer's own) |
 | `GET /requests/{id}` | One request, for a person who may read it, with team coverage for its manager |
+| `GET /calendar?from=&to=` | The date picker's marks for yourself: your scheduled weekdays, your location's holidays with their names, and the earliest day each type allows (today for PTO, 30 days back for sick time). Added from the design of screen 08 |
 | `POST /check` | The engine's answer for a possible request, with nothing written: the form's live preview |
 | `POST /requests` | Make a request (`via: "ui"`). PTO starts `pending`; sick time is `recorded` |
 | `POST /requests/{id}/decision` | `{ decision: "approve" \| "deny", note? }` by the direct manager |
 | `POST /requests/{id}/cancel` | By the person |
-| `GET /summary` | For the home's at-a-glance cards and the nav badge: your PTO available, your pending count, and for a manager, how many requests wait for them |
+| `GET /summary` | For the home's at-a-glance cards, the nav badge, and the form's footer: your PTO available, your pending count, your approver, and for a manager, how many requests wait for them |
 
 **Team coverage** (the backlog's item): beside a request waiting for a decision, who else among
-the manager's direct reports is off on any of its dates, with type and dates. It's context only:
-nothing ranks or recommends (invariant 5).
+the manager's direct reports has approved or recorded time off on any of its scheduled days, with
+type and dates (a request still waiting doesn't count as off). It's context only: plain text that
+nothing ranks or recommends (invariant 5), shown on the card and the page and never sent to the
+model.
 
 ### Audit events
 
@@ -403,6 +406,8 @@ pending ──confirm──▶ executed
   decision and cancel checks) for the asker, and refuses as a normal tool error if they fail. If
   they pass, it inserts the row with the engine's result as its card, writes `proposal.created`,
   and the turn emits a `proposal` event.
+- **Canceled has a reason:** `dismissed` (the person pressed Dismiss), `replaced` (a newer card),
+  or `turn-incomplete`. The card shows "You dismissed this." or "Replaced by a newer card."
 - **One live proposal per conversation:** a new one cancels any still pending, with the reason
   "replaced".
 - **A turn whose stored history doesn't hold the proposal's round** cancels the proposals it
@@ -533,8 +538,18 @@ The design decides the look. The build adds these rules.
 - **The home's at-a-glance cards:** PTO available, requests pending, and approvals waiting, from
   `GET /time-off/summary`.
 - **The confirm card in chat** sits under the assistant's message. It says the AI proposed it and
-  nothing happens until the person confirms. Its states: pending (Confirm, Cancel, and when it
-  expires), executed, failed with the reason, canceled, and expired.
+  nothing happens until the person confirms. Its states: pending (Confirm, Dismiss, and when it
+  expires), confirming, executed, failed with the reason, dismissed, replaced, and expired.
+- **Decisions from the design rounds** (screens 08 to 10, 2026-10-20; each screen's `notes.md`
+  has them under "Build decisions"):
+  - Approve and Deny carry equal weight on the Approvals page, and every confirm step uses the
+    standard primary button; red is for real errors only (invariant 5)
+  - no pronouns anywhere: the data has none, and Open Door never guesses one from a name
+  - the card's secondary button is "Dismiss", so the "Cancel time off" card never has a Cancel
+    button that means "keep it"
+  - page actions (cancel a request, approve, deny) each take one confirm step in an alert dialog
+  - today counts as taken (PTO) and used (sick leave)
+  - every figure comes from the API with its label; the browser never computes one
 - **State:** requests, balances, and proposals are server data in TanStack Query. A confirm or a
   page write invalidates the time-off queries and the conversation; nothing calls `setQueryData`
   (the backlog's rule against a write landing in a new identity's cache).
@@ -544,81 +559,15 @@ The design decides the look. The build adds these rules.
 - **A date picker** comes with the components stage: scheduled days and holidays shown, past days
   disabled for PTO. If the design needs a date library, it's chosen then, small and maintained.
 
-### What the design must cover (for Claude Design)
+### The design
 
-Desktop mockups at 1440 px, with narrow behavior described in `notes.md`, as before. They reuse
-the approved shell, conversation view, source chips, and banners. The sample data is the seed's
-people. The figures are sample data, but they must follow the engine's rules, since the build is
-checked against them. "Today" in the mockups is Tuesday, October 20, 2026.
-
-**Screen 08, Time off** (`/time-off`, Priya Raman, salaried, Oakland, scheduled Monday to Friday):
-1. **Balances:**
-   - PTO: "92 hours (11.5 days) available", then earned to date 130 hours, taken 30, booked 8,
-     pending 0; "Next: 10 hours on October 31"; the ceiling, 180 hours. A source chip, "Handbook
-     §4.1 · Paid time off".
-   - Sick leave: "32 hours available this year", then 40 granted, 8 used; "Renews January 1". A
-     source chip, "Handbook CA-4.3 · California addendum".
-   - The PTO card's "paused at the ceiling" variant.
-2. **Her schedule:** "Your schedule: Monday to Friday, 8 hours a day", with a link to §3.1.
-3. **My requests:** upcoming and past, each with type, dates, amount, and a status badge
-   (pending, approved, denied, recorded, canceled), and Cancel where it's allowed. Include a
-   denied request with the manager's note, and the empty state.
-4. **The request form,** with its live preview:
-   - PTO on one day (Friday, October 30: "8 hours (1 day) · 84 hours (10.5 days) left after
-     this")
-   - a half day (4 hours)
-   - a range over a weekend (Friday, October 30 to Monday, November 2: 2 days counted, Saturday
-     and Sunday shown as "not scheduled")
-   - a range over a holiday (Wednesday, November 25 to Friday, November 27: 2 days counted,
-     Thursday, November 26 shown as "Thanksgiving")
-   - sick time in hours (3 hours on one day)
-   - the short-notice warning (4 days from November 2: "More than 3 days usually needs 2 weeks'
-     notice. You can still request it.")
-   - a refusal ("You have 92 hours (11.5 days) available. This request needs 120 hours (15
-     days).")
-   - submitting, and the submitted state
-5. **The date picker:** unscheduled days and holidays marked, past days disabled for PTO, by
-   keyboard as well as pointer.
-6. Loading, error, and canceling a request (with its one confirm step).
-
-**Screen 09, Approvals** (`/approvals`, Marcus Bell, store manager; his direct reports are Priya
-Raman, Leo Nakamura, Zara Bautista, Vikram Morales, and Malik Flores):
-1. **Waiting for you:** Zara Bautista's PTO, Monday, November 9 to Tuesday, November 10, 16 hours
-   (2 days), "62 hours (7.75 days) available after this", sent 3 days ago, and Priya's request
-   for October 30. Each shows **team coverage**: "Also off: Leo Nakamura, Tuesday, November 10 ·
-   PTO". Coverage is context only: nothing ranks, scores, or recommends.
-2. **Approve and Deny,** each with one confirm step, using the decision confirm card. Deny has
-   an optional note (up to 300 characters, "Zara will see this note").
-3. **After a decision:** the request moves to "Recent decisions". A request canceled while
-   Marcus was looking: "Zara canceled this request."
-4. **Coming up on your team:** approved and recorded time off in the next 30 days, type and
-   dates only.
-5. The empty state ("Nothing is waiting for you"), loading, and error.
-6. **The nav:** "Approvals" with its count, and the assistant home's at-a-glance cards (PTO
-   available, requests pending, approvals waiting).
-
-**Screen 10, Confirm cards** in the conversation, under the assistant's one-line reply ("Here's
-the request. Confirm it and Marcus will review it."):
-1. **Variants:**
-   - a PTO request on one day
-   - a multi-day request with a skipped holiday
-   - a sick-time record in hours
-   - an approve decision, and a deny decision with its optional note field, each showing the
-     requester, type, dates, amount, and team coverage
-   - a cancel, with what returns to the balance
-2. **States, for the request variant at least:**
-   - **pending:** Confirm and Cancel, and "Expires at 3:42 PM". Confirm is disabled while the
-     answer is still arriving
-   - **executed:** the apricot success moment. "Requested. Marcus Bell will review it." /
-     "Recorded." / "Approved. Priya will see it on her Time off page." / "Canceled. 8 hours are
-     back in your balance."
-   - **failed:** "Couldn't book this: you now have 4 hours available. Nothing was changed."
-   - **canceled:** "You canceled this. Nothing was changed.", and "Replaced by a newer
-     request."
-   - **expired:** "This card expired after 15 minutes. Nothing was changed." with "Ask again"
-3. **On every card:** "Proposed by the AI. Nothing happens until you confirm." (invariant 7), the
-   source chips for its rules, and any short-notice warning.
-4. **A sensitive turn** that also proposes: the sick-time card, then the HR panel.
+Designed and approved on 2026-10-20, in three rounds in Claude Design:
+[`08-time-off`](../design/screens/08-time-off/notes.md),
+[`09-approvals`](../design/screens/09-approvals/notes.md), and
+[`10-confirm-cards`](../design/screens/10-confirm-cards/notes.md). Each screen's `notes.md` has
+its states, layout, phone behavior, keyboard and focus, copy, the data it needs, its build
+decisions, and its acceptance criteria, which Stage 5's Task 29 turns into the plan's table. The
+mockups' sample figures follow the engine's rules, so the build can be checked against them.
 
 ---
 

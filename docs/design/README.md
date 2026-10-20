@@ -39,7 +39,7 @@ wait. Phases 0 and 1 have no UI, which gives the design track a head start.
 | Phase 2 | The design system (`tokens.md`, `components.md`), landing, app shell, assistant home, directory, global states |
 | Phase 3 | Handbook browser and the passage panel (designed, in `screens/06-handbook/`) |
 | Phase 4 | Conversation view, refusal, escalation stub, budget banner (designed, in `screens/07-conversation/`) |
-| Phase 5 | Time off, approvals queue, confirm cards in every state |
+| Phase 5 | Time off, approvals queue, confirm cards in every state (designed, in `screens/08-time-off/`, `screens/09-approvals/`, and `screens/10-confirm-cards/`) |
 | Phase 6 | Escalation panel, confidential-case confirm, HR case queue and detail |
 | Phase 7 | AI Ops console, "How it's built", guided-tour overlay |
 

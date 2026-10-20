@@ -18,15 +18,15 @@ build then implements it in the component gallery before any screen uses it.
 | Component | Variants | States | Designed |
 |---|---|---|---|
 | Button | primary, secondary, ghost, destructive; 40 px and 32 px | default, hover, focus, active, disabled, loading | partly: the loading state is built, not designed (a spinner before the label; it stays focusable) |
-| Text input / textarea | with label, helper, error | default, focus, disabled, error | partly: the search field (see Forms below); labeled form fields come with Phase 5 |
+| Text input / textarea | with label, helper, error | default, focus, disabled, error | [x]: the search field (see Forms below), and the labeled fields of Phase 5: the note field, the hours stepper, the date field (see Time off below) |
 | Select | | default, open, focus, disabled, error | partly: the filter select (see Forms below) |
 | Checkbox / radio / switch | | default, checked, focus, disabled | [ ] |
-| Date picker | single date, range, half-day option | default, open, disabled days (weekends, holidays) | [ ] |
-| Badge / chip | neutral, status, applicability | default | partly: the neutral "You" tag and the applicability badge (see Handbook below); status badges come with Phase 5 |
+| Date picker | single date, range | default, open, range in progress, range selected, every day-cell state (see Time off below) | [x] |
+| Badge / chip | neutral, status, applicability | default | [x]: the neutral "You" tag, the applicability badge (see Handbook below), and the time-off status badges (see Time off below) |
 | Card | plain, interactive | default, hover, focus | [ ] |
 | Table | dense, comfortable | default, empty, loading | partly: the directory list (see Directory below) |
 | Tabs | | default, active, focus | [ ] |
-| Dialog | | open | [ ] |
+| Dialog | alert dialog (cancel a request, approve, deny) | open, with the full-window scrim | [x]: see Time off below |
 | Toast | success; errors go inline, not in a toast | default, closing | [x] |
 | Tooltip | | default | [x] |
 | Avatar | initials | default | [x] |
@@ -47,7 +47,7 @@ build then implements it in the component gallery before any screen uses it.
 | Citation marker + source chip | | default, hover, focus, active (panel open) | [ ] |
 | Source panel | handbook passage, highlighted quote | open, loading, error | [x] as the passage panel (see Handbook below); Phase 4 docks it beside the conversation |
 | "Show your work" trace | | collapsed, expanded | [ ] |
-| Confirm card | time-off request, approve/deny, cancel request, open case | pending, executed, canceled, expired, failed | [ ] |
+| Confirm card | book PTO, record sick time, approve, deny (with a note), cancel time off; open case comes with Phase 6 | pending, pending while the answer streams, confirming, executed, failed, dismissed, replaced, expired | partly: every time-off variant and state (screen 10); the open-case variant comes with Phase 6 |
 | Escalation panel | sensitive topic | default, case offered, case opened | [ ] |
 | Crisis panel | | default (fixed text) | [ ] |
 | Feedback control | | default, up selected, down selected (reason form) | [ ] |
@@ -117,3 +117,33 @@ The source is in [`system/components/handbook/`](system/components/handbook/).
 - **The compact cited passage on its own:** drawn only inside the panel.
 - **The panel's loading and error eyebrow without a section name:** "Handbook CA-4.3", when the
   host doesn't pass one.
+
+## Time-off and approvals components
+
+Added by the design system for the Time off page, the Approvals page, and the confirm cards
+(screens 08, 09, and 10, Phase 5). The source is in
+[`system/components/timeoff/`](system/components/timeoff/),
+[`system/components/approvals/`](system/components/approvals/), and
+[`system/components/assistant/`](system/components/assistant/) (the confirm card).
+
+| Component | Variants | States | Designed |
+|---|---|---|---|
+| Status badge | waiting for approval (cinnamon clock), approved, denied, recorded, canceled | default (not interactive) | [x] |
+| Segmented control (Type) | PTO, sick time | default, hover, focus, selected, active, disabled | [x] |
+| Choice group (How much) | full or half day; full day or some hours | default, hover, focus, selected, active, disabled | [x] |
+| Hours stepper | | default, hover, focus, at 1, at 8, error, disabled | [x] |
+| Date field | empty, one day, a range (short form) | default, focus, open, error, disabled | [x] |
+| Date picker and day cell | PTO, sick time (30 days back) | default, hover, focus, active, selected, range start, in range, range end, skipped, skipped in range, holiday, today, disabled, disabled weekend | [x] |
+| Balance card | PTO, PTO at the ceiling, sick leave | default, loading | [x] |
+| Request row and group | mine (with Cancel), team (with a person column), decided (with the note) | default, hover, focus | [x] |
+| Preview block ("What this uses") | one day, weekend skipped, holiday skipped, sick hours, already booked, nothing picked | default | [x] |
+| Form message | warning, refusal | default (not interactive) | [x] |
+| Avatar | initials, muted | default | [x] |
+| Approval card | | default, focus, conflict, loading | [x] |
+| Note field | | empty, hover, focus, at the limit, disabled | [x] |
+| Decision dialog | approve, deny with a note | open, deciding | [x] |
+| Alert dialog (cancel a request) | | open, with the full-window scrim | [x] |
+
+Approve and Deny carry equal weight on every approval card, and no screen uses a destructive
+button for a decision (screen 09's build decisions).
+

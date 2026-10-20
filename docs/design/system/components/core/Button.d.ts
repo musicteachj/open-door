@@ -12,6 +12,8 @@ export interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElemen
   icon?: IconName;
   /** Trailing Lucide icon, e.g. arrow-right on Ask. */
   iconRight?: IconName;
+  /** Submitting: swaps the leading icon for a spinning loader-circle, sets aria-busy and aria-disabled, and ignores clicks. Keep the label as a present participle, e.g. "Requesting…". */
+  loading?: boolean;
   children?: React.ReactNode;
 }
 export declare function Button(props: ButtonProps): JSX.Element;

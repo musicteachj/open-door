@@ -38,6 +38,12 @@
   --warning: #8A5300; /* Needs attention; 6.3:1 on white */
   --danger: #B42318; /* Errors only, never a denied request; 6.6:1 on white */
   --danger-hover: #931C13; /* Hovered destructive button; 8.7:1 with white */
+  --warning-tint: #FCF4E8; /* Fill behind a warning message; ink on it 15.0:1, warning icon on it 5.8:1 */
+  --warning-border: #E6C79A; /* Warning message edge, 1.6:1 on white (decorative; the icon and words carry the meaning) */
+  --danger-tint: #FDEFEE; /* Fill behind a refusal or error message; ink on it 14.7:1, danger icon on it 5.9:1 */
+  --danger-border: #EFBDB8; /* Refusal message edge, 1.7:1 on white (decorative) */
+  --apricot-tint: #FBEFE5; /* The confirmed moment on a confirm card: a warm wash from the cinnamon family. Ink on it 14.5:1, success icon 5.6:1, primary link 9.8:1 */
+  --apricot-border: #EBC6A8; /* Edge of the confirmed strip, 1.6:1 on white (decorative; the icon and words carry the meaning) */
 
   /* Disabled */
   --disabled-bg: #E7EBED; /* Disabled fills */
@@ -46,4 +52,5 @@
   /* Overlays */
   --tooltip-bg: var(--ink); /* Tooltip background */
   --tooltip-fg: #FFFFFF; /* Tooltip text; 16.4:1 */
+  --scrim: rgba(20, 33, 42, 0.32); /* Behind a confirm dialog */
 }

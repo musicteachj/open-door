@@ -1,0 +1,99 @@
+<!-- @dsCard group="Components" viewport="1180x3600" name="Approvals" -->
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><link rel="stylesheet" href="../../styles.css"><script src="https://unpkg.com/react@18.3.1/umd/react.production.min.js"></script><script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.production.min.js"></script><script src="https://unpkg.com/@babel/standalone@7.24.7/babel.min.js"></script><script src="../../preview/loader.js"></script></head><body style="margin:0;background:var(--surface-raised)"><div id="root"></div>
+<script type="text/babel" data-presets="react">
+loadOpenDoor("../../", OD_FILES).then(function (OD) {
+  const { Button, Avatar, NavItem, GlanceLink, ApprovalCard, NoteField, DecisionDialog, RequestRow, RequestGroup, StatusBadge } = OD;
+  const Lbl = ({ children }) => <div style={{ font: "400 11px/16px var(--font-sans)", color: "var(--ink-muted)", marginBottom: 8 }}>{children}</div>;
+  const H = ({ children }) => <h2 style={{ margin: "0 0 12px", font: "600 15px/24px var(--font-sans)", color: "var(--ink)" }}>{children}</h2>;
+  const Row = ({ children, gap = 24 }) => <div style={{ display: "flex", flexWrap: "wrap", gap, alignItems: "flex-start" }}>{children}</div>;
+  const Cell = ({ label, w, children }) => <div style={{ width: w, display: "flex", flexDirection: "column", gap: 8 }}><Lbl>{label}</Lbl>{children}</div>;
+  const ZARA = { name: 'Zara Bautista', first: 'Zara', title: 'Department Lead, Apparel', initials: 'ZB' };
+  const PRIYA = { name: 'Priya Raman', first: 'Priya', title: 'Visual Merchandiser', initials: 'PR' };
+  const zaraCard = { person: ZARA, dates: 'Monday, November 9 to Tuesday, November 10', shortDates: 'November 9 to 10', amount: '16 hours (2 days)', availableAfter: '62 hours (7.75 days) available after this', sent: 'Sent October 17', coverage: ['Also off: Vikram Morales, Tuesday, November 10 · PTO'] };
+  const FACTS = 'Monday, November 9 to Tuesday, November 10, 16 hours (2 days).';
+  const NOTE = 'Inventory runs November 9 and 10 this year. Could you move this a week later?';
+  const LONG = 'Inventory runs November 9 and 10 this year, and the holiday floor set goes up the same week, so the whole Apparel team is scheduled for both days. Could you move this a week later? If those dates matter, let me know and we can look at coverage together before you resend.';
+  function LiveDialog() {
+    const [note, setNote] = React.useState('');
+    const [phase, setPhase] = React.useState(null);
+    return <DecisionDialog id="ld" kind="deny" scrim={false} person={ZARA} facts={FACTS} note={note} onNoteChange={setNote} phase={phase}
+      onConfirm={() => { setPhase('deciding'); setTimeout(() => setPhase(null), 1400); }} onBack={() => setNote('')} />;
+  }
+  function Card() {
+    return (
+      <div style={{ padding: "20px 24px 40px", display: "flex", flexDirection: "column", gap: 40 }}>
+        <div><H>Approve and Deny</H><Lbl>Equal weight: on the card both are secondary, the same size, Approve first. Each is named for its request, e.g. "Approve Zara Bautista's PTO, November 9 to 10". In the dialog the confirm is the standard primary button for both.</Lbl>
+          <Row gap={20}>
+            {[['Default', undefined], ['Hover', 'hover'], ['Focus', 'focus']].map(([l, s]) => (
+              <Cell key={l} label={l} w={170}><div style={{ display: "flex", gap: 12 }}><Button variant="secondary" data-state={s}>Approve</Button><Button variant="secondary" data-state={s}>Deny</Button></div></Cell>
+            ))}
+            <Cell label="Loading (in the dialog)" w={300}><div style={{ display: "flex", gap: 12 }}><Button loading>Approving…</Button><Button loading>Denying…</Button></div></Cell>
+            <Cell label="Disabled" w={170}><div style={{ display: "flex", gap: 12 }}><Button variant="secondary" disabled>Approve</Button><Button variant="secondary" disabled>Deny</Button></div></Cell>
+            <Cell label="Dialog confirm (primary): default, hover, focus" w={360}><div style={{ display: "flex", gap: 12 }}><Button>Deny</Button><Button data-state="hover">Deny</Button><Button data-state="focus">Approve</Button></div></Cell>
+          </Row></div>
+
+        <div style={{ maxWidth: 1000 }}><H>Approval card</H><Lbl>Default, with focus on Approve, and with the second request (no overlap). Coverage is context only: no colors, scores, or suggestions.</Lbl>
+          <ul className="od-approval-list">
+            <ApprovalCard {...zaraCard} />
+            <ApprovalCard {...zaraCard} approveState="focus" />
+            <ApprovalCard person={PRIYA} dates="Friday, October 30" shortDates="October 30" amount="8 hours (1 day)" availableAfter="84 hours (10.5 days) available after this" sent="Sent today" coverage={['No one else on your team is off that day.']} denyState="hover" />
+          </ul>
+          <div style={{ marginTop: 20 }}><Lbl>Conflict: the request was canceled while the manager was looking. Muted, Canceled badge, no actions, refusal message (role="alert").</Lbl>
+            <ul className="od-approval-list"><ApprovalCard {...zaraCard} conflict="Zara canceled this request." /></ul></div>
+          <div style={{ marginTop: 20 }}><Lbl>Loading</Lbl><ul className="od-approval-list"><ApprovalCard loading /></ul></div>
+        </div>
+
+        <div><H>Note field</H>
+          <Row gap={20}>
+            <Cell label="Empty" w={432}><NoteField id="n1" label="Note to Zara (optional)" helper="Zara will see this note. Up to 300 characters." /></Cell>
+            <Cell label="Hover" w={432}><NoteField id="n2" label="Note to Zara (optional)" helper="Zara will see this note. Up to 300 characters." data-state="hover" /></Cell>
+            <Cell label="Focus, typed" w={432}><NoteField id="n3" label="Note to Zara (optional)" helper="Zara will see this note. Up to 300 characters." value={NOTE} data-state="focus" /></Cell>
+            <Cell label="At the limit (typing stops at 300)" w={432}><NoteField id="n4" label="Note to Zara (optional)" helper="Zara will see this note. Up to 300 characters." value={LONG.slice(0, 300)} /></Cell>
+            <Cell label="Disabled (while deciding)" w={432}><NoteField id="n5" label="Note to Zara (optional)" helper="Zara will see this note. Up to 300 characters." value={NOTE} disabled /></Cell>
+          </Row></div>
+
+        <div><H>Decision dialog</H><Lbl>Shown inline here; on the page it sits on the full-window scrim. No AI label: this is the manager's own action.</Lbl>
+          <Row gap={20}>
+            <Cell label="Approve. Focus starts on Go back." w={480}><DecisionDialog id="d1" scrim={false} person={ZARA} facts={FACTS} backState="focus" /></Cell>
+            <Cell label="Approving" w={480}><DecisionDialog id="d2" scrim={false} person={ZARA} facts={FACTS} phase="deciding" /></Cell>
+            <Cell label="Deny, with a typed note" w={480}><DecisionDialog id="d3" kind="deny" scrim={false} person={ZARA} facts={FACTS} note={NOTE} noteState="focus" /></Cell>
+            <Cell label="Denying" w={480}><DecisionDialog id="d4" kind="deny" scrim={false} person={ZARA} facts={FACTS} note={NOTE} phase="deciding" /></Cell>
+            <Cell label="Live: type a note, Deny, Go back clears it" w={480}><LiveDialog /></Cell>
+          </Row></div>
+
+        <div style={{ maxWidth: 1000 }}><H>Team request rows (RequestRow with person)</H><Lbl>The screen 08 row with an avatar and name column and no Cancel. Recent decisions use decidedLine ("Approved October 5") and noteLabel ("Your note"). Hover tints the row.</Lbl>
+          <RequestGroup title="Coming up on your team">
+            <RequestRow person={{ name: 'Malik Flores', initials: 'MF' }} type="sick" dates="Thursday, October 22" amount="3 hours" status="recorded" />
+            <RequestRow person={{ name: 'Vikram Morales', initials: 'VM' }} dates="Tuesday, November 10" amount="8 hours (1 day)" status="approved" data-state="hover" />
+          </RequestGroup>
+          <RequestGroup title="Recent decisions">
+            <RequestRow person={{ name: 'Zara Bautista', initials: 'ZB' }} dates="Monday, November 9 to Tuesday, November 10" amount="16 hours (2 days)" status="approved" decidedLine="Approved today" />
+            <RequestRow person={{ name: 'Priya Raman', initials: 'PR' }} dates="Friday, August 28" amount="8 hours (1 day)" status="denied" decidedLine="Denied August 20" noteLabel="Your note" note="We’re short-staffed for the back-to-school sale that week. Could you pick another Friday?" />
+            <RequestRow loading />
+          </RequestGroup>
+        </div>
+
+        <div><H>Nav item with a count</H><Lbl>Accessible name includes the count: "Approvals, 2 waiting". No count when nothing is waiting.</Lbl>
+          <Row gap={20}>
+            <Cell label="Current, 2 waiting" w={208}><NavItem icon="clipboard-check" label="Approvals" count={2} current /></Cell>
+            <Cell label="Default, 2 waiting" w={208}><NavItem icon="clipboard-check" label="Approvals" count={2} /></Cell>
+            <Cell label="Hover" w={208}><NavItem icon="clipboard-check" label="Approvals" count={2} data-state="hover" /></Cell>
+            <Cell label="Focus, 1 waiting" w={208}><NavItem icon="clipboard-check" label="Approvals" count={1} data-state="focus" /></Cell>
+            <Cell label="Nothing waiting" w={208}><NavItem icon="clipboard-check" label="Approvals" count={0} /></Cell>
+          </Row></div>
+
+        <div><H>At a glance, as Marcus</H>
+          <div style={{ width: 276, padding: "0 12px", background: "var(--surface-sunken)" }}>
+            <GlanceLink value="72 hours" caption="PTO available" destination="Time off" />
+            <GlanceLink value="0" caption="requests pending" destination="Time off" />
+            <GlanceLink value="2" caption="approvals waiting" destination="Approvals" marker />
+            <GlanceLink value="Sep 12" caption="Handbook updated" destination="Handbook" />
+          </div></div>
+
+        <div><H>Avatar</H><Row gap={16}><Avatar initials="ZB" /><Avatar initials="MB" size={36} /><Avatar initials="MF" size={32} /><Avatar initials="ZB" muted /></Row></div>
+      </div>);
+  }
+  ReactDOM.createRoot(document.getElementById("root")).render(<Card />);
+});
+</script></body></html>

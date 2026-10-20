@@ -1,0 +1,54 @@
+/* ConfirmCard */
+.od-confirm { border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--surface-raised); overflow: hidden; font-family: var(--font-sans); color: var(--ink); }
+.od-confirm__head { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; padding: 14px 20px; border-bottom: 1px solid var(--border-subtle); }
+.od-confirm__title { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.od-confirm__title h3 { margin: 0; font-size: 15px; line-height: 24px; font-weight: var(--weight-semibold); }
+.od-confirm__tile { width: 32px; height: 32px; flex: none; border-radius: var(--radius-sm); background: var(--primary-tint); color: var(--primary); display: flex; align-items: center; justify-content: center; }
+.od-confirm__exp { display: inline-flex; align-items: center; gap: 6px; font-size: var(--text-small); line-height: var(--leading-small); color: var(--ink-muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.od-confirm__body { display: flex; flex-direction: column; gap: 16px; padding: 16px 20px 20px; }
+.od-confirm__who { display: flex; align-items: center; gap: 12px; }
+.od-confirm__who > span:last-child { display: flex; flex-direction: column; }
+.od-confirm__who-name { font-size: 15px; line-height: 24px; font-weight: var(--weight-semibold); }
+.od-confirm__who-title { font-size: var(--text-small); line-height: var(--leading-small); color: var(--ink-muted); }
+.od-confirm__facts { margin: 0; display: grid; grid-template-columns: 96px minmax(0, 1fr); gap: 8px 16px; align-items: center; font-size: var(--text-ui); line-height: var(--leading-ui); }
+.od-confirm__facts dt { color: var(--ink-muted); }
+.od-confirm__facts dd { margin: 0; display: flex; font-variant-numeric: tabular-nums; text-wrap: pretty; }
+.od-confirm__facts dd[data-strong] { font-weight: var(--weight-semibold); }
+.od-confirm__cov { display: flex; align-items: flex-start; gap: 10px; }
+.od-confirm__cov svg { flex: none; margin-top: 2px; color: var(--ink-muted); }
+.od-confirm__cov > div { display: flex; flex-direction: column; }
+.od-confirm__cov > div > span:first-child { font-size: var(--text-small); line-height: var(--leading-small); color: var(--ink-muted); }
+.od-confirm__cov > div > span:last-child { font-size: var(--text-ui); line-height: var(--leading-ui); font-variant-numeric: tabular-nums; }
+.od-confirm__info { display: flex; align-items: flex-start; gap: 8px; margin: 0; font-size: var(--text-ui); line-height: var(--leading-ui); color: var(--ink-muted); text-wrap: pretty; }
+.od-confirm__info svg { flex: none; margin-top: 2px; }
+.od-confirm__note { display: flex; flex-direction: column; gap: 2px; padding: 10px 14px; background: var(--surface-sunken); border: 1px solid var(--border-subtle); border-radius: var(--radius-md); }
+.od-confirm__note span { font-size: var(--text-small); line-height: var(--leading-small); color: var(--ink-muted); }
+.od-confirm__note p { margin: 0; font-size: var(--text-ui); line-height: 22px; }
+.od-confirm .od-note { margin-top: 0; }
+.od-confirm__foot { display: flex; flex-direction: column; gap: 12px; padding: 14px 20px 16px; border-top: 1px solid var(--border-subtle); background: var(--surface-sunken); }
+.od-confirm__proposed { display: flex; align-items: center; gap: 8px; margin: 0; font-size: var(--text-ui); line-height: var(--leading-ui); }
+.od-confirm__ai { display: inline-flex; align-items: center; height: 20px; padding: 0 6px; box-sizing: border-box; border: 1px solid var(--border-strong); border-radius: var(--radius-xs); background: var(--surface-raised); font-size: 11px; line-height: 16px; font-weight: var(--weight-semibold); letter-spacing: .03em; }
+.od-confirm__actions { display: flex; align-items: center; flex-wrap: wrap; gap: var(--space-3); }
+.od-confirm__wait { font-size: var(--text-small); line-height: var(--leading-small); color: var(--ink-muted); }
+.od-confirm__done, .od-confirm__fail, .od-confirm__ended { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; padding: 14px 20px; outline: 0; }
+.od-confirm__done p, .od-confirm__fail p, .od-confirm__ended p { flex: 1; min-width: 200px; margin: 0; font-size: var(--text-ui); line-height: var(--leading-ui); text-wrap: pretty; }
+.od-confirm__done { border-top: 1px solid var(--apricot-border); background: var(--apricot-tint); animation: od-confirm-in var(--duration-base, 200ms) var(--ease-standard, ease-out); }
+.od-confirm__done svg { flex: none; color: var(--success); }
+.od-confirm__done a { font-size: var(--text-ui); line-height: var(--leading-ui); font-weight: var(--weight-semibold); color: var(--primary); text-decoration: underline; text-decoration-thickness: 1px; text-underline-offset: 3px; white-space: nowrap; }
+.od-confirm__fail { align-items: flex-start; border-top: 1px solid var(--danger-border); background: var(--danger-tint); }
+.od-confirm__fail svg { flex: none; margin-top: 1px; color: var(--danger); }
+.od-confirm__ended { padding: 12px 20px; border-top: 1px solid var(--border-subtle); background: var(--surface-sunken); }
+.od-confirm__ended > svg { flex: none; color: var(--ink-muted); }
+.od-confirm[data-muted] .od-confirm__title h3, .od-confirm[data-muted] .od-confirm__facts dd, .od-confirm[data-muted] .od-confirm__who-name, .od-confirm[data-muted] .od-preview, .od-confirm[data-muted] .od-confirm__cov > div > span:last-child { color: var(--ink-muted); }
+.od-confirm[data-muted] .od-confirm__tile { background: var(--surface-hover); color: var(--ink-muted); }
+.od-confirm[data-muted] .od-preview__item svg { color: var(--ink-muted); }
+@keyframes od-confirm-in { from { opacity: 0; } to { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .od-confirm__done { animation: none; } }
+@media (max-width: 640px) {
+  .od-confirm__head, .od-confirm__body, .od-confirm__foot, .od-confirm__done, .od-confirm__fail, .od-confirm__ended { padding-left: 16px; padding-right: 16px; }
+  .od-confirm__facts { grid-template-columns: minmax(0, 1fr); gap: 2px; }
+  .od-confirm__facts dd { margin-bottom: 8px; }
+  .od-confirm__actions { display: grid; grid-template-columns: 1fr 1fr; }
+  .od-confirm__actions .od-btn { justify-content: center; }
+  .od-confirm__wait { grid-column: 1 / -1; }
+}
