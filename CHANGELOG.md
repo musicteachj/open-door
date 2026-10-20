@@ -25,6 +25,15 @@ version (`0.x.y` while the app is being built, `1.0.0` when it is complete).
 
 ### Security
 
+- **Vite updated to 8.3.4 (between Phase 5 stages, 2026-10-20).** Vite 8.3.0 to 8.3.2 bundle a
+  `launch-editor` with three advisories published that day (GHSA-r825-w8mm-5pxw,
+  GHSA-698v-4r3x-3vcv, GHSA-587h-7wmj-h5pm), the worst a crafted file path that can run a command
+  through some editors' command-line flags. It is the development server's "open in editor"
+  helper, so it touched developers' machines, not the built app, which Vite only bundles. 8.3.3 is
+  the first fixed release; `package.json` now asks for at least 8.3.4, the newest 8.3 release. 8.3.4
+  needs `postcss` 8.5.29 or later, so the lockfile also moved `postcss` (to 8.5.31) and its own
+  small dependencies.
+
 - **`certifi` updated to 2026.10.19 (between phases, 2026-10-20).** The certificate bundle the API's
   HTTP client trusts (through `httpx`, which reaches Voyage) included the emSign root
   certificates, whose intermediate keys were compromised. A critical advisory, GHSA-6q48-6c7w-9gw2,
