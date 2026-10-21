@@ -984,6 +984,115 @@ owner.
 Record here anything that differs from this plan, with the reason, each stage's final test counts,
 and the commit `dev` was at before Stage 1 (the phase review's base).
 
+**Phase 5's base commit is `4557963`** (`dev` after the planning PR, #62, merged). Task 38's phase
+review diffs against it. The screens (#63) and a `certifi` security update (#64) merged before
+Stage 1, which branched from `dev` at `4ebd47a`.
+
+### Stage 1: the engine (`feat/phase-5-engine`)
+
+Built in three batches, each reviewed with at least five fixtures recomputed by hand (eight in
+batch A, six in batch B, all agreeing). Neither review found anything high or medium. The engine
+has 176 tests, so the API has 3,139 (2,963 before).
+
+Decisions the plan left open, made at the stage's start and pinned by tests:
+
+- **Both balances take `holidays`.** Task 4's and Task 5's interfaces omitted it, but a request is
+  charged day by day (around today, at each month-end, and at December 31), and a day's charge
+  depends on whether it counts. So `pto_balance(person, opening, requests, holidays, today)`,
+  `sick_balance(person, requests, holidays, year, today)`, and `sick_years(person, requests,
+  holidays, today)`. One helper, `charge_days` in `charges.py`, charges a counted day 480 minutes,
+  or a one-day request's partial.
+- **Statuses by type.** PTO counts `approved` (taken on or before today, booked after) and
+  `pending`; sick time counts `recorded` only. An overlap is any `pending`, `approved`, or
+  `recorded` request of either type, by raw date range, as the database constraint will be.
+  PTO days before the opening's date are ignored: the opening already reflects them.
+- **Month-ends.** Earning happens on every month's last day from `max(opening.as_of, hire_date)`
+  up to and including today. The next earning is the first month-end after today, or None
+  ("paused at the ceiling") when it would earn nothing. It looks only one month ahead: with PTO
+  booked later, earning can resume after it, so Stage 5's copy should read "for now".
+- **Labels.** Hours always ("1 hour" in the singular). Days in parentheses only from a full day up,
+  in whole quarter days ("10 hours (1.25 days)"), and 240 minutes reads "4 hours (half a day)".
+  Other amounts are hours only ("3 hours"), minutes that aren't whole hours read "1 hour 30
+  minutes", and nothing is rounded. A negative keeps its sign.
+- **Counting.** "Not scheduled" wins over a holiday on the same day. Counting cites 3.1 always,
+  and 4.2 only when a holiday was skipped.
+- **Rules.** Besides the spec's rules, the table has `pto-increments` and `pto-notice` (4.1), and
+  `sick-increments` and `sick-window` (4.3). `too-long` cites no rule, since `RULES` stays within
+  the six sections; its pointer to §5.1 is for the fixed texts in Stage 3 or 4.
+- **Evaluating.** Every check runs, and the codes come out in the spec's order. `not-enough` is
+  checked only when the amount is defined (no `bad-partial`, at least one counted day). The result
+  has a `Draw` per balance it takes from: one for PTO, one per calendar year for sick time,
+  including last year (a sick day up to 30 days back, in early January).
+- **`out-of-range` gains a form:** a request that starts before the hire date, for either type
+  (batch B review). A recent hire in a sandbox could otherwise record sick time from before their
+  first day.
+
+Other differences from the plan:
+
+- **`calendar.py` is `counting.py`,** and its tests `test_timeoff_counting.py` (Task 3 names
+  them `calendar`). `pto.py` also imports the standard library's `calendar`, and a sibling module
+  with the same name invites confusion.
+- **`Rule` lives in `rules.py`,** with `RULES` and `sick_grant_rule(state)`, not in `model.py`.
+  Later stages import it from `app.domain.timeoff.rules`.
+- **Task 5's year-end fixture moved.** December 30, 2026 to January 2, 2027 puts no counted day
+  in 2027 for a Monday-to-Friday person (January 1 is a holiday and January 2 a Saturday). The
+  tests use December 30 to Monday, January 4, in Texas and in Colorado.
+- **The California grant** is computed as `max(2400, 5 * DAY_MINUTES)`, but with 8-hour days both
+  sides are 2,400, so no fixture can tell it from a constant.
+- **For Stage 2's service:** at confirm, the request being confirmed must not be in `requests`,
+  or `evaluate` counts it twice. The backlog's "Never treat the anchor date as today" keeps its
+  sandbox test at 03:00 UTC for Stage 2; the engine's `today_at` is done.
+- **`tzdata` isn't a dependency,** so `today_at` relies on the system's zone files. The backlog
+  has it under Phase 8.
+
+The stage's `/code-review medium`:
+
+- **Fixed:** a PTO request already refused for starting in the past no longer also gets the
+  short-notice warning. The opening's docstring says it is the balance at the start of its date,
+  before that day's earning. `today_at`'s docstring names the `ValueError` a malformed zone
+  raises. `evaluate` takes its amount and its draws from one set of charges, so the two can't
+  drift apart.
+- **For Stage 4 (Task 24, the handbook additions):** three forms of `out-of-range` have no
+  handbook sentence to cite: PTO that starts before today, a request that starts before the hire
+  date, and one that ends after December 31 of next year. The engine cites only rules the
+  handbook states, so these refusals carry no section. Stage 4 should propose wording for the
+  owner, for example in §4.1, "You can request PTO for today or a later date, up to the end of
+  next year," or have the fixed texts for these codes say plainly that it's how Open Door works,
+  not a policy, so the assistant never states it as one (invariant 4).
+- **Kept as decided:** -240 minutes reads "-4 hours", since days are shown only from a full day
+  up; "half a day" is the one positive exception.
+- **Recorded:** `sick_years` lists the current year and next, as the spec says, so a sick day in
+  early January dated last December draws on a year the balance view doesn't list. The card shows
+  the draw's own before and after, which covers it; Stage 3's summary can add last year if the
+  pages need it. `sick_years` and `evaluate` count each recorded sick request once per year shown,
+  which is cheap at sandbox scale (ADR 0012).
+- **Round 2 fixed:** a range longer than 31 days is no longer counted day by day before it's
+  refused, so a far-off end date (which the model could supply) costs nothing; `evaluate` reports
+  only the date checks for it. The new request is counted in one pass. A stored request's partial
+  amount is validated like a new one's, and a schedule's weekdays are always a `frozenset`.
+- **Round 2, for Stage 4:** `app/ai/context.py` works out the turn's local date itself. When Stage
+  4 edits the context, it should call `today_at`, so the model's "today" and the engine's can't
+  drift apart (invariant 2). The output is the same, so it's left alone here.
+- **Round 2, recorded:** the PTO balance re-sums approved days at each month-end, and the sick
+  balance charges recorded requests once per year asked about. Both are cheap at sandbox scale
+  (a year of months and a handful of requests), so they stay simple.
+- **Round 3 fixed:** PTO that starts before the opening's date is `out-of-range`. The balance
+  ignores days before the opening (it already reflects them), so an approved one would otherwise
+  cost nothing, and the opening's date is the sandbox's UTC anchor while the location's today can
+  be the day before. A stored request, like a new one, spans at most 31 days, so a bad row can't
+  make a balance read walk millions of days. A request's type and status are checked when it's
+  made, so a misspelled type can't be treated as sick time.
+- **Round 3, for Stage 2:** the seed must give each opening the balance at the start of its date
+  (the engine adds that day's earning when it's a month-end); a seed test should pin it. A future
+  hire's sick grant shows in advance, as next year's does; that's kept.
+- **Round 3, recorded:** the end-before-start check is in both `Request` and `NewRequest`, and
+  `charges_for` repeats the one-day rule that `partial_is_valid` enforces. They agree today; a
+  change to the partial rules has to touch both.
+- **Round 4 had nothing high or medium,** so the loop stopped there. Two of its lows were
+  fixed: the docstrings say the holidays passed in must cover every year any request touches,
+  stored requests included (Stage 2's service loads them so), and `Person` checks its state and
+  employment type when it's made. The rest repeated earlier findings.
+
 ## Backlog
 
 Deferrals found during execution go in `docs/BACKLOG.md` under the phase that should pick them up,

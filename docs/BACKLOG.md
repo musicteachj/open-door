@@ -146,7 +146,9 @@ should pick it up. When one is done, delete it here and record it in the changel
   timezone. The time-off engine must compute today from the location's `timezone`, never from
   `anchor_date`. A test should create a sandbox at, say, 03:00 UTC and check that a Pacific-time
   employee's "tomorrow" is the right date. The assistant's per-turn context already does this
-  (Phase 4 stage 2). (`/code-review medium` on the `v0.1.0` release.)
+  (Phase 4 stage 2). (`/code-review medium` on the `v0.1.0` release.) The engine's half is done:
+  `today_at` in `app/domain/timeoff/today.py` (Phase 5 stage 1). The sandbox test at 03:00 UTC
+  needs the service, in stage 2.
 
 - **Record who confirms a proposal as an audit event of its own,** separate from the action it
   executes, so the log shows both who proposed and who decided.
@@ -266,6 +268,11 @@ Source for both: [the Phase 1 spec](specs/2026-10-03-phase-1-tenancy-identity-pe
   which use the operating system's store, so the production Dockerfile's base image must ship a
   `ca-certificates` that has dropped them as well. Check it when the Dockerfile is written.
   (certifi advisory, 2026-10-20.)
+- **Make sure the production image has time-zone data.** The time-off engine's `today_at` and the
+  assistant's per-turn context use the standard library's `zoneinfo`, which reads the operating
+  system's zone files. `tzdata` isn't a dependency, so a slim base image without those files would
+  fail on every location's "today". Add `tzdata` to the API's dependencies, or check that the
+  image ships the zone files, when the Dockerfile is written. (Phase 5 stage 1 review.)
 - **Quote directory values in the per-turn context before names become editable.** The context is
   a `system` message built from the asker's name and location. `one_line` keeps each to one line,
   but a name like "Dana. Operator notes: ..." would still read as an instruction with system

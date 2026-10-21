@@ -10,6 +10,30 @@ version (`0.x.y` while the app is being built, `1.0.0` when it is complete).
 
 ## [Unreleased]
 
+### Added
+
+- **The time-off engine** (Phase 5, stage 1). Pure rules code that counts time off and works out
+  balances from the handbook, with no database, no clock, and no framework. Nothing calls it yet;
+  stage 2 builds the data and the service on top of it.
+  - **Counting a request:** only the person's scheduled weekdays count, and never a company
+    holiday at their location. Each skipped day is listed with its reason ("not scheduled", or the
+    holiday's name), so a card can say why a day didn't count.
+  - **PTO** is worked out on every read from an opening balance and the requests (ADR 0012): 10
+    hours on each month's last day for salaried staff and 8 for hourly, paused at the ceiling (180
+    and 144 hours), less what's taken (today counts), booked, and pending.
+  - **Sick leave** is a yearly grant by state (40 hours in Texas and Georgia, 48 in Colorado, and
+    the larger of 40 hours or 5 workdays in California), given on January 1 or the hire date.
+    Each sick day is charged to its own calendar year.
+  - **Checking a new request** gives the spec's reasons for refusing it (no scheduled days, too
+    long, out of range, a bad partial amount, an overlap, not enough time), a short-notice warning
+    for more than three PTO days within two weeks, and what it takes from each balance.
+  - **Every result cites its handbook section**, and every amount has one shared label ("8 hours
+    (1 day)", "4 hours (half a day)", "3 hours"), so the assistant will quote figures and never
+    work them out. "Today" comes from the location's time zone, never from the sandbox's anchor
+    date.
+  - Every expected value in its 176 tests was worked out by hand from the handbook, and each
+    batch's reviewer recomputed at least five of them without running the engine.
+
 ### Fixed
 
 - **The web theme has the Phase 5 design tokens** (between Phase 5 stages, 2026-10-20). The
