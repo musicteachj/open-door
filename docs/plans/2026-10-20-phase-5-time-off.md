@@ -1093,6 +1093,113 @@ The stage's `/code-review medium`:
   stored requests included (Stage 2's service loads them so), and `Person` checks its state and
   employment type when it's made. The rest repeated earlier findings.
 
+### Stage 2: the data and the service (`feat/phase-5-data`)
+
+Built in three batches plus the close, off `dev` at `d82b998` (Stage 1, #66, and the theme-token,
+CI filter, and Vite fix, #65). Batch A got a Sonnet compliance reviewer and an Opus 5.5 security
+reviewer in parallel; batches B and C got one combined Sonnet review each. No review found
+anything high. The API has 3,518 tests (3,139 before).
+
+Decisions the plan left open, made at the stage's start and pinned by tests:
+
+- **The database checks more than the spec's trigger.** Checks tie a request's decision and
+  cancel fields to its status, keep PTO out of `recorded` and sick time in `recorded` or
+  `canceled`, mirror the engine's 31-day and partial-amount rules, require `proposal_id` exactly
+  when `created_via` is `assistant`, and refuse `decided_by` equal to the request's own person.
+  The update trigger allows only a legal status change (never a same-status update), and the
+  decision columns change only on `pending` to `approved` or `denied`. There is no insert-time
+  status rule for requests, so the seed can insert approved history; the service inserts only
+  `pending` (PTO) and `recorded` (sick).
+- **Proposals are held tighter, from the security review.** The database stamps `created_at` and
+  `ended_at` with its own clock, holds `expires_at` to at most 15 minutes after `created_at`,
+  refuses an insert that isn't `pending`, and refuses `executed` after `expires_at`. A unique
+  partial index lets one proposal make at most one request.
+- **Composite keys:** a proposal's turn key is `(tenant_id, turn_id, conversation_id,
+  person_id)`, with a new unique constraint on `ai_turns`, so the turn must be in the proposal's
+  own conversation. A request's proposal key carries `person_id`, and `audit_events.proposal_id`
+  now has a key to `ai_proposals`.
+- **Holidays:** the service loads every holiday at the person's location, which covers every
+  year any stored or new request touches. The seed stores four years, from the anchor year minus
+  one to plus two: a 24-hour sandbox can cross New Year, and then December 31 of next year (the
+  engine's `out-of-range` bound) is two years past the anchor.
+- **Today** is always the request person's location, also when their manager decides or reads
+  their balance. `now` is always passed in.
+- **`resolve_rules` is async,** `resolve_rules(db, rules, version_id)`, since titles come from
+  the pinned handbook. It raises `LookupError` for a missing section or a sandbox with no pinned
+  version.
+- **Refusals** are `Refused(code)`: the engine's codes, plus `not-found` (can't read it, or it
+  doesn't exist; Stage 3 maps it to 404), `not-allowed` (can read but may not act),
+  `status-changed` (no longer in the status the action needs; 409), and `already-started`
+  (canceling an approved or recorded request on or after its first day). A note on an approval,
+  a note over 300 characters, a naive `now`, or a `via` that doesn't match `proposal_id` raises
+  `ValueError`: the routes' schemas prevent them.
+- **Policy:** rules take `(actor, resource, today)`, each rule accepts only its resource type
+  (`DIRECTORY_READ` now requires a `PersonResource`), and the cancel rule denies when `today` is
+  None. `Actor.direct_report_ids` is required and must be a subset of `report_ids`; it comes from
+  a second small query, since a depth column would stop the recursive query's `UNION` from ending
+  a loop. `create` and `check` call `TIMEOFF_REQUEST` first.
+- **A missing opening** (only in sandboxes made before migration 0009) reads as 0 as of the
+  sandbox's anchor date.
+- **The seed:** the pending request is Zara Bautista's (the design's sample), two scheduled days
+  three to four weeks after the anchor. Leo's last-week PTO is seeded even when it falls before
+  his opening (an anchor in early January), which the engine ignores by design. The CEO, with no
+  manager, gets no approved PTO. Amounts come from the engine. The new draws use their own stream,
+  `TIME_OFF_STREAM` (2), and a test stops a future location from taking it.
+
+Other differences from the plan:
+
+- **`load_actor`'s tests live in `tests/integration/test_identity.py`;** there is no
+  `test_actor.py`.
+- **`btree_gist` stays on downgrade, but not "like 0001's `vector`":** 0001's downgrade drops
+  `vector`. 0009 leaves `btree_gist` because, with `IF NOT EXISTS`, a downgrade can't tell whether
+  it created the extension.
+- **The overlap insert runs in a savepoint,** so the exclusion constraint becomes
+  `Refused("overlaps")` and the caller's transaction stays usable. The decide and cancel updates
+  also carry `WHERE status = <expected>`, a second guard beside the lock.
+- **`make_tenant`'s helper** writes an opening, a proposal, and the request it made for the
+  employee, so the cleanup and isolation tests cover the new tables; its opening insert skips a
+  person the seed already gave one.
+- **Seeded history is checked at the anchor and the day before,** since a sandbox created early
+  in UTC is still the day before in the Americas (batch C review: a month-end anchor otherwise
+  showed a few people negative available PTO at their local today).
+
+For Stage 3 (from the reviews):
+
+- **Compute a proposal's `expires_at` in SQL,** as `now() + interval '15 minutes'`. The database
+  stamps `created_at` with the transaction's start, so a Python time taken after a model call can
+  fail the 15-minute check.
+- **The expiry check uses the transaction's start time,** so a confirm transaction that began
+  before expiry can still execute a few seconds after it. That overrun is bounded by how long the
+  confirm runs; switching to `clock_timestamp()` would make it strict, if wanted, and the route's
+  own check should then use the same clock.
+- **Never take a `proposal_id` or `person_id` from the client.** Foreign key checks bypass
+  row-level security, so a key would reveal whether a hidden proposal ID exists within a sandbox.
+- **The one-request-per-proposal index isn't mapped to a refusal.** The confirm path should treat
+  its violation (and the proposal trigger's OD003, or 0 rows updated) as "already done".
+- **The routes call `can()` for `TIMEOFF_REQUEST`** as the service does.
+- **A person with no manager can't have PTO decided.** Only the direct manager decides, so the
+  CEO's pending PTO would wait forever (the seed gives the CEO none, and no persona is the CEO).
+  Stage 3's summary route returns the approver; decide there whether `create` refuses PTO for a
+  person with no manager (a new refusal code and fixed text) or the spec names a fallback.
+- **A pending PTO request can be decided after its days have passed.** The spec doesn't forbid it
+  (a late approval is realistic), while cancel refuses once a request has started. Confirm the
+  intent when the decision route is built.
+
+The stage's `/code-review medium` (one round; nothing high or medium, so the loop stopped):
+
+- **Fixed:** `load_actor` reads the direct reports in the same statement as the rest, so the two
+  sets always come from one snapshot (a second query could, after a future org-chart edit, give a
+  direct report the recursive set lacks, and `Actor` would refuse it). A redundant note
+  expression in `decide` is simplified.
+- **Recorded:** seeded approvals name the person's current manager even when that manager was
+  hired after the request (the history is fictional, and "who approved this" isn't shown before
+  Stage 6); `cancel` loads the person's facts before its ownership check (a few small queries,
+  then a refusal); the seed re-runs the balance for each candidate request (sandbox creation
+  stays near 50 ms against the 2-second limit); the decide rule's own self-check is kept beside
+  the subset guarantee as a second guard.
+- **The browser tests failed once** on a conversation layout check at 390 px that lost its element
+  mid-check, and passed on the rerun; the backlog has it.
+
 ## Backlog
 
 Deferrals found during execution go in `docs/BACKLOG.md` under the phase that should pick them up,

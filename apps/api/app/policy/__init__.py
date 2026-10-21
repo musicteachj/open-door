@@ -9,6 +9,7 @@ tenant, so a person from another tenant never reaches this function.
 
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
+from datetime import date, datetime
 from enum import StrEnum
 from types import MappingProxyType
 from uuid import UUID
@@ -29,6 +30,9 @@ class Actor:
     is_hr_admin: bool
     # Direct and indirect reports, computed fresh for every request and never cached.
     report_ids: frozenset[UUID]
+    # The people who report straight to this person: a subset of `report_ids`. Deciding a request
+    # needs the direct manager, so a manager two levels up reads a request but doesn't decide it.
+    direct_report_ids: frozenset[UUID]
 
     def __post_init__(self) -> None:
         # Python doesn't check annotations at runtime. A truthy string in `is_hr_admin`, for
@@ -37,6 +41,10 @@ class Actor:
         _require(self.tenant_id, UUID, "tenant_id")
         _require(self.is_hr_admin, bool, "is_hr_admin")
         _require(self.report_ids, frozenset, "report_ids")
+        _require(self.direct_report_ids, frozenset, "direct_report_ids")
+        if not self.direct_report_ids <= self.report_ids:
+            msg = "direct_report_ids must be a subset of report_ids"
+            raise ValueError(msg)
 
     @property
     def is_manager(self) -> bool:
@@ -47,6 +55,10 @@ class Actor:
 class Action(StrEnum):
     DIRECTORY_READ = "directory.read"
     PERSON_PRIVATE_READ = "person_private.read"
+    TIMEOFF_READ = "timeoff.read"
+    TIMEOFF_REQUEST = "timeoff.request"
+    TIMEOFF_DECIDE = "timeoff.decide"
+    TIMEOFF_CANCEL = "timeoff.cancel"
 
 
 @dataclass(frozen=True, slots=True)
@@ -59,30 +71,106 @@ class PersonResource:
         _require(self.person_id, UUID, "person_id")
 
 
-type Rule = Callable[[Actor, PersonResource], bool]
+@dataclass(frozen=True, slots=True)
+class TimeOffRequestResource:
+    """A time-off request, as far as a permission needs it: whose it is, what kind, where it
+    stands, and its first day. The decide and cancel rules read all four."""
+
+    person_id: UUID
+    type: str  # "pto" or "sick"; an unknown value simply matches no rule
+    status: str
+    start_date: date
+
+    def __post_init__(self) -> None:
+        _require(self.person_id, UUID, "person_id")
+        _require(self.type, str, "type")
+        _require(self.status, str, "status")
+        _require_date(self.start_date, "start_date")
 
 
-def _anyone_in_the_company(actor: Actor, target: PersonResource) -> bool:
-    return True
+def _require_date(value: object, name: str) -> None:
+    """A calendar date. A datetime is a date too, but comparing the two raises, so it is refused."""
+    if isinstance(value, datetime) or not isinstance(value, date):
+        raise TypeError(f"{name} must be a date, not {type(value).__name__}")
 
 
-def _themselves_or_hr(actor: Actor, target: PersonResource) -> bool:
+type Resource = PersonResource | TimeOffRequestResource
+# A rule gets the actor, the resource, and today's date at the person's location (None when the
+# caller has none). It must return exactly True to grant.
+type Rule = Callable[[Actor, Resource, date | None], bool]
+
+
+def _anyone_in_the_company(actor: Actor, target: Resource, today: date | None) -> bool:
+    return isinstance(target, PersonResource)
+
+
+def _themselves_or_hr(actor: Actor, target: Resource, today: date | None) -> bool:
+    if not isinstance(target, PersonResource):
+        return False
     # A manager gets nothing extra: their reports' private details are not theirs to read.
     return target.person_id == actor.person_id or actor.is_hr_admin
+
+
+def _timeoff_read(actor: Actor, target: Resource, today: date | None) -> bool:
+    # A person, or one of their requests: either way it is the person that counts.
+    if not isinstance(target, PersonResource | TimeOffRequestResource):
+        return False
+    return (
+        target.person_id == actor.person_id
+        or target.person_id in actor.report_ids
+        or actor.is_hr_admin
+    )
+
+
+def _timeoff_request(actor: Actor, target: Resource, today: date | None) -> bool:
+    return isinstance(target, PersonResource) and target.person_id == actor.person_id
+
+
+def _timeoff_decide(actor: Actor, target: Resource, today: date | None) -> bool:
+    # Only the direct manager, never on one's own request. HR and managers further up read, and
+    # don't decide. Sick time is recorded, never decided.
+    return (
+        isinstance(target, TimeOffRequestResource)
+        and target.person_id != actor.person_id
+        and target.person_id in actor.direct_report_ids
+        and target.type == "pto"
+        and target.status == "pending"
+    )
+
+
+def _timeoff_cancel(actor: Actor, target: Resource, today: date | None) -> bool:
+    if (
+        not isinstance(target, TimeOffRequestResource)
+        or today is None
+        or target.person_id != actor.person_id
+    ):
+        return False
+    if target.status == "pending":
+        return True
+    # Approved or recorded: only before its first day, so the day before yes, on it no.
+    return target.status in {"approved", "recorded"} and today < target.start_date
 
 
 RULES: Mapping[Action, Rule] = MappingProxyType(
     {
         Action.DIRECTORY_READ: _anyone_in_the_company,
         Action.PERSON_PRIVATE_READ: _themselves_or_hr,
+        Action.TIMEOFF_READ: _timeoff_read,
+        Action.TIMEOFF_REQUEST: _timeoff_request,
+        Action.TIMEOFF_DECIDE: _timeoff_decide,
+        Action.TIMEOFF_CANCEL: _timeoff_cancel,
     }
 )
 
 
-def can(actor: Actor, action: Action, target: PersonResource) -> bool:
+def can(actor: Actor, action: Action, target: Resource, *, today: date | None = None) -> bool:
     """Whether `actor` may perform `action` on `target`. An action without a rule is denied.
 
-    Always a real bool: only a rule that returns exactly True grants access.
+    `today` is the date at the request person's location, which only the cancel rule reads. It is
+    a plain date, never a datetime. Always a real bool: only a rule that returns exactly True
+    grants access.
     """
+    if today is not None:
+        _require_date(today, "today")
     rule = RULES.get(action)
-    return rule is not None and rule(actor, target) is True
+    return rule is not None and rule(actor, target, today) is True

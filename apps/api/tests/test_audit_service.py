@@ -3,14 +3,14 @@
 Refusal happens before the database is touched, so these tests use a stand-in session.
 """
 
-from typing import Any, cast
+from typing import Any, cast, get_args
 from unittest.mock import AsyncMock
 from uuid import uuid4
 
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.modules.audit.service import record_event
+from app.modules.audit.service import AuditAction, record_event
 
 PRIVATE_PAYLOADS = {
     "top level": {"phone": "555-0100"},
@@ -22,6 +22,10 @@ PRIVATE_PAYLOADS = {
     "PascalCase": {"PersonalEmail": "priya@example.com"},
     "key inside a list of dicts": {"people": [{"given_name": "Priya"}, {"phone": "555-0100"}]},
     "key inside a tuple of dicts": {"people": ({"dateOfBirth": "1990-01-01"},)},
+    "a decision note": {"decisionNote": "Coverage is thin that week"},
+    "a decision note, snake_case": {"decision_note": "Coverage is thin that week"},
+    "a note": {"note": "Coverage is thin that week"},
+    "a note, nested": {"x": [{"Note": "Coverage is thin that week"}]},
     "list of pairs": [("phone", "555-0100")],
     "list of pairs, camelCase": [("personalEmail", "priya@example.com")],
 }
@@ -68,3 +72,45 @@ async def test_the_real_payloads_are_recorded(payload: dict[str, object]) -> Non
     await record(session, before=payload, after=payload)
 
     session.execute.assert_awaited_once()
+
+
+def test_the_time_off_and_proposal_actions_exist() -> None:
+    actions = set(get_args(AuditAction.__value__))
+
+    assert {
+        "timeoff.requested",
+        "timeoff.recorded",
+        "timeoff.approved",
+        "timeoff.denied",
+        "timeoff.canceled",
+        "proposal.created",
+        "proposal.confirmed",
+        "proposal.canceled",
+        "proposal.failed",
+    } <= actions
+
+
+async def test_record_event_writes_the_proposal_id() -> None:
+    session = stand_in_session()
+    proposal_id = uuid4()
+
+    await record_event(
+        cast("AsyncSession", session),
+        tenant_id=uuid4(),
+        actor_id=uuid4(),
+        action="timeoff.requested",
+        via="assistant",
+        proposal_id=proposal_id,
+    )
+
+    statement = session.execute.await_args.args[0]
+    assert statement.compile().params["proposal_id"] == proposal_id
+
+
+async def test_proposal_id_is_empty_unless_given() -> None:
+    session = stand_in_session()
+
+    await record(session)
+
+    statement = session.execute.await_args.args[0]
+    assert statement.compile().params["proposal_id"] is None

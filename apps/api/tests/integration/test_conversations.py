@@ -51,7 +51,11 @@ PINS = Pins(
 
 def actor_of(tenant: SampleTenant, person_id: UUID) -> Actor:
     return Actor(
-        person_id=person_id, tenant_id=tenant.id, is_hr_admin=False, report_ids=frozenset()
+        person_id=person_id,
+        tenant_id=tenant.id,
+        is_hr_admin=False,
+        report_ids=frozenset(),
+        direct_report_ids=frozenset(),
     )
 
 

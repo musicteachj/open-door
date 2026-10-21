@@ -1,6 +1,7 @@
 """The tables. Migration 0003 creates the tenant tables, with their row-level security and grants.
-Migration 0004 adds the handbook tables, which are global and read-only to the API, and migration
-0008 adds the assistant's tables at the end of this file.
+Migration 0004 adds the handbook tables, which are global and read-only to the API, migration
+0008 adds the assistant's tables, and migration 0009 adds the time-off tables and proposals at the
+end of this file.
 
 Every table except `tenants` and `sessions` is a tenant table: it has a tenant_id, and Postgres
 shows the API only the rows of the tenant its transaction is scoped to (see app/db/tenancy.py).
@@ -28,13 +29,14 @@ from sqlalchemy import (
     ForeignKeyConstraint,
     Index,
     Numeric,
+    SmallInteger,
     Text,
     UniqueConstraint,
     false,
     func,
     text,
 )
-from sqlalchemy.dialects.postgresql import ARRAY, JSONB, TSVECTOR
+from sqlalchemy.dialects.postgresql import ARRAY, JSONB, TSVECTOR, ExcludeConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
@@ -111,6 +113,11 @@ class Person(Base):
         ForeignKeyConstraint(["tenant_id", "manager_id"], ["people.tenant_id", "people.id"]),
         CheckConstraint("employment_type IN ('salaried', 'hourly')", name="employment_type"),
         CheckConstraint("persona_key IN ('priya', 'mateo', 'marcus', 'dana')", name="persona_key"),
+        CheckConstraint(
+            "cardinality(scheduled_weekdays) >= 1"
+            " AND scheduled_weekdays <@ ARRAY[1, 2, 3, 4, 5, 6, 7]::smallint[]",
+            name="scheduled_weekdays",
+        ),
         # Directory paging, and the recursive query for a manager's reports.
         Index(None, "tenant_id", "family_name", "given_name", "id"),
         Index(None, "tenant_id", "manager_id"),
@@ -129,6 +136,12 @@ class Person(Base):
     hire_date: Mapped[date]
     is_hr_admin: Mapped[bool] = mapped_column(server_default=false())
     persona_key: Mapped[str | None]
+    # The ISO weekdays the person works (1 is Monday, 7 is Sunday), which the time-off engine counts
+    # against. The default is Monday to Friday, kept on purpose (migration 0009): sandboxes that
+    # predate the column get it, and the seed writes every person's days explicitly.
+    scheduled_weekdays: Mapped[list[int]] = mapped_column(
+        ARRAY(SmallInteger), server_default=text("'{1,2,3,4,5}'")
+    )
 
 
 class PersonPrivate(Base):
@@ -196,9 +209,16 @@ class AuditEvent(Base):
     __tablename__ = "audit_events"
     __table_args__ = (
         ForeignKeyConstraint(["tenant_id", "actor_person_id"], ["people.tenant_id", "people.id"]),
+        # An event can name only a proposal of its own sandbox (migration 0009). Deleting a
+        # sandbox removes both tables' rows in one statement, so this key never blocks it.
+        ForeignKeyConstraint(
+            ["tenant_id", "proposal_id"], ["ai_proposals.tenant_id", "ai_proposals.id"]
+        ),
         CheckConstraint("via IN ('ui', 'assistant', 'system')", name="via"),
         Index(None, "tenant_id", "occurred_at"),
         Index(None, "tenant_id", "actor_person_id"),
+        # For the key to the proposal: deleting a proposal looks here for events that name it.
+        Index(None, "tenant_id", "proposal_id"),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, server_default=func.gen_random_uuid())
@@ -343,9 +363,11 @@ class AiTurn(Base):
 
     __tablename__ = "ai_turns"
     __table_args__ = (
-        # Targets of the keys from messages, feedback (with the person), and spend (without).
+        # Targets of the keys from messages, feedback (with the person), spend (without), and
+        # proposals (with the conversation too: a proposal's turn is in its own conversation).
         UniqueConstraint("tenant_id", "id", "person_id"),
         UniqueConstraint("tenant_id", "id"),
+        UniqueConstraint("tenant_id", "id", "conversation_id", "person_id"),
         # Ownership keys. Postgres checks a foreign key without row-level security, so a plain
         # (tenant_id, conversation_id) key would let one person add a turn to another's
         # conversation, if they knew its random ID. Carrying person_id makes that impossible.
@@ -548,3 +570,201 @@ class AiSpendDaily(Base):
     kind: Mapped[str]
     amount_usd: Mapped[Decimal] = mapped_column(Numeric(12, 6))
     created_at: Mapped[datetime] = mapped_column(server_default=func.now())
+
+
+class AiProposal(Base):
+    """Something the assistant wants done, waiting for the person it was made for to confirm.
+
+    The model proposes and never writes: this row holds the validated input (`payload`) and the
+    card the person is shown, and the server runs the stored payload, never the client's, when they
+    confirm. Postgres shows a row only to its person, HR included. Its status moves from `pending`
+    to one final status, once, and a trigger (migration 0009) refuses every other change. The API
+    may update only status, ended_at, and outcome.
+    """
+
+    __tablename__ = "ai_proposals"
+    __table_args__ = (
+        # Targets of the audit key, and of a request's key (with the person).
+        UniqueConstraint("tenant_id", "id"),
+        UniqueConstraint("tenant_id", "id", "person_id"),
+        # Ownership keys, as for the assistant's other rows: the conversation is the person's own,
+        # and the turn is in that conversation and is the person's own.
+        ForeignKeyConstraint(
+            ["tenant_id", "conversation_id", "person_id"],
+            ["ai_conversations.tenant_id", "ai_conversations.id", "ai_conversations.person_id"],
+            name="fk_ai_proposals_conversation_owner",
+        ),
+        ForeignKeyConstraint(
+            ["tenant_id", "turn_id", "conversation_id", "person_id"],
+            ["ai_turns.tenant_id", "ai_turns.id", "ai_turns.conversation_id", "ai_turns.person_id"],
+            name="fk_ai_proposals_turn_owner",
+        ),
+        CheckConstraint(
+            "action IN ('timeoff.request', 'timeoff.decide', 'timeoff.cancel')", name="action"
+        ),
+        CheckConstraint(
+            "status IN ('pending', 'executed', 'failed', 'canceled', 'expired')", name="status"
+        ),
+        CheckConstraint(
+            "(ended_at IS NULL) = (status = 'pending')", name="ended_at_matches_status"
+        ),
+        CheckConstraint("expires_at > created_at", name="expires_after_created"),
+        CheckConstraint(
+            "expires_at <= created_at + interval '15 minutes'", name="expires_within_15_minutes"
+        ),
+        # A conversation's proposals, oldest first.
+        Index(None, "tenant_id", "conversation_id", "created_at"),
+        # For the key to the turn: deleting a turn looks here for proposals that name it.
+        Index(None, "tenant_id", "turn_id"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, server_default=func.gen_random_uuid())
+    tenant_id: Mapped[uuid.UUID] = mapped_column(ForeignKey(TENANT_FK, ondelete="CASCADE"))
+    person_id: Mapped[uuid.UUID]
+    conversation_id: Mapped[uuid.UUID]
+    turn_id: Mapped[uuid.UUID]
+    # timeoff.request, timeoff.decide, or timeoff.cancel.
+    action: Mapped[str]
+    # The validated tool input. The confirm runs this, not anything the client sends.
+    payload: Mapped[dict[str, Any]] = mapped_column(JSONB)
+    # The details the server built for the card the person sees. Never model text.
+    card: Mapped[dict[str, Any]] = mapped_column(JSONB)
+    status: Mapped[str]
+    created_at: Mapped[datetime] = mapped_column(server_default=func.now())
+    expires_at: Mapped[datetime]
+    # Set exactly when the status is not `pending`.
+    ended_at: Mapped[datetime | None]
+    # The request ID made or changed, or the failure's code and its fixed text.
+    outcome: Mapped[dict[str, Any] | None] = mapped_column(JSONB(none_as_null=True))
+
+
+class TimeOffOpening(Base):
+    """A person's PTO balance on `as_of`, in minutes. The engine counts forward from it, and a
+    balance is worked out on every read, never stored (ADR 0012). One row per person."""
+
+    __tablename__ = "time_off_openings"
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "person_id"),
+        ForeignKeyConstraint(["tenant_id", "person_id"], ["people.tenant_id", "people.id"]),
+        CheckConstraint("amount_minutes >= 0", name="amount_not_negative"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, server_default=func.gen_random_uuid())
+    tenant_id: Mapped[uuid.UUID] = mapped_column(ForeignKey(TENANT_FK, ondelete="CASCADE"))
+    person_id: Mapped[uuid.UUID]
+    as_of: Mapped[date]
+    amount_minutes: Mapped[int]
+    created_at: Mapped[datetime] = mapped_column(server_default=func.now())
+
+
+class TimeOffRequest(Base):
+    """A PTO request or a recorded sick day. Its checks hold the engine's rules, and a trigger
+    (migration 0009) lets its status move only one way. The API may update only the status, the
+    decision columns, and canceled_at. Postgres shows a row to the whole sandbox, and the policy
+    layer decides who reads which."""
+
+    __tablename__ = "time_off_requests"
+    __table_args__ = (
+        ForeignKeyConstraint(["tenant_id", "person_id"], ["people.tenant_id", "people.id"]),
+        ForeignKeyConstraint(["tenant_id", "decided_by"], ["people.tenant_id", "people.id"]),
+        # The proposal that made a request is that person's own.
+        ForeignKeyConstraint(
+            ["tenant_id", "proposal_id", "person_id"],
+            ["ai_proposals.tenant_id", "ai_proposals.id", "ai_proposals.person_id"],
+            name="fk_time_off_requests_proposal_owner",
+        ),
+        CheckConstraint("type IN ('pto', 'sick')", name="type"),
+        CheckConstraint(
+            "status IN ('pending', 'approved', 'denied', 'recorded', 'canceled')", name="status"
+        ),
+        CheckConstraint("created_via IN ('ui', 'assistant')", name="created_via"),
+        # Each half reads as "if it is this type, then...", so an unknown type passes here and
+        # fails only the type check.
+        CheckConstraint(
+            "(type <> 'pto' OR status <> 'recorded')"
+            " AND (type <> 'sick' OR status IN ('recorded', 'canceled'))",
+            name="status_matches_type",
+        ),
+        CheckConstraint("end_date >= start_date", name="dates_in_order"),
+        CheckConstraint("end_date - start_date <= 30", name="at_most_31_days"),
+        CheckConstraint(
+            "partial_minutes IS NULL OR (start_date = end_date AND ("
+            "(type = 'pto' AND partial_minutes = 240)"
+            " OR (type = 'sick' AND partial_minutes % 60 = 0"
+            " AND partial_minutes BETWEEN 60 AND 480)))",
+            name="partial_minutes_match_the_engine",
+        ),
+        CheckConstraint("amount_minutes > 0", name="amount_is_positive"),
+        # Written as implications, one per status, so an unknown status passes here and fails only
+        # the status check.
+        CheckConstraint(
+            "(status NOT IN ('pending', 'recorded') OR (decided_by IS NULL AND decided_at IS NULL"
+            " AND decision_note IS NULL AND canceled_at IS NULL))"
+            " AND (status NOT IN ('approved', 'denied') OR (decided_by IS NOT NULL"
+            " AND decided_at IS NOT NULL AND canceled_at IS NULL))"
+            " AND (status <> 'canceled' OR (canceled_at IS NOT NULL"
+            " AND (decided_by IS NULL) = (decided_at IS NULL)))",
+            name="decision_matches_status",
+        ),
+        CheckConstraint(
+            "decision_note IS NULL OR (char_length(decision_note) <= 300 AND status = 'denied')",
+            name="decision_note_is_a_short_denial_note",
+        ),
+        CheckConstraint(
+            "(proposal_id IS NOT NULL) = (created_via = 'assistant')",
+            name="proposal_matches_created_via",
+        ),
+        # Two open requests for one person can't share a day. Both ends are inclusive. A canceled
+        # or denied request frees its days. The engine checks first, so a person sees the friendly
+        # reason; this catches two requests that race.
+        ExcludeConstraint(
+            ("tenant_id", "="),
+            ("person_id", "="),
+            (text("daterange(start_date, end_date, '[]')"), "&&"),
+            using="gist",
+            where=text("status IN ('pending', 'approved', 'recorded')"),
+            name="ex_time_off_requests_no_overlap",
+        ),
+        # Nobody decides their own request. A null decided_by passes.
+        CheckConstraint("decided_by IS DISTINCT FROM person_id", name="no_self_decision"),
+        # A person's requests by date.
+        Index(None, "tenant_id", "person_id", "start_date"),
+        # For the key to the decider: deleting a person looks here.
+        Index(None, "tenant_id", "decided_by"),
+        # A proposal makes at most one request. It also serves the key to the proposal.
+        Index(
+            "uq_time_off_requests_tenant_id_proposal_id",
+            "tenant_id",
+            "proposal_id",
+            unique=True,
+            postgresql_where=text("proposal_id IS NOT NULL"),
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, server_default=func.gen_random_uuid())
+    tenant_id: Mapped[uuid.UUID] = mapped_column(ForeignKey(TENANT_FK, ondelete="CASCADE"))
+    person_id: Mapped[uuid.UUID]
+    # pto or sick.
+    type: Mapped[str]
+    # Calendar dates in the person's location's time zone. Both ends are inclusive.
+    start_date: Mapped[date]
+    end_date: Mapped[date]
+    # Null for whole days. Otherwise 240 for a half-day of PTO, or a whole number of hours from
+    # 60 to 480 for sick leave, on a single day.
+    partial_minutes: Mapped[int | None]
+    # The engine's count when the request was made, kept for the record.
+    amount_minutes: Mapped[int]
+    # pending, approved, denied, recorded, or canceled. A PTO request is never recorded, and a sick
+    # one is only recorded or canceled.
+    status: Mapped[str]
+    created_at: Mapped[datetime] = mapped_column(server_default=func.now())
+    # ui or assistant.
+    created_via: Mapped[str]
+    # Set exactly when created_via is assistant.
+    proposal_id: Mapped[uuid.UUID | None]
+    decided_by: Mapped[uuid.UUID | None]
+    decided_at: Mapped[datetime | None]
+    # A denial's note, up to 300 characters. Written by a person, shown on pages and cards, and
+    # never sent to a model.
+    decision_note: Mapped[str | None]
+    canceled_at: Mapped[datetime | None]
