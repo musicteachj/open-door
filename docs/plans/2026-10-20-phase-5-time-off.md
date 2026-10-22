@@ -1200,6 +1200,145 @@ The stage's `/code-review medium` (one round; nothing high or medium, so the loo
 - **The browser tests failed once** on a conversation layout check at 390 px that lost its element
   mid-check, and passed on the rerun; the backlog has it.
 
+### Stage 3: the routes and proposals (`feat/phase-5-routes`)
+
+Built in three batches plus the close, off `dev` at `aebd3c1` (Stage 2, #67). Batches A and C got
+one combined Sonnet review each; batch B got a Sonnet compliance reviewer and an Opus 5.5 security
+reviewer in parallel, and the security reviewer re-checked the fixes. No review found anything
+high. The API has 3,858 tests (3,518 before); the web app's 2,009 are unchanged.
+
+Decisions the plan left open, made at the stage's start and pinned by tests:
+
+- **Refusals over HTTP:** `not-found` is a 404, so something the caller can't read looks the same
+  as something that doesn't exist; `not-allowed` is a 403, reachable only by someone who can read
+  the request (HR or a skip-level manager deciding, a manager canceling a report's request);
+  `status-changed` and `already-started` are 409s whose body carries `currentStatus`; the
+  engine's codes are 422s. The code is the problem's `type`, and `detail` is a fixed, figure-free
+  sentence from `app/modules/timeoff/texts.py`. The web app writes the copy with figures from
+  structured data. `authorize()` isn't used for time off, since it answers 403.
+- **Two small pure engine functions:** `overlapping_days` (the days of a range that open requests
+  already cover, for "Already booked" and a failed card's dates) and `request_bounds` (the
+  earliest start per type and the latest end). `evaluate` uses `request_bounds` too, so the date
+  picker and the refusal can't disagree.
+- **Team coverage** (`app/modules/timeoff/coverage.py`): the request's counted days against the
+  manager's other direct reports' approved and recorded time off, one entry per colleague with
+  typed days. Only for the request person's direct manager; never in an audit event or a tool
+  result.
+- **`scope=waiting` ignores the date window,** so a waiting request is never hidden and the list
+  agrees with the summary's `waitingCount` (below 200 rows). `availableAfter` is on pending PTO
+  only.
+- **Proposal payloads and cards are typed in Stage 3** (`app/ai/proposal_cards.py`), with
+  builders (`request_card_for`, `decide_card`, `cancel_card`) that Stage 4's tools call. Each card
+  carries `kind` (`request`, `decide`, `cancel`), and the API's card is a discriminated union.
+  Card figures are flat pairs, as in the time-off routes (`amountMinutes` and `amountLabel`,
+  `availableBeforeMinutes` and `availableBeforeLabel`, and so on), not the spec's nested
+  `amount: { minutes, label }`: CLAUDE.md puts the unit in the field name (the close's review).
+  The card's days use the check route's shape too (`countedDays` as dates, `skippedDays` with
+  `day` and `reason`), not the spec's `counted` and `skipped`, so one component renders both.
+  A cancel card's "returns" and "available after" come from the engine (the balance run again with
+  the request canceled), never from the stored amount.
+- **`outcome`** is `{requestId}` when executed, `{code, text, dates}` when failed (dates for an
+  overlap only), and `{reason}` when canceled. Never a note.
+- **Clocks:** `expires_at` is `now() + interval '15 minutes'` in SQL, and the expiry is judged by
+  the database's `now()`. Python's `now` reaches only the time-off service, for "today".
+- **A 409 that wrote** (marking a card expired, or canceling an unfinished turn's card) is
+  returned as a problem response rather than raised, so the request's transaction commits it. A
+  failed confirm is a 200 whose status is `failed`.
+- **"Already done":** the one-request-per-proposal index, the trigger's OD003, and zero rows
+  updated all re-read the row and answer 409 with its status. A status with no fixed sentence
+  gets a generic one, never a 500.
+- **Only a completed turn's card executes.** A running turn's card is a 409 `turn-running` with
+  nothing written. Any other turn (failed, stopped, crisis, guard unavailable, or running past the
+  10-minute abandoned limit) cancels its card as `turn-incomplete`. `create_proposal` locks the
+  turn row and refuses unless it is running.
+- **Automatic cancels are audited** as `proposal.canceled` via `system` (`replaced`,
+  `turn-incomplete`); Dismiss is via `ui`; expiry isn't audited.
+- **The note** is accepted only on a deny card, checked after the 409s, at most 300 characters,
+  and stored on the request only.
+- **The conversation read** shows each card's status as of the read by the database clock, from
+  the same functions confirm uses (`turn_state_of`, `shown_ending`), with `turnRunning` for a
+  running turn's pending card. It reads all the conversation's proposals in one statement and
+  writes nothing.
+
+Owner decisions on the two Stage 2 questions (2026-10-22, after Batch A, on my recommendations):
+
+- **PTO for a person with no manager is refused,** with a new service-level code `no-approver`
+  (422) and the text "Your PTO needs a manager's approval, and no manager is on file for you, so
+  please contact HR." The engine's problems come first; the check lists it too; sick time is
+  unaffected. HR systems usually configure a fallback approver; that would break the spec's
+  "only the direct manager decides", so v1 refuses instead.
+- **Pending PTO can be decided after its days have passed** (a late approval records time already
+  taken). Unchanged behavior, now pinned by tests.
+
+Other differences from the plan:
+
+- **Migration `0010` (not planned):** a unique partial index on `ai_proposals (tenant_id,
+  conversation_id) WHERE status = 'pending'`, so one live card per conversation holds in the
+  database. `create_proposal` also takes a per-conversation advisory lock (namespace 4404, keyed by
+  tenant and conversation): the API's login has no UPDATE grant on `ai_conversations`, so it can't
+  row-lock one. The security review proved that two concurrent proposal tools (Phase 4 runs up to
+  three tools at once) left two pending cards in four of five rounds.
+- **Lock order:** in `create_proposal`, the conversation lock, then the turn row, then proposal
+  rows; in confirm and cancel, the proposal row, then the person's time-off lock. Confirm reads the
+  turn's status without a lock.
+- **Files:** the card models are in `app/ai/proposal_cards.py`; the route tests for the
+  conversation read are in `test_proposal_routes.py`, which has the proposal helpers;
+  `outcomes_since` takes a `now`, and a card pending past its expiry counts as expired at
+  `expires_at`. The confirm and dismiss responses are `ProposalOut`, the same shape as the read's.
+- **Stage 2's table tests** built proposals in a conversation that already held a pending one;
+  they now make their own, since migration 0010 would refuse the second card.
+- **Test-first slip:** batch A's first round was written code first. Its mutation proofs showed
+  each test catches its bug, and every later change was written test first.
+
+For Stage 4 (from the reviews):
+
+- **Cancel a turn's proposals in the same transaction as its ending.** Task 22 says "in its own
+  transaction, after `finish_turn`": that leaves a window in which a failed turn's card can be
+  confirmed. Use `cancel_turn_proposals_in(db, ...)` inside `finish_turn` and inside
+  `recover_abandoned`, which today fails a turn without canceling its cards (confirm now covers
+  that, but the database should agree).
+- **Update the turn row first, then cancel its proposals.** The reverse deadlocks with a late
+  `create_proposal`, which holds the turn row and waits on the old card's row (proved in the
+  security review).
+- **Join `outcomes_since`'s lines under one "Since the last message:"**: each line carries the
+  prefix today.
+- **A tool's proposal for a finished turn raises `TurnFinished`;** the tool should end as a normal
+  tool error.
+
+The stage's `/code-review medium` ran four rounds; the fourth found nothing high or medium, so the
+loop stopped.
+
+- **Round 1** (two medium): the card figures broke the unit-naming rule (now flat pairs, above),
+  and the cancel card added the stored amount back instead of asking the engine. Also fixed: facts
+  loaded once per requester, the expiry boundary in `_end_pending` made strict like the trigger,
+  404s declared in the schema (with a test that catches an undeclared one), a fixed sentence for a
+  failure with an unknown code, one note rule (`service.checked_note`), one read in `get_request`.
+- **Round 2** (one medium): the cancel card showed the balance change as the request's amount.
+  The amount is now the request's own charge today (a new pure `request_charge_minutes`), and
+  "returns" the change; they differ only for days before the opening. Also: the clock dependency
+  moved to `app/api/deps.py`, one resource builder, one not-found helper.
+- **Round 3** (two medium): a confirm that canceled an unfinished turn's card said it had been
+  dismissed (it is now its own problem, `turn-incomplete`), and the card builders kept their own
+  copy of the decide and cancel checks, already disagreeing on sick time (one shared
+  `decide_precheck` and `cancel_precheck` now). Also: coverage carries partial days, and an OD003
+  from the request trigger during a confirm fails the card instead of a 500.
+- **Round 4** (lows only, fixed): an unknown action's guard, no card for an abandoned turn, the
+  cancel check order, a test tying the outcome lines' reasons to the refusal codes, one shape for
+  skipped days, and the coverage description.
+
+The stage's reviews also recorded, without a change: HR's `scope=team` lists only HR's own
+reports (the spec's "everyone below you"); `load_facts` runs twice per requester on the waiting
+list (bounded by the number of direct reports); a sick card that crosses New Year shows the first
+year's figures (backlog, for Stage 5); the plain-name check in the context lines isn't an
+injection filter (backlog, if names become editable); the confirm has no `lock_timeout` (backlog,
+Phase 8
+Phase 8); the waiting list stops at 200 rows with no marker (a manager would need over 200
+waiting requests); a stored card or outcome that no longer matches its model would make the
+conversation read fail, so a later change to the card's shape needs a data migration; a failed
+outcome stores its sentence, which nothing reads; `outcomes_since` doesn't know a turn's state,
+which Stage 4's cancel inside `finish_turn` makes moot; a 409 that wrote rebuilds its problem
+body in the route rather than through a commit option on `ProblemError`.
+
 ## Backlog
 
 Deferrals found during execution go in `docs/BACKLOG.md` under the phase that should pick them up,

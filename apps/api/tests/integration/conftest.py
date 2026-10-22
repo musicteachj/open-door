@@ -33,6 +33,7 @@ from pydantic import PostgresDsn
 from sqlalchemy import delete, select, text
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 
+from app.ai.proposal_cards import RequestCard
 from app.core.config import Settings
 from app.db.engine import create_engine
 from app.db.models import (
@@ -251,6 +252,28 @@ async def write_time_off_rows(
     """
     rows = TimeOffRows(proposal_id=uuid4(), request_id=uuid4())
     today = datetime.now(UTC).date()
+    day = today + timedelta(days=30)
+    # A real card, so reading the proposal back (the conversation read validates it) works.
+    card = RequestCard.model_validate(
+        {
+            "kind": "request",
+            "type": "pto",
+            "startDate": day.isoformat(),
+            "endDate": day.isoformat(),
+            "partialMinutes": None,
+            "countedDays": [day.isoformat()],
+            "skippedDays": [],
+            "amountMinutes": 480,
+            "amountLabel": "8 hours (1 day)",
+            "availableBeforeMinutes": 480,
+            "availableBeforeLabel": "8 hours (1 day)",
+            "availableAfterMinutes": 480,
+            "availableAfterLabel": "8 hours (1 day)",
+            "warnings": [],
+            "approver": None,
+            "rules": [],
+        }
+    )
     await session.execute(
         text(
             "INSERT INTO time_off_openings (tenant_id, person_id, as_of, amount_minutes)"
@@ -274,8 +297,10 @@ async def write_time_off_rows(
             "person_id": person_id,
             "conversation_id": assistant.conversation_id,
             "turn_id": assistant.turn_id,
-            "payload": json.dumps({"type": "pto"}),
-            "card": json.dumps({"title": "Request time off"}),
+            "payload": json.dumps(
+                {"type": "pto", "startDate": day.isoformat(), "endDate": day.isoformat()}
+            ),
+            "card": card.model_dump_json(by_alias=True),
         },
     )
     await session.execute(

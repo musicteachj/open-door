@@ -12,6 +12,84 @@ version (`0.x.y` while the app is being built, `1.0.0` when it is complete).
 
 ### Added
 
+- **The time-off routes** (Phase 5, stage 3). The time-off service is now reachable over
+  HTTP under `/api/v1/time-off`, for the time-off page, the Approvals page, and the home's
+  at-a-glance cards. Every route needs a session, every write needs the CSRF header, and every
+  amount comes with both its minutes and its label ("8 hours (1 day)").
+  - **Reading:** balances for yourself or a person you may read, with the handbook sections they
+    rest on; your requests, everyone below you, or the requests waiting for your decision (oldest
+    first, whenever their days fall), in a window that defaults to 30 days back and 120 ahead of
+    your own today, at most 200 rows; one request; the date picker's marks (your weekdays, your
+    location's holidays across New Year, and the earliest day each type allows); and a summary
+    with your PTO available, your pending requests, your approver, and, for a manager, how many
+    requests wait for them.
+  - **Acting:** a check that previews a possible request without writing anything (it answers 200
+    even when the request has problems, and names the days another request already covers), then
+    make, decide, and cancel. Each is audited as made from the page.
+  - **Refusals are problems with a fixed sentence.** A request or person the caller can't read is
+    a 404, never a 403, so it looks the same as one that doesn't exist. Someone who can read it
+    but may not act (HR or a skip-level manager deciding, a manager canceling a report's request)
+    gets a 403. A request that is no longer in the needed status, or has already started, is a 409
+    that says where it stands now. The engine's refusals are 422s whose `type` is the code. Each
+    code has one plain sentence, written by a person.
+  - **PTO for someone with no manager is refused** (`no-approver`), since only a direct manager
+    decides PTO and it would wait forever. The engine's own problems come first, and the check
+    lists it too, so the form says so before sending. Sick time is unaffected. A pending request
+    can still be approved or denied after its days have passed.
+  - **Team coverage and "available after"** come with a request for the person's direct manager
+    only: who else among the manager's direct reports has approved or recorded time off on the
+    request's scheduled days (a waiting request doesn't count), and the person's available PTO as
+    it stands. Plain context, never in the audit log or sent to the model.
+  - **The engine** gains two small pure functions: the calendar days of a range that existing
+    requests already cover, and the dates a request may start and end on, which the evaluation now
+    uses too, so the date picker and the refusal can't disagree.
+
+- **Proposals and the confirm and dismiss routes** (Phase 5, stage 3). The assistant can
+  now propose a time-off request, a decision, or a cancellation, and a person confirms it on a
+  card. Nothing is reachable from the assistant yet (stage 4 adds its tools); the server side is
+  built and proven first.
+  - **The proposal service** stores each proposal for one person with its validated payload and its
+    card, a fixed 15 minutes to live, and an audit event from the assistant. A new proposal replaces
+    the one still waiting in its conversation, and a turn that doesn't finish cancels its own.
+  - **The card is built by the server** from the engine's and the service's results, never from
+    the model's words: a booking card (counted and skipped days, the amount, the balance before and
+    after, warnings, the approver, and the handbook sections), a decision card (who asked, the
+    balance as it stands, and who else on the team is off), and a cancel card (what goes back into
+    the balance). A card never holds a note or anything a person wrote.
+  - **Confirm** (`POST /api/v1/assistant/proposals/{id}/confirm`) runs the stored payload through
+    the time-off service, once, and never anything the browser sends except a denial's note (at most
+    300 characters, kept on the request only, never in the proposal or the audit log). The proposal
+    is locked first and the person's balance second, so two confirms at once book once. If the
+    request no longer fits, the confirm itself still works: the answer is a 200 whose status is
+    `failed`, with the engine's code and its fixed sentence (and the clashing days for an overlap).
+  - **Dismiss** (`POST /api/v1/assistant/proposals/{id}/cancel`) works even while the answer is
+    still streaming.
+  - **Refusals:** another person's proposal and a missing one are both a 404. A proposal that has
+    already ended is a 409 whose `type` is its status (`executed`, `failed`, `canceled`, or
+    `expired`), and one whose answer is still streaming is a 409 `turn-running`. A confirm after
+    the 15 minutes marks the proposal expired and keeps that, and so does one for an answer that
+    never finished (the proposal is canceled).
+  - **The next turn's context** gets one fixed sentence per proposal that ended since the last
+    message (made from structured fields only, never from stored text).
+  - **The proposal's clock is the database's,** never the caller's.
+  - **A card from a turn that didn't finish never runs.** A confirm executes a card only when its
+    answer completed. A turn that failed, was stopped, ended in crisis, or was marked abandoned
+    cancels its card instead. A proposal can't be stored for a turn that has already ended.
+  - **One live card per conversation is held in the database too** (migration `0010`, a unique
+    partial index on pending proposals), beside a lock that makes two cards made at once take turns.
+  - An ended proposal always answers 409 before a bad note answers 422, and an unexpected status is
+    still a 409 with a generic sentence.
+  - **A reload shows each card's state.** `GET /api/v1/assistant/conversations/current`
+    gives each turn its proposals, oldest first, with the card and the status as of the read (the
+    database's clock), in one query for the whole conversation. A waiting card past its 15 minutes
+    shows `expired`, and one whose answer never finished shows `canceled` with the reason
+    `turn-incomplete`, exactly what a confirm would do, from one shared rule. A read writes
+    nothing. Each proposal also says `turnRunning`, true while its answer is still streaming, so the
+    web app knows Confirm must wait (the confirm and dismiss answers carry it too, always false).
+  - **Each card says what it is** (`kind`: `request`, `decide`, or `cancel`), and the card is a
+    discriminated union in the API schema, so the web app can tell them apart without guessing.
+  - **The web client is regenerated** for every stage 3 route and schema (`make openapi`).
+
 - **The time-off data and service** (Phase 5, stage 2). The database, the permission rules, the
   service, and the seed that the engine needs to run against a real sandbox. Nothing is reachable
   over HTTP yet; stage 3 adds the routes.

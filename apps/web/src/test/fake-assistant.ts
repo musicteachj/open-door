@@ -40,6 +40,7 @@ export function turnOut(overrides: Partial<TurnOut> = {}): TurnOut {
     toolCalls: [],
     sections: [],
     feedback: null,
+    proposals: [],
     startedAt: '2026-10-18T10:00:00Z',
     endedAt: '2026-10-18T10:00:05Z',
     ...overrides,

@@ -31,3 +31,15 @@ def charge_days(
 ) -> tuple[tuple[date, int], ...]:
     """The (day, minutes) pairs a request charges, in date order."""
     return charges_for(count_days(person, start, end, holidays), start, end, partial_minutes)
+
+
+def request_charge_minutes(
+    person: Person,
+    start: date,
+    end: date,
+    partial_minutes: int | None,
+    holidays: Mapping[date, str],
+) -> int:
+    """What a request charges in total over the person's schedule and holidays as they stand now,
+    which differs from the amount stored when it was made if a holiday was added since."""
+    return sum(minutes for _, minutes in charge_days(person, start, end, partial_minutes, holidays))

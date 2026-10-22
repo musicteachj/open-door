@@ -1111,6 +1111,190 @@
         }
       }
     },
+    "/api/v1/assistant/proposals/{proposal_id}/confirm": {
+      "post": {
+        "tags": [
+          "assistant"
+        ],
+        "summary": "Confirm one of the person's own proposals: the server runs its stored payload, once",
+        "description": "Nothing but the denial's note comes from the client. A proposal the engine refuses at\nconfirm time is a 200 with status `failed` and the reason: the confirm itself worked.",
+        "operationId": "confirmProposal",
+        "parameters": [
+          {
+            "name": "proposal_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Proposal Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/ConfirmIn"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Body"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProposalOut"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Unprocessable Content",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/assistant/proposals/{proposal_id}/cancel": {
+      "post": {
+        "tags": [
+          "assistant"
+        ],
+        "summary": "Dismiss one of the person's own proposals",
+        "operationId": "cancelProposal",
+        "parameters": [
+          {
+            "name": "proposal_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Proposal Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProposalOut"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Unprocessable Content",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/assistant/conversations/{conversation_id}/turns": {
       "post": {
         "tags": [
@@ -1213,6 +1397,661 @@
           }
         }
       }
+    },
+    "/api/v1/time-off/balances": {
+      "get": {
+        "tags": [
+          "time-off"
+        ],
+        "summary": "PTO and sick balances for yourself or a person you may read",
+        "operationId": "getTimeOffBalances",
+        "parameters": [
+          {
+            "name": "person",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Person"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BalancesOut"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Unprocessable Content",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/time-off/requests": {
+      "get": {
+        "tags": [
+          "time-off"
+        ],
+        "summary": "Time-off requests: your own, everyone below you, or what waits for your decision",
+        "operationId": "listTimeOffRequests",
+        "parameters": [
+          {
+            "name": "scope",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "enum": [
+                "mine",
+                "team",
+                "waiting"
+              ],
+              "type": "string",
+              "default": "mine",
+              "title": "Scope"
+            }
+          },
+          {
+            "name": "from",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "From"
+            }
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "To"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RequestList"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Unprocessable Content",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "time-off"
+        ],
+        "summary": "Make a time-off request of your own: PTO waits for a decision, sick time is recorded",
+        "operationId": "createTimeOffRequest",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PossibleRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RequestOut"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Unprocessable Content",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/time-off/requests/{request_id}": {
+      "get": {
+        "tags": [
+          "time-off"
+        ],
+        "summary": "One request, for a person who may read it",
+        "operationId": "getTimeOffRequest",
+        "parameters": [
+          {
+            "name": "request_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Request Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RequestOut"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Unprocessable Content",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/time-off/calendar": {
+      "get": {
+        "tags": [
+          "time-off"
+        ],
+        "summary": "The date picker's marks for you: your weekdays, holidays, and the earliest days",
+        "operationId": "getTimeOffCalendar",
+        "parameters": [
+          {
+            "name": "from",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "date",
+              "title": "From"
+            }
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "date",
+              "title": "To"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CalendarOut"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Unprocessable Content",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/time-off/check": {
+      "post": {
+        "tags": [
+          "time-off"
+        ],
+        "summary": "What a possible request of yours would count, with nothing written",
+        "operationId": "checkTimeOffRequest",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PossibleRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CheckOut"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Unprocessable Content",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/time-off/requests/{request_id}/decision": {
+      "post": {
+        "tags": [
+          "time-off"
+        ],
+        "summary": "Approve or deny a PTO request as the person's direct manager",
+        "operationId": "decideTimeOffRequest",
+        "parameters": [
+          {
+            "name": "request_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Request Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DecisionBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RequestOut"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Unprocessable Content",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/time-off/requests/{request_id}/cancel": {
+      "post": {
+        "tags": [
+          "time-off"
+        ],
+        "summary": "Cancel your own request",
+        "operationId": "cancelTimeOffRequest",
+        "parameters": [
+          {
+            "name": "request_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Request Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RequestOut"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Unprocessable Content",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/time-off/summary": {
+      "get": {
+        "tags": [
+          "time-off"
+        ],
+        "summary": "Your PTO available, your pending requests, your approver, and what waits for you",
+        "operationId": "getTimeOffSummary",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SummaryOut"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -1267,6 +2106,46 @@
           "locations"
         ],
         "title": "AudienceOut"
+      },
+      "BalancesOut": {
+        "properties": {
+          "personId": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Personid"
+          },
+          "today": {
+            "type": "string",
+            "format": "date",
+            "title": "Today"
+          },
+          "pto": {
+            "$ref": "#/components/schemas/PtoBalanceOut"
+          },
+          "sick": {
+            "items": {
+              "$ref": "#/components/schemas/SickYearOut"
+            },
+            "type": "array",
+            "title": "Sick"
+          },
+          "rules": {
+            "items": {
+              "$ref": "#/components/schemas/RuleRefOut"
+            },
+            "type": "array",
+            "title": "Rules"
+          }
+        },
+        "type": "object",
+        "required": [
+          "personId",
+          "today",
+          "pto",
+          "sick",
+          "rules"
+        ],
+        "title": "BalancesOut"
       },
       "BudgetBannerOut": {
         "properties": {
@@ -1325,6 +2204,286 @@
         ],
         "title": "BudgetOut",
         "description": "Whether a turn can start. A cap counts as reached when it has less than a turn needs left,\nnot only at zero (the 429 uses the same measure)."
+      },
+      "CalendarOut": {
+        "properties": {
+          "scheduledWeekdays": {
+            "items": {
+              "type": "integer"
+            },
+            "type": "array",
+            "title": "Scheduledweekdays"
+          },
+          "holidays": {
+            "items": {
+              "$ref": "#/components/schemas/HolidayOut"
+            },
+            "type": "array",
+            "title": "Holidays"
+          },
+          "earliestStart": {
+            "$ref": "#/components/schemas/EarliestStart"
+          },
+          "latestEnd": {
+            "type": "string",
+            "format": "date",
+            "title": "Latestend"
+          }
+        },
+        "type": "object",
+        "required": [
+          "scheduledWeekdays",
+          "holidays",
+          "earliestStart",
+          "latestEnd"
+        ],
+        "title": "CalendarOut",
+        "description": "The date picker's marks for the signed-in person."
+      },
+      "CancelCard": {
+        "properties": {
+          "kind": {
+            "type": "string",
+            "const": "cancel",
+            "title": "Kind"
+          },
+          "type": {
+            "$ref": "#/components/schemas/LeaveTypeName"
+          },
+          "startDate": {
+            "type": "string",
+            "format": "date",
+            "title": "Startdate"
+          },
+          "endDate": {
+            "type": "string",
+            "format": "date",
+            "title": "Enddate"
+          },
+          "partialMinutes": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Partialminutes"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "pending",
+              "approved",
+              "recorded"
+            ],
+            "title": "Status"
+          },
+          "amountMinutes": {
+            "type": "integer",
+            "title": "Amountminutes"
+          },
+          "amountLabel": {
+            "type": "string",
+            "title": "Amountlabel"
+          },
+          "returnsMinutes": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Returnsminutes"
+          },
+          "returnsLabel": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Returnslabel"
+          },
+          "availableAfterMinutes": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Availableafterminutes"
+          },
+          "availableAfterLabel": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Availableafterlabel"
+          },
+          "rules": {
+            "items": {
+              "$ref": "#/components/schemas/RuleRefOut"
+            },
+            "type": "array",
+            "title": "Rules"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "kind",
+          "type",
+          "startDate",
+          "endDate",
+          "partialMinutes",
+          "status",
+          "amountMinutes",
+          "amountLabel",
+          "returnsMinutes",
+          "returnsLabel",
+          "availableAfterMinutes",
+          "availableAfterLabel",
+          "rules"
+        ],
+        "title": "CancelCard",
+        "description": "A card to cancel a request of the person's own."
+      },
+      "CanceledReason": {
+        "type": "string",
+        "enum": [
+          "dismissed",
+          "replaced",
+          "turn-incomplete"
+        ]
+      },
+      "Card": {
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/RequestCard"
+          },
+          {
+            "$ref": "#/components/schemas/DecideCard"
+          },
+          {
+            "$ref": "#/components/schemas/CancelCard"
+          }
+        ],
+        "discriminator": {
+          "propertyName": "kind",
+          "mapping": {
+            "cancel": "#/components/schemas/CancelCard",
+            "decide": "#/components/schemas/DecideCard",
+            "request": "#/components/schemas/RequestCard"
+          }
+        }
+      },
+      "CheckOut": {
+        "properties": {
+          "ok": {
+            "type": "boolean",
+            "title": "Ok"
+          },
+          "problems": {
+            "items": {
+              "$ref": "#/components/schemas/ProblemOut"
+            },
+            "type": "array",
+            "title": "Problems"
+          },
+          "warnings": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Warnings"
+          },
+          "countedDays": {
+            "items": {
+              "type": "string",
+              "format": "date"
+            },
+            "type": "array",
+            "title": "Counteddays"
+          },
+          "skippedDays": {
+            "items": {
+              "$ref": "#/components/schemas/SkippedDay"
+            },
+            "type": "array",
+            "title": "Skippeddays"
+          },
+          "overlappingDays": {
+            "items": {
+              "type": "string",
+              "format": "date"
+            },
+            "type": "array",
+            "title": "Overlappingdays"
+          },
+          "amountMinutes": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Amountminutes"
+          },
+          "amountLabel": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Amountlabel"
+          },
+          "draws": {
+            "items": {
+              "$ref": "#/components/schemas/DrawOut"
+            },
+            "type": "array",
+            "title": "Draws"
+          },
+          "rules": {
+            "items": {
+              "$ref": "#/components/schemas/RuleRefOut"
+            },
+            "type": "array",
+            "title": "Rules"
+          }
+        },
+        "type": "object",
+        "required": [
+          "ok",
+          "problems",
+          "warnings",
+          "countedDays",
+          "skippedDays",
+          "overlappingDays",
+          "amountMinutes",
+          "amountLabel",
+          "draws",
+          "rules"
+        ],
+        "title": "CheckOut",
+        "description": "The engine's answer for a possible request. It is a preview: nothing was written, and it is\na 200 even when the request has problems."
       },
       "CitationOut": {
         "properties": {
@@ -1385,6 +2544,26 @@
         "title": "CitationOut",
         "description": "A citation as the `citation` event sent it."
       },
+      "ConfirmIn": {
+        "properties": {
+          "note": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 20000
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "ConfirmIn",
+        "description": "The body of a confirm. A denial's note is the only thing the client sends: the proposal's\naction, payload, and person are the server's own, so any other field is a 422."
+      },
       "ConversationOut": {
         "properties": {
           "id": {
@@ -1439,6 +2618,212 @@
           "outdated"
         ],
         "title": "ConversationOut"
+      },
+      "CoverageDayOut": {
+        "properties": {
+          "date": {
+            "type": "string",
+            "format": "date",
+            "title": "Date"
+          },
+          "type": {
+            "$ref": "#/components/schemas/LeaveTypeName"
+          },
+          "partialMinutes": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Partialminutes"
+          }
+        },
+        "type": "object",
+        "required": [
+          "date",
+          "type",
+          "partialMinutes"
+        ],
+        "title": "CoverageDayOut"
+      },
+      "CoverageOut": {
+        "properties": {
+          "person": {
+            "$ref": "#/components/schemas/CoveragePerson"
+          },
+          "days": {
+            "items": {
+              "$ref": "#/components/schemas/CoverageDayOut"
+            },
+            "type": "array",
+            "title": "Days"
+          }
+        },
+        "type": "object",
+        "required": [
+          "person",
+          "days"
+        ],
+        "title": "CoverageOut",
+        "description": "One colleague who is off on some of the request's days. Plain context, never a verdict."
+      },
+      "CoveragePerson": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "name"
+        ],
+        "title": "CoveragePerson"
+      },
+      "DecideCard": {
+        "properties": {
+          "kind": {
+            "type": "string",
+            "const": "decide",
+            "title": "Kind"
+          },
+          "requester": {
+            "$ref": "#/components/schemas/PersonOut"
+          },
+          "type": {
+            "$ref": "#/components/schemas/LeaveTypeName"
+          },
+          "startDate": {
+            "type": "string",
+            "format": "date",
+            "title": "Startdate"
+          },
+          "endDate": {
+            "type": "string",
+            "format": "date",
+            "title": "Enddate"
+          },
+          "partialMinutes": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Partialminutes"
+          },
+          "amountMinutes": {
+            "type": "integer",
+            "title": "Amountminutes"
+          },
+          "amountLabel": {
+            "type": "string",
+            "title": "Amountlabel"
+          },
+          "availableAfterMinutes": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Availableafterminutes"
+          },
+          "availableAfterLabel": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Availableafterlabel"
+          },
+          "coverage": {
+            "items": {
+              "$ref": "#/components/schemas/CoverageOut"
+            },
+            "type": "array",
+            "title": "Coverage"
+          },
+          "decision": {
+            "type": "string",
+            "enum": [
+              "approve",
+              "deny"
+            ],
+            "title": "Decision"
+          },
+          "rules": {
+            "items": {
+              "$ref": "#/components/schemas/RuleRefOut"
+            },
+            "type": "array",
+            "title": "Rules"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "kind",
+          "requester",
+          "type",
+          "startDate",
+          "endDate",
+          "partialMinutes",
+          "amountMinutes",
+          "amountLabel",
+          "availableAfterMinutes",
+          "availableAfterLabel",
+          "coverage",
+          "decision",
+          "rules"
+        ],
+        "title": "DecideCard",
+        "description": "A card to approve or deny a request, for its person's direct manager."
+      },
+      "DecisionBody": {
+        "properties": {
+          "decision": {
+            "type": "string",
+            "enum": [
+              "approve",
+              "deny"
+            ],
+            "title": "Decision"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 300
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          }
+        },
+        "type": "object",
+        "required": [
+          "decision"
+        ],
+        "title": "DecisionBody"
       },
       "DepartmentCount": {
         "properties": {
@@ -1611,6 +2996,76 @@
         ],
         "title": "DirectoryPage"
       },
+      "DrawOut": {
+        "properties": {
+          "year": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Year"
+          },
+          "amountMinutes": {
+            "type": "integer",
+            "title": "Amountminutes"
+          },
+          "amountLabel": {
+            "type": "string",
+            "title": "Amountlabel"
+          },
+          "availableBeforeMinutes": {
+            "type": "integer",
+            "title": "Availablebeforeminutes"
+          },
+          "availableBeforeLabel": {
+            "type": "string",
+            "title": "Availablebeforelabel"
+          },
+          "availableAfterMinutes": {
+            "type": "integer",
+            "title": "Availableafterminutes"
+          },
+          "availableAfterLabel": {
+            "type": "string",
+            "title": "Availableafterlabel"
+          }
+        },
+        "type": "object",
+        "required": [
+          "year",
+          "amountMinutes",
+          "amountLabel",
+          "availableBeforeMinutes",
+          "availableBeforeLabel",
+          "availableAfterMinutes",
+          "availableAfterLabel"
+        ],
+        "title": "DrawOut"
+      },
+      "EarliestStart": {
+        "properties": {
+          "pto": {
+            "type": "string",
+            "format": "date",
+            "title": "Pto"
+          },
+          "sick": {
+            "type": "string",
+            "format": "date",
+            "title": "Sick"
+          }
+        },
+        "type": "object",
+        "required": [
+          "pto",
+          "sick"
+        ],
+        "title": "EarliestStart"
+      },
       "EscalationOut": {
         "properties": {
           "kind": {
@@ -1642,6 +3097,40 @@
         ],
         "title": "EscalationOut",
         "description": "The fixed text the stream's `escalation` event had, and the HR team to reach."
+      },
+      "FailureOut": {
+        "properties": {
+          "code": {
+            "type": "string",
+            "title": "Code"
+          },
+          "text": {
+            "type": "string",
+            "title": "Text"
+          },
+          "dates": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string",
+                  "format": "date"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dates"
+          }
+        },
+        "type": "object",
+        "required": [
+          "code",
+          "text"
+        ],
+        "title": "FailureOut",
+        "description": "Why a confirmed proposal didn't go through: the engine's or the service's code, and its one\nfixed sentence. `dates` is the days that clash, for `overlaps` only."
       },
       "FeedbackGivenOut": {
         "properties": {
@@ -1881,6 +3370,25 @@
         ],
         "title": "HealthResponse"
       },
+      "HolidayOut": {
+        "properties": {
+          "day": {
+            "type": "string",
+            "format": "date",
+            "title": "Day"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          }
+        },
+        "type": "object",
+        "required": [
+          "day",
+          "name"
+        ],
+        "title": "HolidayOut"
+      },
       "HrContactOut": {
         "properties": {
           "name": {
@@ -1957,6 +3465,13 @@
           "linkSectionId"
         ],
         "title": "Inline"
+      },
+      "LeaveTypeName": {
+        "type": "string",
+        "enum": [
+          "pto",
+          "sick"
+        ]
       },
       "ListPassage": {
         "properties": {
@@ -2145,6 +3660,19 @@
         "title": "Me",
         "description": "The signed-in person's own card, with the fields only they see."
       },
+      "NameOut": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name"
+        ],
+        "title": "NameOut"
+      },
       "NewSandboxRequest": {
         "properties": {
           "persona": {
@@ -2243,6 +3771,30 @@
         "title": "PassageView",
         "description": "What the passage panel shows."
       },
+      "PersonOut": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "title"
+        ],
+        "title": "PersonOut"
+      },
       "PersonRef": {
         "properties": {
           "id": {
@@ -2287,6 +3839,42 @@
           "marcus",
           "dana"
         ]
+      },
+      "PossibleRequest": {
+        "properties": {
+          "type": {
+            "$ref": "#/components/schemas/LeaveTypeName"
+          },
+          "startDate": {
+            "type": "string",
+            "format": "date",
+            "title": "Startdate"
+          },
+          "endDate": {
+            "type": "string",
+            "format": "date",
+            "title": "Enddate"
+          },
+          "partialMinutes": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Partialminutes"
+          }
+        },
+        "type": "object",
+        "required": [
+          "type",
+          "startDate",
+          "endDate"
+        ],
+        "title": "PossibleRequest",
+        "description": "The body of a check and of a request: type, dates, and a partial amount for a single day."
       },
       "PrivateDetails": {
         "properties": {
@@ -2370,6 +3958,17 @@
               }
             ],
             "title": "Errors"
+          },
+          "currentStatus": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Currentstatus"
           }
         },
         "type": "object",
@@ -2381,6 +3980,534 @@
         ],
         "title": "Problem",
         "description": "The body of every error response. Only a 422 has `errors`."
+      },
+      "ProblemOut": {
+        "properties": {
+          "code": {
+            "type": "string",
+            "title": "Code"
+          },
+          "text": {
+            "type": "string",
+            "title": "Text"
+          }
+        },
+        "type": "object",
+        "required": [
+          "code",
+          "text"
+        ],
+        "title": "ProblemOut"
+      },
+      "ProposalAction": {
+        "type": "string",
+        "enum": [
+          "timeoff.request",
+          "timeoff.decide",
+          "timeoff.cancel"
+        ]
+      },
+      "ProposalOut": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "action": {
+            "$ref": "#/components/schemas/ProposalAction"
+          },
+          "status": {
+            "$ref": "#/components/schemas/ProposalStatus"
+          },
+          "canceledReason": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CanceledReason"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "expiresAt": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Expiresat"
+          },
+          "card": {
+            "$ref": "#/components/schemas/Card"
+          },
+          "failure": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/FailureOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "turnRunning": {
+            "type": "boolean",
+            "title": "Turnrunning"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "action",
+          "status",
+          "canceledReason",
+          "expiresAt",
+          "card",
+          "failure",
+          "turnRunning"
+        ],
+        "title": "ProposalOut"
+      },
+      "ProposalStatus": {
+        "type": "string",
+        "enum": [
+          "pending",
+          "executed",
+          "failed",
+          "canceled",
+          "expired"
+        ]
+      },
+      "PtoBalanceOut": {
+        "properties": {
+          "earnedMinutes": {
+            "type": "integer",
+            "title": "Earnedminutes"
+          },
+          "earnedLabel": {
+            "type": "string",
+            "title": "Earnedlabel"
+          },
+          "takenMinutes": {
+            "type": "integer",
+            "title": "Takenminutes"
+          },
+          "takenLabel": {
+            "type": "string",
+            "title": "Takenlabel"
+          },
+          "bookedMinutes": {
+            "type": "integer",
+            "title": "Bookedminutes"
+          },
+          "bookedLabel": {
+            "type": "string",
+            "title": "Bookedlabel"
+          },
+          "pendingMinutes": {
+            "type": "integer",
+            "title": "Pendingminutes"
+          },
+          "pendingLabel": {
+            "type": "string",
+            "title": "Pendinglabel"
+          },
+          "availableMinutes": {
+            "type": "integer",
+            "title": "Availableminutes"
+          },
+          "availableLabel": {
+            "type": "string",
+            "title": "Availablelabel"
+          },
+          "ceilingMinutes": {
+            "type": "integer",
+            "title": "Ceilingminutes"
+          },
+          "ceilingLabel": {
+            "type": "string",
+            "title": "Ceilinglabel"
+          },
+          "nextEarningDate": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Nextearningdate"
+          },
+          "nextEarningMinutes": {
+            "type": "integer",
+            "title": "Nextearningminutes"
+          },
+          "nextEarningLabel": {
+            "type": "string",
+            "title": "Nextearninglabel"
+          }
+        },
+        "type": "object",
+        "required": [
+          "earnedMinutes",
+          "earnedLabel",
+          "takenMinutes",
+          "takenLabel",
+          "bookedMinutes",
+          "bookedLabel",
+          "pendingMinutes",
+          "pendingLabel",
+          "availableMinutes",
+          "availableLabel",
+          "ceilingMinutes",
+          "ceilingLabel",
+          "nextEarningDate",
+          "nextEarningMinutes",
+          "nextEarningLabel"
+        ],
+        "title": "PtoBalanceOut"
+      },
+      "RequestCard": {
+        "properties": {
+          "kind": {
+            "type": "string",
+            "const": "request",
+            "title": "Kind"
+          },
+          "type": {
+            "$ref": "#/components/schemas/LeaveTypeName"
+          },
+          "startDate": {
+            "type": "string",
+            "format": "date",
+            "title": "Startdate"
+          },
+          "endDate": {
+            "type": "string",
+            "format": "date",
+            "title": "Enddate"
+          },
+          "partialMinutes": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Partialminutes"
+          },
+          "countedDays": {
+            "items": {
+              "type": "string",
+              "format": "date"
+            },
+            "type": "array",
+            "title": "Counteddays"
+          },
+          "skippedDays": {
+            "items": {
+              "$ref": "#/components/schemas/SkippedDay"
+            },
+            "type": "array",
+            "title": "Skippeddays"
+          },
+          "amountMinutes": {
+            "type": "integer",
+            "title": "Amountminutes"
+          },
+          "amountLabel": {
+            "type": "string",
+            "title": "Amountlabel"
+          },
+          "availableBeforeMinutes": {
+            "type": "integer",
+            "title": "Availablebeforeminutes"
+          },
+          "availableBeforeLabel": {
+            "type": "string",
+            "title": "Availablebeforelabel"
+          },
+          "availableAfterMinutes": {
+            "type": "integer",
+            "title": "Availableafterminutes"
+          },
+          "availableAfterLabel": {
+            "type": "string",
+            "title": "Availableafterlabel"
+          },
+          "warnings": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Warnings"
+          },
+          "approver": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/NameOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "rules": {
+            "items": {
+              "$ref": "#/components/schemas/RuleRefOut"
+            },
+            "type": "array",
+            "title": "Rules"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "kind",
+          "type",
+          "startDate",
+          "endDate",
+          "partialMinutes",
+          "countedDays",
+          "skippedDays",
+          "amountMinutes",
+          "amountLabel",
+          "availableBeforeMinutes",
+          "availableBeforeLabel",
+          "availableAfterMinutes",
+          "availableAfterLabel",
+          "warnings",
+          "approver",
+          "rules"
+        ],
+        "title": "RequestCard",
+        "description": "A card to book PTO or record sick time."
+      },
+      "RequestList": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/RequestOut"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "fromDate": {
+            "type": "string",
+            "format": "date",
+            "title": "Fromdate"
+          },
+          "toDate": {
+            "type": "string",
+            "format": "date",
+            "title": "Todate"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items",
+          "fromDate",
+          "toDate"
+        ],
+        "title": "RequestList"
+      },
+      "RequestOut": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "person": {
+            "$ref": "#/components/schemas/PersonOut"
+          },
+          "type": {
+            "$ref": "#/components/schemas/LeaveTypeName"
+          },
+          "startDate": {
+            "type": "string",
+            "format": "date",
+            "title": "Startdate"
+          },
+          "endDate": {
+            "type": "string",
+            "format": "date",
+            "title": "Enddate"
+          },
+          "partialMinutes": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Partialminutes"
+          },
+          "amountMinutes": {
+            "type": "integer",
+            "title": "Amountminutes"
+          },
+          "amountLabel": {
+            "type": "string",
+            "title": "Amountlabel"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "pending",
+              "approved",
+              "denied",
+              "recorded",
+              "canceled"
+            ],
+            "title": "Status"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Createdat"
+          },
+          "createdVia": {
+            "type": "string",
+            "enum": [
+              "ui",
+              "assistant"
+            ],
+            "title": "Createdvia"
+          },
+          "decidedBy": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/NameOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "decidedAt": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Decidedat"
+          },
+          "decisionNote": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Decisionnote"
+          },
+          "canceledAt": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Canceledat"
+          },
+          "availableAfterMinutes": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Availableafterminutes"
+          },
+          "availableAfterLabel": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Availableafterlabel"
+          },
+          "coverage": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/CoverageOut"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Coverage"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "person",
+          "type",
+          "startDate",
+          "endDate",
+          "partialMinutes",
+          "amountMinutes",
+          "amountLabel",
+          "status",
+          "createdAt",
+          "createdVia",
+          "decidedBy",
+          "decidedAt",
+          "decisionNote",
+          "canceledAt"
+        ],
+        "title": "RequestOut"
+      },
+      "RuleRefOut": {
+        "properties": {
+          "sectionId": {
+            "type": "string",
+            "title": "Sectionid"
+          },
+          "rule": {
+            "type": "string",
+            "title": "Rule"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "deepLink": {
+            "type": "string",
+            "title": "Deeplink"
+          }
+        },
+        "type": "object",
+        "required": [
+          "sectionId",
+          "rule",
+          "title",
+          "deepLink"
+        ],
+        "title": "RuleRefOut"
       },
       "SandboxCreated": {
         "properties": {
@@ -2775,6 +4902,124 @@
         ],
         "title": "Segment"
       },
+      "SickYearOut": {
+        "properties": {
+          "year": {
+            "type": "integer",
+            "title": "Year"
+          },
+          "grantedMinutes": {
+            "type": "integer",
+            "title": "Grantedminutes"
+          },
+          "grantedLabel": {
+            "type": "string",
+            "title": "Grantedlabel"
+          },
+          "usedMinutes": {
+            "type": "integer",
+            "title": "Usedminutes"
+          },
+          "usedLabel": {
+            "type": "string",
+            "title": "Usedlabel"
+          },
+          "bookedMinutes": {
+            "type": "integer",
+            "title": "Bookedminutes"
+          },
+          "bookedLabel": {
+            "type": "string",
+            "title": "Bookedlabel"
+          },
+          "availableMinutes": {
+            "type": "integer",
+            "title": "Availableminutes"
+          },
+          "availableLabel": {
+            "type": "string",
+            "title": "Availablelabel"
+          }
+        },
+        "type": "object",
+        "required": [
+          "year",
+          "grantedMinutes",
+          "grantedLabel",
+          "usedMinutes",
+          "usedLabel",
+          "bookedMinutes",
+          "bookedLabel",
+          "availableMinutes",
+          "availableLabel"
+        ],
+        "title": "SickYearOut"
+      },
+      "SkippedDay": {
+        "properties": {
+          "day": {
+            "type": "string",
+            "format": "date",
+            "title": "Day"
+          },
+          "reason": {
+            "type": "string",
+            "title": "Reason"
+          }
+        },
+        "type": "object",
+        "required": [
+          "day",
+          "reason"
+        ],
+        "title": "SkippedDay"
+      },
+      "SummaryOut": {
+        "properties": {
+          "ptoAvailableMinutes": {
+            "type": "integer",
+            "title": "Ptoavailableminutes"
+          },
+          "ptoAvailableLabel": {
+            "type": "string",
+            "title": "Ptoavailablelabel"
+          },
+          "pendingCount": {
+            "type": "integer",
+            "title": "Pendingcount"
+          },
+          "approver": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/NameOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "waitingCount": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Waitingcount"
+          }
+        },
+        "type": "object",
+        "required": [
+          "ptoAvailableMinutes",
+          "ptoAvailableLabel",
+          "pendingCount",
+          "approver",
+          "waitingCount"
+        ],
+        "title": "SummaryOut"
+      },
       "TenantInfo": {
         "properties": {
           "id": {
@@ -2952,6 +5197,13 @@
               }
             ]
           },
+          "proposals": {
+            "items": {
+              "$ref": "#/components/schemas/ProposalOut"
+            },
+            "type": "array",
+            "title": "Proposals"
+          },
           "startedAt": {
             "type": "string",
             "format": "date-time",
@@ -2985,6 +5237,7 @@
           "toolCalls",
           "sections",
           "feedback",
+          "proposals",
           "startedAt",
           "endedAt"
         ],

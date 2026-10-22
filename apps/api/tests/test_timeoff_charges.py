@@ -2,7 +2,7 @@
 
 from datetime import date
 
-from app.domain.timeoff.charges import charge_days
+from app.domain.timeoff.charges import charge_days, request_charge_minutes
 from app.domain.timeoff.model import Person, Schedule
 
 MON_TO_FRI = Schedule(weekdays=frozenset({1, 2, 3, 4, 5}))
@@ -38,3 +38,13 @@ def test_a_partial_on_a_range_is_not_applied() -> None:
         (date(2026, 10, 14), 480),
         (date(2026, 10, 15), 480),
     )
+
+
+def test_a_requests_charge_is_the_sum_of_its_days_over_todays_schedule_and_holidays() -> None:
+    # Mon Nov 9 to Wed Nov 11 2026 (Nov 1 is a Sunday): three counted days, 3 x 480 = 1,440.
+    first, last = date(2026, 11, 9), date(2026, 11, 11)
+    assert request_charge_minutes(PERSON, first, last, None, {}) == 1440
+    # A holiday added on the Tuesday since it was booked leaves two days, 960.
+    assert request_charge_minutes(PERSON, first, last, None, {date(2026, 11, 10): "X"}) == 960
+    # A one-day partial charges the partial.
+    assert request_charge_minutes(PERSON, first, first, 240, {}) == 240

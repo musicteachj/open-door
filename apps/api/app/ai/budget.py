@@ -27,7 +27,8 @@ from app.db.tenancy import TenantContext, tenant_session
 
 # The two-integer form of pg_advisory_xact_lock takes a namespace and a key. These namespaces keep
 # the budget's locks apart from any other use of advisory locks. 4403 is the time-off service's,
-# one per person (app/modules/timeoff/queries.py); pick the next free number for a new use.
+# one per person (app/modules/timeoff/queries.py), and 4404 is a conversation's proposals
+# (app/ai/proposals.py); pick the next free number for a new use.
 BUDGET_TENANT_NS = 4401
 BUDGET_DAY_NS = 4402
 

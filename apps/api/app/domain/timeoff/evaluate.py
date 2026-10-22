@@ -51,6 +51,16 @@ SHORT_NOTICE_DAYS = 14
 SHORT_NOTICE_MIN_DAYS = 3
 _OVERLAP_STATUSES = ("pending", "approved", "recorded")
 
+# Every code a refused evaluation can carry, in the order the problems come out.
+PROBLEM_CODES = (
+    "no-scheduled-days",
+    "too-long",
+    "out-of-range",
+    "bad-partial",
+    "overlaps",
+    "not-enough",
+)
+
 
 @dataclass(frozen=True, slots=True)
 class NewRequest:
@@ -90,6 +100,58 @@ class Evaluation:
     rules: tuple[Rule, ...]
 
 
+@dataclass(frozen=True, slots=True)
+class Bounds:
+    """The dates a possible request must fall inside, or `out-of-range` refuses it."""
+
+    earliest_pto_start: date
+    earliest_sick_start: date
+    # December 31 of next year, for both types.
+    latest_end: date
+
+    def earliest_start(self, kind: LeaveType) -> date:
+        return self.earliest_pto_start if kind == "pto" else self.earliest_sick_start
+
+
+def sick_window_start(today: date) -> date:
+    """The earliest day sick time can be recorded for: 30 days back, exactly 30 included."""
+    return today - timedelta(days=SICK_WINDOW_DAYS)
+
+
+def request_bounds(person: Person, opening: Opening, today: date) -> Bounds:
+    """The first day each type may start on and the last day either may end on.
+
+    `evaluate` refuses with `out-of-range` through this same function, so the date picker's marks
+    and the refusal can't drift apart. PTO may not start before today, before the opening (it would
+    cost nothing once approved, since the opening already reflects those days), or before the hire
+    date. Sick time may not start before the 30-day window or the hire date.
+    """
+    return Bounds(
+        earliest_pto_start=max(today, opening.as_of, person.hire_date),
+        earliest_sick_start=max(sick_window_start(today), person.hire_date),
+        latest_end=date(today.year + 1, 12, 31),
+    )
+
+
+def overlapping_days(requests: Sequence[Request], start: date, end: date) -> tuple[date, ...]:
+    """The calendar dates from `start` to `end`, both included, that fall inside a pending,
+    approved, or recorded request of either type, in date order. Weekends and holidays count: the
+    database refuses two open requests that share any calendar day.
+
+    It walks each stored request's own days (at most 31) and never the asked range, so a range to
+    9999-12-31 costs nothing.
+    """
+    days: set[date] = set()
+    for request in requests:
+        if request.status not in _OVERLAP_STATUSES:
+            continue
+        first = max(request.start, start)
+        last = min(request.end, end)
+        for offset in range((last - first).days + 1):
+            days.add(first + timedelta(days=offset))
+    return tuple(sorted(days))
+
+
 def evaluate(
     person: Person,
     opening: Opening,
@@ -111,14 +173,8 @@ def evaluate(
         problems.append("no-scheduled-days")
     if too_long:
         problems.append("too-long")
-    out_of_range = _start_out_of_range(new, today)
-    before_opening = new.type == "pto" and new.start < opening.as_of
-    if (
-        out_of_range
-        or before_opening
-        or new.start < person.hire_date
-        or new.end > date(today.year + 1, 12, 31)
-    ):
+    bounds = request_bounds(person, opening, today)
+    if new.start < bounds.earliest_start(new.type) or new.end > bounds.latest_end:
         problems.append("out-of-range")
     if bad_partial:
         problems.append("bad-partial")
@@ -153,7 +209,7 @@ def evaluate(
         rules.append(sick_grant_rule(person.state))
         if partial is not None:
             rules.append(RULES["sick-increments"])
-        if out_of_range:
+        if new.start < sick_window_start(today):
             rules.append(RULES["sick-window"])
     return Evaluation(
         ok=not problems,
@@ -165,12 +221,6 @@ def evaluate(
         draws=draws,
         rules=tuple(dict.fromkeys(rules)),
     )
-
-
-def _start_out_of_range(new: NewRequest, today: date) -> bool:
-    if new.type == "pto":
-        return new.start < today
-    return new.start < today - timedelta(days=SICK_WINDOW_DAYS)
 
 
 def _draws(

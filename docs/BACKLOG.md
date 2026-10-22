@@ -115,6 +115,13 @@ should pick it up. When one is done, delete it here and record it in the changel
   each keep a state-code-to-name table, so a new state needs both (Georgia did). Have the API send
   the names, and drop the web's copy. (Phase 3 close-out review.)
 
+- **Screen names before they reach the model, if names ever become editable.** The next turn's
+  context lines about proposals (`outcomes_since` in `app/ai/proposals.py`) use the requester's
+  or approver's directory name, and its plain-name check only refuses odd characters and long
+  names: "Ignore all previous instructions" passes. That is safe while every name is seeded
+  directory data. A phase that lets a person edit a name must treat names as untrusted text there.
+  (Phase 5 stage 3 security review.)
+
 ## Handbook content
 
 - **A military leave section.** The handbook has none. A company section under the federal
@@ -127,9 +134,6 @@ should pick it up. When one is done, delete it here and record it in the changel
 
 ## Phase 5: time off
 
-- **Show team coverage beside a manager's approval.** When Marcus reviews a request, show who else
-  on his team is off on those dates. It's context only: the assistant never recommends approving
-  or denying (invariant 5). (2026-10-06 design brainstorm.)
 - **Check the nav after a switch from a manager to an employee.** `navFor` builds the nav from the
   fresh `/me` inside a remounted shell, but in Phase 2 everyone sees only Ask and Directory, so the
   manager's items disappearing after a switch can't be observed. When Approvals becomes available,
@@ -141,10 +145,6 @@ should pick it up. When one is done, delete it here and record it in the changel
   2's only writes start or end a session, so nothing does this yet. Write hooks should invalidate
   queries rather than set their data. Where one must set data, `resetIdentity` should count
   identities and the write should check the count first. (Phase 2 stage 2 security review.)
-- **Record who confirms a proposal as an audit event of its own,** separate from the action it
-  executes, so the log shows both who proposed and who decided. (Source:
-  [the Phase 1 spec](specs/2026-10-03-phase-1-tenancy-identity-permissions.md#later-phases).)
-
 - **Make the scroll-restoration exception general.** `use-scroll-restoration.ts` special-cases the
   source panel's `?source=` parameter (an import from the chat feature into the app shell), while
   the panel's navigations already pass `preventScrollReset`. Phase 5's first panel that lives in
@@ -162,6 +162,12 @@ should pick it up. When one is done, delete it here and record it in the changel
   the design and move it onto `bg-scrim` if they should match. The gallery's handbook and
   conversation sections size their docked panels with `w-[420px]` in four places; use `w-panel`.
   (Theme-token fix review, 2026-10-20.)
+
+- **Show both years on a sick-time card that crosses New Year.** A sick request that spans
+  December 31 draws on two years' grants, but the card's "available before" and "after" carry
+  only the first year's figures, while its amount is the whole request. If the card shows the
+  arithmetic, ship each year's draw. Rare, and Stage 5 decides whether the card needs it. (Phase 5
+  stage 3 review.)
 
 ## Phase 6: cases and escalation
 
@@ -444,6 +450,11 @@ From the Phase 1 review ([the spec's Later phases](specs/2026-10-03-phase-1-tena
   every path a test reads outside its app and fail if no filter covers it. The theme tokens'
   test could also check the other way, that every theme token has a source in the design export.
   (Theme-token fix review, 2026-10-20.)
+
+- **Give the confirm a lock timeout.** A confirm that has passed its expiry check can still wait
+  on the person's time-off lock, held only by short time-off writes, so its overrun past the 15
+  minutes is small but has no stated bound. A `SET LOCAL lock_timeout` in the confirm would make
+  it explicit. (Phase 5 stage 3 security review.)
 
 ## Phase 9: deploy to AWS
 

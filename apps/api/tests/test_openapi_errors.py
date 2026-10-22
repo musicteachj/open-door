@@ -1,5 +1,6 @@
 """The OpenAPI schema describes the errors the API really sends: problem details, not FastAPI's."""
 
+import inspect
 import json
 from collections.abc import Iterator
 from typing import Any
@@ -131,6 +132,22 @@ def test_every_operation_with_a_path_parameter_declares_a_404(app: FastAPI) -> N
 
     assert looked_up
     for operation_id in looked_up:
+        assert "404" in _declared(operations[operation_id]), operation_id
+
+
+def test_every_operation_that_raises_a_404_itself_declares_it(app: FastAPI) -> None:
+    # A route that raises a 404 in its own body (a ProblemError or HTTPException with the status or
+    # the `not-found` code) must say so, or the generated client's error type misses it.
+    operations = _operations(app)
+    markers = ("HTTP_404_NOT_FOUND", '"not-found"')
+    raising = [
+        _operation_id(route)
+        for route in _routes(api_router)
+        if any(marker in inspect.getsource(route.endpoint) for marker in markers)
+    ]
+
+    assert len(raising) >= 4
+    for operation_id in raising:
         assert "404" in _declared(operations[operation_id]), operation_id
 
 
