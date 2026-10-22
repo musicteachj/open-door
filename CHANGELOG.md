@@ -75,6 +75,13 @@ version (`0.x.y` while the app is being built, `1.0.0` when it is complete).
 
 ### Security
 
+- **`opentelemetry-api` updated to 1.45.1 (between Phase 5 stages, 2026-10-22).** FastAPI depends
+  on it, and 1.45.0 parses a request's W3C `tracestate` header with a pattern that takes quadratic
+  time on a long run of spaces or tabs, so one large header could keep a worker busy for seconds
+  (GHSA-xcq7-p3pf-p88h, low severity, published that day). The API's own code never reads the
+  header, but the audit flags the package either way. A floor in `pyproject.toml` keeps any later
+  re-resolve from going back below it.
+
 - **Vite updated to 8.3.4 (between Phase 5 stages, 2026-10-20).** Vite 8.3.0 to 8.3.2 bundle a
   `launch-editor` with three advisories published that day (GHSA-r825-w8mm-5pxw,
   GHSA-698v-4r3x-3vcv, GHSA-587h-7wmj-h5pm), the worst a crafted file path that can run a command
