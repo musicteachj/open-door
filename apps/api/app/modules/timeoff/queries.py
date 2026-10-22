@@ -5,12 +5,14 @@ may see what: the service asks the policy layer first. Time-off requests and ope
 tenant rule only, so a manager's session reads a report's rows.
 """
 
+from collections.abc import Collection
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, datetime
 from uuid import UUID
 
-from sqlalchemy import select, text
+from sqlalchemy import ColumnElement, SQLColumnExpression, func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import aliased
 
 from app.db.models import (
     HandbookSection,
@@ -58,6 +60,9 @@ class PersonFacts:
     # The handbook version the person's sandbox answers from; None only for a sandbox made before
     # migration 0004.
     handbook_version_id: UUID | None
+    # Whether the person has a manager. Only a direct manager decides PTO, so without one a PTO
+    # request could never be decided.
+    has_manager: bool
 
 
 async def load_facts(db: AsyncSession, tenant_id: UUID, person_id: UUID) -> PersonFacts | None:
@@ -71,6 +76,7 @@ async def load_facts(db: AsyncSession, tenant_id: UUID, person_id: UUID) -> Pers
             select(
                 Person.employment_type,
                 Person.hire_date,
+                Person.manager_id,
                 Person.scheduled_weekdays,
                 Location.id.label("location_id"),
                 Location.state,
@@ -116,7 +122,14 @@ async def load_facts(db: AsyncSession, tenant_id: UUID, person_id: UUID) -> Pers
         hire_date=row.hire_date,
         schedule=Schedule(frozenset(row.scheduled_weekdays)),
     )
-    return PersonFacts(person, opening, holidays, row.timezone, row.handbook_version_id)
+    return PersonFacts(
+        person,
+        opening,
+        holidays,
+        row.timezone,
+        row.handbook_version_id,
+        has_manager=row.manager_id is not None,
+    )
 
 
 async def load_requests(db: AsyncSession, tenant_id: UUID, person_id: UUID) -> tuple[Request, ...]:
@@ -198,3 +211,221 @@ async def section_titles(db: AsyncSession, version_id: UUID, keys: set[str]) -> 
             )
         )
     }
+
+
+async def timezone_of(db: AsyncSession, tenant_id: UUID, person_id: UUID) -> str | None:
+    """The IANA zone of the person's location: where their "today" is."""
+    return (
+        await db.execute(
+            select(Location.timezone)
+            .join(
+                Person,
+                (Location.tenant_id == Person.tenant_id) & (Location.id == Person.location_id),
+            )
+            .where(Person.id == person_id, Person.tenant_id == tenant_id)
+        )
+    ).scalar_one_or_none()
+
+
+@dataclass(frozen=True, slots=True)
+class RequestRow:
+    """A request as a page shows it: the stored row with the names of the person and the decider."""
+
+    id: UUID
+    person_id: UUID
+    person_name: str
+    person_title: str
+    type: str
+    status: str
+    start_date: date
+    end_date: date
+    partial_minutes: int | None
+    amount_minutes: int
+    created_at: datetime
+    created_via: str
+    decided_by_name: str | None
+    decided_at: datetime | None
+    decision_note: str | None
+    canceled_at: datetime | None
+
+
+def _name(
+    given_name: SQLColumnExpression[str], family_name: SQLColumnExpression[str]
+) -> ColumnElement[str]:
+    # `||`, not concat(): a missing decider is a missing name, never a blank one.
+    return given_name + " " + family_name
+
+
+async def load_request_rows(
+    db: AsyncSession,
+    tenant_id: UUID,
+    *,
+    person_ids: Collection[UUID],
+    overlapping: tuple[date, date] | None = None,
+    pending_pto_only: bool = False,
+    request_id: UUID | None = None,
+    limit: int | None = None,
+) -> list[RequestRow]:
+    """Requests of the given people, as pages show them.
+
+    `overlapping` keeps requests whose dates meet [from, to]. `pending_pto_only` keeps what waits
+    for a decision and orders it oldest sent first; otherwise the order is by first day. Who may
+    see which rows is the caller's to ask the policy: these functions only read.
+    """
+    decider = aliased(Person)
+    query = (
+        select(
+            TimeOffRequest.id,
+            TimeOffRequest.person_id,
+            _name(Person.given_name, Person.family_name).label("person_name"),
+            Person.title.label("person_title"),
+            TimeOffRequest.type,
+            TimeOffRequest.status,
+            TimeOffRequest.start_date,
+            TimeOffRequest.end_date,
+            TimeOffRequest.partial_minutes,
+            TimeOffRequest.amount_minutes,
+            TimeOffRequest.created_at,
+            TimeOffRequest.created_via,
+            _name(decider.given_name, decider.family_name).label("decided_by_name"),
+            TimeOffRequest.decided_at,
+            TimeOffRequest.decision_note,
+            TimeOffRequest.canceled_at,
+        )
+        .join(
+            Person,
+            (Person.tenant_id == TimeOffRequest.tenant_id)
+            & (Person.id == TimeOffRequest.person_id),
+        )
+        .outerjoin(
+            decider,
+            (decider.tenant_id == TimeOffRequest.tenant_id)
+            & (decider.id == TimeOffRequest.decided_by),
+        )
+        .where(TimeOffRequest.tenant_id == tenant_id, TimeOffRequest.person_id.in_(person_ids))
+    )
+    if request_id is not None:
+        query = query.where(TimeOffRequest.id == request_id)
+    if overlapping is not None:
+        first, last = overlapping
+        query = query.where(TimeOffRequest.start_date <= last, TimeOffRequest.end_date >= first)
+    if pending_pto_only:
+        query = query.where(TimeOffRequest.type == "pto", TimeOffRequest.status == "pending")
+        query = query.order_by(TimeOffRequest.created_at, TimeOffRequest.id)
+    else:
+        query = query.order_by(TimeOffRequest.start_date, TimeOffRequest.id)
+    if limit is not None:
+        query = query.limit(limit)
+    return [
+        RequestRow(
+            id=row.id,
+            person_id=row.person_id,
+            person_name=row.person_name,
+            person_title=row.person_title,
+            type=row.type,
+            status=row.status,
+            start_date=row.start_date,
+            end_date=row.end_date,
+            partial_minutes=row.partial_minutes,
+            amount_minutes=row.amount_minutes,
+            created_at=row.created_at,
+            created_via=row.created_via,
+            decided_by_name=row.decided_by_name,
+            decided_at=row.decided_at,
+            decision_note=row.decision_note,
+            canceled_at=row.canceled_at,
+        )
+        for row in await db.execute(query)
+    ]
+
+
+@dataclass(frozen=True, slots=True)
+class OffRequest:
+    """A person's approved or recorded time off: the facts team coverage needs."""
+
+    person_id: UUID
+    person_name: str
+    type: str
+    start_date: date
+    end_date: date
+    # Set only for a one-day request: 240 for half a day of PTO, or whole hours of sick time.
+    partial_minutes: int | None
+
+
+async def load_time_off(
+    db: AsyncSession,
+    tenant_id: UUID,
+    person_ids: Collection[UUID],
+    first: date,
+    last: date,
+) -> list[OffRequest]:
+    """Approved and recorded requests of these people that meet [first, last]. A pending request
+    is not time off yet, and a denied or canceled one never was."""
+    rows = await db.execute(
+        select(
+            TimeOffRequest.person_id,
+            _name(Person.given_name, Person.family_name).label("person_name"),
+            TimeOffRequest.type,
+            TimeOffRequest.start_date,
+            TimeOffRequest.end_date,
+            TimeOffRequest.partial_minutes,
+        )
+        .join(
+            Person,
+            (Person.tenant_id == TimeOffRequest.tenant_id)
+            & (Person.id == TimeOffRequest.person_id),
+        )
+        .where(
+            TimeOffRequest.tenant_id == tenant_id,
+            TimeOffRequest.person_id.in_(person_ids),
+            TimeOffRequest.status.in_(("approved", "recorded")),
+            TimeOffRequest.start_date <= last,
+            TimeOffRequest.end_date >= first,
+        )
+        .order_by(Person.family_name, Person.given_name, TimeOffRequest.start_date)
+    )
+    return [
+        OffRequest(
+            row.person_id,
+            row.person_name,
+            row.type,
+            row.start_date,
+            row.end_date,
+            row.partial_minutes,
+        )
+        for row in rows
+    ]
+
+
+async def manager_name(db: AsyncSession, tenant_id: UUID, person_id: UUID) -> str | None:
+    """The name of the person's direct manager, or None if they have none."""
+    manager = aliased(Person)
+    return (
+        await db.execute(
+            select(_name(manager.given_name, manager.family_name))
+            .join(
+                Person,
+                (Person.tenant_id == manager.tenant_id) & (Person.manager_id == manager.id),
+            )
+            .where(Person.id == person_id, Person.tenant_id == tenant_id)
+        )
+    ).scalar_one_or_none()
+
+
+async def count_requests(
+    db: AsyncSession,
+    tenant_id: UUID,
+    person_ids: Collection[UUID],
+    *,
+    status: str,
+    type_: str | None = None,
+) -> int:
+    """How many requests these people have in `status` (of `type_`, if given)."""
+    query = select(func.count()).where(
+        TimeOffRequest.tenant_id == tenant_id,
+        TimeOffRequest.person_id.in_(person_ids),
+        TimeOffRequest.status == status,
+    )
+    if type_ is not None:
+        query = query.where(TimeOffRequest.type == type_)
+    return (await db.execute(query)).scalar_one()

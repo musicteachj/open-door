@@ -36,6 +36,9 @@ class Problem(CamelModel):
     detail: str | None = None
     request_id: str | None = None
     errors: list[FieldError] | None = None
+    # Only a 409 on a time-off request or a proposal: where it stands now ("approved", "canceled",
+    # "executed", "expired", ...). A proposal whose answer is still streaming is "pending".
+    current_status: str | None = None
 
 
 def problem_responses(*statuses: int) -> dict[int | str, dict[str, Any]]:

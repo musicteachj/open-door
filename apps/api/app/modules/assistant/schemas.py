@@ -11,9 +11,10 @@ from datetime import datetime
 from typing import Annotated, Literal
 from uuid import UUID
 
-from pydantic import AfterValidator, Field, StringConstraints
+from pydantic import AfterValidator, ConfigDict, Field, StringConstraints
 
 from app.ai.conversations import FEEDBACK_REASON_MAX_CHARACTERS
+from app.ai.proposals import ProposalOut
 from app.api.schemas import CamelModel
 
 
@@ -117,6 +118,9 @@ class TurnOut(CamelModel):
     tool_calls: list[ToolCallOut]
     sections: list[SectionOut]
     feedback: FeedbackOut | None
+    # The cards this turn made, oldest first, each with its status as of the read and whether
+    # Confirm is allowed yet (see `ProposalOut`).
+    proposals: list[ProposalOut]
     started_at: datetime
     ended_at: datetime | None
 
@@ -183,3 +187,14 @@ class TurnIn(CamelModel):
     # refuses an absurd question early, with the schema's 422, before the route's work (the body
     # has been read by then). Limiting the body's size is the reverse proxy's job (Phase 8).
     question: Annotated[str, Field(max_length=20_000)]
+
+
+class ConfirmIn(CamelModel):
+    """The body of a confirm. A denial's note is the only thing the client sends: the proposal's
+    action, payload, and person are the server's own, so any other field is a 422."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    # Checked by the proposal service (at most 300 characters, only for a denial), which answers
+    # 422 with its own wording. This limit only refuses an absurd body early.
+    note: Annotated[str | None, Field(max_length=20_000)] = None

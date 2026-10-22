@@ -612,6 +612,15 @@ class AiProposal(Base):
         CheckConstraint(
             "expires_at <= created_at + interval '15 minutes'", name="expires_within_15_minutes"
         ),
+        # One live proposal per conversation (migration 0010): the service replaces the pending
+        # card before it stores a new one, and this refuses a second pending card outright.
+        Index(
+            "uq_ai_proposals_one_pending_per_conversation",
+            "tenant_id",
+            "conversation_id",
+            unique=True,
+            postgresql_where=text("status = 'pending'"),
+        ),
         # A conversation's proposals, oldest first.
         Index(None, "tenant_id", "conversation_id", "created_at"),
         # For the key to the turn: deleting a turn looks here for proposals that name it.

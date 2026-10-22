@@ -8,6 +8,7 @@ from app.modules.handbook import routes as handbook
 from app.modules.identity import routes as identity
 from app.modules.people import routes as people
 from app.modules.sandbox import routes as sandbox
+from app.modules.timeoff import routes as timeoff
 
 api_router = APIRouter(prefix="/api/v1")
 api_router.include_router(health.router)
@@ -16,3 +17,4 @@ api_router.include_router(identity.router)
 api_router.include_router(people.router)
 api_router.include_router(handbook.router)
 api_router.include_router(assistant.router)
+api_router.include_router(timeoff.router)

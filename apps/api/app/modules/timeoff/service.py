@@ -22,7 +22,7 @@ exist and one the actor may not see look the same.
 from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import date, datetime
-from typing import Literal
+from typing import Literal, Protocol
 from uuid import UUID
 
 from sqlalchemy import insert, update
@@ -31,7 +31,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.errors import constraint_name
 from app.db.models import TimeOffRequest
-from app.domain.timeoff.evaluate import Evaluation, NewRequest, evaluate
+from app.domain.timeoff.evaluate import (
+    PROBLEM_CODES,
+    Evaluation,
+    NewRequest,
+    evaluate,
+    overlapping_days,
+)
+from app.domain.timeoff.model import Request
 from app.domain.timeoff.pto import PtoBalance, pto_balance
 from app.domain.timeoff.rules import Rule
 from app.domain.timeoff.sick import SickYear, sick_years
@@ -44,6 +51,8 @@ from app.policy import Action, Actor, PersonResource, TimeOffRequestResource, ca
 # name, never by the message's text.
 NO_OVERLAP_CONSTRAINT = "ex_time_off_requests_no_overlap"
 MAX_NOTE_CHARACTERS = 300
+# The statuses a request can still be canceled from.
+OPEN_STATUSES = ("pending", "approved", "recorded")
 
 type Via = Literal["ui", "assistant"]
 type Decision = Literal["approve", "deny"]
@@ -53,6 +62,18 @@ _NOT_ALLOWED = "not-allowed"
 _STATUS_CHANGED = "status-changed"
 _ALREADY_STARTED = "already-started"
 _OVERLAPS = "overlaps"
+_NO_APPROVER = "no-approver"
+
+# Every code a `Refused` can carry: the engine's, then the service's own. Each needs a fixed text
+# (`texts.py`), which a test enforces.
+REFUSAL_CODES = (
+    *PROBLEM_CODES,
+    _NOT_FOUND,
+    _NOT_ALLOWED,
+    _STATUS_CHANGED,
+    _ALREADY_STARTED,
+    _NO_APPROVER,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -76,11 +97,26 @@ class Balances:
 
 
 @dataclass(frozen=True, slots=True)
+class Preview:
+    """The engine's answer for a possible request, with what a form needs beside it."""
+
+    evaluation: Evaluation
+    # The engine's problems, then `no-approver` for PTO by a person with no manager (a service
+    # rule: the engine knows nothing of managers). `ok` is true only with none.
+    problems: tuple[str, ...]
+    ok: bool
+    # The calendar days of the range already inside a pending, approved, or recorded request.
+    overlapping: tuple[date, ...]
+    rules: tuple[RuleRef, ...]
+
+
+@dataclass(frozen=True, slots=True)
 class Refused:
     """Why nothing was done.
 
     `code` is one of the engine's problem codes (`no-scheduled-days`, `too-long`, `out-of-range`,
-    `bad-partial`, `overlaps`, `not-enough`) for a request that can't be made, or `not-found`,
+    `bad-partial`, `overlaps`, `not-enough`) for a request that can't be made, `no-approver` for PTO
+    by a person with no manager, or `not-found`,
     `not-allowed`, `status-changed`, or `already-started`. `evaluation` is the engine's answer,
     when there is one.
     """
@@ -172,19 +208,80 @@ async def balances(
     )
 
 
-async def check(db: AsyncSession, actor: Actor, new: NewRequest, now: datetime) -> Evaluation:
-    """What the actor's own possible request would count, and whether it fits. No lock, no write.
+async def pto_available_minutes(
+    db: AsyncSession,
+    actor: Actor,
+    person_id: UUID,
+    now: datetime,
+    *,
+    facts: queries.PersonFacts | None = None,
+) -> int | None:
+    """What the person has available as PTO today at their location, if the actor may read them,
+    else None. A pending request already counts against it. Reading takes no lock. A caller that
+    has the person's facts already passes them, so they are read once."""
+    if not can(actor, Action.TIMEOFF_READ, PersonResource(person_id)):
+        return None
+    if facts is None:
+        facts = await queries.load_facts(db, actor.tenant_id, person_id)
+    if facts is None:
+        return None
+    requests = await queries.load_requests(db, actor.tenant_id, person_id)
+    today = today_at(facts.timezone, now)
+    return pto_balance(
+        facts.person, facts.opening, requests, facts.holidays, today
+    ).available_minutes
 
-    It is a preview: by the time the request is made, the answer can have changed, which is why
-    `create` asks again under the lock. The policy rule for requesting is the actor's own person
-    only, so a denial can't happen on any path the server builds: it raises PermissionError, a
-    bug, not a refusal to explain.
-    """
+
+async def _evaluate_own(
+    db: AsyncSession, actor: Actor, new: NewRequest, now: datetime
+) -> tuple[Evaluation, queries.PersonFacts, tuple[Request, ...]]:
+    """The actor's possible request run through the engine, with the facts and stored requests it
+    used. The policy rule for requesting is the actor's own person only, so a denial can't happen
+    on any path the server builds: it raises PermissionError, a bug, not a refusal to explain."""
     _require_may_request(actor)
     facts = await _facts(db, actor.tenant_id, actor.person_id)
     requests = await queries.load_requests(db, actor.tenant_id, actor.person_id)
     today = today_at(facts.timezone, now)
-    return evaluate(facts.person, facts.opening, requests, facts.holidays, new, today)
+    evaluation = evaluate(facts.person, facts.opening, requests, facts.holidays, new, today)
+    return evaluation, facts, requests
+
+
+async def check(db: AsyncSession, actor: Actor, new: NewRequest, now: datetime) -> Evaluation:
+    """What the actor's own possible request would count, and whether it fits. No lock, no write.
+
+    It is a preview: by the time the request is made, the answer can have changed, which is why
+    `create` asks again under the lock.
+    """
+    return (await _evaluate_own(db, actor, new, now))[0]
+
+
+async def preview(db: AsyncSession, actor: Actor, new: NewRequest, now: datetime) -> Preview:
+    """`check`, with the days already booked and the cited rules a form shows beside the answer."""
+    evaluation, facts, requests = await _evaluate_own(db, actor, new, now)
+    problems = evaluation.problems
+    if new.type == "pto" and not facts.has_manager:
+        problems = (*problems, _NO_APPROVER)
+    return Preview(
+        evaluation=evaluation,
+        problems=problems,
+        ok=not problems,
+        overlapping=overlapping_days(requests, new.start, new.end),
+        rules=await resolve_rules(db, evaluation.rules, facts.handbook_version_id),
+    )
+
+
+def checked_note(note: str) -> str:
+    """A denial's note, trimmed, or a ValueError if Postgres can't hold it (a NUL) or it is over 300
+    characters. The one rule for the page's route and the assistant's confirm. A blank note comes
+    back as an empty string."""
+    trimmed = note.strip()
+    if "\x00" in trimmed:
+        msg = "The note can't contain a NUL character."
+        raise ValueError(msg)
+    if len(trimmed) > MAX_NOTE_CHARACTERS:
+        msg = f"The note is at most {MAX_NOTE_CHARACTERS} characters."
+        raise ValueError(msg)
+    return trimmed
 
 
 def _shape(type_: str, status: str, start: date, end: date) -> dict[str, str]:
@@ -244,6 +341,9 @@ async def create(
     evaluation = evaluate(facts.person, facts.opening, requests, facts.holidays, new, today)
     if not evaluation.ok or evaluation.amount_minutes is None:
         return Refused(evaluation.problems[0], evaluation)
+    # After the engine, so a person fixes the dates first. Sick time is recorded, never decided.
+    if new.type == "pto" and not facts.has_manager:
+        return Refused(_NO_APPROVER, evaluation)
 
     status: Literal["pending", "recorded"] = "pending" if new.type == "pto" else "recorded"
     try:
@@ -305,13 +405,63 @@ async def _lock_request(
 
 
 def _may_read(actor: Actor, request: queries.StoredRequest) -> bool:
-    return can(actor, Action.TIMEOFF_READ, _resource(request))
+    return can(actor, Action.TIMEOFF_READ, request_resource(request))
 
 
-def _resource(request: queries.StoredRequest) -> TimeOffRequestResource:
+class _HasRequestFacts(Protocol):
+    @property
+    def person_id(self) -> UUID: ...
+
+    @property
+    def type(self) -> str: ...
+
+    @property
+    def status(self) -> str: ...
+
+    @property
+    def start_date(self) -> date: ...
+
+
+def request_resource(request: _HasRequestFacts) -> TimeOffRequestResource:
+    """The permission rules' view of a request (whose it is, its type, status, and first day), from
+    a stored request or a page's row."""
     return TimeOffRequestResource(
         request.person_id, request.type, request.status, request.start_date
     )
+
+
+def decide_precheck(actor: Actor, stored: queries.StoredRequest) -> Refused | None:
+    """Whether the actor may decide this request as it stands, in the order `decide` refuses: not
+    readable (`not-found`), sick time (never decided: `not-allowed`) or PTO no longer pending
+    (`status-changed`), and not the person's direct manager (`not-allowed`). None means it may be.
+    One function, so the card offered before a confirm refuses for the same reason the confirm
+    would."""
+    resource = request_resource(stored)
+    if not can(actor, Action.TIMEOFF_READ, resource):
+        return Refused(_NOT_FOUND)
+    # Sick time is recorded, never decided, whatever its status; a PTO request is decided only
+    # while it is pending.
+    if stored.type == "pto" and stored.status != "pending":
+        return Refused(_STATUS_CHANGED)
+    if not can(actor, Action.TIMEOFF_DECIDE, resource):
+        return Refused(_NOT_ALLOWED)
+    return None
+
+
+def cancel_precheck(actor: Actor, stored: queries.StoredRequest, today: date) -> Refused | None:
+    """Whether the actor may cancel this request as it stands, in the order `cancel` refuses:
+    not readable (`not-found`), no longer open (`status-changed`), someone else's (`not-allowed`),
+    already started (`already-started`). `today` is the date at the request person's location."""
+    resource = request_resource(stored)
+    if not can(actor, Action.TIMEOFF_READ, resource):
+        return Refused(_NOT_FOUND)
+    if stored.status not in OPEN_STATUSES:
+        return Refused(_STATUS_CHANGED)
+    if not can(actor, Action.TIMEOFF_CANCEL, resource, today=today):
+        if stored.person_id != actor.person_id:
+            return Refused(_NOT_ALLOWED)
+        return Refused(_ALREADY_STARTED)
+    return None
 
 
 async def decide(
@@ -342,24 +492,17 @@ async def decide(
     if decision not in ("approve", "deny"):
         msg = f"A decision is 'approve' or 'deny', not {decision!r}"
         raise ValueError(msg)
-    note = note.strip() if note is not None else None
+    note = checked_note(note) if note is not None else None
     if note and decision == "approve":
         msg = "Only a denial carries a note"
-        raise ValueError(msg)
-    if note is not None and len(note) > MAX_NOTE_CHARACTERS:
-        msg = f"A note is at most {MAX_NOTE_CHARACTERS} characters"
         raise ValueError(msg)
     _check_via(via, proposal_id)
 
     found = await _lock_request(db, actor, request_id)
     if isinstance(found, Refused):
         return found
-    # Sick time is recorded, never decided, whatever its status; a PTO request is decided only
-    # while it is pending.
-    if found.type == "pto" and found.status != "pending":
-        return Refused(_STATUS_CHANGED)
-    if not can(actor, Action.TIMEOFF_DECIDE, _resource(found)):
-        return Refused(_NOT_ALLOWED)
+    if (refused := decide_precheck(actor, found)) is not None:
+        return refused
 
     status: Literal["approved", "denied"] = "approved" if decision == "approve" else "denied"
     changed = (
@@ -413,14 +556,13 @@ async def cancel(
     found = await _lock_request(db, actor, request_id)
     if isinstance(found, Refused):
         return found
-    if found.status not in ("pending", "approved", "recorded"):
+    # The status first: a closed request is `status-changed` whatever else is known of the person.
+    if found.status not in OPEN_STATUSES:
         return Refused(_STATUS_CHANGED)
     facts = await _facts(db, actor.tenant_id, found.person_id)
     today = today_at(facts.timezone, now)
-    if not can(actor, Action.TIMEOFF_CANCEL, _resource(found), today=today):
-        if found.person_id != actor.person_id:
-            return Refused(_NOT_ALLOWED)
-        return Refused(_ALREADY_STARTED)
+    if (refused := cancel_precheck(actor, found, today)) is not None:
+        return refused
 
     changed = (
         await db.execute(

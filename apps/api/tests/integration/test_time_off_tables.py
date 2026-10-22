@@ -110,7 +110,10 @@ async def insert_proposal(
         **overrides,
     }
     if "conversation_id" not in values:
-        values["conversation_id"], values["turn_id"] = await a_conversation_and_turn(session)
+        # A conversation of its own: the sample tenant's one already holds a pending proposal, and
+        # a conversation may hold only one (migration 0010).
+        rows = await write_assistant_rows(session, tenant.id, values["person_id"])
+        values["conversation_id"], values["turn_id"] = rows.conversation_id, rows.turn_id
     sql_values = {name: f":{name}" for name in values}
     for name in ("payload", "card", "outcome"):
         if name in values:
@@ -1106,7 +1109,10 @@ async def test_a_proposal_cannot_name_another_persons_conversation(
 ) -> None:
     tenant = await make_tenant()
     async with tenant_session(app_engine, as_employee(tenant)) as session:
-        conversation_id, turn_id = await a_conversation_and_turn(session)
+        # A conversation with no pending proposal, so the one-pending index (0010) isn't what
+        # refuses the insert before the key does.
+        rows = await write_assistant_rows(session, tenant.id, tenant.employee_id)
+        conversation_id, turn_id = rows.conversation_id, rows.turn_id
 
     # The colleague writes their own proposal (the person rule allows that) but names Priya's
     # conversation and turn. The row-level rule can't see those rows, and a foreign key check
@@ -1362,3 +1368,16 @@ async def test_a_person_added_without_a_schedule_works_monday_to_friday(
         days: list[Any] = list(result.scalars())
 
     assert days == [[1, 2, 3, 4, 5]]
+
+
+async def test_a_conversation_cannot_hold_two_pending_proposals(
+    app_engine: AsyncEngine, make_tenant: MakeTenant
+) -> None:
+    tenant = await make_tenant()
+    # The sample employee's conversation already holds one pending proposal.
+    async with tenant_session(app_engine, as_employee(tenant)) as session:
+        conversation_id, turn_id = await a_conversation_and_turn(session)
+
+    with pytest.raises(IntegrityError, match="uq_ai_proposals_one_pending_per_conversation"):
+        async with tenant_session(app_engine, as_employee(tenant)) as session:
+            await insert_proposal(session, tenant, conversation_id=conversation_id, turn_id=turn_id)

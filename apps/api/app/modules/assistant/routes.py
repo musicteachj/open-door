@@ -16,15 +16,15 @@ stream, as an `error` event.
 
 import asyncio
 import contextlib
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Awaitable, Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Annotated, Any
 from uuid import UUID
 
 import anyio
-from fastapi import APIRouter, Depends, HTTPException, status
-from fastapi.responses import StreamingResponse
+from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi.responses import JSONResponse, StreamingResponse
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 
@@ -65,6 +65,18 @@ from app.ai.fixed_texts import (
     hr_contact,
 )
 from app.ai.personal_data import kind_of_personal_data
+from app.ai.proposals import (
+    TURN_RUNNING,
+    Conflict,
+    InvalidNote,
+    ProposalNotFound,
+    ProposalOut,
+    cancel,
+    confirm,
+    conversation_proposals,
+    proposal_out,
+    turn_state_of,
+)
 from app.ai.transport import Transport
 from app.ai.turn import (
     MAX_QUESTION_CHARACTERS,
@@ -73,10 +85,10 @@ from app.ai.turn import (
     TurnDeps,
     start_turn_run,
 )
-from app.api.deps import get_app_settings, get_embedder, get_engine, get_streams, get_transport
+from app.api.deps import Now, get_app_settings, get_embedder, get_engine, get_streams, get_transport
 from app.api.problems import problem_responses
 from app.core.config import Settings
-from app.core.problems import ProblemError
+from app.core.problems import ProblemError, problem_response
 from app.db.models import AiConversation, HandbookVersion
 from app.db.tenancy import TenantContext, set_is_hr, tenant_session
 from app.domain.handbook.applicability import Asker
@@ -85,6 +97,7 @@ from app.modules.assistant.schemas import (
     AssistantTextsOut,
     BudgetBannerOut,
     BudgetOut,
+    ConfirmIn,
     ConversationOut,
     FeedbackGivenOut,
     FeedbackIn,
@@ -108,6 +121,23 @@ router = APIRouter(prefix="/assistant", tags=["assistant"])
 NO_CONVERSATION = "No such conversation."
 NO_TURN = "No such turn."
 NO_VERSION = "This sandbox has no handbook version."
+NO_PROPOSAL = "No such proposal."
+
+# The fixed sentence for each 409 on a proposal, by the status it has (or `turn-running`, for a
+# card whose answer is still streaming). Written by a person: the code is the problem's `type`.
+PROPOSAL_CONFLICT_TEXTS = {
+    "executed": "This card was already confirmed.",
+    "failed": "This card was already tried, and it did not go through.",
+    "canceled": "This card was already dismissed or replaced.",
+    "expired": "This card expired after 15 minutes.",
+    "turn-running": STILL_ANSWERING_TEXT,
+    # A card the server canceled because the answer that made it never finished.
+    "turn-incomplete": (
+        "This card can't be confirmed because its answer didn't finish. Nothing was changed."
+    ),
+}
+# For any other status a conflict can carry, so an unexpected one is still a 409 and never a 500.
+GENERIC_CONFLICT_TEXT = "This card can't be changed right now."
 
 
 def personal_data_refusal() -> ProblemError:
@@ -117,6 +147,13 @@ def personal_data_refusal() -> ProblemError:
 CURRENT_ERRORS = problem_responses(status.HTTP_401_UNAUTHORIZED)
 CREATE_ERRORS = problem_responses(status.HTTP_401_UNAUTHORIZED, status.HTTP_403_FORBIDDEN)
 FEEDBACK_ERRORS = problem_responses(
+    status.HTTP_401_UNAUTHORIZED,
+    status.HTTP_403_FORBIDDEN,
+    status.HTTP_404_NOT_FOUND,
+    status.HTTP_409_CONFLICT,
+    status.HTTP_422_UNPROCESSABLE_CONTENT,
+)
+PROPOSAL_ERRORS = problem_responses(
     status.HTTP_401_UNAUTHORIZED,
     status.HTTP_403_FORBIDDEN,
     status.HTTP_404_NOT_FOUND,
@@ -231,6 +268,14 @@ async def conversation_out(
     # The database's clock decides what is abandoned, as for the POST.
     database_now = (await db.execute(select(func.now()))).scalar_one()
     shows = [shown(t, database_now) for t in turns]
+    # One query for the whole conversation's cards, not one per turn. Each is shown as a confirm
+    # would find it now, by the database's clock: a read writes nothing.
+    by_turn: dict[UUID, list[ProposalOut]] = {}
+    turn_states = {t.id: turn_state_of(t.status, t.started_at, database_now) for t in turns}
+    for row in await conversation_proposals(db, conversation.id):
+        by_turn.setdefault(row.turn_id, []).append(
+            proposal_out(row, database_now, turn_states.get(row.turn_id, "incomplete"))
+        )
     contacts = await hr_contact(db) if needs_hr_contact(shows) else []
     history = await model_history(db, conversation.id)
     tokens = history_tokens(history)
@@ -250,7 +295,7 @@ async def conversation_out(
         id=conversation.id,
         created_at=conversation.created_at,
         turns=[
-            turn_out(t, s, feedback.get(t.id), contacts, names)
+            turn_out(t, s, feedback.get(t.id), contacts, names, by_turn.get(t.id, ()))
             for t, s in zip(turns, shows, strict=True)
         ],
         hr_contacts=hr_contact_out(contacts),
@@ -372,6 +417,82 @@ async def give_feedback(
             status.HTTP_409_CONFLICT, "You've already given feedback on this answer."
         ) from None
     return FeedbackGivenOut(turn_id=turn_id, helpful=body.helpful, reason=reason)
+
+
+# --- Proposals: confirm and dismiss -----------------------------------------------------------
+
+
+async def _act_on_proposal(
+    request: Request, act: Callable[[], Awaitable[ProposalOut]]
+) -> ProposalOut | JSONResponse:
+    """Run a confirm or a dismiss and map its refusals to problems.
+
+    The proposal's ID comes only from the path, and the person only from the session: Postgres shows
+    a person only their own proposals, so another person's and a missing one are the same 404.
+
+    A 409 that wrote something (a proposal marked expired, or canceled for a turn that never
+    finished) must commit. The session's transaction rolls back when a route raises, so that
+    problem is *returned*, which commits it; one that wrote nothing is raised like any other.
+    """
+    try:
+        return await act()
+    except ProposalNotFound:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, NO_PROPOSAL) from None
+    except InvalidNote as error:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(error)) from None
+    except Conflict as conflict:
+        code = conflict.status
+        if code == "canceled" and conflict.reason == "turn-incomplete":
+            # Its own problem, so it isn't told apart from a dismissal only by its text. The card
+            # is still `canceled`.
+            problem_type = "turn-incomplete"
+        else:
+            problem_type = code
+        detail = PROPOSAL_CONFLICT_TEXTS.get(problem_type, GENERIC_CONFLICT_TEXT)
+        # A card whose turn is still answering is still pending.
+        extra: dict[str, object] = {"currentStatus": "pending" if code == TURN_RUNNING else code}
+        if conflict.wrote:
+            return problem_response(
+                request, status.HTTP_409_CONFLICT, detail, {**extra, "type": problem_type}
+            )
+        raise ProblemError(status.HTTP_409_CONFLICT, problem_type, detail, extra) from None
+
+
+@router.post(
+    "/proposals/{proposal_id}/confirm",
+    operation_id="confirmProposal",
+    summary="Confirm one of the person's own proposals: the server runs its stored payload, once",
+    response_model=ProposalOut,
+    responses=PROPOSAL_ERRORS,
+)
+async def confirm_proposal(
+    proposal_id: UUID,
+    signed_in: SignedInDep,
+    request: Request,
+    now: Now,
+    body: ConfirmIn | None = None,
+) -> ProposalOut | JSONResponse:
+    """Nothing but the denial's note comes from the client. A proposal the engine refuses at
+    confirm time is a 200 with status `failed` and the reason: the confirm itself worked."""
+    note = None if body is None else body.note
+    return await _act_on_proposal(
+        request, lambda: confirm(signed_in.db, signed_in.actor, proposal_id, note, now)
+    )
+
+
+@router.post(
+    "/proposals/{proposal_id}/cancel",
+    operation_id="cancelProposal",
+    summary="Dismiss one of the person's own proposals",
+    response_model=ProposalOut,
+    responses=PROPOSAL_ERRORS,
+)
+async def cancel_proposal(
+    proposal_id: UUID, signed_in: SignedInDep, request: Request
+) -> ProposalOut | JSONResponse:
+    return await _act_on_proposal(
+        request, lambda: cancel(signed_in.db, signed_in.actor, proposal_id)
+    )
 
 
 # --- The turn stream ------------------------------------------------------------------------
