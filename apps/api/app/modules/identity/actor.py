@@ -2,7 +2,8 @@
 
 Being a manager is derived, never stored. A person's reports, direct and indirect, come from a
 recursive query on manager_id, run fresh for every request. A change to the org chart therefore
-takes effect on the next request, without anyone signing in again.
+takes effect on the next request, without anyone signing in again. The people who report straight
+to the person are loaded with them: deciding a time-off request needs the direct manager.
 """
 
 from uuid import UUID
@@ -30,12 +31,26 @@ async def load_actor(session: AsyncSession, tenant_id: UUID, person_id: UUID) ->
     ).one_or_none()
     if row is None:
         return None
-    reports = select(Person.id).where(Person.manager_id == person_id).cte(recursive=True)
+    reports = (
+        select(Person.id, Person.manager_id)
+        .where(Person.manager_id == person_id)
+        .cte(recursive=True)
+    )
     # UNION, not UNION ALL: a person already found is never walked again, so even a loop in the
-    # org chart would end.
-    reports = reports.union(select(Person.id).join(reports, Person.manager_id == reports.c.id))
+    # org chart would end. Each person has one manager_id, so carrying it changes nothing there.
+    reports = reports.union(
+        select(Person.id, Person.manager_id).join(reports, Person.manager_id == reports.c.id)
+    )
+    # One statement, so the direct reports always come from the same snapshot as the rest.
+    found = (await session.execute(select(reports.c.id, reports.c.manager_id))).all()
     # A person who manages themself, or sits in a loop, is found among their own reports. They
     # are never their own report, or they could count as their own manager.
-    found: frozenset[UUID] = frozenset(await session.scalars(select(reports.c.id)))
-    report_ids = found - {person_id}
-    return Actor(person_id, row.tenant_id, is_hr_admin=row.is_hr_admin, report_ids=report_ids)
+    report_ids = frozenset(row.id for row in found) - {person_id}
+    direct = frozenset(row.id for row in found if row.manager_id == person_id) - {person_id}
+    return Actor(
+        person_id,
+        row.tenant_id,
+        is_hr_admin=row.is_hr_admin,
+        report_ids=report_ids,
+        direct_report_ids=direct,
+    )

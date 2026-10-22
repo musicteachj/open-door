@@ -15,6 +15,7 @@ like the web app in a browser. Every tenant these create is deleted when the tes
 
 import asyncio
 import hashlib
+import json
 import secrets
 from collections.abc import AsyncIterator, Iterator
 from contextlib import ExitStack
@@ -140,7 +141,11 @@ async def cleanup_engine(database_settings: Settings) -> AsyncIterator[AsyncEngi
 
 @dataclass(frozen=True)
 class SampleTenant:
-    """A tenant with a row in every table: three people, their private details, and the rest."""
+    """A tenant with a row in every table: three people, their private details, and the rest.
+
+    The employee has the assistant's rows and the time-off rows: an opening balance, a pending
+    proposal, and the pending request that proposal made.
+    """
 
     id: UUID
     # An ordinary employee, with a session. They are the actor on the tenant's audit event.
@@ -220,6 +225,75 @@ async def write_assistant_rows(
         )
     )
     await session.flush()
+    return rows
+
+
+@dataclass(frozen=True)
+class TimeOffRows:
+    """The IDs of the time-off rows `write_time_off_rows` wrote for one person."""
+
+    proposal_id: UUID
+    request_id: UUID
+
+
+async def write_time_off_rows(
+    session: AsyncSession, tenant_id: UUID, person_id: UUID, assistant: AssistantRows
+) -> TimeOffRows:
+    """Write an opening balance, a pending proposal in the person's conversation, and a pending
+    request that the proposal made, and flush them.
+
+    A person who already has an opening (everyone in a seeded sandbox) keeps it, since a person
+    has only one. The request is a single day, 30 days from the real today, so it overlaps none of
+    the seed's, which are dated from a fixed anchor (and only Zara's pending one is ahead of it).
+
+    The session must be scoped to `person_id`, like `write_assistant_rows`. The proposal belongs
+    to the conversation and turn `assistant` names.
+    """
+    rows = TimeOffRows(proposal_id=uuid4(), request_id=uuid4())
+    today = datetime.now(UTC).date()
+    await session.execute(
+        text(
+            "INSERT INTO time_off_openings (tenant_id, person_id, as_of, amount_minutes)"
+            " VALUES (:tenant_id, :person_id, :as_of, 4800)"
+            # A person in a seeded sandbox already has the seed's opening: keep it.
+            " ON CONFLICT (tenant_id, person_id) DO NOTHING"
+        ),
+        {"tenant_id": tenant_id, "person_id": person_id, "as_of": today},
+    )
+    await session.execute(
+        text(
+            "INSERT INTO ai_proposals (id, tenant_id, person_id, conversation_id, turn_id, action,"
+            " payload, card, status, expires_at)"
+            " VALUES (:id, :tenant_id, :person_id, :conversation_id, :turn_id, 'timeoff.request',"
+            " CAST(:payload AS jsonb), CAST(:card AS jsonb), 'pending',"
+            " now() + interval '15 minutes')"
+        ),
+        {
+            "id": rows.proposal_id,
+            "tenant_id": tenant_id,
+            "person_id": person_id,
+            "conversation_id": assistant.conversation_id,
+            "turn_id": assistant.turn_id,
+            "payload": json.dumps({"type": "pto"}),
+            "card": json.dumps({"title": "Request time off"}),
+        },
+    )
+    await session.execute(
+        text(
+            "INSERT INTO time_off_requests (id, tenant_id, person_id, type, start_date, end_date,"
+            " amount_minutes, status, created_via, proposal_id)"
+            " VALUES (:id, :tenant_id, :person_id, 'pto', :start_date, :end_date, 480, 'pending',"
+            " 'assistant', :proposal_id)"
+        ),
+        {
+            "id": rows.request_id,
+            "tenant_id": tenant_id,
+            "person_id": person_id,
+            "start_date": today + timedelta(days=30),
+            "end_date": today + timedelta(days=30),
+            "proposal_id": rows.proposal_id,
+        },
+    )
     return rows
 
 
@@ -376,7 +450,8 @@ def make_tenant(app_engine: AsyncEngine, created_tenant_ids: list[UUID]) -> Make
         # The assistant's rows are visible only to the person they belong to, so the employee
         # writes them in a transaction of their own.
         async with tenant_session(app_engine, TenantContext(tenant_id, employee.id)) as session:
-            await write_assistant_rows(session, tenant_id, employee.id)
+            assistant = await write_assistant_rows(session, tenant_id, employee.id)
+            await write_time_off_rows(session, tenant_id, employee.id, assistant)
         return SampleTenant(tenant_id, employee.id, colleague.id, hr.id)
 
     return make

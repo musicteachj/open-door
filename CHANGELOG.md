@@ -12,6 +12,32 @@ version (`0.x.y` while the app is being built, `1.0.0` when it is complete).
 
 ### Added
 
+- **The time-off data and service** (Phase 5, stage 2). The database, the permission rules, the
+  service, and the seed that the engine needs to run against a real sandbox. Nothing is reachable
+  over HTTP yet; stage 3 adds the routes.
+  - **The tables:** each person's working weekdays, an opening PTO balance per person, time-off
+    requests, and the assistant's proposals. The API's login can add rows and change only a
+    request's status and decision, or a proposal's status. A database trigger lets a status move
+    only forward (a final one never changes), a constraint refuses two open requests for the same
+    days, and row-level security shows a proposal only to the person it was made for.
+  - **The database backs the rules up:** it stamps when a proposal was made and when it ended,
+    holds its life to 15 minutes, starts it pending, and refuses to execute it once expired. One
+    proposal makes at most one request, and nobody can decide their own request.
+  - **Who may do what:** a person reads their own time off, a manager reads anyone below them, and
+    HR reads everyone's. Only a person's direct manager decides, and only a pending PTO request. A
+    person cancels their own request any time while it is pending, and an approved or recorded one
+    until the day before its first day.
+  - **The time-off service** makes, decides, and cancels requests. It takes a per-person lock
+    first, so two requests that each fit but not together can't both be made, and it checks each
+    request with the engine against that person's current data, using today's date at their
+    location. Each change is recorded in the audit log with the proposal that led to it, if any,
+    and the log never holds a denial's note.
+  - **The seed:** every sandbox company now has working weekdays for each person (the stores
+    rotate, the Austin night crew works Sunday to Thursday, and Leo works Wednesday to Sunday), an
+    opening PTO balance, a few approved PTO requests and the odd recorded sick day each, Leo's time
+    off last week, and one pending request in Marcus's queue. Holidays are seeded for four years,
+    from the year before the sandbox to two years after, so a sandbox that lasts past New Year is
+    still covered.
 - **The time-off engine** (Phase 5, stage 1). Pure rules code that counts time off and works out
   balances from the handbook, with no database, no clock, and no framework. Nothing calls it yet;
   stage 2 builds the data and the service on top of it.

@@ -9,6 +9,12 @@ should pick it up. When one is done, delete it here and record it in the changel
   an update has failed" and a few handbook-page searches time out now and then when the whole
   Vitest suite runs, on a clean `dev` too, and pass alone. Raise their waits or find the slow
   path. (Phase 4 stage 6.)
+- **A conversation layout browser test can lose its element mid-check.** At 390 px, "streaming,
+  stopped, and an error mid-stream stay inside the column" (`e2e/conversation-layout.spec.ts`)
+  failed once with "no box for a visible element": the element was visible, then gone before its
+  bounding box was read. It passed on the rerun, and nothing near it had changed. Wait for the
+  final state before measuring, or retry the measurement; Phase 5 stage 6 changes that page anyway.
+  (Phase 5 stage 2 close.)
 
 - **Small conversation-page glitches the v0.4.0 release review left alone.** When a
   remembered conversation turns out to be gone (a 404 on send), the page drops to "Loading…" while
@@ -135,27 +141,9 @@ should pick it up. When one is done, delete it here and record it in the changel
   2's only writes start or end a session, so nothing does this yet. Write hooks should invalidate
   queries rather than set their data. Where one must set data, `resetIdentity` should count
   identities and the write should check the count first. (Phase 2 stage 2 security review.)
-- **Seed last year's holidays too.** A sandbox stores the holiday calendar for its anchor year and
-  the next. One created in early January therefore lacks the previous December's closures, so a
-  question about leave taken over the holidays just before it would miss them. If the time-off
-  engine answers past-dated questions, seed the prior year as well. (Stage 2 review.)
-- **Never treat the anchor date as today.** `create_sandbox` sets `tenants.anchor_date` to
-  today's date in UTC, not in any location's timezone. Every seeded location is in the US, so a
-  sandbox created in the US evening is anchored to the location's tomorrow. Seed dates are only
-  shifted by a day, which is harmless, but invariant 2 needs today's date in the location's
-  timezone. The time-off engine must compute today from the location's `timezone`, never from
-  `anchor_date`. A test should create a sandbox at, say, 03:00 UTC and check that a Pacific-time
-  employee's "tomorrow" is the right date. The assistant's per-turn context already does this
-  (Phase 4 stage 2). (`/code-review medium` on the `v0.1.0` release.) The engine's half is done:
-  `today_at` in `app/domain/timeoff/today.py` (Phase 5 stage 1). The sandbox test at 03:00 UTC
-  needs the service, in stage 2.
-
 - **Record who confirms a proposal as an audit event of its own,** separate from the action it
-  executes, so the log shows both who proposed and who decided.
-- **Grant `UPDATE` only where requests and approvals need it.** Phase 1 grants the API no
-  `UPDATE` anywhere, and the exact-grants test fails on any grant it doesn't expect.
-
-Source for both: [the Phase 1 spec](specs/2026-10-03-phase-1-tenancy-identity-permissions.md#later-phases).
+  executes, so the log shows both who proposed and who decided. (Source:
+  [the Phase 1 spec](specs/2026-10-03-phase-1-tenancy-identity-permissions.md#later-phases).)
 
 - **Make the scroll-restoration exception general.** `use-scroll-restoration.ts` special-cases the
   source panel's `?source=` parameter (an import from the chat feature into the app shell), while

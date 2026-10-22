@@ -10,11 +10,25 @@ from dataclasses import dataclass
 # Every other choice (who gets which name, phone number, and address, and the dates of everyone
 # not named below) comes from this seed, so every sandbox gets exactly the same company.
 SEED = 20261003
+# Time off draws from the stream SEED + 2 (see `build_company` in seed.py), so no location may
+# take that stream number. Changing it would reshuffle all seeded history.
+TIME_OFF_STREAM = 2
 
 # .example and example.com are reserved for documentation (RFC 2606), so no message sent to these
 # addresses can reach anyone.
 WORK_EMAIL_DOMAIN = "juniperrow.example"
 PERSONAL_EMAIL_DOMAIN = "example.com"
+
+
+# The ISO weekdays people work: 1 is Monday, 7 is Sunday. Sorted, as they are stored.
+MONDAY_TO_FRIDAY = (1, 2, 3, 4, 5)
+SUNDAY_TO_THURSDAY = (1, 2, 3, 4, 7)
+TUESDAY_TO_SATURDAY = (2, 3, 4, 5, 6)
+WEDNESDAY_TO_SUNDAY = (3, 4, 5, 6, 7)
+# The stores are open all week, so their staff rotate through these, in this order, one after
+# another by seat order (see `_seats` in seed.py). A seat with a `weekdays` of its own skips the
+# rotation and doesn't use up a turn.
+STORE_ROTATION = (TUESDAY_TO_SATURDAY, SUNDAY_TO_THURSDAY, WEDNESDAY_TO_SUNDAY, MONDAY_TO_FRIDAY)
 
 
 @dataclass(frozen=True, slots=True)
@@ -29,14 +43,25 @@ class LocationSpec:
     zip_codes: tuple[str, ...]
     # Which random stream draws this location's phone numbers: 0 is the original stream, and each
     # location opened later takes the next number, drawing from SEED + that number (see seed.py).
+    # Number 2 is taken by time off (TIME_OFF_STREAM), so the next new location must skip it.
     # A location of its own stream leaves everyone who already existed exactly as they were.
     seed_stream: int = 0
+    # The weekdays of everyone here whose seat doesn't set its own: each seat takes the next entry,
+    # round and round. Most locations have a single entry, so everyone works the same days.
+    rotation: tuple[tuple[int, ...], ...] = (MONDAY_TO_FRIDAY,)
 
 
 LOCATIONS = (
     LocationSpec("den", "Denver HQ", "Denver", "CO", "America/Denver", "303", ("80203", "80211")),
     LocationSpec(
-        "oak", "Oakland store", "Oakland", "CA", "America/Los_Angeles", "510", ("94606", "94610")
+        "oak",
+        "Oakland store",
+        "Oakland",
+        "CA",
+        "America/Los_Angeles",
+        "510",
+        ("94606", "94610"),
+        rotation=STORE_ROTATION,
     ),
     LocationSpec(
         "aus", "Austin warehouse", "Austin", "TX", "America/Chicago", "512", ("78702", "78745")
@@ -50,6 +75,7 @@ LOCATIONS = (
         "404",
         ("30308", "30309"),
         seed_stream=1,
+        rotation=STORE_ROTATION,
     ),
 )
 
@@ -78,6 +104,9 @@ class Position:
     `manager` makes the reporting line. The people in a position with several seats get the keys
     `key-1`, `key-2`, and so on, so such a position can't be anyone's manager. A position without
     a `person` gets someone drawn from the seed.
+
+    `weekdays` is the ISO weekdays everyone in the position works. Without it, they work their
+    location's rotation: Monday to Friday, or at a store whichever of the rotation's turns is next.
     """
 
     key: str
@@ -86,6 +115,7 @@ class Position:
     employment_type: str = "salaried"
     seats: int = 1
     person: PersonSpec | None = None
+    weekdays: tuple[int, ...] | None = None
 
 
 DANA = PersonSpec("Dana", "Whitfield", 1650, 15200, persona_key="dana", is_hr_admin=True)
@@ -95,6 +125,12 @@ LEO = PersonSpec("Leo", "Nakamura", 700, 9600)
 MATEO = PersonSpec("Mateo", "Alvarez", 520, 10300, persona_key="mateo")
 
 HOURLY = "hourly"
+
+# The seats the demo's time-off story is about. Leo was out last week, from Wednesday to Friday, so
+# "Why was Leo out last week?" has an answer, and Zara Bautista (Marcus's direct report, the
+# design's sample) has the one request waiting for him, so "Anything waiting on me?" does too.
+LAST_WEEK_PTO_SEAT = "leo"
+PENDING_REQUEST_SEAT = "oak-apparel-lead"
 
 # Each department-and-location pair is one group of seats here; Store Operations runs both stores.
 # Denver HQ has 40 people, the Oakland store 45, the Austin warehouse 35, and the Atlanta store 25.
@@ -143,9 +179,11 @@ ORG: dict[tuple[str, str], tuple[Position, ...]] = {
     # the leads manage everyone else, so he has reports both directly and through the leads.
     # Priya and Leo manage no one.
     ("Store Operations", "oak"): (
-        Position("marcus", "Store Manager", "coo", person=MARCUS),
-        Position("priya", "Visual Merchandiser", "marcus", person=PRIYA),
-        Position("leo", "Sales Associate", "marcus", HOURLY, person=LEO),
+        Position("marcus", "Store Manager", "coo", person=MARCUS, weekdays=MONDAY_TO_FRIDAY),
+        Position("priya", "Visual Merchandiser", "marcus", person=PRIYA, weekdays=MONDAY_TO_FRIDAY),
+        Position(
+            "leo", "Sales Associate", "marcus", HOURLY, person=LEO, weekdays=WEDNESDAY_TO_SUNDAY
+        ),
         Position("oak-apparel-lead", "Department Lead, Apparel", "marcus"),
         Position("oak-apparel", "Sales Associate", "oak-apparel-lead", HOURLY, seats=13),
         Position("oak-home-lead", "Department Lead, Home", "marcus"),
@@ -162,15 +200,32 @@ ORG: dict[tuple[str, str], tuple[Position, ...]] = {
         Position("mateo", "Warehouse Associate", "aus-days", HOURLY, person=MATEO),
         Position("aus-day-crew", "Warehouse Associate", "aus-days", HOURLY, seats=12),
         Position("aus-day-forklift", "Forklift Operator", "aus-days", HOURLY, seats=2),
-        Position("aus-nights", "Shift Supervisor, Nights", "aus-manager"),
-        Position("aus-night-crew", "Warehouse Associate", "aus-nights", HOURLY, seats=12),
-        Position("aus-night-forklift", "Forklift Operator", "aus-nights", HOURLY, seats=2),
+        # The night crew works Sunday to Thursday. A night shift counts on the date it starts.
+        Position(
+            "aus-nights", "Shift Supervisor, Nights", "aus-manager", weekdays=SUNDAY_TO_THURSDAY
+        ),
+        Position(
+            "aus-night-crew",
+            "Warehouse Associate",
+            "aus-nights",
+            HOURLY,
+            seats=12,
+            weekdays=SUNDAY_TO_THURSDAY,
+        ),
+        Position(
+            "aus-night-forklift",
+            "Forklift Operator",
+            "aus-nights",
+            HOURLY,
+            seats=2,
+            weekdays=SUNDAY_TO_THURSDAY,
+        ),
     ),
     # Hire dates here reach back before the store opened, so the earliest hires read as transfers
     # from other stores. The store manager reports to the COO, two shift leads report to the
     # assistant manager, and the associates and cashiers report to the shift leads.
     ("Store Operations", "atl"): (
-        Position("atl-manager", "Store Manager", "coo"),
+        Position("atl-manager", "Store Manager", "coo", weekdays=MONDAY_TO_FRIDAY),
         Position("atl-assistant-manager", "Assistant Store Manager", "atl-manager"),
         Position("atl-lead-opening", "Shift Lead, Opening", "atl-assistant-manager"),
         Position("atl-opening-sales", "Sales Associate", "atl-lead-opening", HOURLY, seats=6),
