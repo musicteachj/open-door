@@ -188,6 +188,14 @@ version (`0.x.y` while the app is being built, `1.0.0` when it is complete).
   four weeks of PTO against a fixed 9,600-minute opening, but each sandbox's seeded history is
   drawn at random over the days before it starts, so on some days the history left too little
   and the card was never made. The test now funds far more than the request needs.
+- **The two-confirms-at-once test no longer fails now and then** (Phase 5, stage 5). FastAPI
+  builds a router's routes on the first request that reaches them, inside
+  `warnings.catch_warnings()` to hide a pydantic warning, and that context manager swaps the
+  process-wide warning filters. The test's two simultaneous confirms were the first requests to
+  reach those routes, so one thread could restore the filters under the other, and the hidden
+  warning escaped into the suite's "warnings are errors" setting (it failed CI on #70). The test
+  now sends each client one confirm that answers 404 first, so the routes are built before the
+  two confirms race. Production only ever logged the warning.
 - **The web theme has the Phase 5 design tokens** (between Phase 5 stages, 2026-10-20). The
   screens PR (#63) added eight tokens to the design export: the warning, danger, and apricot tints
   and borders, the scrim behind a confirm dialog, and the docked panel's width. It didn't add them

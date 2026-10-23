@@ -5,13 +5,6 @@ should pick it up. When one is done, delete it here and record it in the changel
 
 ## Any phase
 
-- **A concurrent-confirm API test can fail on a FastAPI warning.** In one full `make check` run,
-  `test_two_confirms_at_once_book_once` (`tests/integration/test_proposal_routes.py`) failed with
-  pydantic's `UnsupportedFieldAttributeWarning` about the alias `conversation_id`: FastAPI 0.142
-  builds a route's parameter types on first use, the alias is FastAPI's own for the path
-  parameter, and the test settings turn warnings into errors. It passed six times alone and in
-  the full suite before. Find why it fires only under concurrent first requests (perhaps build the
-  routes once at startup in tests), or filter that one warning with a reason. (Phase 5 stage 5.)
 - **Some web unit tests are timing-flaky under full-suite load:** the directory page's "footer when
   an update has failed" and a few handbook-page searches time out now and then when the whole
   Vitest suite runs, on a clean `dev` too, and pass alone. Raise their waits or find the slow

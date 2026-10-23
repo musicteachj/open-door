@@ -594,6 +594,14 @@ async def test_a_dismissed_card_cannot_then_be_confirmed(start: StartWorld) -> N
 
 def fire_together(clients: list[Browser], path: str) -> list[Any]:
     """Post the same confirm from each client at the same moment."""
+    # Warm each client's app first, one at a time, with a confirm that answers 404. FastAPI builds
+    # a router's routes on the first request that reaches them, inside `warnings.catch_warnings()`
+    # to hide a pydantic warning, and that context manager swaps the process-wide filters: two
+    # threads building at once can restore them under each other, and the hidden warning then
+    # escapes into this suite's "warnings are errors" setting.
+    for client in clients:
+        warm = client.client.post(confirm_path(uuid4()), headers=client.csrf)
+        assert warm.status_code == 404, warm.text
     barrier = threading.Barrier(len(clients))
 
     def go(client: Browser) -> Any:

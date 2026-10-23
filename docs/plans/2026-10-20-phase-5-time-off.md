@@ -1526,8 +1526,13 @@ the loop stopped.
 code too. The seed draws each person's past time off at random over the days before the
 sandbox's anchor, so Priya's history changes from day to day, and the test's 9,600-minute opening
 no longer covered its four-week booking (8,040 available against 9,120). It now funds 40,000
-minutes; with the opening at 0 the request still can't fit. A concurrent-confirm test failed once
-on a FastAPI warning in an earlier run; it is in the backlog.
+minutes; with the opening at 0 the request still can't fit. The concurrent-confirm test
+(`test_two_confirms_at_once_book_once`) then failed CI on #70 with a pydantic warning: FastAPI
+builds a router's routes on the first request that reaches them, inside `warnings.catch_warnings()`,
+which swaps the process-wide filters, and the test's two simultaneous confirms were those first
+requests. An experiment counted 204 such builds during two cold concurrent requests and none after
+one warm-up request per app, so `fire_together` now warms each client with a confirm that answers
+404 before the race.
 
 **Repeated finding, dismissed:** every round flagged that request cards stored before `draws` would
 no longer validate. Nothing creates a proposal outside the tests until Stage 4's tools, so no
