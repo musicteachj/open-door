@@ -147,3 +147,23 @@ Added by the design system for the Time off page, the Approvals page, and the co
 Approve and Deny carry equal weight on every approval card, and no screen uses a destructive
 button for a decision (screen 09's build decisions).
 
+**Built but not designed, or built differently** (Phase 5, stage 5), each shown in the gallery:
+- **"What this uses" lists dates without hours** (the owner's decision, 2026-10-22). The counted
+  lines carry no per-day or per-run hours, since the browser never works out a figure; the total
+  line keeps the server's labels.
+- **Sick time across New Year:** one "left" line per year ("16 hours of sick leave left in
+  2026"), from the request card's per-year figures.
+- **The source chips name the section's title** ("Handbook CA-4.3 · Sick leave"), where the
+  mockups show the addendum's name ("California addendum"): the server sends the title.
+- **A deny card's balance reads "available now"** (the owner's decision, 2026-10-22): the figure
+  counts the waiting request, so "available after this" would be wrong once a denial gives the
+  hours back. Approve cards and the Approvals page keep "available after this".
+- **One alert dialog, 480 px wide,** for canceling a request, approving, and denying (the
+  cancel mockup is 440 px).
+- **Copy with no frame:** an already-decided request on an approval card ("This request was
+  already approved."), a canceled sick-time card ("Canceled. The sick time is no longer
+  recorded."), a colleague off with two kinds of leave on one coverage line, and "None of these
+  days are on your schedule, so there's nothing to request."
+- **The deny card's Tab order follows the screen:** the note field, then the source chips (the
+  notes listed the chips first, but the frame draws them under the note).
+

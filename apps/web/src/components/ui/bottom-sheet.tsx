@@ -11,6 +11,11 @@ const SheetTitle = DialogPrimitive.Title
 type BottomSheetProps = {
   /** Called for Escape, a press on the overlay, and a swipe down on the handle. */
   onClose: () => void
+  /**
+   * Called before Escape closes the sheet. Call `preventDefault()` to keep it open, so a part
+   * inside (an open date picker) can take the key for itself.
+   */
+  onEscapeKeyDown?: (event: KeyboardEvent) => void
   children: ReactNode
   className?: string
 }
@@ -26,7 +31,7 @@ type BottomSheetProps = {
  * 80 px and let go to close. A control in the header does not start a drag, and the body never
  * does, so it scrolls as normal. The content must hold a `SheetTitle`, which names the dialog.
  */
-function BottomSheet({ onClose, children, className }: BottomSheetProps) {
+function BottomSheet({ onClose, onEscapeKeyDown, children, className }: BottomSheetProps) {
   const drag = useRef<{ startY: number; pointerId: number } | null>(null)
   const [offset, setOffset] = useState(0)
   const [dragging, setDragging] = useState(false)
@@ -59,12 +64,13 @@ function BottomSheet({ onClose, children, className }: BottomSheetProps) {
       <DialogPrimitive.Portal>
         <DialogPrimitive.Overlay
           data-slot="bottom-sheet-overlay"
-          className="fixed inset-0 z-40 bg-ink/40"
+          className="fixed inset-0 z-40 bg-scrim"
         />
         <DialogPrimitive.Content
           data-slot="bottom-sheet"
           aria-describedby={undefined}
           onCloseAutoFocus={(event) => event.preventDefault()}
+          onEscapeKeyDown={onEscapeKeyDown}
           onPointerDown={startDrag}
           onPointerMove={moveDrag}
           onPointerUp={endDrag}

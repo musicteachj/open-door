@@ -12,6 +12,42 @@ version (`0.x.y` while the app is being built, `1.0.0` when it is complete).
 
 ### Added
 
+- **The time-off, approvals, and confirm-card components, and the alert dialog** (Phase 5,
+  stage 5). The pieces the time-off request form, the balance and request lists, the Approvals
+  page, and the assistant's confirm card are built from, each in every state and shown in the
+  component gallery. They are not on a page yet; stage 6 wires them up.
+  - **The page parts:** the balance cards (PTO, at the limit with the "earning is paused" notice,
+    sick leave, and loading), the request rows and their Upcoming and Past groups (a person's own,
+    with Cancel, and a team member's), the handbook source chips, and "What this uses", which lists
+    the counted dates (folded into runs past five), the skipped days and why, a day already booked,
+    the total, and what is left (one line for each sick-leave year). Every figure is the
+    server's own label, split into hours and days but never worked out in the browser.
+  - **The request form:** a docked 420 px panel on a wide window and a full-height sheet on a phone,
+    with the type, the dates and their picker, how much, the preview, the short-notice warning,
+    and the refusals. In the phone's sheet, Escape closes only an open date picker.
+  - **Approvals:** the approval card (Approve and Deny look the same, so neither is favored), its
+    muted "conflict" state, plain team coverage, the note field with its 300-character counter, and
+    the approve and deny dialogs.
+  - **The confirm card:** one card for booking PTO, recording sick time, approving, denying, and
+    canceling, in every state: waiting for the answer to finish, confirming, done, failed, dismissed,
+    replaced, and expired (with "Ask again"). It makes no requests; stage 6 wires it up.
+  - **The form:** a status badge (waiting, approved, denied, recorded, canceled, each an icon and a
+    fixed word), the Type control and the "How much" cards (arrow keys move and select), an hours
+    stepper that takes 1 to 8 and says so when it is not, the Dates field, and the amber warning
+    and the refusal messages.
+  - **The date picker:** opens under the Dates field and works by keyboard alone (arrows, Page Up
+    and Page Down by month, Home and End, Enter or Space, Escape). Days off the person's schedule
+    are shaded but can be picked, holidays get a dot and their name on hover or focus, and days
+    that can't be picked are struck through. Each day's name says what is special about it. Dates
+    are plain calendar dates, so no time zone moves them a day.
+  - **The alert dialog:** one centered confirm step on a scrim that covers the whole window, for
+    canceling a request and, later, approving or denying one. Focus starts on the safe choice and
+    stays inside, and on a phone the buttons stack with the confirm on top.
+  - **Also:** the avatar gains 40 px and 32 px sizes and a muted look, and the phone form's sheet
+    and the gallery's panels now use the design's scrim and panel-width tokens.
+  - **Checked in a browser:** every gallery state is scanned for accessibility at full width and
+    at 390 px, the dialogs' focus and the date picker's keys are tested in Chromium, and
+    `make captures` sets each state beside its design specimen.
 - **The time-off routes** (Phase 5, stage 3). The time-off service is now reachable over
   HTTP under `/api/v1/time-off`, for the time-off page, the Approvals page, and the home's
   at-a-glance cards. Every route needs a session, every write needs the CSRF header, and every
@@ -138,8 +174,20 @@ version (`0.x.y` while the app is being built, `1.0.0` when it is complete).
   - Every expected value in its 176 tests was worked out by hand from the handbook, and each
     batch's reviewer recomputed at least five of them without running the engine.
 
+### Changed
+
+- **A time-off request card now carries the balance for each year** (Phase 5, stage 5). The card
+  the assistant proposes for booking PTO or recording sick time used to hold only the first year's
+  "available before and after" figures. It now holds a list of draws in the same shape as the
+  request check, so sick time that crosses New Year shows the balance for both years. The web
+  client's types were regenerated.
+
 ### Fixed
 
+- **A time-off test no longer fails on some days** (Phase 5, stage 5). A Stage 3 test booked
+  four weeks of PTO against a fixed 9,600-minute opening, but each sandbox's seeded history is
+  drawn at random over the days before it starts, so on some days the history left too little
+  and the card was never made. The test now funds far more than the request needs.
 - **The web theme has the Phase 5 design tokens** (between Phase 5 stages, 2026-10-20). The
   screens PR (#63) added eight tokens to the design export: the warning, danger, and apricot tints
   and borders, the scrim behind a confirm dialog, and the docked panel's width. It didn't add them

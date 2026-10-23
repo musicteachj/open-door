@@ -31,6 +31,7 @@ from app.modules.timeoff import queries, service
 from app.modules.timeoff.coverage import CoverageRequest, team_coverage
 from app.modules.timeoff.schemas import (
     CoverageOut,
+    DrawOut,
     LeaveTypeName,
     NameOut,
     PersonOut,
@@ -98,11 +99,9 @@ class RequestCard(_Stored):
     # Every figure is minutes for a program and the product's one label for a person.
     amount_minutes: int
     amount_label: str
-    # For sick time that spans two years, the first year's: where the request starts.
-    available_before_minutes: int
-    available_before_label: str
-    available_after_minutes: int
-    available_after_label: str
+    # The balance before and after, in the check route's shape: one draw for PTO, and one per
+    # calendar year the request touches for sick time (two when it crosses December 31).
+    draws: list[DrawOut]
     # Codes, such as "short-notice". The web app writes the sentence.
     warnings: list[str]
     # The direct manager for PTO. Null for sick time, which needs no approval.
@@ -185,9 +184,6 @@ def request_card(new: NewRequest, preview: Preview, approver_name: str | None) -
     if not preview.ok or evaluation.amount_minutes is None or not evaluation.draws:
         msg = "A card is made only for a request the engine accepts"
         raise ValueError(msg)
-    # PTO has one draw. Sick time has one per calendar year it touches, and the card shows the
-    # first: the year the request starts in.
-    draw = evaluation.draws[0]
     return RequestCard(
         kind="request",
         type=new.type,
@@ -198,10 +194,7 @@ def request_card(new: NewRequest, preview: Preview, approver_name: str | None) -
         skipped_days=[SkippedDay(day=item.day, reason=item.reason) for item in evaluation.skipped],
         amount_minutes=evaluation.amount_minutes,
         amount_label=label(evaluation.amount_minutes),
-        available_before_minutes=draw.available_before_minutes,
-        available_before_label=label(draw.available_before_minutes),
-        available_after_minutes=draw.available_after_minutes,
-        available_after_label=label(draw.available_after_minutes),
+        draws=[DrawOut.of(draw) for draw in evaluation.draws],
         warnings=list(evaluation.warnings),
         approver=None if approver_name is None else NameOut(name=approver_name),
         rules=[RuleRefOut.of(rule) for rule in preview.rules],

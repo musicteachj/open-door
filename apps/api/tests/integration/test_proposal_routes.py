@@ -219,9 +219,12 @@ async def test_a_card_whose_balance_changed_fails_not_enough_with_its_text_and_b
     start: StartWorld,
 ) -> None:
     world = start("priya")
-    await world.fund("priya")
-    # Twenty working days, four weeks from the first Monday a month out: about all of the 9,600
-    # minutes the opening gives her, and more than she has without it.
+    # 40,000 minutes: far more than four weeks of PTO plus whatever her seeded history has taken.
+    # The seed draws that history at random over the days before the sandbox's start, so a
+    # smaller opening fits on some days and not on others.
+    await world.fund("priya", 40_000)
+    # About twenty working days, four weeks from the first Monday a month out: more than she has
+    # once the opening drops to nothing (a whole year of month-ends earns 7,200).
     monday = world.workday(30) + timedelta(days=(7 - world.workday(30).weekday()) % 7)
     proposal_id = await book(world, monday, monday + timedelta(days=27))
     # Afterward her opening balance drops to nothing, so the card no longer fits.

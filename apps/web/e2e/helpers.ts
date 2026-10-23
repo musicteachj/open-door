@@ -128,3 +128,73 @@ export async function keyboardFocus(page: Page, target: Locator) {
   await page.keyboard.press('Tab')
   await expect(target).toBeFocused()
 }
+
+/**
+ * Presses a key and holds it until its effect shows, then lets go. Radix moves focus in a radio
+ * group on a timer and counts a selection only while the arrow key is down, so
+ * `page.keyboard.press`, which releases the key at once, can move focus without selecting. Pass
+ * `until` (an assertion on the result) wherever the target is known; without it the key is held
+ * for a fixed 60 ms.
+ */
+export async function holdKey(page: Page, key: string, until?: () => Promise<unknown>) {
+  await page.keyboard.down(key)
+  try {
+    if (until) await until()
+    else await page.waitForTimeout(60)
+  } finally {
+    await page.keyboard.up(key)
+  }
+}
+
+/**
+ * The ids of the gallery's own state headings, in page order. A component's heading carries a
+ * generated id such as `_r_1_`; the gallery's are kebab-case.
+ */
+export const galleryHeadingIds = (page: Page) =>
+  page
+    .locator('h3[id]')
+    .evaluateAll((headings) =>
+      headings.map((h) => h.id).filter((id) => /^[a-z][a-z0-9-]*$/.test(id)),
+    )
+
+/** The headings from the first id to the last id, which must be exactly `ids`, in order. */
+export async function expectSectionHeadings(page: Page, ids: readonly string[]) {
+  const all = await galleryHeadingIds(page)
+  const first = all.indexOf(ids[0]!)
+  expect(first, `${ids[0]} is on the page`).toBeGreaterThanOrEqual(0)
+  expect(all.slice(first, first + ids.length)).toEqual(ids)
+}
+
+/** The selector for a gallery state, by the id of its heading (for axe's `include`). */
+export const galleryStateSelector = (id: string) => `section[aria-labelledby="${id}"]`
+
+/** A gallery state, by the id of its heading. */
+export const galleryState = (page: Page, id: string) => page.locator(galleryStateSelector(id))
+
+/** Opens the gallery and waits for its heading. */
+export async function openGallery(page: Page) {
+  await page.goto('/gallery')
+  await expect(
+    page.getByRole('heading', { level: 1, name: 'Open Door component gallery' }),
+  ).toBeVisible()
+}
+
+/**
+ * The gallery states whose content reaches past `width` px. Text clipped by a truncating
+ * ancestor is not sideways scroll, so those are left out.
+ */
+export async function statesPastEdge(page: Page, ids: readonly string[], width: number) {
+  const past: string[] = []
+  for (const id of ids) {
+    const wide = await galleryState(page, id).evaluate((el, limit) => {
+      // Past the window, or past the section that holds it.
+      const edge = Math.min(limit, el.getBoundingClientRect().right)
+      return [...el.querySelectorAll<HTMLElement>('*')].filter(
+        (child) =>
+          child.getBoundingClientRect().right > edge + 1 && child.closest('.truncate') === null,
+      ).length
+    }, width)
+    if (wide > 0) past.push(id)
+  }
+  return past
+}

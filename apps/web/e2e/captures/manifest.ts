@@ -9,7 +9,9 @@ import { GALLERY_STATE_IDS } from '../gallery-ids'
 // every row of its area.
 
 export const AREAS = [
+  'approvals',
   'assistant',
+  'confirm',
   'core',
   'directory',
   'feedback',
@@ -18,6 +20,7 @@ export const AREAS = [
   'landing',
   'navigation',
   'status',
+  'timeoff',
 ] as const
 
 export type Area = (typeof AREAS)[number]
@@ -25,7 +28,10 @@ export type GalleryStateId = (typeof GALLERY_STATE_IDS)[number]
 
 /** Where an area's specimen page is, from the repository root. */
 export const specimenPath = (area: Area) =>
-  `docs/design/system/components/${area}/${area}.card.html`
+  area === 'confirm'
+    ? // The confirm card's specimen sits in the assistant folder, beside the other assistant parts.
+      'docs/design/system/components/assistant/confirm.card.html'
+    : `docs/design/system/components/${area}/${area}.card.html`
 
 /** What to do inside the section, with Playwright's locator for it, before the photograph. */
 export type Interaction = {
@@ -46,7 +52,7 @@ export type ComponentRow = {
   /** The interaction opens a floating panel outside the section. The spec waits for an element
    * with this role to be visible before photographing, and photographs the viewport, not the
    * section alone. */
-  overlay?: 'listbox' | 'menu' | 'tooltip'
+  overlay?: 'listbox' | 'menu' | 'tooltip' | 'alertdialog' | 'dialog'
 }
 
 /** Paths the report links to, relative to captures/index.html. The spec takes every path from
@@ -209,6 +215,186 @@ export const COMPONENT_ROWS: ComponentRow[] = [
   }),
   row('handbook', 'passage-panel-loading'),
   row('handbook', 'passage-panel-error'),
+
+  // Phase 5, stage 5: the time-off form's parts, the approvals parts, and the confirm card. Hover
+  // and focus rows pick the real element, since the gallery draws neither.
+  row('timeoff', 'status-badge-waiting'),
+  row('timeoff', 'status-badge-approved'),
+  row('timeoff', 'status-badge-denied'),
+  row('timeoff', 'status-badge-recorded'),
+  row('timeoff', 'status-badge-canceled'),
+  row('timeoff', 'segmented-control-default', {
+    variant: 'hover',
+    note: 'Unselected option hovered',
+    interaction: { action: 'hover', target: '[role="radio"][data-state="unchecked"]' },
+  }),
+  row('timeoff', 'segmented-control-default', {
+    variant: 'focus',
+    note: 'Keyboard focus',
+    interaction: { action: 'focus', target: '[role="radio"]' },
+  }),
+  row('timeoff', 'segmented-control-selected'),
+  row('timeoff', 'segmented-control-disabled'),
+  row('timeoff', 'choice-group-default', {
+    variant: 'hover',
+    note: 'Unselected option hovered',
+    interaction: { action: 'hover', target: '[role="radio"][data-state="unchecked"]' },
+  }),
+  row('timeoff', 'choice-group-default', {
+    variant: 'focus',
+    note: 'Keyboard focus',
+    interaction: { action: 'focus', target: '[role="radio"]' },
+  }),
+  row('timeoff', 'choice-group-selected'),
+  row('timeoff', 'choice-group-disabled'),
+  row('timeoff', 'hours-stepper-default'),
+  row('timeoff', 'hours-stepper-at-1'),
+  row('timeoff', 'hours-stepper-at-8'),
+  row('timeoff', 'hours-stepper-error'),
+  row('timeoff', 'hours-stepper-disabled'),
+  row('timeoff', 'date-field-empty'),
+  row('timeoff', 'date-field-one-day'),
+  row('timeoff', 'date-field-range'),
+  row('timeoff', 'date-field-open'),
+  row('timeoff', 'date-field-error'),
+  row('timeoff', 'date-field-disabled'),
+  row('timeoff', 'date-picker-pto', {
+    variant: 'hover',
+    note: 'Hovered day',
+    interaction: { action: 'hover', target: 'button[data-day="2026-10-22"]' },
+  }),
+  row('timeoff', 'date-picker-pto', {
+    variant: 'focus',
+    note: 'Day with keyboard focus',
+    interaction: { action: 'focus', target: 'button[data-day="2026-10-22"]' },
+  }),
+  row('timeoff', 'date-picker-sick'),
+  row('timeoff', 'date-picker-range'),
+  row('timeoff', 'form-message-warning'),
+  row('timeoff', 'form-message-refusal'),
+  row('timeoff', 'alert-dialog-cancel-request', {
+    note: 'Opened by pressing the button',
+    interaction: { action: 'click', target: 'button' },
+    overlay: 'alertdialog',
+  }),
+  row('timeoff', 'balance-card-pto'),
+  row('timeoff', 'balance-card-ceiling'),
+  row('timeoff', 'balance-card-sick'),
+  row('timeoff', 'balance-card-empty'),
+  row('timeoff', 'balance-card-loading'),
+  row('timeoff', 'request-row-approved', {
+    variant: 'hover',
+    note: 'Row hovered',
+    interaction: { action: 'hover', target: 'li' },
+  }),
+  row('timeoff', 'request-row-approved', {
+    variant: 'focus',
+    note: 'Cancel focused by keyboard',
+    interaction: { action: 'focus', target: 'button' },
+  }),
+  row('timeoff', 'request-row-waiting'),
+  row('timeoff', 'request-row-recorded'),
+  row('timeoff', 'request-row-canceled'),
+  row('timeoff', 'request-row-denied'),
+  row('timeoff', 'request-row-team'),
+  row('timeoff', 'request-row-team-denied'),
+  row('timeoff', 'request-group-upcoming'),
+  row('timeoff', 'request-group-empty'),
+  row('timeoff', 'preview-block-one-day'),
+  row('timeoff', 'preview-block-weekend'),
+  row('timeoff', 'preview-block-holiday'),
+  row('timeoff', 'preview-block-sick-hours'),
+  row('timeoff', 'preview-block-already-booked'),
+  row('timeoff', 'preview-block-runs'),
+  row('timeoff', 'preview-block-cross-year-sick'),
+  row('timeoff', 'preview-block-nothing-picked'),
+  row('timeoff', 'preview-block-nothing-counted'),
+  row('timeoff', 'request-form-pto-one-day'),
+  row('timeoff', 'request-form-holiday-range'),
+  row('timeoff', 'request-form-sick-hours'),
+  row('timeoff', 'request-form-short-notice'),
+  row('timeoff', 'request-form-not-enough'),
+  row('timeoff', 'request-form-overlap'),
+  row('timeoff', 'request-form-submitting'),
+  row('timeoff', 'request-form-sheet', {
+    note: 'Opened by pressing the button',
+    interaction: { action: 'click', target: 'button' },
+    overlay: 'dialog',
+  }),
+
+  row('approvals', 'approval-card-default', {
+    variant: 'hover-approve',
+    note: 'Approve hovered',
+    interaction: { action: 'hover', target: 'button[aria-label^="Approve"]' },
+  }),
+  row('approvals', 'approval-card-default', {
+    variant: 'hover-deny',
+    note: 'Deny hovered',
+    interaction: { action: 'hover', target: 'button[aria-label^="Deny"]' },
+  }),
+  row('approvals', 'approval-card-default', {
+    variant: 'focus',
+    note: 'Approve focused by keyboard',
+    interaction: { action: 'focus', target: 'button[aria-label^="Approve"]' },
+  }),
+  row('approvals', 'approval-card-no-coverage'),
+  row('approvals', 'approval-card-conflict'),
+  row('approvals', 'approval-card-conflict-decided'),
+  row('approvals', 'approval-card-loading'),
+  row('approvals', 'coverage-line-one-person'),
+  row('approvals', 'coverage-line-none'),
+  row('approvals', 'coverage-line-range'),
+  row('approvals', 'coverage-line-part-of-day'),
+  row('approvals', 'note-field-empty'),
+  row('approvals', 'note-field-typed'),
+  row('approvals', 'note-field-at-limit'),
+  row('approvals', 'note-field-disabled'),
+  row('approvals', 'decision-dialog-approve', {
+    note: 'Opened by pressing the button',
+    interaction: { action: 'click', target: 'button' },
+    overlay: 'alertdialog',
+  }),
+  row('approvals', 'decision-dialog-deny', {
+    note: 'Opened by pressing the button',
+    interaction: { action: 'click', target: 'button' },
+    overlay: 'alertdialog',
+  }),
+  row('approvals', 'decision-dialog-deciding', {
+    note: 'Opened by pressing the button; it closes itself after 4 seconds',
+    interaction: { action: 'click', target: 'button' },
+    overlay: 'alertdialog',
+  }),
+
+  row('confirm', 'confirm-card-book-pending', {
+    variant: 'hover',
+    note: 'Confirm hovered',
+    interaction: { action: 'hover', target: 'button' },
+  }),
+  row('confirm', 'confirm-card-book-pending', {
+    variant: 'focus',
+    note: 'Confirm focused by keyboard',
+    interaction: { action: 'focus', target: 'button' },
+  }),
+  row('confirm', 'confirm-card-holiday-pending'),
+  row('confirm', 'confirm-card-sick-pending'),
+  row('confirm', 'confirm-card-approve-pending'),
+  row('confirm', 'confirm-card-deny-pending'),
+  row('confirm', 'confirm-card-cancel-pending'),
+  row('confirm', 'confirm-card-short-notice-pending'),
+  row('confirm', 'confirm-card-cross-year-sick-pending'),
+  row('confirm', 'confirm-card-streaming'),
+  row('confirm', 'confirm-card-confirming'),
+  row('confirm', 'confirm-card-book-executed'),
+  row('confirm', 'confirm-card-holiday-executed'),
+  row('confirm', 'confirm-card-sick-executed'),
+  row('confirm', 'confirm-card-approve-executed'),
+  row('confirm', 'confirm-card-deny-executed-with-note'),
+  row('confirm', 'confirm-card-deny-executed'),
+  row('confirm', 'confirm-card-cancel-executed'),
+  row('confirm', 'confirm-card-failed'),
+  row('confirm', 'confirm-card-dismissed'),
+  row('confirm', 'confirm-card-replaced'),
+  row('confirm', 'confirm-card-expired'),
 ]
 
 /** The screen folders the report compares, in docs/design/screens/. The other folders belong to

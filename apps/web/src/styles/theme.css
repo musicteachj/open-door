@@ -112,6 +112,16 @@
   /* Motion: color and border transitions only (Tailwind's transition-* utilities read these) */
   --default-transition-duration: 150ms;
   --default-transition-timing-function: cubic-bezier(0.2, 0, 0, 1);
+  /* The confirm card's executed line fades in over 200 ms; base.css stops it under reduced motion. */
+  --animate-confirm-in: confirm-in 200ms cubic-bezier(0.2, 0, 0, 1);
+  @keyframes confirm-in {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
+  }
 
   /* Layout: w-sidebar, w-rail, w-panel, max-w-content, h-control, h-control-sm, h-row, inset-sheet */
   --spacing-sidebar: 248px;

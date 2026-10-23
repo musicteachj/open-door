@@ -265,10 +265,17 @@ async def write_time_off_rows(
             "skippedDays": [],
             "amountMinutes": 480,
             "amountLabel": "8 hours (1 day)",
-            "availableBeforeMinutes": 480,
-            "availableBeforeLabel": "8 hours (1 day)",
-            "availableAfterMinutes": 480,
-            "availableAfterLabel": "8 hours (1 day)",
+            "draws": [
+                {
+                    "year": None,
+                    "amountMinutes": 480,
+                    "amountLabel": "8 hours (1 day)",
+                    "availableBeforeMinutes": 960,
+                    "availableBeforeLabel": "16 hours (2 days)",
+                    "availableAfterMinutes": 480,
+                    "availableAfterLabel": "8 hours (1 day)",
+                }
+            ],
             "warnings": [],
             "approver": None,
             "rules": [],

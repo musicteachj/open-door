@@ -5,6 +5,13 @@ should pick it up. When one is done, delete it here and record it in the changel
 
 ## Any phase
 
+- **A concurrent-confirm API test can fail on a FastAPI warning.** In one full `make check` run,
+  `test_two_confirms_at_once_book_once` (`tests/integration/test_proposal_routes.py`) failed with
+  pydantic's `UnsupportedFieldAttributeWarning` about the alias `conversation_id`: FastAPI 0.142
+  builds a route's parameter types on first use, the alias is FastAPI's own for the path
+  parameter, and the test settings turn warnings into errors. It passed six times alone and in
+  the full suite before. Find why it fires only under concurrent first requests (perhaps build the
+  routes once at startup in tests), or filter that one warning with a reason. (Phase 5 stage 5.)
 - **Some web unit tests are timing-flaky under full-suite load:** the directory page's "footer when
   an update has failed" and a few handbook-page searches time out now and then when the whole
   Vitest suite runs, on a clean `dev` too, and pass alone. Raise their waits or find the slow
@@ -157,17 +164,6 @@ should pick it up. When one is done, delete it here and record it in the changel
   room, in trial 2 or 3 throws away trial 1's complete, already paid recordings. Gate the save (and
   the prune) on trial 1 alone. The last full run used $8.02 of a $16 cap, so it hasn't bitten;
   Phase 5's new tools will need a full run, so fix it first. (Phase 4 phase review.)
-- **Put the existing overlays and panels on the new tokens** (Stage 5). The bottom sheet's backdrop
-  is `bg-ink/40`, darker than the design's `scrim` (0.32) that the confirm dialog will use; check
-  the design and move it onto `bg-scrim` if they should match. The gallery's handbook and
-  conversation sections size their docked panels with `w-[420px]` in four places; use `w-panel`.
-  (Theme-token fix review, 2026-10-20.)
-
-- **Show both years on a sick-time card that crosses New Year.** A sick request that spans
-  December 31 draws on two years' grants, but the card's "available before" and "after" carry
-  only the first year's figures, while its amount is the whole request. If the card shows the
-  arithmetic, ship each year's draw. Rare, and Stage 5 decides whether the card needs it. (Phase 5
-  stage 3 review.)
 
 ## Phase 6: cases and escalation
 
