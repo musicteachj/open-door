@@ -1,12 +1,9 @@
-import AxeBuilder from '@axe-core/playwright'
 import { expect, test, type Page } from '@playwright/test'
 import { GALLERY_STATE_IDS } from './gallery-ids'
 import {
-  AXE_TAGS,
-  MODAL_OVERLAY_RULES,
+  expectNoViolationsIn,
   expectSectionHeadings,
   galleryState as state,
-  galleryStateSelector,
   holdKey,
   openGallery,
   statesPastEdge,
@@ -22,12 +19,6 @@ const TIMEOFF_IDS = GALLERY_STATE_IDS.slice(
   GALLERY_STATE_IDS.indexOf('status-badge-waiting'),
   GALLERY_STATE_IDS.indexOf('request-form-sheet') + 1,
 )
-// These start closed, behind a button.
-const HOSTS: Record<string, string> = {
-  'alert-dialog-cancel-request': 'Cancel time off',
-  'request-form-sheet': 'Open the request form as a sheet',
-}
-
 test.beforeEach(async ({ page }) => {
   await openGallery(page)
 })
@@ -38,28 +29,13 @@ test('every time-off state has its own heading', async ({ page }) => {
   for (const id of TIMEOFF_IDS) await expect(page.locator(`h3#${id}`)).toHaveCount(1)
 })
 
-for (const id of TIMEOFF_IDS) {
-  test(`${id} has no accessibility violations`, async ({ page }) => {
-    const open = HOSTS[id]
-    if (open) {
-      await state(page, id).getByRole('button', { name: open }).click()
-      await expect(
-        page.getByRole(id === 'request-form-sheet' ? 'dialog' : 'alertdialog'),
-      ).toBeVisible()
-      const results = await new AxeBuilder({ page })
-        .withTags(AXE_TAGS)
-        .disableRules(MODAL_OVERLAY_RULES)
-        .analyze()
-      expect(results.violations).toEqual([])
-      return
-    }
-    const results = await new AxeBuilder({ page })
-      .withTags(AXE_TAGS)
-      .include(galleryStateSelector(id))
-      .analyze()
-    expect(results.violations).toEqual([])
+test('no time-off state has accessibility violations', async ({ page }) => {
+  test.setTimeout(180_000)
+  await expectNoViolationsIn(page, TIMEOFF_IDS, {
+    'alert-dialog-cancel-request': { button: 'Cancel time off', role: 'alertdialog' },
+    'request-form-sheet': { button: 'Open the request form as a sheet', role: 'dialog' },
   })
-}
+})
 
 test.describe('the cancel-request alert dialog', () => {
   const host = (page: Page) => state(page, 'alert-dialog-cancel-request')
@@ -465,8 +441,16 @@ test.describe('at 390 px', () => {
 
   test('nothing in the time-off section scrolls sideways', async ({ page }) => {
     await expect(page.locator('h3#status-badge-waiting')).toBeAttached()
-    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390)
-    expect(await statesPastEdge(page, TIMEOFF_IDS, 390)).toEqual([])
+    expect
+      .soft(
+        await page.evaluate(() => document.documentElement.scrollWidth),
+        'the page is wider than the window',
+      )
+      .toBeLessThanOrEqual(390)
+    // The ids of the states with content past the edge, so a failure names them.
+    expect
+      .soft(await statesPastEdge(page, TIMEOFF_IDS, 390), 'states with content past the edge')
+      .toEqual([])
   })
 
   test('the balance cards stack, and a request row keeps Cancel at the top right', async ({

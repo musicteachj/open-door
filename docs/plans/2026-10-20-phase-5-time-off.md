@@ -1396,7 +1396,7 @@ Built in three batches off `dev` at `e25d125` (Stage 3, #68, and the `openteleme
 the fixes were written test first and mutation-proved. Before each batch's report I photographed
 every gallery state at 1440 and 390 px, in hover and keyboard focus and with each dialog open, and
 compared it with the frames and the specimen cards. No review found anything high. The web app
-has 2,496 tests (2,009 before) and 447 browser tests (285 before); the API has 3,859 (3,858
+has 2,496 tests (2,009 before) and 354 browser tests (285 before); the API has 3,859 (3,858
 before).
 
 **Task 29:** the acceptance-criteria table above, approved by the owner on 2026-10-22. One row
@@ -1486,6 +1486,18 @@ Review rounds:
   sheet's Close and swipe. Also: weak assertions strengthened, `holdKey` waits for the selection
   instead of a fixed 60 ms, and the confirm card's fade is polled rather than slept on. Each new
   browser test was mutation-proved against the component it covers.
+  After the PR opened, CI's browser-test job (one worker) ran past its 20-minute limit, so the new
+  per-state tests were grouped: one gallery load per section, a soft assertion per state that
+  names it (447 tests became 354, the new specs' time halved), and the job's limit is now 30
+  minutes for headroom (the owner's choice). A `/code-review medium` of that change (three
+  rounds) found the grouped scan dropping violations inside a component's own labeled section and
+  blaming page-wide ones on dialogs, a whole-page scan that coupled the specs to every gallery
+  area and caught the confirm card mid-fade, and a self-closing demo dialog racing the scan; the
+  scan is now scoped to the checked states, credits each node to its state (anything it can't
+  credit fails), runs with reduced motion, and controls the demo's timer with Playwright's clock.
+  It also fixed two picker and copy lows: the grid's one tab stop never sits on a day that can't
+  be picked, and a sick request across New Year says "in 2026" in both the preview and the
+  refusal.
 
 The stage's `/code-review medium` ran seven rounds; the seventh found nothing high or medium, so
 the loop stopped.

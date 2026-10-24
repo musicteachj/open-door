@@ -176,6 +176,10 @@ version (`0.x.y` while the app is being built, `1.0.0` when it is complete).
 
 ### Changed
 
+- **The browser-test job in CI may run for 30 minutes** (Phase 5, stage 5). CI runs the browser
+  tests on one worker, and stage 5's gallery tests took the job past its 20-minute limit. The new
+  tests now load the gallery once per section and check every state there (each failure still
+  names its state), which brought the run back to about 18 minutes; the limit is 30 for headroom.
 - **A time-off request card now carries the balance for each year** (Phase 5, stage 5). The card
   the assistant proposes for booking PTO or recording sick time used to hold only the first year's
   "available before and after" figures. It now holds a list of draws in the same shape as the

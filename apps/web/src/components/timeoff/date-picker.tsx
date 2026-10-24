@@ -87,27 +87,32 @@ function DatePicker({
   const root = useRef<HTMLDivElement>(null)
   const pendingFocus = useRef<string | null>(null)
   const clampedToday = today < minDate ? minDate : maxDate && today > maxDate ? maxDate : today
-  const [month, setMonth] = useState<CalendarMonth>(() => monthOf(start ?? clampedToday))
-  const [focusDay, setFocusDay] = useState(start ?? clampedToday)
+  const isDisabled = (day: string) => day < minDate || (maxDate !== undefined && day > maxDate)
+  // A start that can't be picked (the type switched and the earliest day moved) doesn't lead.
+  const lead = start !== undefined && !isDisabled(start) ? start : clampedToday
+  const [month, setMonth] = useState<CalendarMonth>(() => monthOf(lead))
+  const [focusDay, setFocusDay] = useState(lead)
   // True between the first and the last day of a range, when a click ends it instead of starting
   // another.
   const [picking, setPicking] = useState(false)
+  const [gridFocused, setGridFocused] = useState(false)
   const [preview, setPreview] = useState<string | null>(null)
   const titleId = `${id}-title`
 
-  const isDisabled = (day: string) => day < minDate || (maxDate !== undefined && day > maxDate)
   const holidayNames = new Map(holidays.map((holiday) => [holiday.day, holiday.name]))
   const weeks = monthGrid(month)
   const inView = (day: string) =>
     day.startsWith(`${month.year}-${String(month.month + 1).padStart(2, '0')}`)
   const firstEnabled = weeks.flat().find((day) => day !== null && !isDisabled(day))
-  const tabDay = inView(focusDay)
-    ? focusDay
-    : start && inView(start)
-      ? start
-      : inView(today)
-        ? today
-        : (firstEnabled ?? weeks.flat().find((day) => day !== null))
+  // The focus day leads the grid unless it has become unavailable while focus is elsewhere.
+  const tabDay =
+    inView(focusDay) && (gridFocused || !isDisabled(focusDay))
+      ? focusDay
+      : start && inView(start) && !isDisabled(start)
+        ? start
+        : inView(clampedToday)
+          ? clampedToday
+          : (firstEnabled ?? weeks.flat().find((day) => day !== null))
 
   // Keyboard moves stay inside the months the limits allow.
   const lowestFocus = firstOfMonth(monthOf(minDate))
@@ -243,6 +248,9 @@ function DatePicker({
         aria-labelledby={titleId}
         onKeyDown={onGridKeyDown}
         onMouseLeave={() => setPreview(null)}
+        onBlur={(event) => {
+          if (!event.currentTarget.contains(event.relatedTarget)) setGridFocused(false)
+        }}
         className="w-full table-fixed border-collapse"
       >
         <thead>
@@ -285,6 +293,7 @@ function DatePicker({
                     onSelect={choose}
                     onPreview={(hovered) => picking && !isDisabled(hovered) && setPreview(hovered)}
                     onFocusDay={(focused) => {
+                      setGridFocused(true)
                       setFocusDay(focused)
                       if (picking && !isDisabled(focused)) setPreview(focused)
                     }}

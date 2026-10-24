@@ -192,7 +192,9 @@ jobs:
     needs: changes
     if: needs.changes.outputs.e2e == 'true' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    # The browser tests run on one worker (playwright.config.ts) and took about 18 minutes after
+    # Phase 5 stage 5; 30 leaves room for a slow runner and Stage 6's page tests.
+    timeout-minutes: 30
     services:
       # The same service as the API job.
       postgres:

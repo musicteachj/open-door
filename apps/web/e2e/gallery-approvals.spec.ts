@@ -1,12 +1,9 @@
-import AxeBuilder from '@axe-core/playwright'
 import { expect, test, type Locator, type Page } from '@playwright/test'
 import { GALLERY_STATE_IDS } from './gallery-ids'
 import {
-  AXE_TAGS,
-  MODAL_OVERLAY_RULES,
+  expectNoViolationsIn,
   expectSectionHeadings,
   galleryState as state,
-  galleryStateSelector,
   openGallery,
   statesPastEdge,
   themeColor,
@@ -35,26 +32,24 @@ test('every approvals state has its own heading', async ({ page }) => {
   for (const id of APPROVALS_IDS) await expect(page.locator(`h3#${id}`)).toHaveCount(1)
 })
 
-for (const id of APPROVALS_IDS) {
-  test(`${id} has no accessibility violations`, async ({ page }) => {
-    const open = HOSTS[id]
-    if (open) {
-      await state(page, id).getByRole('button', { name: open }).click()
-      await expect(page.getByRole('alertdialog')).toBeVisible()
-      const results = await new AxeBuilder({ page })
-        .withTags(AXE_TAGS)
-        .disableRules(MODAL_OVERLAY_RULES)
-        .analyze()
-      expect(results.violations).toEqual([])
-      return
-    }
-    const results = await new AxeBuilder({ page })
-      .withTags(AXE_TAGS)
-      .include(galleryStateSelector(id))
-      .analyze()
-    expect(results.violations).toEqual([])
-  })
-}
+test('no approvals state has accessibility violations', async ({ page }) => {
+  test.setTimeout(120_000)
+  await expectNoViolationsIn(
+    page,
+    APPROVALS_IDS,
+    Object.fromEntries(
+      Object.entries(HOSTS).map(([id, button]) => [
+        id,
+        {
+          button,
+          role: 'alertdialog' as const,
+          // Escape does nothing while deciding, so its timer is run to close it.
+          closes: id === 'decision-dialog-deciding' ? ('timer' as const) : undefined,
+        },
+      ]),
+    ),
+  )
+})
 
 const style = (target: Locator) =>
   target.evaluate((el) => {
@@ -235,8 +230,16 @@ test.describe('at 390 px', () => {
 
   test('nothing in the approvals section scrolls sideways', async ({ page }) => {
     await expect(page.locator('h3#approval-card-default')).toBeAttached()
-    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390)
-    expect(await statesPastEdge(page, APPROVALS_IDS, 390)).toEqual([])
+    expect
+      .soft(
+        await page.evaluate(() => document.documentElement.scrollWidth),
+        'the page is wider than the window',
+      )
+      .toBeLessThanOrEqual(390)
+    // The ids of the states with content past the edge, so a failure names them.
+    expect
+      .soft(await statesPastEdge(page, APPROVALS_IDS, 390), 'states with content past the edge')
+      .toEqual([])
   })
 
   test('Approve and Deny are half the card each, side by side, below the details', async ({

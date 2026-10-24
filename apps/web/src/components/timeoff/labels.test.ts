@@ -350,4 +350,51 @@ describe('the preview, form, and balance copy', () => {
       )
     })
   })
+
+  describe('the sick-year phrase', () => {
+    const cross = [
+      draw({
+        year: 2026,
+        availableAfterLabel: '16 hours (2 days)',
+        availableBeforeLabel: '8 hours',
+        amountLabel: '16 hours (2 days)',
+        availableAfterMinutes: -480,
+      }),
+      draw({
+        year: 2027,
+        availableBeforeLabel: '40 hours (5 days)',
+        amountLabel: '8 hours (1 day)',
+      }),
+    ]
+
+    it('says in the year, never this year, for a request that crosses New Year', () => {
+      expect(leftLines('sick', cross, 2026)[0]).toBe('16 hours of sick leave left in 2026')
+      expect(
+        problemText(
+          { code: 'not-enough', text: 'x' },
+          { type: 'sick', draws: cross, amountLabel: '24 hours (3 days)', thisYear: 2026 },
+        ),
+      ).toBe('You have 8 hours of sick leave left in 2026. This request needs 16 hours.')
+    })
+
+    it('says this year for a request on one year, which is this year', () => {
+      const one = [draw({ year: 2026, availableAfterMinutes: -60 })]
+      expect(
+        problemText(
+          { code: 'not-enough', text: 'x' },
+          { type: 'sick', draws: one, amountLabel: '8 hours (1 day)', thisYear: 2026 },
+        ),
+      ).toContain('left this year.')
+    })
+  })
+
+  describe('the sick-year phrase, with an unknown year', () => {
+    it('never prints a null year, even beside a dated draw', () => {
+      const draws = [draw({ year: null }), draw({ year: 2027 })]
+      const lines = leftLines('sick', draws, 2026)
+      expect(lines[0]).toContain('left this year')
+      expect(lines.join(' ')).not.toContain('null')
+      expect(lines[1]).toContain('left in 2027')
+    })
+  })
 })

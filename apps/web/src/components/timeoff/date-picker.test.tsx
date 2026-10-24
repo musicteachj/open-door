@@ -649,4 +649,48 @@ describe('DatePicker size', () => {
       expect(cell('Friday, October 23')).toHaveAttribute('aria-selected', 'true')
     })
   })
+
+  describe('DatePicker, the grid’s one tab stop', () => {
+    it('is never a day that can not be picked, after paging away and back', async () => {
+      const user = userEvent.setup()
+      // Nothing after October 10 can be picked, though today is the 20th.
+      render(<Picker minDate="2026-09-01" maxDate="2026-10-10" />)
+      await user.click(screen.getByRole('button', { name: 'Previous month' }))
+      await user.click(day('Tuesday, September 15'))
+      await user.click(screen.getByRole('button', { name: 'Next month' }))
+      const stops = [...document.querySelectorAll<HTMLElement>('[data-day][tabindex="0"]')]
+      expect(stops).toHaveLength(1)
+      expect(stops[0]).not.toHaveAttribute('aria-disabled', 'true')
+    })
+  })
+
+  describe('DatePicker, the tab stop and a start before the earliest day', () => {
+    it('is not the selection’s start when that day is no longer allowed', () => {
+      render(<Picker start="2026-10-15" minDate="2026-10-22" />)
+      const stops = [...document.querySelectorAll<HTMLElement>('[data-day][tabindex="0"]')]
+      expect(stops).toHaveLength(1)
+      expect(stops[0]).not.toHaveAttribute('aria-disabled', 'true')
+    })
+  })
+
+  describe('DatePicker, the tab stop when the earliest day moves later', () => {
+    it('leaves a focus day that has become unavailable, unless focus is on it', () => {
+      const view = (minDate: string) => <Picker start="2026-10-15" minDate={minDate} />
+      const { rerender } = render(view('2026-09-20'))
+      rerender(view('2026-10-22'))
+      const stops = [...document.querySelectorAll<HTMLElement>('[data-day][tabindex="0"]')]
+      expect(stops).toHaveLength(1)
+      expect(stops[0]).not.toHaveAttribute('aria-disabled', 'true')
+    })
+  })
+
+  it('keeps the tab stop on a disabled day that has focus, so the arrow keys can pass over it', async () => {
+    const user = userEvent.setup()
+    render(<Picker />)
+    await user.click(day('Tuesday, October 20'))
+    await user.keyboard('{ArrowLeft}')
+    const focused = day('Monday, October 19')
+    expect(focused).toHaveFocus()
+    expect(focused).toHaveAttribute('tabindex', '0')
+  })
 })

@@ -157,6 +157,17 @@ export function skippedLine(skipped: SkippedDay): string {
 }
 
 /**
+ * "this year" or "in 2027" for a sick draw. "This year" only when the request draws on one year and
+ * that year is the current one (or the current year isn't known); otherwise the year's number, so
+ * a request across New Year never says "this year" about either half.
+ */
+function sickYearPhrase(draws: DrawOut[], draw: DrawOut, thisYear?: number): string {
+  if (draw.year === null) return 'this year'
+  const current = draws.length === 1 && (thisYear === undefined || draw.year === thisYear)
+  return current ? 'this year' : `in ${draw.year}`
+}
+
+/**
  * What is left after a request, one line per draw. PTO has one draw ("84 hours (10.5 days) left
  * after this"). Sick time speaks in hours, "this year" for one draw in the current year (or when
  * `thisYear` isn't known) and the year's number otherwise.
@@ -164,12 +175,10 @@ export function skippedLine(skipped: SkippedDay): string {
 export function leftLines(type: LeaveTypeName, draws: DrawOut[], thisYear?: number): string[] {
   if (type === 'pto')
     return draws.slice(0, 1).map((draw) => `${draw.availableAfterLabel} left after this`)
-  return draws.map((draw) => {
-    const current =
-      draws.length === 1 && (draw.year === null || thisYear === undefined || draw.year === thisYear)
-    const when = current ? 'this year' : `in ${draw.year}`
-    return `${splitLabel(draw.availableAfterLabel).hours} of sick leave left ${when}`
-  })
+  return draws.map(
+    (draw) =>
+      `${splitLabel(draw.availableAfterLabel).hours} of sick leave left ${sickYearPhrase(draws, draw, thisYear)}`,
+  )
 }
 
 export const formCopy = {
@@ -206,10 +215,7 @@ export function problemText(problem: ProblemOut, context: ProblemContext): strin
       const needs = context.amountLabel ?? draw.amountLabel
       return `You have ${draw.availableBeforeLabel} available. This request needs ${needs}.`
     }
-    const when =
-      draw.year === null || context.thisYear === undefined || draw.year === context.thisYear
-        ? 'this year'
-        : `in ${draw.year}`
+    const when = sickYearPhrase(context.draws, draw, context.thisYear)
     return `You have ${splitLabel(draw.availableBeforeLabel).hours} of sick leave left ${when}. This request needs ${splitLabel(draw.amountLabel).hours}.`
   }
   if (problem.code === 'overlaps' && context.overlappingDays?.length) {

@@ -1,11 +1,9 @@
-import AxeBuilder from '@axe-core/playwright'
 import { expect, test } from '@playwright/test'
 import { GALLERY_STATE_IDS } from './gallery-ids'
 import {
-  AXE_TAGS,
   expectSectionHeadings,
   galleryState as state,
-  galleryStateSelector,
+  expectNoViolationsIn,
   openGallery,
   statesPastEdge,
 } from './helpers'
@@ -27,24 +25,10 @@ test('every confirm card state has its own heading', async ({ page }) => {
   for (const id of CONFIRM_IDS) await expect(page.locator(`h3#${id}`)).toHaveCount(1)
 })
 
-for (const id of CONFIRM_IDS) {
-  test(`${id} has no accessibility violations`, async ({ page }) => {
-    // The executed card's line fades in over 200 ms; wait for it to be fully opaque before axe
-    // reads its colors.
-    await expect
-      .poll(() =>
-        state(page, id)
-          .locator('output')
-          .evaluateAll((lines) => lines.every((line) => getComputedStyle(line).opacity === '1')),
-      )
-      .toBe(true)
-    const results = await new AxeBuilder({ page })
-      .withTags(AXE_TAGS)
-      .include(galleryStateSelector(id))
-      .analyze()
-    expect(results.violations).toEqual([])
-  })
-}
+test('no confirm card state has accessibility violations', async ({ page }) => {
+  test.setTimeout(120_000)
+  await expectNoViolationsIn(page, CONFIRM_IDS)
+})
 
 test('a pending card says the AI proposed it, and when it expires', async ({ page }) => {
   const card = state(page, 'confirm-card-book-pending')
@@ -107,8 +91,16 @@ test.describe('at 390 px', () => {
 
   test('nothing in the confirm card section scrolls sideways', async ({ page }) => {
     await expect(page.locator('h3#confirm-card-book-pending')).toBeAttached()
-    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390)
-    expect(await statesPastEdge(page, CONFIRM_IDS, 390)).toEqual([])
+    expect
+      .soft(
+        await page.evaluate(() => document.documentElement.scrollWidth),
+        'the page is wider than the window',
+      )
+      .toBeLessThanOrEqual(390)
+    // The ids of the states with content past the edge, so a failure names them.
+    expect
+      .soft(await statesPastEdge(page, CONFIRM_IDS, 390), 'states with content past the edge')
+      .toEqual([])
   })
 
   test('Confirm and Dismiss are each half the footer width', async ({ page }) => {
