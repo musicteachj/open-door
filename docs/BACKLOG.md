@@ -5,10 +5,6 @@ should pick it up. When one is done, delete it here and record it in the changel
 
 ## Any phase
 
-- **Some web unit tests are timing-flaky under full-suite load:** the directory page's "footer when
-  an update has failed" and a few handbook-page searches time out now and then when the whole
-  Vitest suite runs, on a clean `dev` too, and pass alone. Raise their waits or find the slow
-  path. (Phase 4 stage 6.)
 - **A conversation layout browser test can lose its element mid-check.** At 390 px, "streaming,
   stopped, and an error mid-stream stay inside the column" (`e2e/conversation-layout.spec.ts`)
   failed once with "no box for a visible element": the element was visible, then gone before its

@@ -200,6 +200,12 @@ version (`0.x.y` while the app is being built, `1.0.0` when it is complete).
   warning escaped into the suite's "warnings are errors" setting (it failed CI on #70). The test
   now sends each client one confirm that answers 404 first, so the routes are built before the
   two confirms race. Production only ever logged the warning.
+- **Web unit tests wait up to 3 seconds for something to appear** (Phase 5, stage 5). Testing
+  Library's default is 1 second, and on a busy CI runner, with the whole suite's files running in
+  parallel, a search that answers in 300 ms on its own can take longer. The directory page's
+  "footer when an update has failed" failed #70's CI twice that way. The setting is in the web
+  tests' setup; a passing test never waits longer. This closes the backlog item about
+  timing-flaky web tests.
 - **The web theme has the Phase 5 design tokens** (between Phase 5 stages, 2026-10-20). The
   screens PR (#63) added eight tokens to the design export: the warning, danger, and apricot tints
   and borders, the scrim behind a confirm dialog, and the docked panel's width. It didn't add them

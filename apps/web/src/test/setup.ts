@@ -1,8 +1,15 @@
 import '@testing-library/jest-dom/vitest'
-import { cleanup } from '@testing-library/react'
+import { cleanup, configure } from '@testing-library/react'
 import { afterAll, afterEach, beforeAll } from 'vitest'
 import { resetAnnouncer } from '@/lib/announce'
 import { server } from './msw'
+
+// How long `findBy…` and `waitFor` wait before failing: 3 seconds, not Testing Library's 1. The
+// whole suite runs its files in parallel, and on a busy CI runner a search that answers in 300 ms
+// on its own can take over a second (the directory's "footer when an update has failed" failed
+// CI twice that way). A passing test never waits longer; this stays under Vitest's 5-second limit
+// per test.
+configure({ asyncUtilTimeout: 3000 })
 
 beforeAll(() => {
   // jsdom does not implement scrolling; <ScrollRestoration> calls it on every navigation.
