@@ -213,6 +213,18 @@ version (`0.x.y` while the app is being built, `1.0.0` when it is complete).
 
 ### Security
 
+- **`zod` and `undici` updated in the web app's development tools (between Phase 5 stages,
+  2026-10-24).** The audit found two high-severity advisories: `zod` before 4.6.6 can exhaust
+  memory validating oversized collections (GHSA-mrhx-c7xc-m3w5), and `undici` up to 7.30.0 and
+  8.12.1 has a Subresource Integrity bypass and a denial of service on excessive content
+  encodings (GHSA-f72v-6w45-q472, GHSA-xjj6-f33q-929c). Both come only through development tools,
+  `orval` (the API client generator) and `jsdom` (the unit tests' browser), so nothing shipped to
+  a browser was affected. `orval` is now 8.44.0 and `jsdom` 30.1.3, which bring `zod` 4.6.7 and
+  `undici` 8.12.3. `orval` also depends directly on `@scalar/json-magic` 0.15 (a file loader), which
+  asks for `undici` 7.29.1 exactly, so an override in `package.json`, scoped to that 0.15 line,
+  moves it to the fixed 7.x (7.30.1 or later). Once `orval` moves past `@scalar/json-magic` 0.15
+  the override stops matching and can go; the audit would flag a vulnerable `undici` again either
+  way. The generated client is unchanged.
 - **`opentelemetry-api` updated to 1.45.1 (between Phase 5 stages, 2026-10-22).** FastAPI depends
   on it, and 1.45.0 parses a request's W3C `tracestate` header with a pattern that takes quadratic
   time on a long run of spaces or tabs, so one large header could keep a worker busy for seconds
