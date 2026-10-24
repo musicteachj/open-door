@@ -276,7 +276,7 @@ function SourcePanelState() {
         view && (
           <div
             data-slot="source-panel-frame"
-            className="h-[640px] w-[420px] max-w-full self-start overflow-hidden rounded-lg border border-border bg-surface-raised"
+            className="h-[640px] w-panel max-w-full self-start overflow-hidden rounded-lg border border-border bg-surface-raised"
           >
             <PassagePanel
               state="open"

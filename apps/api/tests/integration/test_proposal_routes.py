@@ -219,9 +219,12 @@ async def test_a_card_whose_balance_changed_fails_not_enough_with_its_text_and_b
     start: StartWorld,
 ) -> None:
     world = start("priya")
-    await world.fund("priya")
-    # Twenty working days, four weeks from the first Monday a month out: about all of the 9,600
-    # minutes the opening gives her, and more than she has without it.
+    # 40,000 minutes: far more than four weeks of PTO plus whatever her seeded history has taken.
+    # The seed draws that history at random over the days before the sandbox's start, so a
+    # smaller opening fits on some days and not on others.
+    await world.fund("priya", 40_000)
+    # About twenty working days, four weeks from the first Monday a month out: more than she has
+    # once the opening drops to nothing (a whole year of month-ends earns 7,200).
     monday = world.workday(30) + timedelta(days=(7 - world.workday(30).weekday()) % 7)
     proposal_id = await book(world, monday, monday + timedelta(days=27))
     # Afterward her opening balance drops to nothing, so the card no longer fits.
@@ -591,6 +594,14 @@ async def test_a_dismissed_card_cannot_then_be_confirmed(start: StartWorld) -> N
 
 def fire_together(clients: list[Browser], path: str) -> list[Any]:
     """Post the same confirm from each client at the same moment."""
+    # Warm each client's app first, one at a time, with a confirm that answers 404. FastAPI builds
+    # a router's routes on the first request that reaches them, inside `warnings.catch_warnings()`
+    # to hide a pydantic warning, and that context manager swaps the process-wide filters: two
+    # threads building at once can restore them under each other, and the hidden warning then
+    # escapes into this suite's "warnings are errors" setting.
+    for client in clients:
+        warm = client.client.post(confirm_path(uuid4()), headers=client.csrf)
+        assert warm.status_code == 404, warm.text
     barrier = threading.Barrier(len(clients))
 
     def go(client: Browser) -> Any:

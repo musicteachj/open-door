@@ -59,6 +59,7 @@ from app.db.tenancy import TenantContext, tenant_session
 from app.domain.timeoff.evaluate import NewRequest
 from app.domain.timeoff.labels import label
 from app.modules.timeoff import queries, service
+from app.modules.timeoff.schemas import DrawOut
 from app.modules.timeoff.service import Preview, Refused
 from app.modules.timeoff.texts import refusal_text
 from tests.integration.conftest import MakeTenant, audit_events
@@ -370,10 +371,17 @@ async def test_a_request_card_holds_the_engines_figures_and_the_approver(
         "skippedDays": [],
         "amountMinutes": 480,
         "amountLabel": "8 hours (1 day)",
-        "availableBeforeMinutes": 4800,
-        "availableBeforeLabel": "80 hours (10 days)",
-        "availableAfterMinutes": 4320,
-        "availableAfterLabel": "72 hours (9 days)",
+        "draws": [
+            {
+                "year": None,
+                "amountMinutes": 480,
+                "amountLabel": "8 hours (1 day)",
+                "availableBeforeMinutes": 4800,
+                "availableBeforeLabel": "80 hours (10 days)",
+                "availableAfterMinutes": 4320,
+                "availableAfterLabel": "72 hours (9 days)",
+            }
+        ],
         "warnings": [],
         "approver": {"name": "Manager Test"},
     }
@@ -416,13 +424,67 @@ async def test_a_sick_card_has_no_approver_and_the_sick_years_figures(
     assert card.type == "sick"
     assert card.approver is None
     assert (card.amount_minutes, card.amount_label) == (180, "3 hours")
+    [draw] = card.draws
+    assert draw.year == 2026
     for minutes, text_ in (
-        (card.amount_minutes, card.amount_label),
-        (card.available_before_minutes, card.available_before_label),
-        (card.available_after_minutes, card.available_after_label),
+        (draw.amount_minutes, draw.amount_label),
+        (draw.available_before_minutes, draw.available_before_label),
+        (draw.available_after_minutes, draw.available_after_label),
     ):
         assert text_ == label(minutes)
-    assert card.available_before_minutes - card.available_after_minutes == 180
+    assert draw.available_before_minutes - draw.available_after_minutes == 180
+
+
+async def test_a_sick_card_across_new_year_has_one_draw_per_year_with_its_own_figures(
+    app_engine: AsyncEngine, make_tenant: MakeTenant
+) -> None:
+    org = await ready(app_engine, make_tenant)
+    # The company is in Colorado, so each year grants 48 hours (2,880 minutes), and the report was
+    # hired in 2024, so both years grant in full. Recorded sick days already on the books, written
+    # in by hand: Monday October 19, 2026 (one day, 480, used) and Tuesday and Wednesday, January
+    # 12 and 13, 2027 (two days, 960, booked).
+    await put_request(app_engine, org, org.report, date(2026, 10, 19), type="sick")
+    await put_request(
+        app_engine,
+        org,
+        org.report,
+        date(2027, 1, 12),
+        date(2027, 1, 13),
+        type="sick",
+        amount_minutes=960,
+    )
+
+    async with acting(app_engine, org.tenant.id, org.report) as (db, actor):
+        # Wednesday December 30, 2026 to Monday January 4, 2027 (no holiday in the test company).
+        card = await request_card_for(db, actor, sick(date(2026, 12, 30), date(2027, 1, 4)), NOW)
+
+    assert isinstance(card, RequestCard)
+    # Counted: Dec 30, Dec 31 (2026), Jan 1 (Friday) and Jan 4 (Monday) (2027). The weekend skips.
+    assert list(card.counted_days) == [
+        date(2026, 12, 30),
+        date(2026, 12, 31),
+        date(2027, 1, 1),
+        date(2027, 1, 4),
+    ]
+    assert (card.amount_minutes, card.amount_label) == (1920, "32 hours (4 days)")
+    # 2026: 2,880 granted - 480 used = 2,400 before; 2 days x 480 = 960 drawn; 1,440 after.
+    # 2027: 2,880 granted - 960 booked = 1,920 before; 2 days x 480 = 960 drawn; 960 after.
+    assert [draw_fields(draw) for draw in card.draws] == [
+        (2026, 960, "16 hours (2 days)", 2400, "40 hours (5 days)", 1440, "24 hours (3 days)"),
+        (2027, 960, "16 hours (2 days)", 1920, "32 hours (4 days)", 960, "16 hours (2 days)"),
+    ]
+
+
+def draw_fields(draw: DrawOut) -> tuple[int | None, int, str, int, str, int, str]:
+    return (
+        draw.year,
+        draw.amount_minutes,
+        draw.amount_label,
+        draw.available_before_minutes,
+        draw.available_before_label,
+        draw.available_after_minutes,
+        draw.available_after_label,
+    )
 
 
 async def test_a_request_that_cannot_be_made_comes_back_as_the_engines_preview_not_a_card(

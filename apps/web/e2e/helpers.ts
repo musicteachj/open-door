@@ -1,5 +1,5 @@
 import AxeBuilder from '@axe-core/playwright'
-import { expect, type Locator, type Page } from '@playwright/test'
+import { expect, test, type Locator, type Page } from '@playwright/test'
 
 /** The four demo personas, by first name, as the landing page's cards are labeled. */
 export type FirstName = 'Priya' | 'Mateo' | 'Marcus' | 'Dana'
@@ -8,8 +8,12 @@ export type FirstName = 'Priya' | 'Mateo' | 'Marcus' | 'Dana'
 export const AXE_TAGS = ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa']
 
 /** An axe scan of the page as it is now. Pass a rule to turn off only where its reason is given. */
-export const scan = (page: Page, disabledRules: string[] = []) =>
-  new AxeBuilder({ page }).withTags(AXE_TAGS).disableRules(disabledRules).analyze()
+export const scan = (page: Page, disabledRules: string[] = [], include: string[] = []) => {
+  const builder = new AxeBuilder({ page }).withTags(AXE_TAGS).disableRules(disabledRules)
+  // With no `include`, the whole page. Each one added narrows the scan to those parts.
+  for (const selector of include) builder.include(selector)
+  return builder.analyze()
+}
 
 /** With a Radix menu open, the page behind it is aria-hidden while its controls stay in the tab
  * order. Radix traps focus in the menu instead, so axe's rule is a false alarm; the test that
@@ -127,4 +131,190 @@ export async function keyboardFocus(page: Page, target: Locator) {
   await page.keyboard.press('Shift+Tab')
   await page.keyboard.press('Tab')
   await expect(target).toBeFocused()
+}
+
+/**
+ * Presses a key and holds it until its effect shows, then lets go. Radix moves focus in a radio
+ * group on a timer and counts a selection only while the arrow key is down, so
+ * `page.keyboard.press`, which releases the key at once, can move focus without selecting. Pass
+ * `until` (an assertion on the result) wherever the target is known; without it the key is held
+ * for a fixed 60 ms.
+ */
+export async function holdKey(page: Page, key: string, until?: () => Promise<unknown>) {
+  await page.keyboard.down(key)
+  try {
+    if (until) await until()
+    else await page.waitForTimeout(60)
+  } finally {
+    await page.keyboard.up(key)
+  }
+}
+
+/**
+ * The ids of the gallery's own state headings, in page order. A component's heading carries a
+ * generated id such as `_r_1_`; the gallery's are kebab-case.
+ */
+export const galleryHeadingIds = (page: Page) =>
+  page
+    .locator('h3[id]')
+    .evaluateAll((headings) =>
+      headings.map((h) => h.id).filter((id) => /^[a-z][a-z0-9-]*$/.test(id)),
+    )
+
+/** The headings from the first id to the last id, which must be exactly `ids`, in order. */
+export async function expectSectionHeadings(page: Page, ids: readonly string[]) {
+  const all = await galleryHeadingIds(page)
+  const first = all.indexOf(ids[0]!)
+  expect(first, `${ids[0]} is on the page`).toBeGreaterThanOrEqual(0)
+  expect(all.slice(first, first + ids.length)).toEqual(ids)
+}
+
+/** The selector for a gallery state, by the id of its heading (for axe's `include`). */
+export const galleryStateSelector = (id: string) => `section[aria-labelledby="${id}"]`
+
+/** A gallery state, by the id of its heading. */
+export const galleryState = (page: Page, id: string) => page.locator(galleryStateSelector(id))
+
+type Host = {
+  /** The opener's name, in the state's own section. */
+  button: string
+  role: 'dialog' | 'alertdialog'
+  /**
+   * `timer`: the dialog can't be closed from the page (it is busy) and closes itself on a timer.
+   * The page's clock is held while it is scanned, then run past the timer.
+   */
+  closes?: 'timer'
+}
+
+/**
+ * Scans a section's gallery states with axe, and records a soft failure named for each state with
+ * violations, so one failure never hides the others. Motion is reduced first, so no fade is
+ * caught half done.
+ *
+ * The states are scanned closed in one pass over just those states, and each violating element is
+ * credited to the nearest ancestor `section` that is one of `ids` (a component's own generated-id
+ * `section` is skipped). A violation that no state owns fails as "unattributed", never dropped.
+ *
+ * A state in `hosts` starts closed behind a button: it is opened, the dialog and the state's own
+ * section are scanned together with it open (`MODAL_OVERLAY_RULES` off), and everything found is
+ * that state's. It is then closed, and the next one waits for it to be gone.
+ */
+export async function expectNoViolationsIn(
+  page: Page,
+  ids: readonly string[],
+  hosts: Record<string, Host> = {},
+) {
+  await page.emulateMedia({ reducedMotion: 'reduce' })
+  // A host's own section (its opener) is drawn too, so it is scanned closed with the others.
+  const results = await scan(page, [], ids.map(galleryStateSelector))
+  const targets = results.violations.flatMap((violation) =>
+    violation.nodes.map((node) => ({
+      rule: violation.id,
+      target: node.target,
+      html: node.html,
+    })),
+  )
+  // One round trip: the owner of every violating element, in order.
+  const owners = await page.evaluate(
+    ([selectors, states]) =>
+      selectors!.map((selector) => {
+        for (
+          let el: Element | null | undefined = document.querySelector(selector);
+          el;
+          el = el.parentElement
+        ) {
+          const label = el.matches('section[aria-labelledby]')
+            ? el.getAttribute('aria-labelledby')
+            : null
+          if (label !== null && states!.includes(label)) return label
+        }
+        return null
+      }),
+    [targets.map((t) => t.target.join(' ')), ids] as const,
+  )
+  const found = new Map<string, unknown[]>(ids.map((id) => [id, []]))
+  const unattributed: unknown[] = []
+  for (const [i, target] of targets.entries()) {
+    const owner = owners[i]
+    if (owner && found.has(owner)) found.get(owner)!.push(target)
+    else unattributed.push(target)
+  }
+  for (const [id, violations] of found) {
+    expect.soft(violations, `${id} has no accessibility violations`).toEqual([])
+  }
+  // Nothing is dropped: a violation outside every state checked here still fails the test.
+  expect.soft(unattributed, 'violations that belong to none of the states checked here').toEqual([])
+
+  for (const id of ids) {
+    const host = hosts[id]
+    if (host === undefined) continue
+    // One host that can't be opened, scanned, or closed is reported, and the others still run.
+    await test.step(`scan ${id} with its dialog open`, async () => {
+      try {
+        const dialog = `[role="${host.role}"]`
+        if (host.closes === 'timer') {
+          // The page's clock stops here, so the dialog's own timer can't fire during the scan.
+          await page.clock.install({ time: new Date() })
+          await page.clock.pauseAt(new Date(Date.now() + 1_000))
+        }
+        await galleryState(page, id)
+          .getByRole('button', { name: host.button })
+          .click({ timeout: 5_000 })
+        await expect(page.locator(dialog)).toHaveCount(1)
+        await expect(page.locator(dialog)).toBeVisible()
+        // Axe needs the page's timers to fire, so a held clock is nudged 1 ms at a time while it
+        // scans: far too little to reach the dialog's own timer.
+        let scanning = true
+        const nudge = (async () => {
+          while (host.closes === 'timer' && scanning) {
+            await page.clock.runFor(1)
+            await page.waitForTimeout(10)
+          }
+        })()
+        let open
+        try {
+          open = await scan(page, MODAL_OVERLAY_RULES, [dialog, galleryStateSelector(id)])
+        } finally {
+          scanning = false
+          await nudge
+        }
+        expect.soft(open.violations, `${id} has no accessibility violations`).toEqual([])
+        if (host.closes === 'timer') await page.clock.runFor(10_000)
+        else await page.keyboard.press('Escape')
+        // Gone from the page, so the next host's dialog is the only one there.
+        await expect(page.locator(dialog)).toHaveCount(0)
+      } catch (error) {
+        expect.soft(String(error), `${id} could not be opened, scanned, and closed`).toBe('')
+        await openGallery(page)
+      }
+    })
+  }
+}
+
+/** Opens the gallery and waits for its heading. */
+export async function openGallery(page: Page) {
+  await page.goto('/gallery')
+  await expect(
+    page.getByRole('heading', { level: 1, name: 'Open Door component gallery' }),
+  ).toBeVisible()
+}
+
+/**
+ * The gallery states whose content reaches past `width` px. Text clipped by a truncating
+ * ancestor is not sideways scroll, so those are left out.
+ */
+export async function statesPastEdge(page: Page, ids: readonly string[], width: number) {
+  const past: string[] = []
+  for (const id of ids) {
+    const wide = await galleryState(page, id).evaluate((el, limit) => {
+      // Past the window, or past the section that holds it.
+      const edge = Math.min(limit, el.getBoundingClientRect().right)
+      return [...el.querySelectorAll<HTMLElement>('*')].filter(
+        (child) =>
+          child.getBoundingClientRect().right > edge + 1 && child.closest('.truncate') === null,
+      ).length
+    }, width)
+    if (wide > 0) past.push(id)
+  }
+  return past
 }

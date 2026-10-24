@@ -24,8 +24,14 @@ CARDS: dict[str, dict[str, Any]] = {
         "countedDays": [],
         "skippedDays": [],
         **pair("amount"),
-        **pair("availableBefore"),
-        **pair("availableAfter"),
+        "draws": [
+            {
+                "year": None,
+                **pair("amount"),
+                **pair("availableBefore"),
+                **pair("availableAfter"),
+            }
+        ],
         "warnings": [],
         "approver": None,
         "rules": [],

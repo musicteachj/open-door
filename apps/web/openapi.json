@@ -4221,21 +4221,12 @@
             "type": "string",
             "title": "Amountlabel"
           },
-          "availableBeforeMinutes": {
-            "type": "integer",
-            "title": "Availablebeforeminutes"
-          },
-          "availableBeforeLabel": {
-            "type": "string",
-            "title": "Availablebeforelabel"
-          },
-          "availableAfterMinutes": {
-            "type": "integer",
-            "title": "Availableafterminutes"
-          },
-          "availableAfterLabel": {
-            "type": "string",
-            "title": "Availableafterlabel"
+          "draws": {
+            "items": {
+              "$ref": "#/components/schemas/DrawOut"
+            },
+            "type": "array",
+            "title": "Draws"
           },
           "warnings": {
             "items": {
@@ -4274,10 +4265,7 @@
           "skippedDays",
           "amountMinutes",
           "amountLabel",
-          "availableBeforeMinutes",
-          "availableBeforeLabel",
-          "availableAfterMinutes",
-          "availableAfterLabel",
+          "draws",
           "warnings",
           "approver",
           "rules"

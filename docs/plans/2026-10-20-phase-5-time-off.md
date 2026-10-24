@@ -972,12 +972,63 @@ config.
 
 ## Self-review: acceptance criteria to tasks
 
-Filled at Stage 5's start (Task 29) from the Phase 5 screens' `notes.md`, and approved by the
-owner.
+Filled at Stage 5's start (2026-10-22) from the `notes.md` of screens 08, 09, and 10, with
+their "Build decisions (owner, 2026-10-20)", and approved by the owner. Two owner decisions made
+that day apply: "What this uses" lists dates only (counted lines carry no hours, so the browser
+never computes one; the total keeps the API's labels), and the request card carries each year's
+draw, so a sick card that crosses New Year shows both years. Tasks 30 to 32 are Stage 5's, and 33
+to 37 are Stage 6's.
 
-| Criterion | Task |
+| Criterion (08 Time off) | Task |
 |---|---|
-| (filled in Task 29) | - |
+| Every state matches its screenshot at 1440 px within the spacing tokens, with the build decisions and the dates-only decision applied | 32 (gallery), 37 (page) |
+| At 390 px: the balance cards stack; the schedule line wraps above a full-width "Request time off"; request rows wrap with Cancel at top right and the badge under the dates; the form is a full-height modal bottom sheet (focus kept inside, the page inert, swipe or Close dismisses it); the picker fills the width with cells of at least 44 px; chips wrap and truncate while keeping the full accessible name; the footer's buttons share the width, primary first; the cancel dialog is full width with its buttons stacked, "Cancel request" on top; nothing scrolls sideways | 30, 31, 32, 35 |
+| Every figure is the API's label; nothing computes hours or days (labels are only split into hours and days) | 31, 35 |
+| The PTO and sick ledgers add up to their figures in every state, ceiling and empty included (the gallery's fixtures use the design's figures; the page uses the engine's) | 31, 37 |
+| The request form is a 420 px (`w-panel`) side panel that isn't modal on desktop; opening it moves focus to its title (h2, `tabindex="-1"`); Close or Cancel returns focus to "Request time off", which has `aria-expanded` and `aria-controls` | 31, 35 |
+| Type and How much are radiogroups with one tab stop each, arrows moving and selecting; How much appears only for a single day; the hours stepper takes 1 to 8, its buttons disable at the limits, and anything else shows "Enter a whole number from 1 to 8." (`role="alert"`, `aria-invalid`) | 30 |
+| The date picker works by keyboard alone: one tab stop, arrows by day, Page Up and Page Down by month (clamped), Home and End to the week's ends, Enter or Space selects, Escape or Done closes it and returns focus to the Dates field; disabled days stay focusable (`aria-disabled`); the hint is `role="status"` | 30 |
+| Every day's accessible name carries its marks (holiday name, "not on your schedule", "today", "not available"), and a holiday's name shows in a tooltip on hover and focus | 30 |
+| Past days can't be picked for PTO, and sick time goes back exactly 30 days, using the earliest days from `GET /time-off/calendar`; the legend says which | 30, 35 |
+| The day marks: off-schedule shaded and still selectable; a holiday's dot; today's ring and 600 number; disabled struck through with no fill; selected in primary; the range band covers skipped days; hover is a light fill | 30 |
+| The Dates field shows the short form ("Wed, Nov 25 to Fri, Nov 27") and is named by the full form; the picker opens inline under it and pushes the form down; dates are plain strings formatted in UTC, proved by a test under `TZ=America/Los_Angeles` | 30 |
+| "What this uses" lists counted days (check icon, dates only, runs past five days), skipped days with their reason (calendar-minus; the weekend line past two weekend days; "Thursday, November 26 is Thanksgiving, a company holiday"), an already-booked day ("Already booked", error icon), the total and what's left (one "left" line per sick year), no total when a day is already booked, and the API's source chips; it's `aria-live="polite"` with the hidden prefixes; the empty and nothing-counted lines read as the notes give them | 31 |
+| The short-notice warning is amber with its icon, `role="status"`, and never disables the button; a refusal (`role="alert"`) disables it | 31 |
+| Submitting shows "Requesting…" or "Recording…" with `aria-busy` and disabled fields; afterward the toast is announced and focus returns to "Request time off" | 31, 35 |
+| Cancel opens the alert dialog with focus on "Keep it", over a scrim covering the whole window; Escape or "Keep it" returns focus to the row's Cancel ("Cancel PTO on Wednesday, December 23"); after "Cancel request", focus moves to the "My requests" heading | 30, 31, 35 |
+| Status badges pair an icon with their fixed word, denied is never red, the decider's line sits under the badge, and a denial shows "Marcus Bell's note" under its row | 30, 31 |
+| Contrast as listed, and axe reports no violations in any state | 32, 37 |
+
+| Criterion (09 Approvals) | Task |
+|---|---|
+| Every state matches its screenshot at 1440 px within the spacing tokens, with the build decisions applied | 32, 37 |
+| At 390 px: cards stack with Approve and Deny half width each, rows stack, the dialog is full width with its buttons stacked (confirm on top), the menu button reads "Menu, 2 approvals waiting"; nothing scrolls sideways | 31, 32, 35 |
+| Only managers see the Approvals nav item, with the count in its accessible name ("Approvals, 2 waiting"); a switch from Marcus to Priya removes it (the backlog's `navFor` item) | 35 |
+| Approve and Deny look the same on every card (both secondary) and are named for the request ("Approve Zara Bautista's PTO, November 9 to 10") | 31 |
+| The approve dialog starts focus on "Go back" and the deny dialog in the note field; Tab stays inside; Escape goes back except while deciding; deciding shows "Approving…" or "Denying…" with `aria-busy`, and disables Go back and the note; going back returns focus to the opener | 31, 35 |
+| The note field ("Note to Zara (optional)") stops at 300 characters, shows "N of 300", and announces "N characters left" politely in the last 20 | 31 |
+| After a decision, the toast is announced, the request moves to Recent decisions, the counts drop, and focus moves to the next request's Approve, or to the heading when none are left | 35, 37 |
+| A stale request (canceled or already decided) shows its card muted, with the Canceled badge in place of the sent date, no actions, and the refusal as `role="alert"` | 31, 35 |
+| Coverage is plain ink text ("Also off: Vikram Morales, Tuesday, November 10 · PTO", or "No one else on your team is off that day."), with no color, icon, or wording that suggests a problem | 31 |
+| No sick time ever appears as something to decide | 35, 37 |
+| No pronouns in any copy | 31, 35 |
+| axe reports no violations in any state | 32, 37 |
+
+| Criterion (10 Confirm cards) | Task |
+|---|---|
+| Every state and variant matches its screenshot at 1440 px within the spacing tokens, with the build decisions and the dates-only decision applied | 32, 37 |
+| At 390 px: the facts stack, chips wrap, the footer line wraps, Confirm and Dismiss sit half width each with "Wait for the answer to finish" under them, the expiry or badge drops under the title, and final lines wrap with their link under the text; nothing scrolls sideways | 31, 32 |
+| Every figure on a card is the API's label; the card never shows the model's numbers | 31, 33 |
+| A pending card always shows the AI tag, "Proposed by the AI. Nothing happens until you confirm.", and "Expires at" with the time, as static text | 31 |
+| Confirm is `aria-disabled` and described by "Wait for the answer to finish" while its turn runs (`turnRunning`); Dismiss works then | 31, 33 |
+| Confirming shows "Confirming…" with `aria-busy`, and disables Dismiss and the note; afterward focus moves to the outcome line, announced once (`role="status"`), and a failure is `role="alert"` | 31, 33 |
+| Executed cards keep their facts at full strength, show the status badge, the apricot line (fading in, with no motion under reduced motion) with each variant's text, and "View in Time off" or "View in Approvals"; a cancel card drops its Status row | 31 |
+| Dismissed, replaced, failed, and expired cards say "Nothing was changed." and mute their facts; failed uses the refusal colors with its reason; expired offers "Ask again", which puts the question in the composer and focuses it, and an expiry while focus is inside the card moves focus to "Ask again" | 31, 33 |
+| After any final state the buttons are gone, and a reload shows the same state | 31, 33, 37 |
+| The rail's figures update after a confirm (from `GET /time-off/summary`) | 34, 37 |
+| On a sensitive turn, the card and the HR panel read as separate things, and "Show your work" sits under the panel | 33 |
+| Confirm and Dismiss are named for the action ("Confirm: book PTO on Friday, October 30", "Dismiss, keep PTO on Wednesday, December 23"); the card is a `section` labeled by its h3 with its facts in a `dl`; the Tab order follows the visual order (on a deny card: the note field, the source chips, Confirm, Dismiss; the notes' list put the chips first, but the frame draws them under the note) | 31 |
+| No pronouns in any copy, and axe reports no violations in any state | 31, 32, 37 |
 
 ## Changes made during execution
 
@@ -1331,13 +1382,192 @@ reports (the spec's "everyone below you"); `load_facts` runs twice per requester
 list (bounded by the number of direct reports); a sick card that crosses New Year shows the first
 year's figures (backlog, for Stage 5); the plain-name check in the context lines isn't an
 injection filter (backlog, if names become editable); the confirm has no `lock_timeout` (backlog,
-Phase 8
 Phase 8); the waiting list stops at 200 rows with no marker (a manager would need over 200
 waiting requests); a stored card or outcome that no longer matches its model would make the
 conversation read fail, so a later change to the card's shape needs a data migration; a failed
 outcome stores its sentence, which nothing reads; `outcomes_since` doesn't know a turn's state,
 which Stage 4's cancel inside `finish_turn` makes moot; a 409 that wrote rebuilds its problem
 body in the route rather than through a commit option on `ProblemError`.
+
+### Stage 5: the components (`feat/phase-5-components`)
+
+Built in three batches off `dev` at `e25d125` (Stage 3, #68, and the `opentelemetry-api` update,
+#69). Each batch had one Sonnet implementer, writing tests first, and one combined Sonnet review;
+the fixes were written test first and mutation-proved. Before each batch's report I photographed
+every gallery state at 1440 and 390 px, in hover and keyboard focus and with each dialog open, and
+compared it with the frames and the specimen cards. No review found anything high. The web app
+has 2,496 tests (2,009 before) and 354 browser tests (285 before); the API has 3,859 (3,858
+before).
+
+**Task 29:** the acceptance-criteria table above, approved by the owner on 2026-10-22. One row
+changed during the build: the deny card's Tab order follows the visual order (the note field,
+then the source chips), since the notes listed the chips first but the frame draws them under the
+note, and a Tab order that differs from what's on screen fails WCAG 2.4.3.
+
+Owner decisions (2026-10-22):
+
+- **"What this uses" lists dates only.** The API sends counted days as dates and one total, and
+  the browser never computes a figure, so the counted lines carry no per-day or per-run hours.
+  The total line keeps the API's labels. A recorded departure from screens 08 and 10.
+- **The request card carries each year's draw.** `RequestCard` replaces its first-year
+  `availableBefore*` and `availableAfter*` with `draws` (the check route's `DrawOut`), so the form
+  and the card render one preview shape, and sick time that crosses New Year shows one "left"
+  line per year. This closed the backlog item. No stored card had the old shape outside the
+  tests (Stage 4 hasn't made one), so no data migration was needed.
+- **A deny card's balance reads "available now"** (decided during the close's review). The API's
+  `availableAfter` on a decide card already counts the waiting request, which is right for an
+  approval ("available after this") but wrong for a denial, which gives the hours back. The deny
+  card says "62 hours (7.75 days) available now", true as stated, with no API change; the
+  Approvals page's card, beside Approve, keeps "available after this".
+
+Calls made at the stage's start, pinned by tests:
+
+- **No date library.** The picker's marks, inline placement, and keyboard model are custom. A
+  month grid works on plain `YYYY-MM-DD` strings, formatted with `Intl.DateTimeFormat` and
+  `timeZone: "UTC"`; a test runs under `TZ=America/Los_Angeles` after proving the zone changed.
+- **Radix primitives** already in the `radix-ui` package: AlertDialog for the cancel and decision
+  dialogs, RadioGroup for Type and How much, the existing Tooltip for holiday names, and the
+  existing BottomSheet for the phone form.
+- **One alert dialog** (`components/ui/alert-dialog.tsx`), 480 px on `bg-scrim`; the cancel
+  mockup is 440 px. While busy it blocks Escape and disables its cancel button.
+- **Labels are split, never computed:** `splitLabel` turns "92 hours (11.5 days)" into the big
+  figure and its days, and the ledger rows drop the days part. The sick card shows hours only, as
+  the design does.
+- **Copy the web app writes,** in tested `labels.ts` objects: the short-notice warning, the
+  not-enough refusal from the draw's labels, the overlap failure from its dates, and the API's
+  fixed sentence for any other code. "Half day (4 hours)" is fixed copy: a PTO half day is 240
+  minutes by the spec.
+- **Team coverage:** one line per colleague, even with both kinds of leave; a partial day reads
+  "(part of the day)", so no minutes become hours in the browser.
+- **"Expires at 3:42 PM"** is `expiresAt` in the browser's time zone; the formatter takes the zone,
+  so the tests are fixed.
+- **Approving and denying show their loading state in the dialog,** not on the card.
+- **The overlay backlog item:** the bottom sheet's backdrop is now `bg-scrim`, and the gallery's
+  four `w-[420px]` are `w-panel`. The item is closed.
+- **Avatar** gains 40 px (`lg`) and 32 px (`row`) sizes and a muted look; 36 and 28 are unchanged.
+- **Gallery sections landed with each batch,** so each batch's states could be photographed
+  before its report. Capture rows cover the new areas `timeoff`, `approvals`, and `confirm` (the
+  confirm card's specimen is `assistant/confirm.card.html`); the screen rows for 08 to 10 wait
+  for Stage 6's pages, since `manifest.test.ts` needs one row per PNG once a folder is listed.
+
+Decisions made during the build:
+
+- **The rule chip names the section's title** ("Handbook CA-4.3 · Sick leave"), where the mockups
+  show the addendum's name: the API sends the title.
+- **A preview with a refusal keeps its total** (the not-enough frame shows it) and drops only
+  "left after this"; a day already booked drops the total too (the build decision).
+- **The ceiling notice** comes from `nextEarningDate` being null, as the schema documents.
+- **The confirm card moves focus to its outcome line** only if one of its buttons was pressed or
+  focus was inside it, so a card replaced or expiring while someone reads elsewhere never pulls
+  focus or scrolls the page.
+- **The note field counts code points,** as the API does, and never splits a surrogate pair; it
+  cuts the text itself rather than using `maxlength`, which counts UTF-16 units.
+- **The request form locks Close, Cancel, Escape, and the sheet's swipe while submitting.**
+- **Arrow keys in the browser tests are held for 60 ms:** Radix moves focus on a timer, and
+  Playwright's instant key press can release the key first. Real key presses select.
+
+Review rounds:
+
+- **Batch A** (one medium): after a range was finished by keyboard, picking a new first day drew
+  the old range's band. Also fixed: modifier keys no longer move the picker (Alt+Left stays the
+  browser's), the hours stepper parses "08" and " 4" and refuses a pasted "3.5", one picker test
+  runs under Los Angeles time, the grid says it's multi-select. My screenshots found the phone
+  dialog running off the right edge, a disabled choice keeping its selected border, and the
+  "Half day (4 hours)" card wrapping on a phone.
+- **Batch B** (three medium): the deny card's Tab order (above), focus pulled from `body` by a
+  replaced or expired card, and a preview live region mounted with its first content (so not
+  announced). Also fixed: an empty info line, a weak "no figures" test, "Cancel sick time" in
+  lowercase, the submitting lock, one coverage line per colleague, the note field's code points,
+  the type scale. My screenshots found days on the sick card, a sample that counted New Year's
+  Day, sample notes that differed from the frames, a 2 px sideways scroll at 390 px (a gallery
+  wrapper), and a list holding a `div` (axe).
+- **Batch C** (the browser tests; three medium coverage gaps at 390 px): the confirm card's
+  footer, badge, and link placement, the deny dialog and the team rows stacking, and the phone
+  sheet's Close and swipe. Also: weak assertions strengthened, `holdKey` waits for the selection
+  instead of a fixed 60 ms, and the confirm card's fade is polled rather than slept on. Each new
+  browser test was mutation-proved against the component it covers.
+  After the PR opened, CI's browser-test job (one worker) ran past its 20-minute limit, so the new
+  per-state tests were grouped: one gallery load per section, a soft assertion per state that
+  names it (447 tests became 354, the new specs' time halved), and the job's limit is now 30
+  minutes for headroom (the owner's choice). A `/code-review medium` of that change (three
+  rounds) found the grouped scan dropping violations inside a component's own labeled section and
+  blaming page-wide ones on dialogs, a whole-page scan that coupled the specs to every gallery
+  area and caught the confirm card mid-fade, and a self-closing demo dialog racing the scan; the
+  scan is now scoped to the checked states, credits each node to its state (anything it can't
+  credit fails), runs with reduced motion, and controls the demo's timer with Playwright's clock.
+  It also fixed two picker and copy lows: the grid's one tab stop never sits on a day that can't
+  be picked, and a sick request across New Year says "in 2026" in both the preview and the
+  refusal.
+
+The stage's `/code-review medium` ran seven rounds; the seventh found nothing high or medium, so
+the loop stopped.
+
+- **Round 1** (two medium): changing the type could leave a How much the new type doesn't offer
+  (now reset to Full day), and the note field cut the raw text while the counter and the server
+  count the trimmed text. Also: the deny note checked with Python's strip, Escape handled once,
+  one parser for whole hours, a linear run fold, one gallery-state helper in the browser tests.
+- **Round 2** (two medium): a press on Confirm that left the card pending (a failed request) kept
+  a "pressed" flag that later pulled focus; an open picker stayed live while submitting. Also: a
+  fixed fallback reason, the empty request group, one wording for the leave type.
+- **Round 3** (three medium, one an owner decision): a deny card's balance reads "available now"
+  (above); the picker came back after a failed submit; the folded line named Saturdays for
+  someone who works them (it now names the weekdays actually skipped, for Leo's Monday and
+  Tuesday too). Also: Escape on a holiday tooltip closes only the tooltip, a card already failed
+  (or a conflict already there) on first render isn't announced, a typed character in the middle
+  of a full note is refused rather than cutting the end.
+- **Round 4** (one medium): a one-day choice survived extending the dates to a range; the form
+  now reports what it shows (`onSubmit` receives `{howMuch, hours}`: Full day for any range).
+  Also: "1 hour goes back", no "0 hours" line, paste versus typing by the input's type.
+- **Round 5** (one medium): a missing team coverage (`null`) read "No one else on your team is off
+  that day."; only an empty list says that now. Also: deletions always allowed in the note field,
+  one cached formatter helper, the How much options derived once.
+- **Round 6** (one medium): the form couldn't tell its preview was stale while the page re-checks;
+  a `checking` prop now disables Submit and mutes the preview (Stage 6 sets it). Also: an
+  in-progress range dropped when the earliest day moves, the note capped at the API's
+  20,000-character body, the card's focus listener only while pending, and the data inventory's
+  card entry.
+- **Round 7** (lows only): previewed days announced as selected, stale messages while checking,
+  a loading card's later conflict announced, and small cleanups, fixed. Recorded without a
+  change: a window resize across the phone breakpoint remounts the form (focus moves to its
+  title and an open picker resets); the grid re-renders on each hovered day while picking a
+  range; `dates.ts` and `lib/time.ts` both format calendar dates in UTC; when submitting starts
+  with focus inside the open picker, focus drops to the page (the Dates field is disabled then).
+
+**A date-dependent Stage 3 test, fixed:** the final `make check` (just after midnight UTC) failed
+`test_a_card_whose_balance_changed_fails_not_enough_with_its_text_and_books_nothing`, on `dev`'s
+code too. The seed draws each person's past time off at random over the days before the
+sandbox's anchor, so Priya's history changes from day to day, and the test's 9,600-minute opening
+no longer covered its four-week booking (8,040 available against 9,120). It now funds 40,000
+minutes; with the opening at 0 the request still can't fit. The concurrent-confirm test
+(`test_two_confirms_at_once_book_once`) then failed CI on #70 with a pydantic warning: FastAPI
+builds a router's routes on the first request that reaches them, inside `warnings.catch_warnings()`,
+which swaps the process-wide filters, and the test's two simultaneous confirms were those first
+requests. An experiment counted 204 such builds during two cold concurrent requests and none after
+one warm-up request per app, so `fire_together` now warms each client with a confirm that answers
+404 before the race.
+
+**Repeated finding, dismissed:** every round flagged that request cards stored before `draws` would
+no longer validate. Nothing creates a proposal outside the tests until Stage 4's tools, so no
+stored card has the old shape; a later change to the card's shape still needs a data migration
+(the Stage 3 note).
+
+For Stage 6:
+
+- **A denial's note after a reload.** `ProposalOut` never says whether a deny card was confirmed
+  with a note, so after a reload an executed deny card can't choose "Zara will see your note" or
+  "Zara will see it". The card takes an optional `deniedNote`; Stage 6 decides the source (a
+  `noteSent` flag on the proposal, say).
+- **The schedule line's hours.** "Your schedule: Monday to Friday, 8 hours a day" needs the hours
+  per day, which `GET /time-off/calendar` doesn't send.
+- **The request form's contract.** `onSubmit` receives `{howMuch, hours}` as shown on screen
+  (Full day for any range); send those, not the page's own copy. Set `checking` from the moment
+  an input changes until the check for the new inputs arrives: it disables Submit and mutes the
+  preview.
+- **The confirm card's focus rule.** It moves focus to its outcome only after one of its own
+  buttons was pressed, or when focus was inside it, so a card replaced or expiring while the
+  person types elsewhere stays quiet.
+- **The picker doesn't move focus into itself when it opens;** the Dates field keeps focus, and
+  Tab enters the grid. Check this against the page's flow.
 
 ## Backlog
 

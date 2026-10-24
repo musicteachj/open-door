@@ -49,4 +49,45 @@ describe('Avatar', () => {
     )
     expect(screen.getByTestId('avatar')).toHaveAttribute('aria-hidden', 'true')
   })
+
+  it('has a 40 px size for a card and a 32 px size for a row', () => {
+    render(
+      <>
+        <Avatar size="lg" data-testid="lg">
+          <AvatarFallback>ZB</AvatarFallback>
+        </Avatar>
+        <Avatar size="row" data-testid="row">
+          <AvatarFallback>VM</AvatarFallback>
+        </Avatar>
+      </>,
+    )
+    expect(screen.getByTestId('lg')).toHaveClass('size-10')
+    expect(screen.getByTestId('lg')).toHaveAttribute('data-size', 'lg')
+    expect(screen.getByTestId('row')).toHaveClass('size-8')
+    expect(screen.getByTestId('row')).toHaveAttribute('data-size', 'row')
+  })
+
+  it('sets the initials at 14/20 in the 40 px size and 12/16 in the 32 px size', () => {
+    render(
+      <>
+        <Avatar size="lg">
+          <AvatarFallback>ZB</AvatarFallback>
+        </Avatar>
+        <Avatar size="row">
+          <AvatarFallback>VM</AvatarFallback>
+        </Avatar>
+      </>,
+    )
+    expect(screen.getByText('ZB')).toHaveClass('group-data-[size=lg]/avatar:text-ui')
+    expect(screen.getByText('VM')).toHaveClass('group-data-[size=row]/avatar:text-caption')
+  })
+
+  it('has a muted variant on the hover surface, for a person who is not the subject', () => {
+    render(
+      <Avatar muted>
+        <AvatarFallback>ZB</AvatarFallback>
+      </Avatar>,
+    )
+    expect(screen.getByText('ZB')).toHaveClass('group-data-[muted]/avatar:bg-surface-hover')
+  })
 })

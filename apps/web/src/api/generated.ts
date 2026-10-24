@@ -187,6 +187,16 @@ export interface SkippedDay {
   reason: string
 }
 
+export interface DrawOut {
+  year: number | null
+  amountMinutes: number
+  amountLabel: string
+  availableBeforeMinutes: number
+  availableBeforeLabel: string
+  availableAfterMinutes: number
+  availableAfterLabel: string
+}
+
 export interface NameOut {
   name: string
 }
@@ -204,10 +214,7 @@ export interface RequestCard {
   skippedDays: SkippedDay[]
   amountMinutes: number
   amountLabel: string
-  availableBeforeMinutes: number
-  availableBeforeLabel: string
-  availableAfterMinutes: number
-  availableAfterLabel: string
+  draws: DrawOut[]
   warnings: string[]
   approver: NameOut | null
   rules: RuleRefOut[]
@@ -275,16 +282,6 @@ export type Card = RequestCard | DecideCard | CancelCard
 export interface ProblemOut {
   code: string
   text: string
-}
-
-export interface DrawOut {
-  year: number | null
-  amountMinutes: number
-  amountLabel: string
-  availableBeforeMinutes: number
-  availableBeforeLabel: string
-  availableAfterMinutes: number
-  availableAfterLabel: string
 }
 
 /**
