@@ -182,4 +182,12 @@ async def run(raw_input: dict[str, Any], ctx: ToolContext) -> ToolOutcome:
     )
 
 
-TOOL = Tool(NAME, DEFINITION, run, describe)
+def check(raw_input: Any) -> list[str]:
+    """The problems with an input, by the same parse `run` makes (no database needed)."""
+    parsed = _parse(raw_input)
+    if isinstance(parsed, ToolOutcome):
+        return [block["text"] for block in parsed.content]
+    return []
+
+
+TOOL = Tool(NAME, DEFINITION, run, describe, check)

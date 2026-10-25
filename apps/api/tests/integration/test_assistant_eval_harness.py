@@ -10,8 +10,9 @@ the same time as another run (`make check` runs the suite serially).
 """
 
 import asyncio
+import dataclasses
 from collections.abc import AsyncIterator, Sequence
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from decimal import Decimal
 from pathlib import Path
 from typing import Any
@@ -49,12 +50,16 @@ from app.db.tenancy import TenantContext, tenant_session
 from app.domain.handbook.models import Audience
 from app.modules.handbook.search import pinned_version_id
 from app.modules.handbook.source import read_handbook
-from tests.assistant_eval import load_runner
+from app.modules.sandbox.seed import build_company, insert_time_off_requests
+from tests.assistant_eval import load_datasets, load_eval_module, load_runner
 from tests.integration.test_budget import daily_ids, delete_daily_rows_except
 
 pytestmark = pytest.mark.integration
 
 run = load_runner()
+datasets = load_datasets()
+eval_sandbox = load_eval_module("eval_sandbox.py")
+action_graders = load_eval_module("action_graders.py")
 
 SICK = "How much paid sick leave do I get?"
 ITEMS = [
@@ -124,8 +129,44 @@ async def live_run(
 
 def test_the_fixed_tenant_id_is_a_literal_that_never_moves() -> None:
     assert UUID("fd45e42b-3779-548c-909c-346ae603c862") == run.TENANT_ID
-    assert run.ANCHOR_DATE.isoformat() == "2026-10-05"
+    assert run.ANCHOR_DATE.isoformat() == "2026-10-15"
     assert run.NOW.isoformat() == "2026-10-15T17:00:00+00:00"
+
+
+async def test_the_sandbox_holds_the_seed_and_the_harness_two_requests_of_priya(
+    app_engine: AsyncEngine, owner_engine: AsyncEngine
+) -> None:
+    async with run.fixed_sandbox(app_engine, owner_engine) as company:
+        async with tenant_session(app_engine, TenantContext(run.TENANT_ID, None)) as db:
+            rows = (
+                await db.execute(
+                    text(
+                        "SELECT id, status, start_date, end_date, amount_minutes, decided_by"
+                        " FROM time_off_requests WHERE person_id = :priya"
+                        " AND start_date >= '2026-10-15' ORDER BY start_date"
+                    ),
+                    {"priya": next(p.id for p in company.people if p.persona_key == "priya")},
+                )
+            ).all()
+        total = len(company.time_off_requests)
+        async with tenant_session(app_engine, TenantContext(run.TENANT_ID, None)) as db:
+            stored: int = (
+                await db.execute(text("SELECT count(*) FROM time_off_requests"))
+            ).scalar_one()
+
+    marcus = next(p.id for p in company.people if p.persona_key == "marcus")
+    assert [(r.status, str(r.start_date), str(r.end_date), r.amount_minutes) for r in rows] == [
+        ("approved", "2026-10-30", "2026-10-30", 480),
+        ("pending", "2026-11-16", "2026-11-18", 1440),
+    ]
+    assert rows[0].decided_by == marcus
+    assert rows[1].decided_by is None
+    assert [r.id for r in rows] == [
+        uuid5(run.TENANT_ID, "timeoff:priya:eval-cancel-friday"),
+        uuid5(run.TENANT_ID, "timeoff:priya:eval-pending-november"),
+    ]
+    # The company the harness hands back is what the database holds.
+    assert stored == total
 
 
 async def test_two_runs_give_the_same_seeded_ids_and_the_same_request_fingerprints(
@@ -431,6 +472,112 @@ async def test_a_leftover_tenant_from_a_crashed_run_is_removed_at_start(
 
     assert len(traces) == 2
     assert await count_rows(owner_engine, "tenants") == 0
+
+
+# --- What a turn did to the sandbox's requests -----------------------------------------------
+
+
+def eval_company() -> Any:
+    return eval_sandbox.with_eval_requests(build_company(run.TENANT_ID, run.ANCHOR_DATE))
+
+
+async def test_a_card_the_turn_made_is_in_its_trace_and_no_request_was_added_or_changed(
+    app_engine: AsyncEngine, owner_engine: AsyncEngine, tmp_path: Path
+) -> None:
+    items = [run.EvalItem("ac-01", "priya", "book next friday off")]
+
+    (trace,) = await live_run(app_engine, owner_engine, FixtureStore(tmp_path / "s"), items)
+
+    assert [(p.action, p.status) for p in trace.proposals] == [("timeoff.request", "pending")]
+    assert trace.requests_added == ()
+    assert trace.requests_changed == ()
+
+
+async def test_a_turn_with_no_card_has_none_in_its_trace(
+    app_engine: AsyncEngine, owner_engine: AsyncEngine, tmp_path: Path
+) -> None:
+    items = [run.EvalItem("qa-001", "priya", SICK)]
+
+    (trace,) = await live_run(app_engine, owner_engine, FixtureStore(tmp_path / "s"), items)
+
+    assert trace.proposals == ()
+
+
+async def test_a_request_added_or_changed_during_a_turn_is_named_in_its_trace(
+    app_engine: AsyncEngine,
+    owner_engine: AsyncEngine,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """If a write ever got past the model's tools, the harness would see it: the requests of the
+    whole sandbox are read before and after the turn."""
+    company = eval_company()
+    priya = next(p for p in company.people if p.persona_key == "priya")
+    marcus = next(p for p in company.people if p.persona_key == "marcus")
+    friday = next(r for r in company.time_off_requests if r.start_date == date(2026, 10, 30))
+    pending = next(r for r in company.time_off_requests if r.start_date == date(2026, 11, 16))
+    original = run.run_turn
+
+    async def writing_turn(*args: Any, **kwargs: Any) -> Any:
+        async with tenant_session(app_engine, TenantContext(run.TENANT_ID, None)) as db:
+            # A new request (a pending one on a quiet week), and a change to the pending one.
+            await insert_time_off_requests(
+                db,
+                [
+                    dataclasses.replace(
+                        pending,
+                        id=UUID(int=99),
+                        start_date=date(2026, 12, 7),
+                        end_date=date(2026, 12, 7),
+                        amount_minutes=480,
+                    )
+                ],
+            )
+            await db.execute(
+                text(
+                    "UPDATE time_off_requests SET status = 'approved', decided_by = :marcus,"
+                    " decided_at = now() WHERE id = :id"
+                ),
+                {"marcus": marcus.id, "id": pending.id},
+            )
+        async for event in original(*args, **kwargs):
+            yield event
+
+    monkeypatch.setattr(run, "run_turn", writing_turn)
+    items = [run.EvalItem("ac-x", "priya", SICK)]
+
+    (trace,) = await live_run(app_engine, owner_engine, FixtureStore(tmp_path / "s"), items)
+
+    assert trace.requests_added == (str(UUID(int=99)),)
+    assert trace.requests_changed == (str(pending.id),)
+    assert str(friday.id) not in trace.requests_changed
+    assert priya.id == pending.person_id
+
+
+async def test_an_action_item_is_graded_end_to_end_on_the_real_sandbox(
+    app_engine: AsyncEngine, owner_engine: AsyncEngine, tmp_path: Path
+) -> None:
+    company = eval_company()
+    item = next(i for i in datasets.load_actions() if i.id == "ac-01")
+    grader = run.graders.Grader(company, {}, public_month_days=(), as_of=run.NOW.date())
+    (trace,) = await live_run(
+        app_engine,
+        owner_engine,
+        FixtureStore(tmp_path / "s"),
+        [run.EvalItem(item.id, item.asker, item.prompt)],
+    )
+
+    grade = action_graders.grade_action_item(
+        trace,
+        item,
+        scanner=grader.scanner_for(trace.person_id),
+        resolve=lambda ref: eval_sandbox.request_id(company, ref.person, ref.start),
+    )
+
+    # The scripted model reads "next Friday" as the Friday of the following week, October 23: one
+    # of the two right readings.
+    assert [r.name for r in grade.results if not r.passed] == []
+    assert any(use.name == "propose_time_off_request" for use in trace.tool_uses)
 
 
 # --- Spend ------------------------------------------------------------------------------------

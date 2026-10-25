@@ -1324,6 +1324,15 @@ async def test_a_half_day_is_four_hours(start: StartWorld) -> None:
     assert response.json()["amountLabel"] == "4 hours (half a day)"
 
 
+def last_workday_before_today(world: World) -> date:
+    """The latest day before today that Priya works (Monday to Friday, not a closed day), so a
+    request for it is out of range and nothing else, whatever weekday today is."""
+    day = world.today - timedelta(days=1)
+    while day.isoweekday() > 5 or day in {h.holiday_date for h in holidays_for("oak", day.year)}:
+        day -= timedelta(days=1)
+    return day
+
+
 def refusal_cases(world: World) -> list[tuple[str, dict[str, Any]]]:
     saturday = world.workday(30) + timedelta(days=(6 - world.workday(30).weekday()) % 7 or 7)
     monday = world.workday(30)
@@ -1344,8 +1353,8 @@ def refusal_cases(world: World) -> list[tuple[str, dict[str, Any]]]:
             "out-of-range",
             {
                 "type": "pto",
-                "startDate": (world.today - timedelta(days=1)).isoformat(),
-                "endDate": (world.today - timedelta(days=1)).isoformat(),
+                "startDate": last_workday_before_today(world).isoformat(),
+                "endDate": last_workday_before_today(world).isoformat(),
             },
         ),
         (
@@ -1369,9 +1378,25 @@ def refusal_cases(world: World) -> list[tuple[str, dict[str, Any]]]:
     ]
 
 
-@pytest.mark.parametrize(
-    "code", ["no-scheduled-days", "too-long", "out-of-range", "bad-partial", "not-enough"]
-)
+REFUSAL_CODES = ["no-scheduled-days", "too-long", "out-of-range", "bad-partial", "not-enough"]
+
+
+@pytest.mark.parametrize("code", REFUSAL_CODES)
+@pytest.mark.parametrize("day", range(7))
+async def test_each_refusal_is_the_one_asked_for_whatever_weekday_today_is(
+    start: StartWorld, code: str, day: int
+) -> None:
+    # Seven consecutive days hold the clock on every weekday. A date that is out of range but not a
+    # workday would be refused as "no-scheduled-days" first.
+    world = start("priya", now=far() + timedelta(days=day))
+    await world.fund("priya")
+
+    response = world.post("/requests", dict(refusal_cases(world))[code])
+
+    assert problem_of(response, 422)["type"] == code
+
+
+@pytest.mark.parametrize("code", REFUSAL_CODES)
 @pytest.mark.parametrize("route", ["/requests", "/check"])
 async def test_every_engine_refusal_is_a_422_with_its_code_and_text_and_writes_nothing(
     start: StartWorld, code: str, route: str

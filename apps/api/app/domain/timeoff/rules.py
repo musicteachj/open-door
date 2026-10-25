@@ -29,8 +29,10 @@ RULES = _table(
     Rule("4.1", "pto-available"),  # only earned PTO, less pending and booked, can be requested
     Rule("4.1", "pto-increments"),  # full days or half days
     Rule("4.1", "pto-notice"),  # two weeks where you can, for more than three days
+    Rule("4.1", "pto-dates"),  # starts today or later, ends by December 31 of next year
     Rule("4.3", "sick-increments"),  # whole hours up to a day, or whole scheduled days
     Rule("4.3", "sick-window"),  # record up to 30 days after the day out
+    Rule("4.3", "sick-dates"),  # not before the first day of work, nor after next year
 )
 
 _SICK_GRANT_SECTION: dict[State, str] = {

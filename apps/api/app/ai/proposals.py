@@ -45,19 +45,20 @@ service, and is stored on the request alone: never in the proposal's payload, ca
 never in an audit event, and never in a line the model reads.
 """
 
-from collections.abc import Mapping, Sequence
+import unicodedata
+from collections.abc import Collection, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import date, datetime
 from typing import Any, Literal, Protocol, cast
 from uuid import UUID
 
-from sqlalchemy import func, insert, literal_column, null, select, text, update
+from sqlalchemy import and_, func, insert, literal_column, null, or_, select, text, update
 from sqlalchemy.exc import DBAPIError, IntegrityError
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 from sqlalchemy.sql import ColumnElement
 from sqlalchemy.sql.dml import ReturningUpdate
 
-from app.ai.conversations import TurnFinished, is_abandoned
+from app.ai.conversations import TurnFinished, is_abandoned, recover_abandoned
 from app.ai.proposal_cards import (
     CARD_TYPES,
     PAYLOAD_TYPES,
@@ -171,6 +172,8 @@ class ProposalRef:
     id: UUID
     action: str
     expires_at: datetime
+    # Whether it canceled a card that was still pending in the conversation.
+    replaced: bool = False
 
 
 class ProposalRow(Protocol):
@@ -272,18 +275,22 @@ def proposal_out(
     )
 
 
-async def conversation_proposals(db: AsyncSession, conversation_id: UUID) -> list[AiProposal]:
+async def conversation_proposals(
+    db: AsyncSession, conversation_id: UUID, *, relevant_since: datetime | None = None
+) -> list[AiProposal]:
     """Every proposal of the conversation, oldest first, in one query. Postgres shows a person
-    only their own."""
-    return list(
-        (
-            await db.scalars(
-                select(AiProposal)
-                .where(AiProposal.conversation_id == conversation_id)
-                .order_by(AiProposal.created_at, AiProposal.id)
+    only their own. With `relevant_since`, only those `outcomes_since` can use for that point:
+    still pending, or ended or expiring after it."""
+    query = select(AiProposal).where(AiProposal.conversation_id == conversation_id)
+    if relevant_since is not None:
+        query = query.where(
+            or_(
+                AiProposal.status == "pending",
+                AiProposal.ended_at > relevant_since,
+                AiProposal.expires_at > relevant_since,
             )
-        ).all()
-    )
+        )
+    return list((await db.scalars(query.order_by(AiProposal.created_at, AiProposal.id))).all())
 
 
 # ---------------------------------------------------------------------------------------------
@@ -447,8 +454,9 @@ async def _end_pending(
     ctx: TenantContext,
     where: ColumnElement[bool],
     reason: AutomaticReason,
-) -> None:
-    """End the person's pending proposals that match `where`, as the system.
+) -> int:
+    """End the person's pending proposals that match `where`, as the system. Returns how many it
+    canceled (an expired one is not counted).
 
     One that has already run out its fifteen minutes is marked expired and not audited (nobody
     acted on it, and the card should still say it expired). The rest are canceled with `reason`,
@@ -486,6 +494,7 @@ async def _end_pending(
             status="canceled",
             extra={"reason": reason},
         )
+    return len(ended)
 
 
 async def create_proposal(
@@ -544,7 +553,9 @@ async def create_proposal(
         # must not replace a valid earlier card (the database's clock, as the confirm reads it).
         if turn_state_of(turn.status, turn.started_at, await _database_now(db)) != "answering":
             raise TurnFinished(str(turn_id))
-        await _end_pending(db, ctx, AiProposal.conversation_id == conversation_id, "replaced")
+        replaced = await _end_pending(
+            db, ctx, AiProposal.conversation_id == conversation_id, "replaced"
+        )
         proposal_id, expires_at = (
             await db.execute(
                 insert(AiProposal)
@@ -572,7 +583,7 @@ async def create_proposal(
             via="assistant",
             status="pending",
         )
-    return ProposalRef(proposal_id, action, expires_at)
+    return ProposalRef(proposal_id, action, expires_at, replaced > 0)
 
 
 async def cancel_turn_proposals(
@@ -594,6 +605,34 @@ async def cancel_turn_proposals_in(
     together. Update the turn's row FIRST and call this second: the reverse order deadlocks with a
     late `create_proposal`, which holds the turn's row and waits on the old card's row."""
     await _end_pending(db, ctx, AiProposal.turn_id == turn_id, reason)
+
+
+async def cancel_unreported_proposals_in(
+    db: AsyncSession,
+    ctx: TenantContext,
+    turn_id: UUID,
+    keep_ids: Collection[UUID],
+    reason: AutomaticReason,
+) -> None:
+    """Cancel the turn's pending proposals whose ID is not in `keep_ids`, in the caller's
+    transaction (same lock order as `cancel_turn_proposals_in`). For a turn that did complete: a
+    card stored while its tool timed out or was canceled was never reported to the model as made,
+    so the model's history does not hold it."""
+    await _end_pending(
+        db, ctx, and_(AiProposal.turn_id == turn_id, AiProposal.id.not_in(list(keep_ids))), reason
+    )
+
+
+async def recover_abandoned_turns(
+    db: AsyncSession, ctx: TenantContext, conversation_id: UUID
+) -> int:
+    """`recover_abandoned`, and the cancellation of each recovered turn's pending proposals in the
+    same transaction, after the turn's update (the order the lock rule needs). Returns how many
+    turns it recovered."""
+    turn_ids = await recover_abandoned(db, conversation_id)
+    for turn_id in turn_ids:
+        await cancel_turn_proposals_in(db, ctx, turn_id, "turn-incomplete")
+    return len(turn_ids)
 
 
 # ---------------------------------------------------------------------------------------------
@@ -872,19 +911,43 @@ _CANCELED_ENDINGS = {
     "replaced": "was replaced by a newer card, so nothing was changed",
     "turn-incomplete": "was canceled because the answer did not finish, so nothing was changed",
 }
-_NAME_PUNCTUATION = frozenset({" ", ".", "'", "-", "\N{RIGHT SINGLE QUOTATION MARK}"})
+_APOSTROPHES = "'\N{RIGHT SINGLE QUOTATION MARK}"
 MAX_NAME_CHARACTERS = 60
+MAX_NAME_WORDS = 4
+
+
+def _is_latin_letter(char: str, category: str) -> bool:
+    return unicodedata.category(char) == category and "LATIN" in unicodedata.name(char, "")
+
+
+def _plain_word(word: str) -> bool:
+    """One word of a plain name: Latin letters (accents are fine), starting with an uppercase one,
+    with at most one hyphen and one apostrophe, and a period only as the whole word "J."."""
+    if "." in word:
+        return len(word) == 2 and word[1] == "." and _is_latin_letter(word[0], "Lu")
+    if not _is_latin_letter(word[0], "Lu"):
+        return False
+    if word.count("-") > 1 or sum(word.count(mark) for mark in _APOSTROPHES) > 1:
+        return False
+    return all(
+        _is_latin_letter(char, "Lu") or _is_latin_letter(char, "Ll") or char in "-" + _APOSTROPHES
+        for char in word
+    )
 
 
 def _plain_name(value: object) -> str | None:
-    """A directory name that is safe to repeat: letters, spaces, and a little punctuation, on one
-    line. Anything else is dropped, so a name can never carry a sentence into a model's context."""
+    """A directory name that is safe to repeat. Only Latin-script words (accented letters are fine)
+    that each start with an uppercase letter, with at most one hyphen and one apostrophe in a word,
+    a period only after a single-letter initial, at most four words and 60 characters, on one
+    line. Anything else is dropped, so a name can never carry a sentence, or another script's
+    look-alike letters, into a model's context."""
     if not isinstance(value, str):
         return None
     name = value.strip()
     if not name or len(name) > MAX_NAME_CHARACTERS:
         return None
-    if not all(char.isalpha() or char in _NAME_PUNCTUATION for char in name):
+    words = name.split(" ")
+    if len(words) > MAX_NAME_WORDS or not all(words) or not all(_plain_word(w) for w in words):
         return None
     return name
 
@@ -955,15 +1018,17 @@ def _predicate(row: OutcomeRow, status: str) -> str:
 
 
 def outcomes_since(rows: Sequence[OutcomeRow], since: datetime, now: datetime) -> tuple[str, ...]:
-    """One line for each proposal that ended since `since` (the last turn), oldest first, for the
-    next turn's per-turn context (ADR 0013).
+    """What happened to the person's cards since `since` (the last turn), for the next turn's
+    per-turn context (ADR 0013): no lines when nothing changed, otherwise ONE line, "Since the last
+    message:" and then one sentence for each proposal that ended, oldest first.
 
     Made from structured fields only: the action, the status, the outcome's reason or code, the
     card's dates, and the approver's or requester's directory name (and that only if it is a plain
     name). Wording is fixed in the tables above. The outcome's stored text, a note, any other key,
     and anything unexpected in a field never reach a line. A pending proposal past its expiry
     counts as expired, at its `expires_at`, as `status_as_of` shows it (pass the database's clock
-    as `now`). Nothing is added for a proposal still pending.
+    as `now`). Only changes after `since` and up to `now` count. Nothing is added for a proposal
+    still pending.
     """
     changes: list[tuple[datetime, str]] = []
     for row in rows:
@@ -972,8 +1037,14 @@ def outcomes_since(rows: Sequence[OutcomeRow], since: datetime, now: datetime) -
             continue
         # An expired card changed when its time ran out, however late something wrote that down.
         changed_at = row.expires_at if status == "expired" or row.ended_at is None else row.ended_at
-        if changed_at <= since:
+        # A change after `now` (a confirm that began after this turn did and committed before the
+        # rows were read) is left for the next turn, which reports it once.
+        if changed_at <= since or changed_at > now:
             continue
-        line = f"{OUTCOME_PREFIX}{_subject(row)} {_predicate(row, status)}."
-        changes.append((changed_at, line))
-    return tuple(line for _, line in sorted(changes, key=lambda change: change[0]))
+        changes.append((changed_at, f"{_subject(row)} {_predicate(row, status)}."))
+    if not changes:
+        return ()
+    sentences = [sentence for _, sentence in sorted(changes, key=lambda change: change[0])]
+    # The first follows the prefix as it is; each later one starts a sentence of its own.
+    joined = " ".join([sentences[0], *(s[0].upper() + s[1:] for s in sentences[1:])])
+    return (OUTCOME_PREFIX + joined,)

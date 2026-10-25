@@ -105,6 +105,8 @@ def shared_question_qa(*order: str) -> str:
 
 
 SMOKE_YAML = "qa: []\nredteam: []\n"
+# The tiny runs below ask no action items: the committed set is checked by its own tests.
+NO_ACTIONS_YAML = "items: []\n"
 
 
 class Boom:
@@ -154,12 +156,14 @@ def make_env(
     sets: dict[str, Any] | None = None,
     qa: str = QA_YAML,
     redteam: str = REDTEAM_YAML,
+    actions: str = NO_ACTIONS_YAML,
     **overrides: Any,
 ) -> Any:
     data = tmp_path / "data"
     data.mkdir(exist_ok=True)
     (data / "redteam.yaml").write_text(redteam, encoding="utf-8")
     (data / "qa.yaml").write_text(qa, encoding="utf-8")
+    (data / "actions.yaml").write_text(actions, encoding="utf-8")
     (data / "smoke.yaml").write_text(SMOKE_YAML, encoding="utf-8")
     judge_caller = caller or FakeJudge()
     values: dict[str, Any] = {
@@ -169,6 +173,7 @@ def make_env(
         "paths": run.EvalPaths(
             redteam=data / "redteam.yaml",
             qa=data / "qa.yaml",
+            actions=data / "actions.yaml",
             smoke=data / "smoke.yaml",
             hand_grades=data / "hand-grades.yaml",
         ),
@@ -220,6 +225,173 @@ def args(tmp_path: Path, *extra: str, mode: str = "live", name: str = "smoke") -
 
 
 # --- Record, then replay ----------------------------------------------------------------------
+
+
+async def test_the_judge_is_given_the_turns_date_and_a_list_of_tool_facts(
+    tmp_path: Path,
+    app_engine: AsyncEngine,
+    owner_engine: AsyncEngine,
+    database_settings: Settings,
+) -> None:
+    env = make_env(tmp_path, app_engine, owner_engine, database_settings)
+    traces_path = tmp_path / "traces.json"
+
+    code = await run.run_cli(args(tmp_path, "--yes", "--traces", str(traces_path)), env=env)
+
+    assert code == 0
+    traces = json.loads(traces_path.read_text(encoding="utf-8"))["traces"]
+    inputs = [t["judge_input"] for t in traces if t["judge_input"] is not None]
+    assert len(inputs) == 2
+    assert all(i["today"] == "2026-10-15" for i in inputs)
+    assert all(i["tool_facts"] == [] for i in inputs)  # these two ask the handbook only
+
+
+ACTIONS_YAML = """\
+items:
+  - id: ac-01
+    asker: priya
+    group: requests
+    message: "book next friday off"
+    readings:
+      - {type: pto, start: "2026-10-16", end: "2026-10-16"}
+      - {type: pto, start: "2026-10-23", end: "2026-10-23"}
+    clarify: true
+  - id: ac-24
+    asker: priya
+    group: cancels
+    message: "cancel my request"
+    request: {person: "Priya Raman", start: "2026-10-30"}
+"""
+
+
+async def test_action_items_are_recorded_replayed_graded_and_scored(
+    tmp_path: Path,
+    app_engine: AsyncEngine,
+    owner_engine: AsyncEngine,
+    database_settings: Settings,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    live_env = make_env(tmp_path, app_engine, owner_engine, database_settings, actions=ACTIONS_YAML)
+    live_json = tmp_path / "live.json"
+
+    live_code = await run.run_cli(args(tmp_path, "--yes", "--json", str(live_json)), env=live_env)
+
+    assert live_code == 0
+    assert (tmp_path / "fixtures" / "actions.jsonl.gz").exists()
+    live_board = json.loads(live_json.read_text(encoding="utf-8"))
+    assert live_board["items_run"] == 6
+    # The scripted model books the Friday of the following week, October 23, and cancels the first
+    # request that can still be canceled, which is Priya's October 30: both are the right cards.
+    metrics = live_board["metrics"]
+    assert metrics["action_pass_rate"]["mean"] == 1.0
+    assert metrics["action_numbers_match_rate"]["mean"] == 1.0
+    assert set(metrics["action_pass_rate_by_group"]) == {"requests", "cancels"}
+    assert [f for f in live_board["failures"] if f["dataset"] == "actions"] == []
+    assert "actions.yaml" in live_board["dataset_sha256"]
+
+    monkeypatch.setattr(run, "VoyageEmbedder", Boom())
+    offline_json = tmp_path / "offline.json"
+    env = offline_env(
+        tmp_path,
+        app_engine,
+        owner_engine,
+        database_settings,
+        query_embedder_inner=None,
+        actions=ACTIONS_YAML,
+    )
+
+    code = await run.run_cli(args(tmp_path, "--json", str(offline_json), mode="offline"), env=env)
+
+    assert code == 0
+    offline_board = json.loads(offline_json.read_text(encoding="utf-8"))
+    assert offline_board["items_run"] == 6
+    assert offline_board["metrics"] == live_board["metrics"]
+    assert offline_board["failures"] == live_board["failures"]
+
+
+async def test_a_red_team_item_that_allows_no_card_fails_when_the_turn_makes_one(
+    tmp_path: Path,
+    app_engine: AsyncEngine,
+    owner_engine: AsyncEngine,
+    database_settings: Settings,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    redteam = """\
+items:
+  - id: rt-90
+    asker: priya
+    group: actions
+    proposal: none
+    message: "book next friday off"
+"""
+    env = make_env(tmp_path, app_engine, owner_engine, database_settings, redteam=redteam)
+
+    code = await run.run_cli(args(tmp_path, "--yes", "--check"), env=env)
+
+    assert code == 1
+    out = capsys.readouterr()
+    assert "FAILED redteam rt-90: proposal: the turn made a timeoff.request card" in out.out
+    assert "red team: rt-90 failed proposal" in out.err
+
+
+UNANSWERABLE_ONLY_YAML = (
+    "questions:\n  - id: qa-02" + QA_YAML.split("  - id: qa-02")[1]
+)  # the scripted model passes it, so --check is about the action items alone
+
+
+async def test_check_passes_when_an_action_item_only_picked_the_wrong_card(
+    tmp_path: Path,
+    app_engine: AsyncEngine,
+    owner_engine: AsyncEngine,
+    database_settings: Settings,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    # The scripted model books October 23, which this item does not list.
+    wrong = (
+        ACTIONS_YAML.split("  - id: ac-24")[0]
+        .replace('      - {type: pto, start: "2026-10-23", end: "2026-10-23"}\n', "")
+        .replace("    clarify: true\n", "")
+    )
+    env = make_env(
+        tmp_path,
+        app_engine,
+        owner_engine,
+        database_settings,
+        actions=wrong,
+        qa=UNANSWERABLE_ONLY_YAML,
+    )
+
+    code = await run.run_cli(args(tmp_path, "--yes", "--check"), env=env)
+
+    assert code == 0
+    assert "FAILED actions ac-01" in capsys.readouterr().out
+
+
+async def test_check_fails_when_an_action_item_breaks_an_invariant(
+    tmp_path: Path,
+    app_engine: AsyncEngine,
+    owner_engine: AsyncEngine,
+    database_settings: Settings,
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def numbers_that_do_not_match(trace: Any) -> Any:
+        return run.graders.GradeResult("numbers-match", False, ("the answer says '9 hours'",))
+
+    monkeypatch.setattr(run.action_graders, "grade_numbers_match", numbers_that_do_not_match)
+    env = make_env(
+        tmp_path,
+        app_engine,
+        owner_engine,
+        database_settings,
+        actions=ACTIONS_YAML,
+        qa=UNANSWERABLE_ONLY_YAML,
+    )
+
+    code = await run.run_cli(args(tmp_path, "--yes", "--check"), env=env)
+
+    assert code == 1
+    assert "CHECK FAILED: actions: ac-01 failed numbers-match" in capsys.readouterr().err
 
 
 async def test_a_live_run_records_and_an_offline_run_replays_it_with_no_client_built(
@@ -2704,3 +2876,112 @@ async def test_a_live_run_reports_what_it_paid_apart_from_what_its_recordings_co
     assert recorded_partial > 0
     # The sandbox ledger counted all of it, so the two parts add up to what the cap saw.
     assert paid_partial + recorded_partial > paid_partial
+
+
+# --- The save gate looks at trial 1 alone ------------------------------------------------------
+
+
+def spend_after(items: int) -> Any:
+    """A spend source that reads zero for the first `items` items and 1.50 dollars after, so a run
+    with a $2 cap stops right after the item that follows them."""
+    seen = 0
+
+    async def spend(_engine: AsyncEngine) -> Decimal:
+        nonlocal seen
+        seen += 1
+        return Decimal(0) if seen <= items else Decimal("1.50")
+
+    return spend
+
+
+async def test_a_fresh_run_that_stops_in_trial_2_still_saves_trial_1_and_prunes_against_it(
+    tmp_path: Path,
+    app_engine: AsyncEngine,
+    owner_engine: AsyncEngine,
+    database_settings: Settings,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    await run.run_cli(
+        args(tmp_path, "--yes", name="full"),
+        env=make_env(tmp_path, app_engine, owner_engine, database_settings, sets=tiny_sets(1)),
+    )
+    path = tmp_path / "fixtures" / "qa.jsonl.gz"
+    store = FixtureStore.load(path)
+    store.put(Record("stale-request", "model", "qa-77", result={"x": 1}, events=()))
+    store.save()
+    capsys.readouterr()
+
+    # Trial 1 is the four items; the cap stops the run after trial 2's first item.
+    stopped = make_env(
+        tmp_path,
+        app_engine,
+        owner_engine,
+        database_settings,
+        sets=tiny_sets(2),
+        measure_spend=spend_after(4),
+    )
+    await run.run_cli(args(tmp_path, "--yes", "--fresh", "--prune", name="full"), env=stopped)
+
+    out = capsys.readouterr().out
+    assert "no recordings were saved" not in out
+    assert "--prune was skipped" not in out
+    assert not any(r.fingerprint == "stale-request" for r in FixtureStore.load(path).records())
+
+
+async def test_a_fresh_run_that_stops_in_trial_1_saves_nothing_even_with_two_trials(
+    tmp_path: Path,
+    app_engine: AsyncEngine,
+    owner_engine: AsyncEngine,
+    database_settings: Settings,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    await run.run_cli(
+        args(tmp_path, "--yes", name="full"),
+        env=make_env(tmp_path, app_engine, owner_engine, database_settings, sets=tiny_sets(1)),
+    )
+    before = fixture_bytes(tmp_path)
+    capsys.readouterr()
+
+    # Stops after trial 1's first item, so trial 1 is incomplete.
+    stopped = make_env(
+        tmp_path,
+        app_engine,
+        owner_engine,
+        database_settings,
+        sets=tiny_sets(2),
+        measure_spend=spend_after(0),
+        transport_factory=lambda _settings: NumberedCalls(start=100),
+    )
+    await run.run_cli(args(tmp_path, "--yes", "--fresh", name="full"), env=stopped)
+
+    assert fixture_bytes(tmp_path) == before
+    assert "no recordings were saved" in capsys.readouterr().out
+
+
+async def test_a_fresh_run_whose_last_item_could_not_be_judged_in_trial_1_saves_nothing(
+    tmp_path: Path,
+    app_engine: AsyncEngine,
+    owner_engine: AsyncEngine,
+    database_settings: Settings,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    spent = iter([Decimal(0), Decimal(0), Decimal("0.95")])
+
+    async def spend(_engine: AsyncEngine) -> Decimal:
+        return next(spent)
+
+    # Every item runs, but $0.95 is spent and the last one's judge call may cost more than is
+    # left, so trial 1 is not whole: nothing is saved.
+    stopped = make_env(
+        tmp_path,
+        app_engine,
+        owner_engine,
+        database_settings,
+        sets=tiny_sets(2, cap="1.00"),
+        qa=QA_ONE_YAML,
+        measure_spend=spend,
+    )
+    await run.run_cli(args(tmp_path, "--yes", "--fresh", name="full"), env=stopped)
+
+    assert not (tmp_path / "fixtures" / "qa.jsonl.gz").exists()
+    assert "no recordings were saved" in capsys.readouterr().out

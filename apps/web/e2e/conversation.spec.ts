@@ -92,7 +92,10 @@ test.describe('the demo steps', () => {
       try {
         const page = await context.newPage()
         await startAs(page, name)
-        await askAndWaitForAnswer(page, 'sick leave')
+        // Full-text search (the browser tests have no embeddings) ranks the addendum fourth for this
+        // question; for the bare "sick leave" the handbook's 2026.11.1 sick-leave paragraphs push it
+        // out of the five results.
+        await askAndWaitForAnswer(page, 'how much sick leave do I get')
         const answer = assistantMessage(page)
         await expectAssistantChrome(answer)
         await expect(answer.getByRole('list', { name: 'Sources' })).toContainText(chip)
@@ -657,7 +660,9 @@ test.describe('the source panel (1440 px, docked)', () => {
     await expect(marker(page)).toHaveAttribute('aria-expanded', 'false')
     await marker(page).click()
     await expect(panel(page)).toBeVisible()
-    await expect(page).toHaveURL(/\/ask\?source=4\.3(~|%7E)p1$/i)
+    // The first result is §4.3's "Notes and notice" chunk (its first passage is p5) since the
+    // handbook's 2026.11.1 sick-leave paragraphs joined it.
+    await expect(page).toHaveURL(/\/ask\?source=4\.3(~|%7E)p5$/i)
     await expect(panel(page).getByRole('heading', { level: 2, name: 'Sick leave' })).toBeFocused()
     await expect(marker(page)).toHaveAttribute('aria-expanded', 'true')
     // It takes the rail's place, beside the thread, and is not modal.

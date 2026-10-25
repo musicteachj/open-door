@@ -3,6 +3,7 @@
 import json
 import time
 from collections.abc import Awaitable, Callable
+from datetime import date
 from decimal import Decimal
 from pathlib import Path
 from typing import Any
@@ -16,6 +17,8 @@ from app.ai.scripted import (
     WORKING_NOTE_TEXT,
     ScriptedTransport,
     load_scenarios,
+    next_friday,
+    today_from_context,
 )
 from app.ai.transport import (
     GUARD_NEW_MESSAGE_TAG,
@@ -526,7 +529,145 @@ async def check_guard_injection(transport: ScriptedTransport, question: str) -> 
     assert (result.category, result.kind, result.injection_suspected) == ("ordinary", None, True)
 
 
+# --- The time-off scenarios -------------------------------------------------------------------
+
+THURSDAY = date(2026, 10, 15)
+CONFIRM_LINE = "Nothing is booked until you confirm."
+
+
+def context_message(today: date = THURSDAY) -> dict[str, Any]:
+    """The per-turn context as the loop sends it: the last `system` message of the request."""
+    weekday = today.strftime("%A")
+    text = (
+        "Context for this turn.\nAsker: Priya, role employee, salaried employee.\n"
+        f"Today: {weekday}, {today.isoformat()} (America/Los_Angeles).\nHandbook version: v3."
+    )
+    return {"role": "system", "content": [{"type": "text", "text": text}]}
+
+
+def with_context(question: str, today: date = THURSDAY) -> list[dict[str, Any]]:
+    return [user(question), context_message(today)]
+
+
+def tool_round(
+    transport_events: list[ModelEvent], *, result: Any, is_error: bool = False
+) -> list[dict[str, Any]]:
+    """The assistant message the transport finished with, and the user message holding the tool's
+    result (JSON text, or the error's text)."""
+    call = next(event for event in transport_events if isinstance(event, ToolCall))
+    body = result if isinstance(result, str) else json.dumps(result)
+    block: dict[str, Any] = {
+        "type": "tool_result",
+        "tool_use_id": call.id,
+        "content": [{"type": "text", "text": body}],
+    }
+    if is_error:
+        block["is_error"] = True
+    return [finished_of(transport_events).message, {"role": "user", "content": [block]}]
+
+
+def the_call(events: list[ModelEvent]) -> ToolCall:
+    (call,) = [event for event in events if isinstance(event, ToolCall)]
+    return call
+
+
+def book_input(day: date, kind: str = "pto") -> dict[str, Any]:
+    return {
+        "type": kind,
+        "start_date": day.isoformat(),
+        "end_date": day.isoformat(),
+        "half_day": False,
+        "hours": None,
+    }
+
+
+@pytest.mark.parametrize(
+    ("today", "expected"),
+    [
+        (date(2026, 10, 12), date(2026, 10, 23)),  # Monday
+        (date(2026, 10, 14), date(2026, 10, 23)),  # Wednesday
+        (date(2026, 10, 15), date(2026, 10, 23)),  # Thursday
+        (date(2026, 10, 16), date(2026, 10, 23)),  # Friday
+        (date(2026, 10, 17), date(2026, 10, 23)),  # Saturday
+        (date(2026, 10, 18), date(2026, 10, 23)),  # Sunday
+        (date(2026, 10, 19), date(2026, 10, 30)),  # the next Monday
+        (date(2026, 12, 31), date(2027, 1, 8)),  # across the new year
+    ],
+)
+def test_next_friday_is_the_friday_of_the_following_week(today: date, expected: date) -> None:
+    assert next_friday(today) == expected
+    assert expected.weekday() == 4
+
+
+def test_today_is_read_from_the_last_system_message() -> None:
+    older = context_message(date(2026, 9, 1))
+    messages = [user("a"), older, user("b"), context_message(date(2026, 10, 15))]
+
+    assert today_from_context(messages) == date(2026, 10, 15)
+
+
+@pytest.mark.parametrize(
+    "text",
+    ["", "Today: someday (UTC).", "Context for this turn.\nToday: Thursday, 2026-13-45 (UTC)."],
+)
+def test_a_context_without_a_readable_date_gives_none(text: str) -> None:
+    message = {"role": "system", "content": [{"type": "text", "text": text}]}
+
+    assert today_from_context([user("a"), message]) is None
+    assert today_from_context([user("a")]) is None
+
+
+async def check_book_friday(transport: ScriptedTransport, question: str) -> None:
+    first = await collect(transport, a_request(*with_context(question)))
+    call = the_call(first)
+    assert (call.name, call.input) == (
+        "propose_time_off_request",
+        book_input(date(2026, 10, 23)),
+    )
+    assert finished_of(first).stop_reason == "tool_use"
+
+
+async def check_sick_tomorrow(transport: ScriptedTransport, question: str) -> None:
+    first = await collect(transport, a_request(*with_context(question)))
+    call = the_call(first)
+    assert (call.name, call.input) == (
+        "propose_time_off_request",
+        book_input(date(2026, 10, 16), "sick"),
+    )
+
+
+async def check_show_balance(transport: ScriptedTransport, question: str) -> None:
+    first = await collect(transport, a_request(*with_context(question)))
+    assert (the_call(first).name, the_call(first).input) == ("get_time_off_balance", {})
+
+
+async def check_waiting_on_me(transport: ScriptedTransport, question: str) -> None:
+    first = await collect(transport, a_request(*with_context(question)))
+    # The optional properties are left out, never sent as null: a strict tool can't get a null.
+    assert the_call(first).input == {"scope": "waiting_for_me"}
+
+
+async def check_approve_it(transport: ScriptedTransport, question: str) -> None:
+    await decision_chain(transport, question, "approve")
+
+
+async def check_deny_it(transport: ScriptedTransport, question: str) -> None:
+    await decision_chain(transport, question, "deny")
+
+
+async def check_cancel_mine(transport: ScriptedTransport, question: str) -> None:
+    first = await collect(transport, a_request(*with_context(question)))
+    assert the_call(first).input["scope"] == "mine"
+
+
 CHECKS: dict[str, Check] = {
+    "book_friday": check_book_friday,
+    "sick_tomorrow": check_sick_tomorrow,
+    "show_balance": check_show_balance,
+    "waiting_on_me": check_waiting_on_me,
+    "approve_it": check_approve_it,
+    "deny_it": check_deny_it,
+    "cancel_mine": check_cancel_mine,
     "decline": check_decline,
     "safety_refusal": check_safety_refusal,
     "not_found": check_not_found,
@@ -540,6 +681,46 @@ CHECKS: dict[str, Check] = {
     "guard_sensitive": check_guard_sensitive,
     "guard_injection": check_guard_injection,
 }
+
+
+WAITING: dict[str, Any] = {
+    "window": None,
+    "requests": [
+        {
+            "id": "11111111-1111-4111-8111-111111111111",
+            "person": "Zara Bautista",
+            "type": "pto",
+            "startDate": "2026-10-27",
+            "endDate": "2026-10-28",
+            "amount": "16 hours (2 days)",
+            "status": "pending",
+            "decidedBy": None,
+        },
+        {
+            "id": "22222222-2222-4222-8222-222222222222",
+            "person": "Leo Nakamura",
+            "type": "pto",
+            "startDate": "2026-11-02",
+            "endDate": "2026-11-02",
+            "amount": "8 hours (1 day)",
+            "status": "pending",
+            "decidedBy": None,
+        },
+    ],
+    "truncated": False,
+}
+
+
+async def decision_chain(transport: ScriptedTransport, question: str, decision: str) -> None:
+    """List what waits, then propose a decision for the first request in that result."""
+    messages = with_context(question)
+    first = await collect(transport, a_request(*messages))
+    assert the_call(first).input["scope"] == "waiting_for_me"
+    messages += tool_round(first, result=WAITING)
+    second = await collect(transport, a_request(*messages))
+    call = the_call(second)
+    assert call.name == "propose_time_off_decision"
+    assert call.input == {"request_id": WAITING["requests"][0]["id"], "decision": decision}
 
 
 def test_every_behavior_the_code_implements_has_a_check() -> None:
@@ -671,3 +852,285 @@ def test_a_malformed_scenario_entry_names_the_entry_and_the_key(
 
     with pytest.raises(ValueError, match=message):
         load_scenarios(bad)
+
+
+# --- The time-off scenarios, call by call -----------------------------------------------------
+
+
+async def test_book_next_friday_asks_for_a_card_then_says_nothing_is_booked_yet() -> None:
+    transport = ScriptedTransport()
+    messages = with_context("Book next Friday off")
+    first = await collect(transport, a_request(*messages))
+    card = {
+        "ok": True,
+        "amount": "8 hours (1 day)",
+        "countedDays": ["2026-10-23"],
+        "note": "A confirm card is shown to the person. Nothing is booked until they confirm.",
+    }
+    second = await collect(transport, a_request(*messages, *tool_round(first, result=card)))
+
+    assert not any(isinstance(event, ToolCall) for event in second)
+    assert text_of(second) == (
+        "I've prepared a card to book PTO for Friday, October 23: 8 hours (1 day). "
+        "Nothing is booked until you confirm."
+    )
+    assert finished_of(second).stop_reason == "end_turn"
+    assert all(event.citations == () for event in second if isinstance(event, TextBlockEnd))
+
+
+async def test_im_sick_tomorrow_asks_for_a_sick_card() -> None:
+    transport = ScriptedTransport()
+    messages = with_context("I\u2019m sick tomorrow")  # A curly apostrophe works too.
+    first = await collect(transport, a_request(*messages))
+    card = {"ok": True, "amount": "8 hours (1 day)", "countedDays": ["2026-10-16"]}
+    second = await collect(transport, a_request(*messages, *tool_round(first, result=card)))
+
+    assert the_call(first).input == book_input(date(2026, 10, 16), "sick")
+    assert text_of(second) == (
+        "I've prepared a card to record sick time for Friday, October 16: 8 hours (1 day). "
+        "Nothing is recorded until you confirm."
+    )
+
+
+async def test_whats_my_balance_quotes_the_tools_labels() -> None:
+    transport = ScriptedTransport()
+    messages = with_context("What's my balance?")
+    first = await collect(transport, a_request(*messages))
+    balance = {
+        "pto": {"available": "94 hours (11.75 days)"},
+        "sick": [{"year": 2026, "available": "40 hours (5 days)"}],
+    }
+    second = await collect(transport, a_request(*messages, *tool_round(first, result=balance)))
+
+    assert the_call(first).name == "get_time_off_balance"
+    assert text_of(second) == (
+        "You have 94 hours (11.75 days) of PTO available, and 40 hours (5 days) of sick time"
+        " for 2026."
+    )
+
+
+async def test_anything_waiting_on_me_names_the_first_request_from_the_list() -> None:
+    transport = ScriptedTransport()
+    messages = with_context("Anything waiting on me?")
+    first = await collect(transport, a_request(*messages))
+    second = await collect(transport, a_request(*messages, *tool_round(first, result=WAITING)))
+
+    assert not any(isinstance(event, ToolCall) for event in second)
+    assert text_of(second) == (
+        "The first request waiting for you is from Zara Bautista, for Tuesday, October 27 to"
+        " Wednesday, October 28 (16 hours (2 days))."
+    )
+
+
+async def test_nothing_waiting_is_said_plainly() -> None:
+    transport = ScriptedTransport()
+    messages = with_context("Anything waiting on me?")
+    first = await collect(transport, a_request(*messages))
+    empty: dict[str, Any] = {"window": None, "requests": [], "truncated": False}
+    second = await collect(transport, a_request(*messages, *tool_round(first, result=empty)))
+
+    assert text_of(second) == "Nothing is waiting for your decision right now."
+
+
+@pytest.mark.parametrize(("phrase", "decision"), [("Approve it", "approve"), ("Deny it", "deny")])
+async def test_approve_and_deny_list_first_then_propose_then_say_nothing_is_decided(
+    phrase: str, decision: str
+) -> None:
+    transport = ScriptedTransport()
+    messages = with_context(phrase)
+    first = await collect(transport, a_request(*messages))
+    messages += tool_round(first, result=WAITING)
+    second = await collect(transport, a_request(*messages))
+    card = {
+        "requestId": WAITING["requests"][0]["id"],
+        "person": "Zara Bautista",
+        "startDate": "2026-10-27",
+        "endDate": "2026-10-28",
+        "decision": decision,
+        "note": "A confirm card is shown to the person. Nothing is decided until they confirm.",
+    }
+    messages += tool_round(second, result=card)
+    third = await collect(transport, a_request(*messages))
+
+    assert the_call(second).input["decision"] == decision
+    assert not any(isinstance(event, ToolCall) for event in third)
+    assert text_of(third) == (
+        f"I've prepared a card to {decision} Zara Bautista's request for Tuesday, October 27 to"
+        " Wednesday, October 28. Nothing is decided until you confirm."
+    )
+
+
+async def test_approve_it_with_nothing_waiting_makes_no_proposal() -> None:
+    transport = ScriptedTransport()
+    messages = with_context("Approve it")
+    first = await collect(transport, a_request(*messages))
+    empty: dict[str, Any] = {"window": None, "requests": [], "truncated": False}
+    second = await collect(transport, a_request(*messages, *tool_round(first, result=empty)))
+
+    assert not any(isinstance(event, ToolCall) for event in second)
+    assert (
+        text_of(second) == "Nothing is waiting for your decision, so there is nothing to approve."
+    )
+
+
+MINE: dict[str, Any] = {
+    "window": {"from": "2026-09-15", "to": "2026-12-14"},
+    "requests": [
+        {
+            "id": "33333333-3333-4333-8333-333333333333",
+            "person": "Priya Raman",
+            "type": "pto",
+            "startDate": "2026-10-02",
+            "endDate": "2026-10-02",
+            "amount": "8 hours (1 day)",
+            "status": "approved",
+            "decidedBy": "Marcus Bell",
+        },
+        {
+            "id": "44444444-4444-4444-8444-444444444444",
+            "person": "Priya Raman",
+            "type": "pto",
+            "startDate": "2026-10-30",
+            "endDate": "2026-10-30",
+            "amount": "8 hours (1 day)",
+            "status": "pending",
+            "decidedBy": None,
+        },
+        {
+            "id": "55555555-5555-4555-8555-555555555555",
+            "person": "Priya Raman",
+            "type": "pto",
+            "startDate": "2026-11-20",
+            "endDate": "2026-11-20",
+            "amount": "8 hours (1 day)",
+            "status": "canceled",
+            "decidedBy": None,
+        },
+    ],
+    "truncated": False,
+}
+
+
+async def test_cancel_my_request_takes_the_first_one_that_can_still_be_canceled() -> None:
+    # The first is approved but already past (before today), so the second is the one.
+    transport = ScriptedTransport()
+    messages = with_context("Cancel my request")
+    first = await collect(transport, a_request(*messages))
+    messages += tool_round(first, result=MINE)
+    second = await collect(transport, a_request(*messages))
+    card = {
+        "requestId": MINE["requests"][1]["id"],
+        "startDate": "2026-10-30",
+        "endDate": "2026-10-30",
+        "note": "A confirm card is shown to the person. Nothing is canceled until they confirm.",
+    }
+    messages += tool_round(second, result=card)
+    third = await collect(transport, a_request(*messages))
+
+    assert the_call(first).input["scope"] == "mine"
+    assert (the_call(second).name, the_call(second).input) == (
+        "propose_cancel_time_off",
+        {"request_id": MINE["requests"][1]["id"]},
+    )
+    assert text_of(third) == (
+        "I've prepared a card to cancel your request for Friday, October 30. "
+        "Nothing is canceled until you confirm."
+    )
+
+
+async def test_cancel_my_request_with_nothing_to_cancel_makes_no_proposal() -> None:
+    transport = ScriptedTransport()
+    messages = with_context("Cancel my request")
+    first = await collect(transport, a_request(*messages))
+    only_canceled = {**MINE, "requests": [MINE["requests"][2]]}
+    second = await collect(
+        transport, a_request(*messages, *tool_round(first, result=only_canceled))
+    )
+
+    assert not any(isinstance(event, ToolCall) for event in second)
+    assert text_of(second) == "You have no requests that can be canceled."
+
+
+async def test_a_tool_error_is_said_plainly_in_one_sentence_and_the_turn_stops() -> None:
+    transport = ScriptedTransport()
+    messages = with_context("Book next Friday off")
+    first = await collect(transport, a_request(*messages))
+    refusal = "Not enough time is available. Try fewer days."
+    second = await collect(
+        transport, a_request(*messages, *tool_round(first, result=refusal, is_error=True))
+    )
+
+    assert not any(isinstance(event, ToolCall) for event in second)
+    assert text_of(second) == "That didn't work: Not enough time is available."
+    assert finished_of(second).stop_reason == "end_turn"
+
+
+async def test_an_error_in_the_second_round_stops_a_chain_too() -> None:
+    transport = ScriptedTransport()
+    messages = with_context("Approve it")
+    first = await collect(transport, a_request(*messages))
+    messages += tool_round(first, result=WAITING)
+    second = await collect(transport, a_request(*messages))
+    messages += tool_round(second, result="That request is not waiting.", is_error=True)
+    third = await collect(transport, a_request(*messages))
+
+    assert not any(isinstance(event, ToolCall) for event in third)
+    assert text_of(third) == "That didn't work: That request is not waiting."
+
+
+async def test_a_context_with_no_date_is_said_plainly() -> None:
+    events = await collect(ScriptedTransport(), a_request(user("Book next Friday off")))
+
+    assert not any(isinstance(event, ToolCall) for event in events)
+    assert text_of(events) == "I can't tell today's date, so I can't work out which day you mean."
+
+
+async def test_earlier_turns_tool_rounds_do_not_count_toward_this_turns_steps() -> None:
+    transport = ScriptedTransport()
+    old_call = {"type": "tool_use", "id": "toolu_old", "name": "get_time_off_balance", "input": {}}
+    history = [
+        user("What's my balance?"),
+        context_message(),
+        {"role": "assistant", "content": [old_call]},
+        tool_result_message("toolu_old", {"type": "text", "text": "{}"}),
+        {"role": "assistant", "content": [{"type": "text", "text": "Done."}]},
+    ]
+    events = await collect(transport, a_request(*history, *with_context("Book next Friday off")))
+
+    assert the_call(events).name == "propose_time_off_request"
+
+
+def test_the_time_off_triggers_do_not_catch_the_default_question() -> None:
+    triggers = [s.trigger.lower() for s in load_scenarios() if s.behavior in CHECKS_TIME_OFF]
+
+    for question in (QUESTION, "How many sick days do I get?", "How does PTO work?"):
+        assert not any(trigger in question.lower() for trigger in triggers)
+
+
+CHECKS_TIME_OFF = {
+    "book_friday",
+    "sick_tomorrow",
+    "show_balance",
+    "waiting_on_me",
+    "approve_it",
+    "deny_it",
+    "cancel_mine",
+}
+
+
+async def test_cancel_my_request_never_picks_one_that_has_already_started() -> None:
+    # Today is October 15. The first request runs October 14 to 16, so it has started.
+    transport = ScriptedTransport()
+    messages = with_context("Cancel my request")
+    first = await collect(transport, a_request(*messages))
+    started = {
+        **MINE["requests"][1],
+        "id": "66666666-6666-4666-8666-666666666666",
+        "startDate": "2026-10-14",
+        "endDate": "2026-10-16",
+    }
+    only = {**MINE, "requests": [started]}
+    second = await collect(transport, a_request(*messages, *tool_round(first, result=only)))
+
+    assert not any(isinstance(event, ToolCall) for event in second)
+    assert text_of(second) == "You have no requests that can be canceled."

@@ -289,7 +289,7 @@ async def test_an_abandoned_turn_is_marked_failed_and_the_next_one_starts(
         )
 
     async with tenant_session(app_engine, context_of(tenant)) as db:
-        recovered = await recover_abandoned(db, conversation_id)
+        recovered = len(await recover_abandoned(db, conversation_id))
 
     assert recovered == 1
     await new_turn(app_engine, tenant, conversation_id, "Are you there?")
@@ -313,7 +313,7 @@ async def test_a_recent_running_turn_is_left_alone(
     await new_turn(app_engine, tenant, conversation_id)
 
     async with tenant_session(app_engine, context_of(tenant)) as db:
-        assert await recover_abandoned(db, conversation_id) == 0
+        assert len(await recover_abandoned(db, conversation_id)) == 0
 
     with pytest.raises(TurnRunning):
         await new_turn(app_engine, tenant, conversation_id)
@@ -524,7 +524,7 @@ async def test_search_sources_run_in_order_across_turns_even_a_recovered_one(
             {"id": first},
         )
     async with tenant_session(app_engine, context_of(tenant)) as db:
-        assert await recover_abandoned(db, conversation_id) == 1
+        assert len(await recover_abandoned(db, conversation_id)) == 1
 
     second = await new_turn(app_engine, tenant, conversation_id, "Second question")
     async with tenant_session(app_engine, context_of(tenant)) as db:
@@ -771,7 +771,7 @@ async def test_appending_locks_the_turn_so_recovery_waits_for_it(
 
     async def recover() -> int:
         async with tenant_session(app_engine, context_of(tenant)) as db:
-            return await recover_abandoned(db, conversation_id)
+            return len(await recover_abandoned(db, conversation_id))
 
     # The append checks that the turn is running and holds it so until its transaction ends. If it
     # didn't, recovery could fail the turn between that check and the insert.
@@ -940,7 +940,7 @@ async def test_an_abandoned_turn_ends_when_it_is_marked_not_when_the_transaction
     async with tenant_session(app_engine, context_of(tenant)) as db:
         began: datetime = (await db.execute(text("SELECT now()"))).scalar_one()
         await asyncio.sleep(0.05)
-        assert await recover_abandoned(db, conversation_id) == 1
+        assert len(await recover_abandoned(db, conversation_id)) == 1
         _, ended = await started_and_ended(db, turn_id)
 
     assert ended - began >= timedelta(milliseconds=40)

@@ -3,8 +3,9 @@
 import dataclasses
 import json
 from collections.abc import Sequence
+from datetime import UTC, datetime
 from typing import Any
-from uuid import UUID, uuid5
+from uuid import UUID, uuid4, uuid5
 
 import pytest
 from sqlalchemy import delete, event, select
@@ -24,6 +25,8 @@ from app.policy import Action, Actor, PersonResource, can
 pytestmark = pytest.mark.integration
 
 SICK = "How much sick leave do I get?"
+# The turn's instant for these tests: the Monday the seed company's history is anchored to.
+NOW = datetime(2026, 10, 5, 18, 0, tzinfo=UTC)
 PRIVATE_NAMES = ("personalEmail", "personal_email", "phone", "homeAddress", "home_address")
 
 
@@ -58,6 +61,9 @@ async def context_for(
         asker=asker,
         version_id=version_id,
         embedder=embedder or FakeEmbedder(),
+        now=NOW,
+        conversation_id=uuid4(),
+        turn_id=uuid4(),
     )
 
 

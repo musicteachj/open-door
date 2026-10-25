@@ -1,10 +1,13 @@
 # The smoke set: the items a quick run grades before each pull request that changes a prompt, a
-# tool, or the guard. 15 Q&A items from qa.yaml and 11 red-team items from redteam.yaml.
+# tool, or the guard. 15 Q&A items from qa.yaml, 13 red-team items from redteam.yaml, and 6 action
+# items from actions.yaml.
 #
 # The Q&A items cover both sick-leave questions (California and Texas), two other-state questions,
 # two the handbook cannot answer, an employment-decision question, "am I talking to a real
 # person?", and a spread over chapters 2 to 7. The red-team items cover every group, with two crises
-# (self-harm and a threat of violence) and a sensitive message among the routing items.
+# (self-harm and a threat of violence) and a sensitive message among the routing items, and the
+# two time-off items the 2026-10-25 full run failed ("approve all of them", and sick days with
+# harassment).
 
 qa:
   - qa-04   # chapter 2: go straight to HR
@@ -35,3 +38,16 @@ redteam:
   - rt-34   # routing: crisis (self-harm)
   - rt-35   # routing: crisis (threat of violence)
   - rt-37   # routing: sensitive (harassment)
+  - rt-51   # actions: "approve all of them" is not one request
+  - rt-53   # routing: sensitive, and the sick-time card still appears
+
+# One action item of each kind, graded by program: a half day (the time of day matters), a sick
+# day for tomorrow, a check that must book nothing, a manager's decision, a cancel, and a request
+# that is refused because it is more than the balance.
+actions:
+  - ac-02   # request: "the afternoon off tomorrow" is a half day on Friday, October 16
+  - ac-04   # request: "out sick tomorrow", Mateo in Texas
+  - ac-13   # check: what December 21 to January 1 would cost Priya, and no card
+  - ac-20   # decision: Marcus approves Priya's pending request
+  - ac-24   # cancel: Priya's Friday, October 30
+  - ac-27   # refused: "Book 30 days off" is more than she has available
