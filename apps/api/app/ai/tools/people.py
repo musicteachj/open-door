@@ -21,9 +21,9 @@ from app.ai.tools.base import (
     ToolOutcome,
     describe_problem,
     failure,
+    input_problems,
     json_block,
     shortened,
-    validation_problems,
 )
 from app.db.models import Tenant
 from app.db.tenancy import tenant_session
@@ -90,9 +90,6 @@ FIND_DEFINITION: dict[str, Any] = {
         "additionalProperties": False,
     },
 }
-
-
-_json_block = json_block
 
 
 def _card(card: DirectoryCard) -> dict[str, Any]:
@@ -189,7 +186,7 @@ async def run_profile(raw_input: dict[str, Any], ctx: ToolContext) -> ToolOutcom
             "dateOfBirth": details.date_of_birth.isoformat(),
         },
     }
-    return ToolOutcome([_json_block(profile)], summary=PROFILE_SUMMARY)
+    return ToolOutcome([json_block(profile)], summary=PROFILE_SUMMARY)
 
 
 def summary_of(scope: str, query: str | None) -> str:
@@ -249,7 +246,7 @@ async def run_find(raw_input: dict[str, Any], ctx: ToolContext) -> ToolOutcome:
     # someone is hidden. If the policy can hide cards, filter in SQL before the limit instead.
     truncated = page.next_cursor is not None
     return ToolOutcome(
-        [_json_block({"people": [_card(card) for card in visible], "truncated": truncated})],
+        [json_block({"people": [_card(card) for card in visible], "truncated": truncated})],
         summary=summary,
     )
 
@@ -259,19 +256,11 @@ def describe_profile(raw_input: Any) -> str:
 
 
 def check_profile(raw_input: Any) -> list[str]:
-    try:
-        NoInput.model_validate(raw_input)
-    except ValidationError as error:
-        return validation_problems(error)
-    return []
+    return input_problems(NoInput, raw_input)
 
 
 def check_find(raw_input: Any) -> list[str]:
-    try:
-        FindInput.model_validate(raw_input)
-    except ValidationError as error:
-        return validation_problems(error)
-    return []
+    return input_problems(FindInput, raw_input)
 
 
 PROFILE_TOOL = Tool(PROFILE_NAME, PROFILE_DEFINITION, run_profile, describe_profile, check_profile)

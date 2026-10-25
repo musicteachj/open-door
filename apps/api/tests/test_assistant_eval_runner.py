@@ -144,7 +144,7 @@ def test_smoke_runs_the_smoke_lists_and_full_runs_every_item() -> None:
     assert [i.id for i in smoke_rt] == [i.id for i in redteam if i.id in smoke.redteam]
     assert [i.id for i in smoke_qa] == [i.id for i in qa if i.id in smoke.qa]
     assert [i.id for i in smoke_ac] == [i.id for i in actions if i.id in smoke.actions]
-    assert (len(smoke_rt), len(smoke_qa), len(smoke_ac)) == (11, 15, 6)
+    assert (len(smoke_rt), len(smoke_qa), len(smoke_ac)) == (13, 15, 6)
     assert (len(full_rt), len(full_qa), len(full_ac)) == (len(redteam), len(qa), len(actions))
     effort_rt, effort_qa, effort_ac = run.items_for_set(
         run.SETS["effort"], redteam, qa, actions, smoke
@@ -1062,7 +1062,7 @@ async def test_live_without_yes_prints_the_estimate_and_makes_no_call(
     out = capsys.readouterr().out
     assert code == 0
     assert "smoke" in out
-    assert "32 items" in out
+    assert "34 items" in out
     assert "1 trial" in out
     assert "$1.20" in out
     assert "$2.00" in out
@@ -1073,8 +1073,8 @@ async def test_live_without_yes_prints_the_estimate_and_makes_no_call(
 @pytest.mark.parametrize(
     ("name", "items", "trials", "estimate", "cap", "effort"),
     [
-        ("smoke", 32, 1, "$1.20", "$2.00", "low"),
-        ("effort", 32, 1, "$1.50", "$2.00", "medium"),
+        ("smoke", 34, 1, "$1.20", "$2.00", "low"),
+        ("effort", 34, 1, "$1.50", "$2.00", "medium"),
     ],
 )
 async def test_each_live_set_estimates_its_own_cost_and_cap(

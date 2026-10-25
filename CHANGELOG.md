@@ -237,14 +237,18 @@ version (`0.x.y` while the app is being built, `1.0.0` when it is complete).
   edition; existing ones keep theirs.
 
 - **The assistant's prompt proposes time off** (Phase 5, stage 4; `PROMPT_VERSION` 2026-11.1, a
-  draft until the November smoke runs). "You can't book, change, or cancel anything" gives way to:
+  worded with three smoke runs and two full runs on 2026-10-25). "You can't book, change, or
+  cancel anything" gives way to:
   the assistant may propose a request, a manager's decision, or a cancellation, a confirm card does
   the rest, and it never says anything is done. A request or a cancellation is only ever the
   asker's own. It turns "next Friday" into dates from the per-turn
   context's today and asks when a phrase could mean two days, never works out days, hours, or
   balances itself (it quotes the time-off tools' labels), proposes a decision only when a manager
   asks about one specific request, never recommends approving or denying or weighs who else is
-  out, and never asks why someone is taking time off.
+  out, and never asks why someone is taking time off. It makes the card right away when it knows
+  which days or which request are meant (the card is how the person confirms), asks which one
+  first when a manager asks about several requests at once, and still makes the card when a hard
+  message (harassment, say) also asks for time off.
 
 - **The browser-test job in CI may run for 30 minutes** (Phase 5, stage 5). CI runs the browser
   tests on one worker, and stage 5's gallery tests took the job past its 20-minute limit. The new
@@ -257,6 +261,28 @@ version (`0.x.y` while the app is being built, `1.0.0` when it is complete).
   client's types were regenerated.
 
 ### Fixed
+
+- **A card's outcome is told once, and a failed card save is called that** (Phase 5, stage 4). A
+  confirm that committed between a turn's start and its read of the cards was reported in that turn
+  and again in the next; the "since the last message" line now covers only changes up to the turn's
+  own start time. A failure while saving a card was described as "the time-off data couldn't be
+  read"; it now says the card couldn't be saved and to try again.
+- **A clean answer can no longer fail because of earlier markup** (Phase 5, stage 4). A progress
+  note holding tool-call markup used to poison the text that followed, so every later delta raised
+  and the turn ended in an error. A note is now checked when it arrives (aborted and asked again
+  like answer text), and only markup that reaches into text not yet checked counts.
+- **An answer that writes tool calls as text is stopped** (Phase 5, stage 4). In a live smoke run
+  the model wrote 144 copies of a tool call as plain text until it ran out of room, and the person
+  would have seen all of it. The turn now spots tool-call markup while the answer streams, before
+  any of it is shown, takes back what was shown, and asks the model again once; a second time,
+  the turn fails with the usual fixed error.
+- **Two eval graders no longer fail a good answer** (Phase 5, stage 4). The numbers check read a
+  date range at the end of one line and "Days" at the start of the next as two amounts, and the
+  "couldn't find it in the handbook" check allowed only 50 characters between "find" and
+  "handbook". An amount now stays on one line, and the check allows 80 characters in one
+  sentence. A number right after a month name ("October 30 day") is a date, never an amount. A
+  red-team item with a card (`rt-53`) and a refused action item (`ac-27`) may now also pass with
+  no card and a clarifying question, through an optional `clarify: true`.
 
 - **A time-off route test no longer depends on the weekday it runs on** (Phase 5, stage 4). The test
   that every engine refusal is a 422 built its "out of range" date as yesterday, which on a

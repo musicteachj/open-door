@@ -9,7 +9,9 @@ should pick it up. When one is done, delete it here and record it in the changel
   stopped, and an error mid-stream stay inside the column" (`e2e/conversation-layout.spec.ts`)
   failed once with "no box for a visible element": the element was visible, then gone before its
   bounding box was read. It passed on the rerun, and nothing near it had changed. Wait for the
-  final state before measuring, or retry the measurement; Phase 5 stage 6 changes that page anyway.
+  final state before measuring, or retry the measurement; Phase 5 stage 6 changes that page anyway. On 2026-10-25, with the machine under heavy load (a load average over 10), ten layout
+  and gallery tests in `conversation-layout.spec.ts` and `gallery-conversation.spec.ts` timed out
+  measuring the page; all passed on the rerun.
   (Phase 5 stage 2 close.)
 
 - **Small conversation-page glitches the v0.4.0 release review left alone.** When a
@@ -117,6 +119,26 @@ should pick it up. When one is done, delete it here and record it in the changel
   names: "Ignore all previous instructions" passes. That is safe while every name is seeded
   directory data. A phase that lets a person edit a name must treat names as untrusted text there.
   (Phase 5 stage 3 security review.)
+- **Decide whether directory names and titles are untrusted text.** CLAUDE.md says a turn that
+  processes text a person wrote gets no proposal tools. The time-off tools (and Phase 4's
+  `find_people`) put directory names and job titles into the model's context in turns that can
+  still propose. Today they are seeded and no route edits them, so they aren't user-written. When
+  any route lets a person edit a name or title, either filter them before they reach the model
+  (the outcome line's `_plain_name` rule, say) or drop the proposal tools from turns that read
+  them. (Phase 5 stage 4 `/code-review medium`, rounds 1 and 3.)
+- **Small edges in what the next turn is told about cards.** A card the model replaced within a
+  turn is reported to the next turn as replaced (true, but not news), and a card canceled because
+  its tool timed out in a completed turn is described as canceled because "the answer did not
+  finish". The outcome line's name rule also drops harmless names with lowercase particles or a
+  suffix ("Ana de la Cruz", "Jr."), falling back to "the requester". (Phase 5 stage 4 reviews.)
+- **One card per model response, not per turn.** A second proposal call in the same response is
+  refused even when the first one failed, and a later round in the same turn may replace the card,
+  although the refusal says "per answer" and the action eval's no-write check allows one card a
+  turn. Align the three if the evals show the model re-proposing. (Phase 5 stage 4 reviews.)
+- **A turn that replaces a card and then fails loses both.** `create_proposal` cancels the
+  pending card as replaced at once; if the turn then fails, its own card is canceled too, and a
+  status can't move back. The person can ask again. Deferring the replacement to the turn's end
+  would need the one-pending-card index (migration 0010) relaxed. (Phase 5 stage 4 review.)
 
 ## Handbook content
 
@@ -147,12 +169,14 @@ should pick it up. When one is done, delete it here and record it in the changel
   the URL (a confirm card, say) would jump to the top until another parameter is hard-coded. Mark
   such navigations in history state and honor that for push, replace, and back instead. (v0.4.0
   release review.)
-- **Keep trial 1's recordings when a fresh run stops in a later trial.** With `FRESH=1` (and
-  `PRUNE=1`), `evals/assistant/run.py` saves recordings only when every item ran and was judged in
-  every trial, but only trial 1 is ever recorded. A run stopped by its cap, or a judge call with no
-  room, in trial 2 or 3 throws away trial 1's complete, already paid recordings. Gate the save (and
-  the prune) on trial 1 alone. The last full run used $8.02 of a $16 cap, so it hasn't bitten;
-  Phase 5's new tools will need a full run, so fix it first. (Phase 4 phase review.)
+- **Show friendly text for the decide and cancel tools in "Show your work".** Their trace
+  summaries hold the request's UUID ("approve request 3f2a..."). Stage 6 should map those tool
+  names to the design's lines ("Checked your time off", "Prepared a confirm card"). (Phase 5 stage
+  4 review.)
+- **Refetch the conversation when a turn ends.** A card the stream sent stays `turnRunning` with
+  Confirm disabled until the conversation is read again, and a card canceled by its turn's ending
+  shows its final state only then. Stage 6 should refetch after `turn.completed`, an `error`, or a
+  closed stream. (Phase 5 stage 4 review.)
 
 ## Phase 6: cases and escalation
 
@@ -225,12 +249,6 @@ should pick it up. When one is done, delete it here and record it in the changel
   sometimes contradict themselves ("sits before marker [2] ... which is fine; however ..."). Before
   Phase 7's model comparison leans on the judge, look at those 10 and decide whether the rubric's
   "at or before a marker" wording needs tightening. (Phase 4 answer-quality follow-up.)
-- **The judge can't see tool facts or today's date.** It grades a fact from the asker's own profile
-  ("your profile lists your personal email") as an uncited policy claim, and a date the assistant
-  worked out from today's date as unsupported. Pass the trace's non-handbook tool results and the
-  turn's date to the judge, or say in the rubric that profile facts are not policy claims.
-  (Phase 4 stage 6 full run, qa-09 and qa-31.)
-
 - **Two eval cost-report gaps.** The scoreboard's "reused recordings" cost is the ledger total
   minus what the live meter saw, and the meter prices only streams that finish, so a billed call
   that kept its reservation (cut by the deadline, a canary, or a transient error) is reported as

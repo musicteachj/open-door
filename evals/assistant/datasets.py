@@ -76,7 +76,7 @@ KINDS = (
 
 
 SMOKE_QA_COUNT = 15
-SMOKE_REDTEAM_COUNT = 11
+SMOKE_REDTEAM_COUNT = 13
 SMOKE_ACTION_COUNT = 6
 
 
@@ -94,6 +94,8 @@ class RedTeamItem:
     # "none": no card may exist after the turn. An action ("timeoff.request"): a card of that
     # action must. None: the item says nothing about cards (it is graded for no write only).
     proposal: str | None = None
+    # With an action in `proposal`: no card plus a clarifying question also passes.
+    clarify: bool = False
 
     @property
     def prompt(self) -> str:
@@ -145,7 +147,7 @@ class ActionItem:
     message: str
     # requests, and optionally checks: the right readings (any one will do).
     readings: tuple[Reading, ...] = ()
-    # requests, decisions: a clarifying question is also a right answer.
+    # requests, decisions, refused: a clarifying question is also a right answer.
     clarify: bool = False
     # checks: the tools, any one of which the turn must have called.
     tools: tuple[str, ...] = ()
@@ -257,7 +259,14 @@ def load_redteam(path: Path = REDTEAM_PATH) -> list[RedTeamItem]:
         group = raw.get("group")
         route = raw.get("route")
         proposal = raw.get("proposal")
+        clarify = raw.get("clarify", False)
         valid = True
+        if not isinstance(clarify, bool):
+            problems.add(where, "`clarify` must be true or false")
+            valid = False
+        elif clarify and (proposal is None or proposal == "none"):
+            problems.add(where, "`clarify` needs a `proposal` that names an action")
+            valid = False
         if proposal is not None and proposal not in PROPOSALS:
             problems.add(where, f"unknown proposal {proposal!r} (known: {', '.join(PROPOSALS)})")
             valid = False
@@ -274,7 +283,9 @@ def load_redteam(path: Path = REDTEAM_PATH) -> list[RedTeamItem]:
             problems.add(where, f"unknown route {route!r} (known: {', '.join(ROUTES)})")
             valid = False
         if asker is not None and message is not None and valid:
-            items.append(RedTeamItem(where, asker, str(group), message, route, proposal))
+            items.append(
+                RedTeamItem(where, asker, str(group), message, route, proposal, clarify is True)
+            )
     problems.raise_if_any()
     return items
 
@@ -340,7 +351,7 @@ _ACTION_KEYS: dict[str, tuple[str, ...]] = {
     "checks": ("tools", "readings"),
     "decisions": ("request", "decision", "clarify"),
     "cancels": ("request",),
-    "refused": ("reason",),
+    "refused": ("reason", "clarify"),
 }
 _ALL_ACTION_KEYS = ("readings", "clarify", "tools", "request", "decision", "reason")
 
@@ -377,7 +388,9 @@ def _reading(raw: Any, where: str, problems: _Problems) -> Reading | None:
     hours = raw.get("hours")
     if not isinstance(half_day, bool):
         problems.add(where, "`half_day` must be true or false")
-    if hours is not None and not (isinstance(hours, int) and 1 <= hours <= MAX_SICK_HOURS):
+    if hours is not None and not (
+        isinstance(hours, int) and not isinstance(hours, bool) and 1 <= hours <= MAX_SICK_HOURS
+    ):
         problems.add(where, f"`hours` must be a whole number from 1 to {MAX_SICK_HOURS}")
     if hours is not None and half_day is True:
         problems.add(where, "a reading takes `half_day` or `hours`, not both")
@@ -497,7 +510,11 @@ def _reasons(raw: dict[str, Any], where: str, problems: _Problems, group: str) -
     ):
         problems.add(where, "a refused item needs `reason`, a list of phrases")
         return ()
-    return tuple(r.strip().lower() for r in listed)
+    # Answers are compared after `_plain`, so the phrases are normalized the same way. Imported
+    # here because graders imports this module.
+    from assistant.graders import _plain
+
+    return tuple(_plain(r) for r in listed)
 
 
 def load_smoke(path: Path = SMOKE_PATH) -> SmokeSet:

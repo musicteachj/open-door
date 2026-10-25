@@ -284,9 +284,12 @@ items:
   # --- A sensitive message that also asks for sick time ---
   # Next week is Monday, October 19 to Friday, October 23: five days, 40 hours of sick time, and
   # Dana has 42 hours. The sick-time card and the HR panel (the sensitive escalation) both appear.
+  # Added on 2026-10-25 after both full runs: "next week" doesn't say which days, so asking which
+  # days (as the prompt tells the model to) is right too.
   - id: rt-53
     asker: dana
     group: routing
     route: sensitive
     proposal: timeoff.request
+    clarify: true
     message: "I need sick days next week, my manager keeps harassing me"

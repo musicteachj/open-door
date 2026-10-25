@@ -380,6 +380,10 @@ class TurnDeps:
 # --- Small helpers ----------------------------------------------------------------------------
 
 
+class _ToolMarkupInText(Exception):  # noqa: N818
+    """The model wrote a tool call as plain answer text. Raised before the text is sent."""
+
+
 class _DeadlineExceeded(Exception):  # noqa: N818
     """The whole-turn deadline fired."""
 
@@ -440,6 +444,25 @@ FOLDED_CANARY = _fold(CANARY)
 MAX_HELD_CHARACTERS = 512
 
 
+# Tool calls written as text, in the plain and the namespaced forms. Narrow on purpose: an HR
+# answer has no reason to hold any of these. Spaces inside a tag are allowed up to two, so the
+# longest match is under MARKUP_HOLD_CHARACTERS.
+_TOOL_MARKUP = re.compile(
+    r"<(?:/(?:antml:)?(?:invoke|parameter|function_calls)\s{0,2}>"
+    r"|(?:antml:)?(?:(?:invoke|parameter)\s{1,2}name\s{0,2}="
+    r"|function_calls\s{0,2}>))"
+)
+# Model text is always held back this many characters, so a tag split across deltas is seen whole
+# before any of it is sent.
+MARKUP_HOLD_CHARACTERS = 32
+
+
+def _has_new_tool_markup(checked: str, new: str) -> bool:
+    """Whether `checked + new` holds tool markup that reaches into `new`. Markup wholly inside
+    `checked` was judged when it arrived, so it cannot fail the text that follows."""
+    return any(m.end() > len(checked) for m in _TOOL_MARKUP.finditer(checked + new))
+
+
 def _has_canary(text: str) -> bool:
     """Whether `text` holds the canary in any writing `_fold` sees through. A boolean, so nothing
     that checks it ever prints the canary."""
@@ -462,7 +485,9 @@ def _keep_from(text: str, count: int) -> int:
 def _tail_start(text: str) -> int:
     """Where the held tail of `text` starts: far enough back to cover `len(FOLDED_CANARY) - 1`
     folded characters, but never more than `MAX_HELD_CHARACTERS` back."""
-    return max(_keep_from(text, len(FOLDED_CANARY) - 1), len(text) - MAX_HELD_CHARACTERS, 0)
+    canary_start = _keep_from(text, len(FOLDED_CANARY) - 1)
+    start = max(canary_start, len(text) - MAX_HELD_CHARACTERS, 0)
+    return min(start, max(len(text) - MARKUP_HOLD_CHARACTERS, 0))
 
 
 def _strings(value: Any, *, keys: bool = False) -> Iterator[str]:
@@ -741,8 +766,6 @@ class TurnRun:
                         AiTurn.answer_text,
                         AiTurn.status,
                         AiTurn.error_code,
-                        AiTurn.started_at,
-                        AiTurn.ended_at,
                     )
                     .where(AiTurn.conversation_id == conversation.id, AiTurn.id != turn.id)
                     .order_by(AiTurn.started_at.desc(), AiTurn.id.desc())
@@ -779,9 +802,10 @@ class TurnRun:
                     )
                 )
             ).scalar_one()
+            since = reference or NEVER
             outcomes = outcomes_since(
-                await conversation_proposals(db, conversation.id),
-                reference or NEVER,
+                await conversation_proposals(db, conversation.id, relevant_since=since),
+                since,
                 (await db.execute(select(func.now()))).scalar_one(),
             )
         return cls(
@@ -792,7 +816,7 @@ class TurnRun:
             turn_id=turn.id,
             history=history,
             sources=sources,
-            previous_answer=_previous_answer(None if previous is None else previous[:3]),
+            previous_answer=_previous_answer(previous),
             outcomes=outcomes,
         )
 
@@ -814,11 +838,19 @@ class TurnRun:
         a leak."""
         if _has_canary(self.sent_tail + self.held + text):
             return "", True
+        if _has_new_tool_markup(self.sent_tail + self.held, text):
+            raise _ToolMarkupInText
         buffer = self.held + text
         cut = _tail_start(buffer)
         send = buffer[:cut]
         self.held = buffer[cut:]
         return send, False
+
+    def _check_note_for_markup(self, note: str) -> None:
+        """Raise `_ToolMarkupInText` when a status note holds tool markup, alone or joined to the
+        text before it (the sent tail and the held text), as answer text is checked."""
+        if _has_new_tool_markup(self.sent_tail + self.held, note):
+            raise _ToolMarkupInText
 
     def _flush_held(self) -> TurnEvent | None:
         """Send the held text, at a block end or the end of a call, before any citation, so the
@@ -1131,6 +1163,7 @@ class TurnRun:
                             logger.warning("status note withheld")
                             self._prompt_leak()
                             return
+                        self._check_note_for_markup(text_of_note)
                         tail = self.sent_tail + text_of_note
                         self.sent_tail = tail[_tail_start(tail) :]
                         yield self._seen(Status(event.text))
@@ -1159,13 +1192,16 @@ class TurnRun:
                         if flushed is not None:
                             yield flushed
                         finished = event
-            except InvalidToolInput:
+            except (InvalidToolInput, _ToolMarkupInText) as broken:
                 # Nothing of this call is complete or stored, and its reservation stays (the cost is
-                # unknown). The same request goes out again as the next call. Text it had already
-                # shown is taken back first, so the person is not shown the same words twice; it is
-                # an aborted call's, not a working note, so it is not kept as an answer, and the
-                # answer saved before the call is kept.
+                # unknown). Leaving the loop closes the stream, so a call that writes tool calls as
+                # text is not read on to max_tokens. The same request goes out again as the next
+                # call. Text it had already shown is taken back first, so the person is not shown
+                # the same words twice; it is an aborted call's, not a working note, so it is not
+                # kept as an answer, and the answer saved before the call is kept.
                 self._keep(reservation)
+                if isinstance(broken, _ToolMarkupInText):
+                    logger.warning("tool call markup in the answer text (turn %s)", self.turn_id)
                 self.held = ""  # Held text was never sent; the retry starts clean.
                 reissues += 1
                 # One re-issue per turn: a model that keeps producing broken input won't mend.

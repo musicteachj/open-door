@@ -2,6 +2,7 @@
 eval_sandbox.py): an upcoming Friday of Priya's to cancel and a pending request of hers for Marcus
 to decide. Pure: the rows are built in memory from the seed company and the engine."""
 
+from dataclasses import replace
 from datetime import UTC, date, datetime, time
 from typing import Any
 from uuid import UUID, uuid5
@@ -203,3 +204,65 @@ def test_a_request_the_balance_cannot_afford_is_refused_when_the_rows_are_built(
         sandbox.build_request(
             company(), "priya", "eval-too-long", date(2026, 11, 2), date(2026, 12, 2), "pending"
         )
+
+
+def test_building_the_pair_in_order_changes_nothing_about_either_row() -> None:
+    c = company()
+
+    cancel, pending = sandbox.eval_requests(c)
+
+    # Each row equals the one built against the seed company alone, as before.
+    assert cancel == sandbox.build_request(
+        c, "priya", sandbox.CANCEL_LABEL, sandbox.CANCEL_DAY, sandbox.CANCEL_DAY, "approved"
+    )
+    assert pending == sandbox.build_request(
+        c, "priya", sandbox.PENDING_LABEL, sandbox.PENDING_START, sandbox.PENDING_END, "pending"
+    )
+    assert [(r.start_date, r.end_date, r.amount_minutes, r.status) for r in (cancel, pending)] == [
+        (date(2026, 10, 30), date(2026, 10, 30), 480, "approved"),
+        (date(2026, 11, 16), date(2026, 11, 18), 1440, "pending"),
+    ]
+
+
+def test_a_balance_that_fits_each_request_but_not_both_is_refused() -> None:
+    c = company()
+    priya = priya_of(c)
+    # 174 hours are available in the seed. An approved December booking of 18 days (144 hours)
+    # leaves 30: 8 fits, 24 fits, 32 does not.
+    template = next(r for r in c.time_off_requests if r.person_id == priya.id and r.type == "pto")
+    filler = replace(
+        template,
+        id=uuid5(TENANT, "test:filler"),
+        start_date=date(2026, 12, 1),
+        end_date=date(2026, 12, 24),
+        partial_minutes=None,
+        amount_minutes=144 * 60,
+        status="approved",
+    )
+    small = replace(c, time_off_requests=(*c.time_off_requests, filler))
+    sandbox.build_request(
+        small, "priya", sandbox.CANCEL_LABEL, sandbox.CANCEL_DAY, sandbox.CANCEL_DAY, "approved"
+    )
+    sandbox.build_request(
+        small, "priya", sandbox.PENDING_LABEL, sandbox.PENDING_START, sandbox.PENDING_END, "pending"
+    )
+
+    with pytest.raises(ValueError, match="takes PTO below zero"):
+        sandbox.eval_requests(small)
+
+
+def test_the_persona_argument_decides_the_id_and_priyas_ids_are_unchanged() -> None:
+    c = company()
+    args = (sandbox.CANCEL_LABEL, sandbox.CANCEL_DAY, sandbox.CANCEL_DAY, "approved")
+
+    mine = sandbox.build_request(c, "priya", *args)
+    marcus = sandbox.build_request(c, "marcus", *args)
+
+    assert mine.id == uuid5(TENANT, "timeoff:priya:eval-cancel-friday")
+    assert marcus.id == uuid5(TENANT, "timeoff:marcus:eval-cancel-friday")
+    assert marcus.id != mine.id
+    pair = sandbox.eval_requests(c)
+    assert [r.id for r in pair] == [
+        uuid5(TENANT, "timeoff:priya:eval-cancel-friday"),
+        uuid5(TENANT, "timeoff:priya:eval-pending-november"),
+    ]

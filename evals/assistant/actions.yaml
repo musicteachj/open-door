@@ -266,11 +266,15 @@ items:
 
   # --- Refused ---
   # 30 days is 240 hours and Priya has 142 hours available (17.75 days) once her booked Friday and
-  # her pending request are counted. Asking for dates first is not a reason, and fails this item.
+  # her pending request are counted. A reason is the right answer; asking for dates first is
+  # accepted too (see below).
+  # Added on 2026-10-25 after the full runs: with no dates given, asking for them is right; the
+  # model can't count 30 days itself.
   - id: ac-27
     asker: priya
     group: refused
     message: "Book 30 days off"
+    clarify: true
     reason: ["not enough", "don't have enough", "only have", "available", "balance", "more than", "exceed"]
 
   # Priya manages no one, so she has no request to approve, and Leo has none waiting for anyone.

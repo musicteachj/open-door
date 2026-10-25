@@ -52,7 +52,7 @@ from datetime import date, datetime
 from typing import Any, Literal, Protocol, cast
 from uuid import UUID
 
-from sqlalchemy import and_, func, insert, literal_column, null, select, text, update
+from sqlalchemy import and_, func, insert, literal_column, null, or_, select, text, update
 from sqlalchemy.exc import DBAPIError, IntegrityError
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 from sqlalchemy.sql import ColumnElement
@@ -275,18 +275,22 @@ def proposal_out(
     )
 
 
-async def conversation_proposals(db: AsyncSession, conversation_id: UUID) -> list[AiProposal]:
+async def conversation_proposals(
+    db: AsyncSession, conversation_id: UUID, *, relevant_since: datetime | None = None
+) -> list[AiProposal]:
     """Every proposal of the conversation, oldest first, in one query. Postgres shows a person
-    only their own."""
-    return list(
-        (
-            await db.scalars(
-                select(AiProposal)
-                .where(AiProposal.conversation_id == conversation_id)
-                .order_by(AiProposal.created_at, AiProposal.id)
+    only their own. With `relevant_since`, only those `outcomes_since` can use for that point:
+    still pending, or ended or expiring after it."""
+    query = select(AiProposal).where(AiProposal.conversation_id == conversation_id)
+    if relevant_since is not None:
+        query = query.where(
+            or_(
+                AiProposal.status == "pending",
+                AiProposal.ended_at > relevant_since,
+                AiProposal.expires_at > relevant_since,
             )
-        ).all()
-    )
+        )
+    return list((await db.scalars(query.order_by(AiProposal.created_at, AiProposal.id))).all())
 
 
 # ---------------------------------------------------------------------------------------------
@@ -1023,7 +1027,8 @@ def outcomes_since(rows: Sequence[OutcomeRow], since: datetime, now: datetime) -
     name). Wording is fixed in the tables above. The outcome's stored text, a note, any other key,
     and anything unexpected in a field never reach a line. A pending proposal past its expiry
     counts as expired, at its `expires_at`, as `status_as_of` shows it (pass the database's clock
-    as `now`). Nothing is added for a proposal still pending.
+    as `now`). Only changes after `since` and up to `now` count. Nothing is added for a proposal
+    still pending.
     """
     changes: list[tuple[datetime, str]] = []
     for row in rows:
@@ -1032,7 +1037,9 @@ def outcomes_since(rows: Sequence[OutcomeRow], since: datetime, now: datetime) -
             continue
         # An expired card changed when its time ran out, however late something wrote that down.
         changed_at = row.expires_at if status == "expired" or row.ended_at is None else row.ended_at
-        if changed_at <= since:
+        # A change after `now` (a confirm that began after this turn did and committed before the
+        # rows were read) is left for the next turn, which reports it once.
+        if changed_at <= since or changed_at > now:
             continue
         changes.append((changed_at, f"{_subject(row)} {_predicate(row, status)}."))
     if not changes:

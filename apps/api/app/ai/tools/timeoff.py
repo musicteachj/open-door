@@ -37,7 +37,7 @@ from app.ai.proposal_cards import (
     decide_card,
     request_card_for,
 )
-from app.ai.proposals import ProposalOut, create_proposal
+from app.ai.proposals import ProposalOut, ProposalRef, create_proposal
 from app.ai.text import error_name
 from app.ai.tools.base import (
     Tool,
@@ -46,9 +46,9 @@ from app.ai.tools.base import (
     ToolOutcome,
     describe_problem,
     failure,
+    input_problems,
     json_block,
     shortened,
-    validation_problems,
 )
 from app.ai.tools.timeoff_results import (
     balance_result,
@@ -89,6 +89,7 @@ HALF_DAY_MINUTES = 240
 
 TURN_ENDED = "This answer has ended, so no card was made."
 NO_MATCH = "No one you can see time off for matches that name."
+CARD_NOT_SAVED = "The card couldn't be saved. Try again in a moment."
 UNREADABLE = "The time-off data couldn't be read. Try again, or say you couldn't look it up."
 
 _ISO_DATE = re.compile(r"\d{4}-\d{2}-\d{2}")
@@ -379,6 +380,20 @@ def _parse[T: ToolInput](
     return _Parsed(arguments, summarize(arguments))
 
 
+class _CardNotSaved(Exception):  # noqa: N818
+    """Storing a proposal failed (a constraint, a lock, a serialization failure)."""
+
+
+async def _save_card(*args: Any, **kwargs: Any) -> ProposalRef:
+    """`create_proposal`, with any failure of the write told apart from a failed read."""
+    try:
+        return await create_proposal(*args, **kwargs)
+    except TurnFinished:
+        raise
+    except Exception as error:
+        raise _CardNotSaved(error_name(error)) from error
+
+
 def _tool[T: ToolInput](
     name: str,
     definition: dict[str, Any],
@@ -393,11 +408,7 @@ def _tool[T: ToolInput](
         return "" if isinstance(parsed, ToolOutcome) else parsed.summary
 
     def check(raw_input: Any) -> list[str]:
-        try:
-            model.model_validate(raw_input)
-        except ValidationError as error:
-            return validation_problems(error)
-        return []
+        return input_problems(model, raw_input)
 
     async def run(raw_input: dict[str, Any], ctx: ToolContext) -> ToolOutcome:
         parsed = _parse(model, raw_input, summarize)
@@ -408,6 +419,9 @@ def _tool[T: ToolInput](
         except TurnFinished:
             # The turn ended while the tool ran: no card is stored, and the model is told.
             return failure(TURN_ENDED, parsed.summary)
+        except _CardNotSaved as error:
+            logger.warning("%s card not saved: %s", name, error)
+            return failure(CARD_NOT_SAVED, parsed.summary)
         except Exception as error:
             logger.warning("%s failed: %s", name, error_name(error))
             return failure(UNREADABLE, parsed.summary)
@@ -468,12 +482,19 @@ async def _resolve(
     case-insensitively among the people the asker may read: the full name first, then a given or
     family name. No match is an error that names no one; several list those matches' names and
     titles, which are directory information."""
-    people = await _readable_people(db, ctx)
     if person_name is None:
-        own = next((p for p in people if p[0] == ctx.actor.person_id), None)
-        if own is None:
+        actor = ctx.actor
+        row = (
+            await db.execute(
+                select(Person.id, Person.given_name, Person.family_name).where(
+                    Person.tenant_id == actor.tenant_id, Person.id == actor.person_id
+                )
+            )
+        ).first()
+        if row is None or not can(actor, Action.TIMEOFF_READ, PersonResource(row.id)):
             return failure(UNREADABLE)
-        return own[0], f"{own[1]} {own[2]}"
+        return row.id, f"{row.given_name} {row.family_name}"
+    people = await _readable_people(db, ctx)
     wanted = _normal(person_name)
     matches = [p for p in people if _normal(f"{p[1]} {p[2]}") == wanted]
     if not matches:
@@ -577,7 +598,8 @@ async def _run_list(arguments: ListInput, ctx: ToolContext, summary: str) -> Too
     result = {
         "window": None if waiting else {"from": first.isoformat(), "to": last.isoformat()},
         "requests": [request_row(row) for row in readable[:MAX_REQUESTS]],
-        "truncated": len(readable) > MAX_REQUESTS,
+        # From the rows the query returned, before the policy filter: more matched than fit.
+        "truncated": len(rows) > MAX_REQUESTS,
     }
     return ToolOutcome([json_block(result)], summary=summary)
 
@@ -618,7 +640,7 @@ async def _run_request(arguments: CheckInput, ctx: ToolContext, summary: str) ->
         card = await request_card_for(db, ctx.actor, new, ctx.now)
     if isinstance(card, Preview):
         return failure(problem_sentences(card), summary)
-    ref = await create_proposal(
+    ref = await _save_card(
         ctx.engine,
         ctx.tenant_ctx,
         conversation_id=ctx.conversation_id,
@@ -649,7 +671,7 @@ async def _run_decision(arguments: DecisionInput, ctx: ToolContext, summary: str
         card = await decide_card(db, ctx.actor, request_id, arguments.decision, ctx.now)
     if isinstance(card, Refused):
         return failure(refusal_text(card.code), summary)
-    ref = await create_proposal(
+    ref = await _save_card(
         ctx.engine,
         ctx.tenant_ctx,
         conversation_id=ctx.conversation_id,
@@ -679,7 +701,7 @@ async def _run_cancel(arguments: CancelInput, ctx: ToolContext, summary: str) ->
         card = await cancel_card(db, ctx.actor, request_id, ctx.now)
     if isinstance(card, Refused):
         return failure(refusal_text(card.code), summary)
-    ref = await create_proposal(
+    ref = await _save_card(
         ctx.engine,
         ctx.tenant_ctx,
         conversation_id=ctx.conversation_id,

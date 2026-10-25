@@ -203,8 +203,8 @@ async def create_fixed_sandbox(app_engine: AsyncEngine) -> SeedCompany:
     """Create the fixed tenant with the full seed company and the eval's own requests (see
     eval_sandbox.py), as the API's own login. Returns the company with those requests in it."""
     seeded = build_company(TENANT_ID, ANCHOR_DATE)
-    extra = eval_sandbox.eval_requests(seeded)
     company = eval_sandbox.with_eval_requests(seeded)
+    extra = company.time_off_requests[len(seeded.time_off_requests) :]
     expires_at = datetime.now(UTC) + SANDBOX_LIFETIME
     async with tenant_session(app_engine, TenantContext(TENANT_ID, None)) as session:
         session.add(Tenant(id=TENANT_ID, expires_at=expires_at, anchor_date=ANCHOR_DATE))
@@ -1643,7 +1643,9 @@ class EvalRun:
             )
             trace = slim_trace(trace)
             return scoreboard.ItemRecord(trial, dataset, item.id, None, item.kind, grade, trace)
-        grade = self.grader.redteam(trace, route=item.route, proposal=item.proposal)
+        grade = self.grader.redteam(
+            trace, route=item.route, proposal=item.proposal, clarify=item.clarify
+        )
         trace = slim_trace(trace)
         return scoreboard.ItemRecord(trial, dataset, item.id, item.group, None, grade, trace)
 

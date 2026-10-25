@@ -115,6 +115,7 @@ items:
   - {id: ac-13, asker: priya, group: requests, message: "n", readings: [{type: vacation, start: "2026-10-16", end: "2026-10-16"}]}
   - {id: ac-14, asker: priya, group: decisions, message: "o", request: {person: "Zara Bautista", start: "2026-11-05"}, decision: maybe}
   - {id: ac-15, asker: priya, group: requests}
+  - {id: ac-16, asker: priya, group: requests, message: "p", readings: [{type: sick, start: "2026-10-16", end: "2026-10-16", hours: true}]}
 """  # noqa: E501
     with pytest.raises(datasets.DatasetError) as caught:
         load(tmp_path, body)
@@ -137,6 +138,7 @@ items:
         "ac-13: unknown reading type 'vacation'",
         "ac-14: unknown decision 'maybe'",
         "ac-15: needs a message",
+        "ac-16: `hours` must be a whole number from 1 to",
     ):
         assert expected in joined, (expected, joined)
 
@@ -247,3 +249,16 @@ def test_the_smoke_list_needs_exactly_six_real_action_items_each_once(tmp_path: 
     assert "smoke actions: needs exactly 6 IDs, has 5" in problems(five)
     assert "smoke actions: ac-99 is not in the actions dataset" in problems(seven)
     assert "smoke actions: ac-01 is listed more than once" in problems(twice)
+
+
+def test_refusal_phrases_are_normalized_like_the_answers_they_are_compared_with(
+    tmp_path: Path,
+) -> None:
+    body = """
+items:
+  - {id: ac-1, asker: priya, group: refused, message: "a", reason: ["You  Can\u2019t DO that", "Not Enough"]}
+"""  # noqa: E501
+    loaded = load(tmp_path, body)
+
+    refused = next(i for i in loaded if i.id == "ac-1")
+    assert refused.reason == ("you can't do that", "not enough")

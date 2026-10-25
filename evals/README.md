@@ -78,7 +78,7 @@ Today is Thursday, October 15, 2026, and the seed counts back from that same day
 
 | Set | What it runs | Trials | Cost (about) | Hard cap | Effort |
 |---|---|---|---|---|---|
-| `smoke` | the 15 Q&A, 11 red-team, and 6 action items listed in `smoke.yaml` | 1 | $1.20 | $2.00 | low |
+| `smoke` | the 15 Q&A, 13 red-team, and 6 action items listed in `smoke.yaml` | 1 | $1.20 | $2.00 | low |
 | `full` | every item in `qa.yaml`, `redteam.yaml`, and `actions.yaml` | 3 | $14 | $16 | low |
 | `effort` | the smoke items at medium effort, compared with a low-effort smoke run | 1 | $1.50 | $2.00 | medium |
 

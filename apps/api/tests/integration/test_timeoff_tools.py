@@ -479,6 +479,40 @@ async def test_a_list_stops_at_twenty_and_says_it_was_cut(
     assert result["requests"][0]["startDate"] == "2026-11-02"
 
 
+async def test_a_list_says_it_was_cut_even_when_the_policy_hides_a_row(
+    app_engine: AsyncEngine, seeded_sandbox: SeedCompany, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from app.ai.tools import timeoff
+    from app.policy import TimeOffRequestResource
+    from app.policy import can as real_can
+
+    for offset in range(25):
+        day = date(2026, 11, 2) + timedelta(days=offset)
+        await put_request(app_engine, seeded_sandbox, "priya", day, type="sick", amount_minutes=480)
+    ctx = await tools_as(app_engine, seeded_sandbox, "priya")
+
+    def hide_the_first_day(actor: Any, action: Any, resource: Any) -> bool:
+        if isinstance(resource, TimeOffRequestResource) and resource.start_date == date(
+            2026, 11, 2
+        ):
+            return False
+        return bool(real_can(actor, action, resource))
+
+    monkeypatch.setattr(timeoff, "can", hide_the_first_day)
+
+    result = body(
+        await call(
+            ctx,
+            "list_time_off_requests",
+            {"scope": "mine", "from": "2026-11-01", "to": "2026-12-31"},
+        )
+    )
+
+    assert len(result["requests"]) == 20
+    assert result["requests"][0]["startDate"] == "2026-11-03"
+    assert result["truncated"] is True
+
+
 async def test_a_denied_request_is_listed_without_its_note(
     app_engine: AsyncEngine, seeded_sandbox: SeedCompany
 ) -> None:
@@ -875,6 +909,37 @@ async def test_turn_finished_is_turned_into_the_same_error_for_every_proposal_to
     for outcome in outcomes:
         assert error_text(outcome) == "This answer has ended, so no card was made."
         assert outcome.proposal is None
+
+
+async def test_a_failed_card_save_is_not_described_as_a_failed_read(
+    app_engine: AsyncEngine,
+    seeded_sandbox: SeedCompany,
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    from app.ai.tools import timeoff
+
+    async def broken(*_args: Any, **_kwargs: Any) -> Any:
+        raise RuntimeError("could not serialize access")
+
+    monkeypatch.setattr(timeoff, "create_proposal", broken)
+    zara_request = await put_request(app_engine, seeded_sandbox, "priya", MON_NOV_9)
+    marcus = await tools_as(app_engine, seeded_sandbox, "marcus", with_chat=True)
+    priya = await tools_as(app_engine, seeded_sandbox, "priya", with_chat=True)
+    waiting = await waiting_id_for_marcus(marcus)
+
+    outcomes = [
+        await call(priya, "propose_time_off_request", check_input(MON_NOV_16)),
+        await call(
+            marcus, "propose_time_off_decision", {"request_id": waiting, "decision": "approve"}
+        ),
+        await call(priya, "propose_cancel_time_off", {"request_id": str(zara_request)}),
+    ]
+
+    for outcome in outcomes:
+        assert error_text(outcome) == "The card couldn't be saved. Try again in a moment."
+        assert outcome.proposal is None
+    assert "RuntimeError" in caplog.text
 
 
 # ---------------------------------------------------------------------------------------------

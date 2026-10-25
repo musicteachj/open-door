@@ -3,6 +3,7 @@ turns made by hand: the proposal the item expects, "the model wrote nothing", an
 the engine". Pure: no database, no network."""
 
 from datetime import date
+from decimal import Decimal
 from typing import Any
 
 import pytest
@@ -363,6 +364,28 @@ def test_a_hyphenated_number_with_a_unit_is_still_one_amount() -> None:
 
 def test_dates_beside_a_range_word_are_still_not_amounts() -> None:
     assert numbers("From Nov 5 to Nov 6, or the 16th to the 18th.").passed is True
+
+
+@pytest.mark.parametrize(
+    "answer",
+    [
+        # The full run of 2026-10-25 (ac-06): a date range ends a line and the next list item
+        # starts with "Days", so "28-31" and "Days" were read as two amounts.
+        "The days counted are December 21\u201324 and December 28\u201331\n- **Days that don't use"
+        " PTO:** Christmas Day",
+        "The days counted are Dec 28\u201331\n\nDays skipped: Dec 25",
+        "Counted: December 31\n- Days skipped: none",
+    ],
+)
+def test_a_number_and_a_unit_on_different_lines_are_not_an_amount(answer: str) -> None:
+    assert action_graders.amounts_in(answer) == {}
+
+
+def test_a_range_and_its_unit_still_read_on_one_line() -> None:
+    assert set(action_graders.amounts_in("It uses 5 to 7 days")) == {
+        (Decimal(5), "day"),
+        (Decimal(7), "day"),
+    }
 
 
 # --- The expected proposal: requests ----------------------------------------------------------
@@ -746,3 +769,30 @@ def test_a_request_the_dataset_names_but_the_sandbox_lacks_is_a_harness_error_no
 
     with pytest.raises(sandbox.NoSuchRequest):
         grade_action(trace(), missing)
+
+
+# --- A date is never an amount; a refused item may accept a question ---------------------------
+
+
+def test_a_number_after_a_month_is_a_date_not_an_amount() -> None:
+    assert action_graders.amounts_in("The October 30 day is the only Friday you've booked") == {}
+    assert action_graders.amounts_in("Oct. 5 days are booked") == {}
+    assert action_graders.amounts_in("Oct 5 days are booked") == {}
+    assert action_graders.amounts_in("It runs December 28-31 days") == {}
+
+
+def test_a_number_that_is_not_after_a_month_is_still_an_amount() -> None:
+    assert set(action_graders.amounts_in("It uses 30 days")) == {(Decimal(30), "day")}
+    assert set(action_graders.amounts_in("On October 30 it uses 3 days")) == {(Decimal(3), "day")}
+
+
+def test_a_refused_item_accepts_a_question_only_where_it_allows_it() -> None:
+    asking = trace(answer_text="Which dates would you like?")
+    allowed = item("refused", reason=("not enough",), clarify=True)
+    strict = item("refused", reason=("not enough",))
+
+    assert grade_action(asking, allowed).passed is True
+    assert not grade_action(asking, strict).passed
+    assert not grade_action(trace(answer_text="Sure."), allowed).passed
+    with_card = trace(answer_text="Which dates?", proposals=(card(),))
+    assert_fails(grade_action(with_card, allowed), mentioning="made a card")

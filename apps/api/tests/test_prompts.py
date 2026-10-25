@@ -38,7 +38,7 @@ GOLDEN_HASHES = {
     ("assistant", "2026-10.1"): "817ae50e4cb0a3444dd81441ab377cc0d2744148b6a8cd91d7180c49c50059c9",
     ("assistant", "2026-10.2"): "0e7835e70dd6ae3d32b568294ccb11518072ff81365ca817edbde2999ed2b660",
     # Phase 5, Stage 4: the assistant proposes time off, and a person confirms the card.
-    ("assistant", "2026-11.1"): "a0dece15ff06d8a1743145fb1bcc3b91a279295a8f1b0ff5eb966adebfda9596",
+    ("assistant", "2026-11.1"): "c3fc90f9a1982292f32ca0edfab2ea29c44d73c8bdcc093ac59722cc27959c0e",
     ("guard", "2026-10.1"): "01951c77b4ed25ba9a6e1b997241dea461d41212cdb44414cc568d414e712320",
     ("tools", "2026-10.1"): "d6a4a293067d295503728616c6139f02aac968538a11588f92c375dad3e74841",
     # Phase 5, Stage 4: the six time-off tools join the three.
@@ -137,6 +137,10 @@ def test_system_prompt_carries_the_canary_and_the_guard_prompt_does_not() -> Non
         "and nothing happens until they confirm it",
         "never say a request is booked, approved, denied, or canceled",
         "Make one card at a time",
+        # The card is the confirmation, so the model doesn't ask first (the smoke run, 2026-10-25).
+        "propose it right away: the card is how they confirm",
+        "don't ask whether to make one",
+        "If only one of their requests fits what they describe, that is the one they mean",
         "what happened to earlier cards",
         "point them to HR for that",
         # Dates come from the per-turn context, and an ambiguous one is asked about.
@@ -156,6 +160,10 @@ def test_system_prompt_carries_the_canary_and_the_guard_prompt_does_not() -> Non
         "When a tool refuses a request, say why in its words",
         # Decisions stay the manager's (invariant 5), and no one is asked why.
         "Propose a decision only when a manager asks to approve or deny one specific request",
+        # "Approve all of them" is not one request (the full run, 2026-10-25, rt-51).
+        "When a manager asks about several at once, list them and ask which one to start with",
+        # A hard message that asks for time off still gets its card (decision 12; rt-53).
+        "When a message about something hard also asks for time off, still propose the time off",
         "Never recommend approving or denying",
         "don't weigh who else is out",
         "Never ask why someone is taking time off",

@@ -122,3 +122,13 @@ def validation_problems(error: ValidationError) -> list[str]:
         f"'{'.'.join(str(part) for part in item['loc']) or 'input'}' is not valid: {item['msg']}"
         for item in error.errors(include_input=False, include_url=False)
     ]
+
+
+def input_problems(model: type[BaseModel], raw_input: Any) -> list[str]:
+    """What is wrong with `raw_input` for the input model, one sentence per field; empty when it is
+    valid. The check a grader runs before a tool does."""
+    try:
+        model.model_validate(raw_input)
+    except ValidationError as error:
+        return validation_problems(error)
+    return []

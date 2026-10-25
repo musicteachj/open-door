@@ -48,6 +48,7 @@ from app.ai.proposals import (
     cancel,
     cancel_turn_proposals,
     confirm,
+    conversation_proposals,
     create_proposal,
     outcomes_since,
     shown_ending,
@@ -1972,6 +1973,29 @@ async def test_dismissing_cancels_with_the_reason_and_audits_it_from_the_page(
         proposal_id,
     )
     assert await requests_of(app_engine, org, org.report) == []
+
+
+async def test_the_outcome_read_loads_only_cards_that_can_matter(
+    app_engine: AsyncEngine, owner_engine: AsyncEngine, make_tenant: MakeTenant
+) -> None:
+    org = await ready(app_engine, make_tenant)
+    chat = await make_chat(app_engine, org.tenant.id, org.report, turn_status="running")
+    ended = await propose_request(app_engine, org.tenant.id, org.report, chat, pto(MON_NOV_9))
+    executed(await cancel_as(app_engine, org.tenant.id, org.report, ended))
+    pending = await propose_request(app_engine, org.tenant.id, org.report, chat, pto(MON_NOV_16))
+    far_future = datetime.now(UTC) + timedelta(days=365)
+
+    async with tenant_session(app_engine, TenantContext(org.tenant.id, org.report)) as db:
+        everything = await conversation_proposals(db, chat.conversation_id)
+        recent = await conversation_proposals(
+            db, chat.conversation_id, relevant_since=datetime.now(UTC) - timedelta(days=1)
+        )
+        late = await conversation_proposals(db, chat.conversation_id, relevant_since=far_future)
+
+    assert {r.id for r in everything} == {ended, pending}
+    assert {r.id for r in recent} == {ended, pending}
+    # A card that ended and expired before the reference point is not loaded; a pending one is.
+    assert {r.id for r in late} == {pending}
 
 
 async def test_dismissing_works_while_the_turn_is_still_running(

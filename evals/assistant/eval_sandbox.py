@@ -44,7 +44,7 @@ from app.domain.timeoff.pto import pto_balance
 from app.domain.timeoff.sick import sick_years
 from app.modules.sandbox.seed import PersonRow, RequestRow, SeedCompany
 
-# Priya's seat key in the seed, and the labels of the two requests.
+# Priya's seat key in the seed (the eval's requests are hers), and the labels of the two requests.
 SEAT = "priya"
 CANCEL_LABEL = "eval-cancel-friday"
 PENDING_LABEL = "eval-pending-november"
@@ -104,7 +104,9 @@ def build_request(
             for r in mine
         ]
         trial.append(
-            EngineRequest(f"{SEAT}:{label}", "pto", start, end, None, cast(RequestStatus, status))
+            EngineRequest(
+                f"{persona}:{label}", "pto", start, end, None, cast(RequestStatus, status)
+            )
         )
         for today in (company.anchor_date - timedelta(days=1), company.anchor_date):
             balance = pto_balance(engine_person, opening, trial, holidays, today)
@@ -123,7 +125,7 @@ def build_request(
         decided_at = None
         decided_by = None
     return RequestRow(
-        id=uuid5(company.tenant_id, f"timeoff:{SEAT}:{label}"),
+        id=uuid5(company.tenant_id, f"timeoff:{persona}:{label}"),
         tenant_id=company.tenant_id,
         person_id=person.id,
         type="pto",
@@ -144,10 +146,11 @@ def build_request(
 
 def eval_requests(company: SeedCompany) -> tuple[RequestRow, ...]:
     """The two requests the eval adds: the Friday to cancel, then the pending one."""
-    return (
-        build_request(company, "priya", CANCEL_LABEL, CANCEL_DAY, CANCEL_DAY, "approved"),
-        build_request(company, "priya", PENDING_LABEL, PENDING_START, PENDING_END, "pending"),
-    )
+    cancel = build_request(company, SEAT, CANCEL_LABEL, CANCEL_DAY, CANCEL_DAY, "approved")
+    # The second is checked against the company plus the first, so the pair's fit is checked.
+    with_cancel = replace(company, time_off_requests=(*company.time_off_requests, cancel))
+    pending = build_request(with_cancel, SEAT, PENDING_LABEL, PENDING_START, PENDING_END, "pending")
+    return (cancel, pending)
 
 
 def with_eval_requests(company: SeedCompany) -> SeedCompany:

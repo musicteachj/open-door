@@ -54,22 +54,6 @@ GUARD_BEHAVIORS: Final = (
     "slow_guard",
     "guard_failure",
 )
-MODEL_BEHAVIORS: Final = (
-    "decline",
-    "safety_refusal",
-    "not_found",
-    "long_answer",
-    "silence",
-    "mid_stream_error",
-    "working_note",
-    "book_friday",
-    "sick_tomorrow",
-    "show_balance",
-    "waiting_on_me",
-    "approve_it",
-    "deny_it",
-    "cancel_mine",
-)
 # The behaviors that call the time-off tools (the real engine, proposals, and cards run).
 TIME_OFF_BEHAVIORS: Final = (
     "book_friday",
@@ -79,6 +63,16 @@ TIME_OFF_BEHAVIORS: Final = (
     "approve_it",
     "deny_it",
     "cancel_mine",
+)
+MODEL_BEHAVIORS: Final = (
+    "decline",
+    "safety_refusal",
+    "not_found",
+    "long_answer",
+    "silence",
+    "mid_stream_error",
+    "working_note",
+    *TIME_OFF_BEHAVIORS,
 )
 BEHAVIORS: Final = GUARD_BEHAVIORS + MODEL_BEHAVIORS
 

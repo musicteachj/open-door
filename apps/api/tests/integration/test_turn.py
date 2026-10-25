@@ -831,6 +831,169 @@ async def test_an_invalid_tool_input_before_any_text_is_reissued_and_counts_towa
     assert await env.spend_kinds(turn.id) == Counter(reserve=3, settle=2)
 
 
+# --- Tool calls written as text ----------------------------------------------------------------
+
+MARKUP = '<invoke name="search_handbook">\n<parameter name="query">PTO</parameter>\n</invoke>'
+
+
+class NeverRead(Exception):  # noqa: N818
+    """Raised by a fake stream that the loop read past the point where it should have stopped."""
+
+
+def markup_plan(*deltas: str) -> Plan:
+    return raw_plan([], "end_turn", *(ModelText(d) for d in deltas), NeverRead("read on"))
+
+
+async def test_tool_call_markup_in_the_answer_is_never_shown_and_the_call_is_reissued(
+    app_engine: AsyncEngine, seeded_sandbox: SeedCompany
+) -> None:
+    transport = PlanTransport(
+        markup_plan("Let me look that up.\n", MARKUP, MARKUP, MARKUP), text_plan("Fine.")
+    )
+    env = await make_env(app_engine, seeded_sandbox, transport=transport)
+    events = await env.ask()
+
+    assert transport.calls == 2
+    assert isinstance(events[-1], TurnCompleted)
+    assert "<invoke" not in sent_text(events)
+    assert "<parameter" not in sent_text(events)
+    assert sent_text(events) == "Fine."
+    turn = await env.last_turn()
+    assert (turn.status, turn.answer_text) == ("completed", "Fine.")
+    assert "invoke" not in json.dumps([m.content for m in await env.messages()])
+    first, second = env.transport.requests
+    assert first == second
+
+
+async def test_markup_twice_in_one_turn_fails_the_turn_and_stores_only_the_question(
+    app_engine: AsyncEngine, seeded_sandbox: SeedCompany
+) -> None:
+    transport = PlanTransport(markup_plan(MARKUP), markup_plan(MARKUP), text_plan("Fine."))
+    env = await make_env(app_engine, seeded_sandbox, transport=transport)
+    events = await env.ask()
+
+    assert transport.calls == 2
+    assert events[-1] == Error("internal", ERROR_TEXTS["internal"])
+    assert "<invoke" not in sent_text(events)
+    assert roles(await env.messages()) == ["user"]
+    turn = await env.last_turn()
+    assert (turn.status, turn.error_code) == ("failed", "internal")
+    assert not turn.answer_text
+
+
+@pytest.mark.parametrize(
+    "deltas",
+    [
+        ("<inv", 'oke name="x">'),
+        ("Sure. <", "/invoke", ">"),
+        ("<", "function", "_calls>"),
+        ("a" * 40 + "<param", 'eter name="q">'),
+        ("<function_calls>",),
+        ("</invoke>",),
+        ('<parameter name="q">',),
+        ("<antml:" + "invoke name=" + chr(34) + "x" + chr(34) + ">",),
+        ("<antml:" + "function_calls>",),
+        ("</antml:" + "invoke>",),
+        ("<", "antml:" + "inv", "oke name=" + chr(34) + "x" + chr(34) + ">"),
+    ],
+)
+async def test_markup_is_caught_however_it_is_split_or_namespaced(
+    app_engine: AsyncEngine, seeded_sandbox: SeedCompany, deltas: tuple[str, ...]
+) -> None:
+    transport = PlanTransport(markup_plan(*deltas), text_plan("Fine."))
+    env = await make_env(app_engine, seeded_sandbox, transport=transport)
+    events = await env.ask()
+
+    assert transport.calls == 2
+    assert isinstance(events[-1], TurnCompleted)
+    shown = sent_text(events)
+    # No part of a marker is ever sent, and the clean answer follows.
+    assert not any(part in shown for part in ("<inv", "</inv", "<param", "<func", "<antml", "<"))
+    assert shown.endswith("Fine.")
+    assert (await env.last_turn()).answer_text == "Fine."
+
+
+async def test_a_status_note_with_tool_markup_is_aborted_and_the_call_reissued(
+    app_engine: AsyncEngine, seeded_sandbox: SeedCompany
+) -> None:
+    def bad(request: ModelRequest, number: int) -> list[Item]:
+        return [StatusNote('Checking <invoke name="search_handbook"> now'), NeverRead("read on")]
+
+    transport = PlanTransport(bad, text_plan("Fine."))
+    env = await make_env(app_engine, seeded_sandbox, transport=transport)
+    events = await env.ask()
+
+    assert transport.calls == 2
+    assert isinstance(events[-1], TurnCompleted)
+    assert not of_type(events, Status)
+    assert "<invoke" not in sent_text(events)
+    assert (await env.last_turn()).answer_text == "Fine."
+
+
+def note_then_text_plan(note: str, text: str) -> Plan:
+    def plan(request: ModelRequest, number: int) -> list[Item]:
+        return [
+            StatusNote(note),
+            ModelText(text),
+            TextBlockEnd(()),
+            finished([{"type": "text", "text": text}]),
+        ]
+
+    return plan
+
+
+async def test_a_clean_answer_after_a_clean_status_note_is_unaffected(
+    app_engine: AsyncEngine, seeded_sandbox: SeedCompany
+) -> None:
+    transport = PlanTransport(note_then_text_plan("Looking at the handbook.", "x" * 80 + " Done."))
+    env = await make_env(app_engine, seeded_sandbox, transport=transport)
+    events = await env.ask()
+
+    assert transport.calls == 1
+    assert isinstance(events[-1], TurnCompleted)
+    assert Status("Looking at the handbook.") in events
+
+
+def test_the_holdback_covers_a_tag_even_when_the_canary_is_short(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # The canary holdback alone happens to cover every tag; the markup holdback is the guarantee.
+    monkeypatch.setattr(turn_module, "FOLDED_CANARY", "zz")
+    text = "Hello there. <inv"
+    assert turn_module._tail_start(text) == 0
+    long_text = "x" * 100
+    held = len(long_text) - turn_module._tail_start(long_text)
+    assert held == turn_module.MARKUP_HOLD_CHARACTERS
+
+
+async def test_ordinary_angle_brackets_and_the_word_invoice_are_not_markup(
+    app_engine: AsyncEngine, seeded_sandbox: SeedCompany
+) -> None:
+    answer = "Send the invoice if 3 < 5 and 7 > 2. Use <b>bold</b> or a <parameter> of the plan."
+    transport = PlanTransport(text_plan(answer))
+    env = await make_env(app_engine, seeded_sandbox, transport=transport)
+    events = await env.ask()
+
+    assert transport.calls == 1
+    assert isinstance(events[-1], TurnCompleted)
+    assert sent_text(events) == answer
+    assert (await env.last_turn()).answer_text == answer
+
+
+async def test_a_long_answer_that_hits_max_tokens_is_unchanged_by_the_markup_check(
+    app_engine: AsyncEngine, seeded_sandbox: SeedCompany
+) -> None:
+    text = "A plain sentence about sick leave. " * 40
+    transport = PlanTransport(text_plan(text, stop_reason="max_tokens"))
+    env = await make_env(app_engine, seeded_sandbox, transport=transport)
+    events = await env.ask()
+
+    assert transport.calls == 1
+    assert sent_text(events) == text
+    turn = await env.last_turn()
+    assert (turn.status, turn.error_code) == ("completed", "max-tokens")
+
+
 # --- Budgets ----------------------------------------------------------------------------------
 
 
