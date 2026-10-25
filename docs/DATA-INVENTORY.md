@@ -191,7 +191,7 @@ Every ID below is a random UUID, so one sandbox can't estimate another's activit
 | `started_at`, `ended_at` | When the turn began and ended (UTC) | The record. |
 | `answer_text`, `citations` | The answer (a stopped turn keeps its partial text) and its citations as JSON | What the person sees after a reload. |
 | `guard_verdict` | The guard's verdict as JSON; null if the guard did not run | Phase 7's console shows why a turn was routed. The browser gets the category and kind only (`GET /assistant/conversations/current`), never `injectionSuspected`, the cost, or the cache counts. |
-| `tool_calls`, `sections_retrieved` | Each tool call (name, a short summary of its input, success, duration), and the handbook sections the search returned | What the assistant did. A search's summary holds up to 60 characters of its query (and `find_people`'s up to 40), after control characters are removed. Tool calls past the limits (5 per response, 20 per question) aren't run, and a round records them as one `skipped` entry with a `count`. The summaries never hold private values. |
+| `tool_calls`, `sections_retrieved` | Each tool call (name, a short summary of its input, success, duration), and the handbook sections the search returned | What the assistant did. A search's summary holds up to 60 characters of its query (and `find_people`'s up to 40), after control characters are removed. A time-off tool's summary holds its scope, dates, and decision, up to 40 characters of a `person_name`, and a request's ID. Tool calls past the limits (5 per response, 20 per question) aren't run, and a second card in one response isn't made; a round records each kind as one `skipped` entry with a `count`. The summaries never hold private values. |
 | `served_by_models`, `effort`, `prompt_version`, `toolset_version` | The model IDs that served the turn, and the settings in effect | Explains a result, and shows when a fallback happened. |
 | `input_tokens`, `output_tokens`, `cache_read_tokens`, `cache_write_tokens`, `cost_usd` | Token counts and the cost at list price | Measures cost and caching. |
 | `first_event_ms`, `total_ms` | Milliseconds to the first visible event, and in total | Measures latency. |
@@ -397,7 +397,9 @@ the safety check that reads each message first. Anthropic is the data processor 
     last answer
   - to the assistant: the system prompt, the tool definitions, the conversation so far, the new
     question, and a short context message (the person's first name, role, location, employment
-    type, today's date, and the handbook version)
+    type, today's date, and the handbook version; and, when one of the person's confirm cards was
+    confirmed, dismissed, replaced, canceled, failed, or expired since the last message, one line
+    saying so, made from the card's action, dates, and a directory name only if it is a plain name)
   - the tools' results, which include handbook passages, directory cards, and, when someone asks
     the assistant about themselves, their own private details (personal email, phone, home
     address, and date of birth)

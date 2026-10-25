@@ -174,7 +174,8 @@ def evaluate(
     if too_long:
         problems.append("too-long")
     bounds = request_bounds(person, opening, today)
-    if new.start < bounds.earliest_start(new.type) or new.end > bounds.latest_end:
+    out_of_range = new.start < bounds.earliest_start(new.type) or new.end > bounds.latest_end
+    if out_of_range:
         problems.append("out-of-range")
     if bad_partial:
         problems.append("bad-partial")
@@ -205,12 +206,17 @@ def evaluate(
             rules.append(RULES["pto-increments"])
         if short_notice:
             rules.append(RULES["pto-notice"])
+        if out_of_range:
+            rules.append(RULES["pto-dates"])
     else:
         rules.append(sick_grant_rule(person.state))
         if partial is not None:
             rules.append(RULES["sick-increments"])
         if new.start < sick_window_start(today):
             rules.append(RULES["sick-window"])
+        # The window has its own rule; the date rule backs the hire date and the latest end.
+        if new.start < person.hire_date or new.end > bounds.latest_end:
+            rules.append(RULES["sick-dates"])
     return Evaluation(
         ok=not problems,
         problems=tuple(problems),

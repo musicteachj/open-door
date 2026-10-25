@@ -393,7 +393,8 @@ async function reachConversation(page: Page, scenario: NonNullable<ScreenRow['sc
       await expect(page.getByText('Thanks for the feedback.')).toBeVisible()
       break
     case 'other-state':
-      await askAndWaitForAnswer(page, 'sick leave')
+      // As in conversation.spec.ts: this question keeps CA-4.3 in the full-text results.
+      await askAndWaitForAnswer(page, 'how much sick leave do I get')
       await page.getByRole('button', { name: 'Show your work' }).click()
       break
     case 'not-found':

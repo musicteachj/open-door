@@ -5,7 +5,6 @@ database rule that limits private details to that person and HR. `find_people` r
 cards only, each one checked by the policy layer.
 """
 
-import json
 import logging
 from dataclasses import dataclass
 from typing import Any, Literal
@@ -22,8 +21,9 @@ from app.ai.tools.base import (
     ToolOutcome,
     describe_problem,
     failure,
+    json_block,
     shortened,
-    text_block,
+    validation_problems,
 )
 from app.db.models import Tenant
 from app.db.tenancy import tenant_session
@@ -92,8 +92,7 @@ FIND_DEFINITION: dict[str, Any] = {
 }
 
 
-def _json_block(data: object) -> dict[str, Any]:
-    return text_block(json.dumps(data, ensure_ascii=False, separators=(",", ":")))
+_json_block = json_block
 
 
 def _card(card: DirectoryCard) -> dict[str, Any]:
@@ -259,5 +258,21 @@ def describe_profile(raw_input: Any) -> str:
     return PROFILE_SUMMARY
 
 
-PROFILE_TOOL = Tool(PROFILE_NAME, PROFILE_DEFINITION, run_profile, describe_profile)
-FIND_TOOL = Tool(FIND_NAME, FIND_DEFINITION, run_find, describe_find)
+def check_profile(raw_input: Any) -> list[str]:
+    try:
+        NoInput.model_validate(raw_input)
+    except ValidationError as error:
+        return validation_problems(error)
+    return []
+
+
+def check_find(raw_input: Any) -> list[str]:
+    try:
+        FindInput.model_validate(raw_input)
+    except ValidationError as error:
+        return validation_problems(error)
+    return []
+
+
+PROFILE_TOOL = Tool(PROFILE_NAME, PROFILE_DEFINITION, run_profile, describe_profile, check_profile)
+FIND_TOOL = Tool(FIND_NAME, FIND_DEFINITION, run_find, describe_find, check_find)

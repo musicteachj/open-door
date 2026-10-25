@@ -3,8 +3,10 @@
 Kept apart from the registry so the tools can import it without importing the registry back.
 """
 
+import json
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
+from datetime import datetime
 from typing import Any
 from uuid import UUID
 
@@ -13,6 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncEngine
 
 from app.ai.conversations import SourceEntry
 from app.ai.embeddings import Embedder
+from app.ai.proposals import ProposalOut
 from app.ai.text import one_line
 from app.db.tenancy import TenantContext
 from app.domain.handbook.applicability import Asker
@@ -33,6 +36,12 @@ class ToolContext:
     asker: Asker
     version_id: UUID  # the handbook version the sandbox is pinned to
     embedder: Embedder | None  # None means full-text search only
+    # The turn's own instant, the one the per-turn context used: "today" in a tool comes from it,
+    # never from a clock.
+    now: datetime
+    # The turn and its conversation, which a proposal is stored under.
+    conversation_id: UUID
+    turn_id: UUID
 
 
 @dataclass(frozen=True)
@@ -44,6 +53,8 @@ class ToolOutcome:
     is_error: bool = False
     summary: str = ""
     sources: list[SourceEntry] = field(default_factory=list)
+    # The card a proposal tool stored, for the turn to send to the browser. Never part of `content`.
+    proposal: ProposalOut | None = None
 
 
 @dataclass(frozen=True)
@@ -57,10 +68,21 @@ class Tool:
     definition: dict[str, Any]
     run: Callable[[dict[str, Any], ToolContext], Awaitable[ToolOutcome]]
     describe: Callable[[Any], str]
+    # The problems with a raw input, from the tool's own input model, or none. No database needed:
+    # the eval graders use it to check each call against the tool that was called.
+    check: Callable[[Any], list[str]]
+    # A proposal tool stores a card for a person to confirm. The turn makes at most one card per
+    # model response, so it needs to know which tools these are.
+    proposes: bool = False
 
 
 def text_block(text: str) -> dict[str, Any]:
     return {"type": "text", "text": text}
+
+
+def json_block(data: object) -> dict[str, Any]:
+    """A compact JSON text block: how a tool hands the model structured data."""
+    return text_block(json.dumps(data, ensure_ascii=False, separators=(",", ":")))
 
 
 def failure(message: str, summary: str = "") -> ToolOutcome:
@@ -92,3 +114,11 @@ def describe_problem(error: ValidationError) -> str:
         else:
             parts.append(f"'{field_name}' is not valid: {item['msg']}")
     return "; ".join(parts)
+
+
+def validation_problems(error: ValidationError) -> list[str]:
+    """A validation error as one plain sentence per field, for a grader to read."""
+    return [
+        f"'{'.'.join(str(part) for part in item['loc']) or 'input'}' is not valid: {item['msg']}"
+        for item in error.errors(include_input=False, include_url=False)
+    ]

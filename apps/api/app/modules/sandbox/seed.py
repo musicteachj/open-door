@@ -662,19 +662,30 @@ async def insert_company(session: AsyncSession, company: SeedCompany) -> None:
     unnest would flatten it into one long column. Each person's value goes in as one text literal,
     like '{3,4,5,6,7}', and the SELECT casts it back to the column's type.
     """
-    for table_name, row_type in ROW_TYPES.items():
-        rows: tuple[Row, ...] = getattr(company, table_name)
-        array_columns = _ARRAY_COLUMNS[table_name]
-        values = {
-            field.name: [
-                _array_literal(getattr(row, field.name))
-                if field.name in array_columns
-                else getattr(row, field.name)
-                for row in rows
-            ]
-            for field in fields(row_type)
-        }
-        await session.execute(_INSERTS[table_name], values)
+    for table_name in ROW_TYPES:
+        await _insert_rows(session, table_name, getattr(company, table_name))
+
+
+async def insert_time_off_requests(session: AsyncSession, rows: Sequence[RequestRow]) -> None:
+    """Write more time-off requests into a sandbox the company is already in, the same way the
+    company's own are written (so the table's constraints hold for them too). The eval harness
+    adds the requests its questions need after the seed; the demo's seed never does."""
+    await _insert_rows(session, "time_off_requests", rows)
+
+
+async def _insert_rows(session: AsyncSession, table_name: str, rows: Sequence[Row]) -> None:
+    row_type = ROW_TYPES[table_name]
+    array_columns = _ARRAY_COLUMNS[table_name]
+    values = {
+        field.name: [
+            _array_literal(getattr(row, field.name))
+            if field.name in array_columns
+            else getattr(row, field.name)
+            for row in rows
+        ]
+        for field in fields(row_type)
+    }
+    await session.execute(_INSERTS[table_name], values)
 
 
 def _array_literal(items: Sequence[int]) -> str:

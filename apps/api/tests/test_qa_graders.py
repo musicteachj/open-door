@@ -590,7 +590,7 @@ def redteam() -> list[Any]:
 
 
 def test_the_set_has_about_sixty_questions(questions: list[Any]) -> None:
-    assert 56 <= len(questions) <= 64
+    assert 60 <= len(questions) <= 70
 
 
 def test_the_kinds_are_spread_as_the_spec_asks(questions: list[Any]) -> None:
@@ -635,7 +635,7 @@ def test_every_expected_section_applies_to_its_asker_or_location(questions: list
 
 def test_unanswerable_decision_and_identity_items_expect_no_section(questions: list[Any]) -> None:
     for q in questions:
-        if q.kind in ("unanswerable", "employment_decision", "ai_identity"):
+        if q.kind in ("unanswerable", "employment_decision", "ai_identity", "tool_answer"):
             assert q.expect == (), q.id
         else:
             assert q.expect, q.id
@@ -832,12 +832,14 @@ def smoke() -> Any:
     return datasets.load_smoke(SMOKE_PATH)
 
 
-def test_the_smoke_list_names_fifteen_and_eleven_real_items(
+def test_the_smoke_list_names_fifteen_eleven_and_six_real_items(
     smoke: Any, questions: list[Any], redteam: list[Any]
 ) -> None:
-    assert (len(smoke.qa), len(smoke.redteam)) == (15, 11)
+    actions = datasets.load_actions()
 
-    datasets.check_smoke(smoke, redteam, questions)
+    assert (len(smoke.qa), len(smoke.redteam), len(smoke.actions)) == (15, 11, 6)
+
+    datasets.check_smoke(smoke, redteam, questions, actions)
 
 
 def test_the_smoke_questions_cover_what_the_plan_asks(smoke: Any, questions: list[Any]) -> None:

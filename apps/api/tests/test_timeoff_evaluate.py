@@ -495,3 +495,54 @@ def test_every_check_runs_and_problems_come_out_in_the_specs_order() -> None:
     # Wed Oct 21 to Sat Nov 21 is 32 days: too long, and not counted, so no not-enough.
     long = run(pto(date(2026, 10, 21), date(2026, 11, 21)), opening=_ZERO)
     assert long.problems == ("too-long",)
+
+
+# The dates a request may use cite the handbook's sentence (Phase 5, stage 4): "A request can start
+# today or later, and end by December 31 of next year" in 4.1, and "Sick time can't be recorded for
+# a day before your first day of work, or for a day after December 31 of next year" in 4.3.
+
+
+def test_the_date_rules_are_in_the_table_with_their_sections() -> None:
+    assert RULES["pto-dates"] == Rule("4.1", "pto-dates")
+    assert RULES["sick-dates"] == Rule("4.3", "sick-dates")
+
+
+def test_pto_out_of_range_cites_the_pto_date_rule_and_an_in_range_one_does_not() -> None:
+    # Yesterday (Mon Oct 19), an end past Fri 2027-12-31 (Thu Dec 30 2027 to Mon 2028-01-03), and a
+    # day before an opening dated Wed Oct 21 (today is Tue Oct 20) are each out of range.
+    yesterday = run(pto(date(2026, 10, 19)))
+    too_late = run(pto(date(2027, 12, 30), date(2028, 1, 3)))
+    before_opening = run(pto(date(2026, 10, 20)), opening=Opening(date(2026, 10, 21), 4800))
+    for result in (yesterday, too_late, before_opening):
+        assert result.problems == ("out-of-range",)
+        assert RULES["pto-dates"] in result.rules
+    # Today, Tue Oct 20, is in range: nothing about dates to cite.
+    assert RULES["pto-dates"] not in run(pto(date(2026, 10, 20))).rules
+
+
+def test_sick_time_before_the_hire_date_or_after_next_year_cites_the_sick_date_rule() -> None:
+    # Hired Mon 2026-06-01, today Wed 2026-06-10: Wed 2026-05-20 is inside the 30-day window but
+    # before the hire. With a 2026 today, Thu 2027-12-30 to Mon 2028-01-03 ends past Dec 31 2027.
+    hired = Person("salaried", "TX", date(2026, 6, 1), MON_TO_FRI)
+    before_hire = run(
+        sick(date(2026, 5, 20)),
+        who=hired,
+        opening=Opening(date(2026, 6, 1), 0),
+        today=date(2026, 6, 10),
+    )
+    too_late = run(sick(date(2027, 12, 30), date(2028, 1, 3)))
+    for result in (before_hire, too_late):
+        assert result.problems == ("out-of-range",)
+        assert RULES["sick-dates"] in result.rules
+        assert RULES["sick-window"] not in result.rules
+
+
+def test_sick_time_past_the_window_cites_the_window_not_the_date_rule() -> None:
+    # Today Wed Oct 21 2026; Sun Sep 20 is 31 days back (an every-day schedule makes it count).
+    late = run(sick(date(2026, 9, 20)), who=person(schedule=ALL_DAYS), today=date(2026, 10, 21))
+    assert late.problems == ("out-of-range",)
+    assert RULES["sick-window"] in late.rules
+    assert RULES["sick-dates"] not in late.rules
+    # An in-range sick day cites neither.
+    fine = run(sick(date(2026, 10, 21)), today=date(2026, 10, 21))
+    assert RULES["sick-dates"] not in fine.rules

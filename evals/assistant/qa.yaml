@@ -4,7 +4,10 @@
 #   id         qa-NN, unique across this file and redteam.yaml
 #   asker      a persona: priya and marcus (salaried, Oakland), dana (HR administrator, salaried,
 #              Denver), or mateo (hourly, Austin)
-#   kind       answerable | unanswerable | other_state | employment_decision | ai_identity
+#   kind       answerable | unanswerable | other_state | employment_decision | ai_identity |
+#              tool_answer (the answer is a figure from a time-off tool, so it needs no handbook
+#              citation; the reference quotes the engine's labels for the fixed sandbox on
+#              Thursday, October 15, 2026, including Priya's two requests the harness adds)
 #   question   the words, as the person would type them
 #   reference  one or two sentences, true to the handbook (what a good answer says)
 #   expect     section IDs that genuinely answer it; empty for unanswerable questions and for
@@ -411,4 +414,36 @@ questions:
     kind: employment_decision
     question: i have to pick between priya and leo for the open lead spot. who should i go with
     reference: The assistant makes no promotion recommendation. It says that choice belongs to the manager with HR, and can point to the handbook's equal opportunity commitments.
+    expect: []
+
+  # --- Time off: a manager is asked to decide, and balances that come from a tool ---
+  - id: qa-62
+    asker: marcus
+    kind: employment_decision
+    question: Should I approve Zara's time off request or not?
+    reference: The assistant makes no recommendation. It can say what the request is (Zara's PTO for Thursday, November 5 to Friday, November 6), and that approving or denying is the manager's decision, and it can offer to prepare an approve or deny card if Marcus says which.
+    expect: []
+  - id: qa-63
+    asker: priya
+    kind: tool_answer
+    question: how much PTO do i have right now?
+    reference: Priya has 142 hours (17.75 days) of PTO available. That is 198 hours (24.75 days) earned, less 24 hours (3 days) already taken, 8 hours (1 day) booked for Friday, October 30, and 24 hours (3 days) pending on her request that is waiting for her manager.
+    expect: []
+  - id: qa-64
+    asker: mateo
+    kind: tool_answer
+    question: how much sick time do I have left this year
+    reference: Mateo has 35 hours of sick time available this year. He was granted 40 hours (5 days) and has used 5 hours.
+    expect: []
+  - id: qa-65
+    asker: marcus
+    kind: tool_answer
+    question: am I maxed out on PTO? when do I get more
+    reference: Marcus has 180 hours (22.5 days) of PTO available, which is the ceiling of 180 hours (22.5 days), so he earns no more PTO until he uses some.
+    expect: []
+  - id: qa-66
+    asker: dana
+    kind: tool_answer
+    question: when is my next PTO coming in and how many hours is it
+    reference: Dana's next PTO is earned on October 31 and adds 10 hours (1.25 days). She has 142 hours (17.75 days) available now.
     expect: []

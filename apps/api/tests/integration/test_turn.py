@@ -1263,6 +1263,12 @@ async def test_the_trace_records_how_the_turn_went(
         "search_handbook",
         "get_my_profile",
         "find_people",
+        "get_time_off_balance",
+        "list_time_off_requests",
+        "check_time_off",
+        "propose_time_off_request",
+        "propose_time_off_decision",
+        "propose_cancel_time_off",
     ]
 
 
@@ -1466,6 +1472,31 @@ async def test_closing_the_stream_cancels_tools_that_are_still_running(
     await stream.aclose()  # type: ignore[attr-defined]
 
     assert state["canceled"] is True, "the slow tool was canceled by the close, not left running"
+
+
+async def test_a_tool_runs_with_the_turns_own_time_conversation_and_turn(
+    app_engine: AsyncEngine, seeded_sandbox: SeedCompany, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    seen: list[ToolContext] = []
+
+    async def run(name: str, raw: dict[str, Any], ctx: ToolContext) -> ToolOutcome:
+        seen.append(ctx)
+        return ToolOutcome([{"type": "text", "text": "ok"}], summary="seen")
+
+    monkeypatch.setattr(turn_module, "run_tool", run)
+    transport = PlanTransport(
+        tool_use_plan(("search_handbook", {"query": "pto"})), text_plan("Done.")
+    )
+    env = await make_env(app_engine, seeded_sandbox, transport=transport)
+    later = NOW + timedelta(minutes=3)
+
+    await env.ask(now=later)
+
+    [ctx] = seen
+    turn = await env.last_turn()
+    assert ctx.now == later
+    assert ctx.turn_id == turn.id
+    assert ctx.conversation_id == env.conversation.id
 
 
 async def test_a_tool_input_that_is_not_an_object_is_an_error_result_not_a_failed_turn(

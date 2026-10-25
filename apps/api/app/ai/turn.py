@@ -41,15 +41,15 @@ from collections.abc import (
 )
 from contextlib import aclosing
 from dataclasses import dataclass, replace
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from functools import partial
 from typing import Any, ClassVar, Literal
 from uuid import UUID
 
 import anyio
-from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncEngine
+from sqlalchemy import func, select
+from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 
 from app.ai.budget import BudgetExceeded, Caps, Reservation, reserve, settle
 from app.ai.citations import CitationEvent, CitationMapper
@@ -62,7 +62,6 @@ from app.ai.conversations import (
     conversation_is_outdated,
     finish_turn,
     model_history,
-    recover_abandoned,
     search_sources,
     start_turn,
 )
@@ -86,9 +85,17 @@ from app.ai.pricing import (
     turn_call_cost,
 )
 from app.ai.prompts.versions import CANARY, system_prompt
+from app.ai.proposals import (
+    ProposalOut,
+    cancel_turn_proposals_in,
+    cancel_unreported_proposals_in,
+    conversation_proposals,
+    outcomes_since,
+    recover_abandoned_turns,
+)
 from app.ai.text import error_name, one_line
 from app.ai.tools.base import ToolContext, ToolOutcome, failure, text_block
-from app.ai.tools.registry import TOOL_DEFINITIONS, describe_call, run_tool
+from app.ai.tools.registry import TOOL_DEFINITIONS, describe_call, proposes, run_tool
 from app.ai.transport import (
     FALLBACK_BETA,
     Finished,
@@ -103,13 +110,16 @@ from app.ai.transport import (
     Transport,
 )
 from app.ai.transport import TextDelta as ModelText
-from app.db.models import AiConversation, AiTurn
+from app.db.models import AiConversation, AiMessage, AiProposal, AiTurn
 from app.db.tenancy import TenantContext, tenant_session
 from app.domain.handbook.applicability import Asker
 from app.modules.audit.service import record_event
 from app.policy import Actor
 
 logger = logging.getLogger(__name__)
+
+# Before any change a card can have: the reference point when no context was ever stored.
+NEVER = datetime(1970, 1, 1, tzinfo=UTC)
 
 MAX_MODEL_CALLS = 8
 MAX_TOKENS = 8000
@@ -133,6 +143,8 @@ TOOL_TIMEOUT = timedelta(seconds=30)
 MAX_TOOLS_PER_RESPONSE = 5
 MAX_CONCURRENT_TOOLS = 3
 MAX_TOOL_RUNS_PER_TURN = 20
+# What the model is told for a second card in one response (spec, "Proposals").
+ONE_CARD_TEXT = "Only one card can be made per answer; this call was not run."
 # The crisis text never waits on the HR lookup longer than this.
 HR_CONTACT_TIMEOUT = timedelta(seconds=2)
 # Closing the model's stream, and settling a call, are shielded from cancellation (the first so the
@@ -246,6 +258,18 @@ class ToolFinished:
 
 
 @dataclass(frozen=True)
+class Proposal:
+    """The card a proposal tool just stored, sent right after that tool's `tool.finished`. The
+    payload is the same shape as the conversation read's proposals, with `turnRunning` true."""
+
+    name: ClassVar[str] = "proposal"
+    proposal: ProposalOut
+
+    def to_json(self) -> dict[str, Any]:
+        return self.proposal.model_dump(mode="json", by_alias=True)
+
+
+@dataclass(frozen=True)
 class Escalation:
     name: ClassVar[str] = "escalation"
     kind: Literal["sensitive", "crisis", "unavailable"]
@@ -319,6 +343,7 @@ TurnEvent = (
     | Citation
     | ToolStarted
     | ToolFinished
+    | Proposal
     | Escalation
     | Error
     | TurnCompleted
@@ -624,6 +649,7 @@ class TurnRun:
         history: list[dict[str, Any]],
         sources: list[SourceEntry],
         previous_answer: str | None,
+        outcomes: tuple[str, ...] = (),
     ) -> None:
         self.deps = deps
         self.conversation = conversation
@@ -633,6 +659,7 @@ class TurnRun:
         self.history = history
         self.mapper = CitationMapper(sources)
         self.previous_answer = previous_answer
+        self.outcomes = outcomes
         self.started_loop_s = _clock()
         self.deadline_loop_s = self.started_loop_s + TURN_DEADLINE.total_seconds()
 
@@ -688,6 +715,11 @@ class TurnRun:
         self.inflight: Reservation | None = None
         self.first_event_ms: int | None = None
         self.finish_failed = False
+        # The cards that successful tool outcomes reported this turn. A card stored while its tool
+        # timed out or was canceled is not here, and the ending cancels it.
+        self.reported_proposals: set[UUID] = set()
+        # Whether the whole turn (question, context, every round, answer) reached the history.
+        self.history_stored = False
 
     # -- start --
 
@@ -698,18 +730,60 @@ class TurnRun:
         """Recover an abandoned turn, add this one, and read what the turn starts from. Raises
         `TurnRunning` when a turn is still in progress."""
         async with tenant_session(deps.engine, deps.tenant_ctx) as db:
-            await recover_abandoned(db, conversation.id)
+            # The abandoned turns' cards are canceled in this same transaction, after their turns.
+            await recover_abandoned_turns(db, deps.tenant_ctx, conversation.id)
             turn = await start_turn(db, conversation, question)
             history = await model_history(db, conversation.id)
             sources = await search_sources(db, conversation.id)
             previous = (
                 await db.execute(
-                    select(AiTurn.answer_text, AiTurn.status, AiTurn.error_code)
+                    select(
+                        AiTurn.answer_text,
+                        AiTurn.status,
+                        AiTurn.error_code,
+                        AiTurn.started_at,
+                        AiTurn.ended_at,
+                    )
                     .where(AiTurn.conversation_id == conversation.id, AiTurn.id != turn.id)
                     .order_by(AiTurn.started_at.desc(), AiTurn.id.desc())
                     .limit(1)
                 )
             ).first()
+            # What changed for the person's cards since the last context the model was shown: the
+            # start of the latest earlier turn whose context was stored in the history (its
+            # outcomes were computed at that same `now()`, the transaction's start). A turn that
+            # failed, crashed, or ended in a crisis stored none, so what it would have said is
+            # still news. With no such turn, every change is.
+            # Wait for a confirm or dismiss still committing (it holds the card's row), so the read
+            # below sees the card's final state: its `ended_at` is its transaction's start, which
+            # can be earlier than this turn's, and a row nobody could see would never be reported.
+            # Lock order here: the turn rows (recovery, the new turn), then these card rows. A
+            # confirm takes only a card row and the balance lock, never a turn, and a proposal
+            # being made takes the conversation's advisory lock, then its turn row, then the card
+            # rows. Nothing holding a card row waits on a turn row, so none of them can cycle.
+            await db.execute(
+                select(AiProposal.id)
+                .where(
+                    AiProposal.conversation_id == conversation.id, AiProposal.status == "pending"
+                )
+                .with_for_update(read=True)
+            )
+            reference = (
+                await db.execute(
+                    select(func.max(AiTurn.started_at))
+                    .join(AiMessage, AiMessage.turn_id == AiTurn.id)
+                    .where(
+                        AiTurn.conversation_id == conversation.id,
+                        AiTurn.id != turn.id,
+                        AiMessage.role == "system",
+                    )
+                )
+            ).scalar_one()
+            outcomes = outcomes_since(
+                await conversation_proposals(db, conversation.id),
+                reference or NEVER,
+                (await db.execute(select(func.now()))).scalar_one(),
+            )
         return cls(
             deps,
             conversation,
@@ -718,7 +792,8 @@ class TurnRun:
             turn_id=turn.id,
             history=history,
             sources=sources,
-            previous_answer=_previous_answer(previous),
+            previous_answer=_previous_answer(None if previous is None else previous[:3]),
+            outcomes=outcomes,
         )
 
     # -- bookkeeping --
@@ -1001,6 +1076,7 @@ class TurnRun:
             now=self.now,
             handbook_label=self.deps.handbook_label,
             operator_notes=outcome.operator_notes,
+            outcomes=self.outcomes,
         )
         question_message = {"role": "user", "content": self.question_message.content}
         context_message: dict[str, Any] = {"role": "system", "content": [text_block(context)]}
@@ -1299,19 +1375,30 @@ class TurnRun:
         model's order, filled as the tool finishes. A tool still running when the turn is canceled
         keeps its slot: not ok, with what it was asked."""
         runnable: list[int] = []
+        over_limit = 0
+        extra_cards = 0
+        made_a_card = False
         for index in range(len(blocks)):
             if index >= MAX_TOOLS_PER_RESPONSE:
                 message = (
                     f"At most {MAX_TOOLS_PER_RESPONSE} tools can run at once. "
                     "Ask for the rest in another step."
                 )
+                over_limit += 1
             elif self.tool_runs >= MAX_TOOL_RUNS_PER_TURN:
                 message = (
                     f"At most {MAX_TOOL_RUNS_PER_TURN} tools can run for one question. "
                     "Answer with what you have."
                 )
+                over_limit += 1
+            elif proposes(blocks[index]["name"]) and made_a_card:
+                # Two cards from one response would both be told "a card is shown", but a new card
+                # replaces the pending one, so only the first call in call order is made.
+                message = ONE_CARD_TEXT
+                extra_cards += 1
             else:
                 self.tool_runs += 1
+                made_a_card = made_a_card or proposes(blocks[index]["name"])
                 runnable.append(index)
                 continue
             results[index] = failure(message)
@@ -1321,17 +1408,17 @@ class TurnRun:
             {"name": blocks[i]["name"], "inputSummary": summaries[i], "ok": False, "durationMs": 0}
             for i in runnable
         )
-        skipped = len(blocks) - len(runnable)
-        if skipped:
-            self.tool_trace.append(
-                {
-                    "name": "skipped",
-                    "inputSummary": f"{skipped} calls not run (limit)",
-                    "ok": False,
-                    "durationMs": 0,
-                    "count": skipped,
-                }
-            )
+        for count, reason in ((over_limit, "limit"), (extra_cards, "one card at a time")):
+            if count:
+                self.tool_trace.append(
+                    {
+                        "name": "skipped",
+                        "inputSummary": f"{count} calls not run ({reason})",
+                        "ok": False,
+                        "durationMs": 0,
+                        "count": count,
+                    }
+                )
         return slot_of
 
     async def _run_tools(
@@ -1350,8 +1437,11 @@ class TurnRun:
             asker=deps.asker,
             version_id=deps.version_id,
             embedder=deps.embedder,
+            now=self.now,
+            conversation_id=self.conversation.id,
+            turn_id=self.turn_id,
         )
-        finished_events: asyncio.Queue[ToolFinished] = asyncio.Queue()
+        finished_events: asyncio.Queue[ToolFinished | Proposal] = asyncio.Queue()
         slots = asyncio.Semaphore(MAX_CONCURRENT_TOOLS)
 
         async def one(index: int, block: dict[str, Any]) -> None:
@@ -1383,11 +1473,26 @@ class TurnRun:
             finished_events.put_nowait(
                 ToolFinished(block["id"], not outcome.is_error, outcome.summary, elapsed_ms)
             )
+            if outcome.proposal is not None and not outcome.is_error:
+                # Reported to the model as made, so the ending keeps it; then sent to the browser,
+                # right after this tool's own `tool.finished`.
+                self.reported_proposals.add(outcome.proposal.id)
+                finished_events.put_nowait(Proposal(outcome.proposal))
 
         tasks = [asyncio.create_task(one(index, blocks[index])) for index in slot_of]
         try:
-            for _ in slot_of:
-                yield await self._within(finished_events.get)
+            # One `tool.finished` for each tool that runs, and a `proposal` after the ones that made
+            # a card.
+            remaining = len(slot_of)
+            while remaining:
+                event = await self._within(finished_events.get)
+                if isinstance(event, ToolFinished):
+                    remaining -= 1
+                yield event
+            # A tool queues its `proposal` right after its `tool.finished`, in the same step, so
+            # the last one is already waiting here.
+            while not finished_events.empty():
+                yield finished_events.get_nowait()
         except _DeadlineExceeded:
             self.fail("model-unavailable")
             raise
@@ -1500,7 +1605,7 @@ class TurnRun:
             # bound can't lose the audit (invariant 7).
             await self._offer_escalation(kind, reason="budget" if self.budget_stopped else None)
         if self.guard_passed:
-            await self._store_history()
+            self.history_stored = await self._store_history()
         if self.first_event_ms is None and (self.error is not None or self.sensitive):
             # The error (and any escalation) goes out right after this write: it is the first
             # thing the person sees.
@@ -1537,13 +1642,30 @@ class TurnRun:
         )
         try:
             async with tenant_session(self.deps.engine, self.deps.tenant_ctx) as db:
+                # The turn's row first, then its cards, in one transaction: a confirm sees either
+                # both ended or neither (the reverse order deadlocks with a late proposal).
                 await finish_turn(db, self.turn_id, outcome)
+                await self._cancel_cards(db)
         except Exception as error:
             logger.error(
                 "Recording the end of turn %s failed (%s)", self.turn_id, error_name(error)
             )
             self.finish_failed = True
             return
+
+    async def _cancel_cards(self, db: AsyncSession) -> None:
+        """Cancel the turn's pending cards that its stored history doesn't back, in the ending's own
+        transaction. A turn that completed with its whole history stored keeps the cards the model
+        was told about; every other ending (stopped, failed, deadline, crisis, a question-only
+        history) cancels all of them. Even a kept turn cancels a card no successful tool outcome
+        reported: it was stored while its tool timed out or was canceled."""
+        ctx = self.deps.tenant_ctx
+        if self.status == "completed" and self.history_stored:
+            await cancel_unreported_proposals_in(
+                db, ctx, self.turn_id, self.reported_proposals, "turn-incomplete"
+            )
+        else:
+            await cancel_turn_proposals_in(db, ctx, self.turn_id, "turn-incomplete")
 
     def _audited_escalation(self) -> str | None:
         if self.budget_stopped:
@@ -1556,13 +1678,13 @@ class TurnRun:
             return "unavailable"
         return self._late_escalation()
 
-    async def _store_history(self) -> None:
+    async def _store_history(self) -> bool:
         """Put this turn into history: all of it in one append when it ended with a storable
         answer (the question, the context, every round, and the answer), otherwise its question
         alone, so the next turn's history shows what was asked and replays nothing half-finished.
 
         If the whole turn is refused, the question alone is tried in its own attempt. Nothing here
-        raises, so `finish_turn` always runs."""
+        raises, so `finish_turn` always runs. Returns whether the whole turn was stored."""
         complete = self.final is not None or (self.answer_without_final and self.rounds)
         if complete and self.status == "completed" and self.context_message:
             # With no final message the history ends on the last tool results, and the next
@@ -1570,8 +1692,9 @@ class TurnRun:
             tail = [self.final] if self.final is not None else []
             whole = [self.question_message, self.context_message, *self.rounds, *tail]
             if await self._try_append(whole):
-                return
+                return True
         await self._try_append([self.question_message])
+        return False
 
     async def _try_append(self, batch: list[StoredMessage]) -> bool:
         try:

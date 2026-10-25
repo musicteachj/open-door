@@ -23,7 +23,9 @@ grading, the judge, the scoreboard, and the exit codes.
 **The sandbox is real, not rolled back.** The retrieval eval runs in one transaction and rolls it
 back. `run_turn` commits through sessions of its own, so a turn can't sit inside one. The harness
 creates a sandbox with a fixed tenant ID, anchor date, and "today", so the seeded IDs repeat and the
-request fingerprints repeat, and it removes the sandbox when the run ends, even when an item raises.
+request fingerprints repeat (the anchor is the date of every turn, so the seed's "last week" is the
+questions' last week), adds the two time-off requests the action items need (eval_sandbox.py), and
+it removes the sandbox when the run ends, even when an item raises.
 The cleanup runs through the database owner (`MIGRATION_DATABASE_URL`): deleting the tenant cascades
 to every table that holds its rows, but the daily spend ledger has no tenant, so the rows the run
 added to it are deleted by hand: exactly the ones that match the eval tenant's own spend rows (see
@@ -49,7 +51,7 @@ from collections import Counter
 from collections.abc import AsyncIterator, Awaitable, Callable, Collection, Mapping, Sequence
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field, replace
-from datetime import UTC, date, datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from pathlib import Path
 from typing import Any, Literal
@@ -109,7 +111,15 @@ from app.ai.turn import (
 from app.ai.turn import TextDelta as AnswerText
 from app.core.config import Settings, get_settings
 from app.db.engine import create_engine
-from app.db.models import AiSpend, AiTurn, HandbookSection, HandbookVersion, Tenant
+from app.db.models import (
+    AiProposal,
+    AiSpend,
+    AiTurn,
+    HandbookSection,
+    HandbookVersion,
+    Tenant,
+    TimeOffRequest,
+)
 from app.db.spend_cleanup import SpendRow, remove_sandboxes, spend_rows_of
 from app.db.tenancy import TenantContext, tenant_session
 from app.domain.handbook.models import Audience
@@ -117,7 +127,12 @@ from app.modules.handbook.asker import load_asker
 from app.modules.handbook.search import pinned_version_id
 from app.modules.identity.actor import load_actor
 from app.modules.people.queries import get_me
-from app.modules.sandbox.seed import SeedCompany, build_company, insert_company
+from app.modules.sandbox.seed import (
+    SeedCompany,
+    build_company,
+    insert_company,
+    insert_time_off_requests,
+)
 from app.modules.sandbox.service import is_no_published_handbook
 
 # The eval's modules are the package `assistant` under evals/. Run as a script, only this folder is
@@ -126,7 +141,15 @@ EVALS_ROOT = Path(__file__).resolve().parent.parent
 if str(EVALS_ROOT) not in sys.path:
     sys.path.insert(0, str(EVALS_ROOT))
 
-from assistant import datasets, graders, handgrades, judge, scoreboard  # noqa: E402
+from assistant import (  # noqa: E402
+    action_graders,
+    datasets,
+    eval_sandbox,
+    graders,
+    handgrades,
+    judge,
+    scoreboard,
+)
 from assistant.judge import ConsoleSpendLimit  # noqa: E402
 
 EVAL_DIR = Path(__file__).resolve().parent
@@ -140,10 +163,11 @@ EFFORT_FIXTURES_DIR = EVAL_DIR / "fixtures-effort"
 # uuid5(NAMESPACE_DNS, "open-door-assistant-eval"), written out so it can't drift. Changing it
 # changes every seeded ID and so every request fingerprint: every fixture would need re-recording.
 TENANT_ID = UUID("fd45e42b-3779-548c-909c-346ae603c862")
-# The date the seed data counts back from: the same as the integration tests' sandbox.
-ANCHOR_DATE = date(2026, 10, 5)
 # "Today" for every turn: a Thursday, afternoon in UTC and morning in Pacific time.
 NOW = datetime(2026, 10, 15, 17, 0, tzinfo=UTC)
+# The date the seed data counts back from: today's date, so the seed's "last week" is the
+# questions' last week.
+ANCHOR_DATE = NOW.date()
 SANDBOX_LIFETIME = timedelta(hours=24)
 # The most the cleanup may take after a run ends or is canceled.
 CLEANUP_TIMEOUT_SECONDS = 10
@@ -176,14 +200,18 @@ class EvalItem:
 
 
 async def create_fixed_sandbox(app_engine: AsyncEngine) -> SeedCompany:
-    """Create the fixed tenant with the full seed company, as the API's own login."""
-    company = build_company(TENANT_ID, ANCHOR_DATE)
+    """Create the fixed tenant with the full seed company and the eval's own requests (see
+    eval_sandbox.py), as the API's own login. Returns the company with those requests in it."""
+    seeded = build_company(TENANT_ID, ANCHOR_DATE)
+    extra = eval_sandbox.eval_requests(seeded)
+    company = eval_sandbox.with_eval_requests(seeded)
     expires_at = datetime.now(UTC) + SANDBOX_LIFETIME
     async with tenant_session(app_engine, TenantContext(TENANT_ID, None)) as session:
         session.add(Tenant(id=TENANT_ID, expires_at=expires_at, anchor_date=ANCHOR_DATE))
         # The tenant row goes first: every seeded row refers to it.
         await session.flush()
-        await insert_company(session, company)
+        await insert_company(session, seeded)
+        await insert_time_off_requests(session, extra)
     return company
 
 
@@ -345,6 +373,16 @@ class EscalationNote:
 
 
 @dataclass(frozen=True)
+class ProposalNote:
+    """A confirm card the turn made, as the database holds it after the turn: its action
+    ("timeoff.request", "timeoff.decide", "timeoff.cancel") and its status (a card the turn's
+    ending canceled is no longer "pending")."""
+
+    action: str
+    status: str
+
+
+@dataclass(frozen=True)
 class CallUsage:
     """One model attempt's tokens, kept so a live run can report cache use and cost."""
 
@@ -393,6 +431,12 @@ class ItemTrace:
     turn_error_code: str | None
     # The turn's cost as the turn recorded it (guard included).
     cost_usd: Decimal
+    # Every card the turn made, read from the database after it.
+    proposals: tuple[ProposalNote, ...] = ()
+    # The IDs of the time-off requests the turn added or changed: the requests of the whole sandbox
+    # read before and after the turn. A turn the model only proposes in changes none.
+    requests_added: tuple[str, ...] = ()
+    requests_changed: tuple[str, ...] = ()
     # Live runs only: one entry for each call that has no recording after the item, naming the call
     # and why (a transient error, or a stream the loop closed early). The runner reports them.
     recording_gaps: tuple[str, ...] = field(default=(), compare=False)
@@ -687,17 +731,27 @@ async def _run_item(
         version_id=version_id,
         handbook_label=label,
     )
+    requests_before = await request_snapshot(app_engine)
     events = [
         event
         async for event in run_turn(
             deps, conversation=conversation, question=item.question, now=NOW
         )
     ]
+    requests_after = await request_snapshot(app_engine)
     async with tenant_session(app_engine, ctx) as db:
         turn = (
             await db.scalars(select(AiTurn).where(AiTurn.conversation_id == conversation.id))
         ).one()
         turn_status, turn_error_code, cost_usd = turn.status, turn.error_code, turn.cost_usd
+        proposals = tuple(
+            ProposalNote(action, status)
+            for action, status in await db.execute(
+                select(AiProposal.action, AiProposal.status)
+                .where(AiProposal.conversation_id == conversation.id)
+                .order_by(AiProposal.created_at, AiProposal.id)
+            )
+        )
 
     if isinstance(transport, RecordingTransport):
         # The turn's outcome says whether a stream the loop closed early was the loop stopping a
@@ -728,11 +782,44 @@ async def _run_item(
         turn_status=turn_status,
         turn_error_code=turn_error_code,
         cost_usd=cost_usd,
+        proposals=proposals,
+        requests_added=tuple(sorted(requests_after.keys() - requests_before.keys())),
+        requests_changed=tuple(
+            sorted(
+                request_id
+                for request_id, row in requests_after.items()
+                if request_id in requests_before and requests_before[request_id] != row
+            )
+        ),
         recording_gaps=_recording_gaps(transport, observer),
         used=_used_keys(observer),
         console_limit=turn_error_code == CONSOLE_LIMIT_CODE,
         requests=tuple(observer.requests),
     )
+
+
+async def request_snapshot(app_engine: AsyncEngine) -> dict[str, tuple[Any, ...]]:
+    """Every time-off request in the sandbox by ID, with every column a write could change, read
+    as the sandbox itself (no one's session). The harness reads it before and after a turn: the
+    model only proposes, so the two must be the same."""
+    async with tenant_session(app_engine, TenantContext(TENANT_ID, None)) as db:
+        rows = await db.execute(
+            select(
+                TimeOffRequest.id,
+                TimeOffRequest.person_id,
+                TimeOffRequest.type,
+                TimeOffRequest.start_date,
+                TimeOffRequest.end_date,
+                TimeOffRequest.partial_minutes,
+                TimeOffRequest.amount_minutes,
+                TimeOffRequest.status,
+                TimeOffRequest.decided_by,
+                TimeOffRequest.decided_at,
+                TimeOffRequest.decision_note,
+                TimeOffRequest.canceled_at,
+            )
+        )
+        return {str(row[0]): tuple(row) for row in rows}
 
 
 def answer_as_shown(events: Sequence[TurnEvent]) -> tuple[str, tuple[dict[str, Any], ...]]:
@@ -897,6 +984,9 @@ def _usage(
 
 REDTEAM_FIXTURE = "redteam.jsonl.gz"
 QA_FIXTURE = "qa.jsonl.gz"
+ACTIONS_FIXTURE = "actions.jsonl.gz"
+# Each dataset's recordings file, by the dataset's name in a record.
+FIXTURE_FILES = {"redteam": REDTEAM_FIXTURE, "qa": QA_FIXTURE, "actions": ACTIONS_FIXTURE}
 JUDGE_FIXTURE = "judge.jsonl.gz"
 # The judge's recordings of the hand-graded answers. No run merges into or prunes this file:
 # `--agreement` reads and writes it alone, so the agreement never depends on a smoke or effort run.
@@ -948,14 +1038,16 @@ def items_for_set(
     config: SetConfig,
     redteam: Sequence[datasets.RedTeamItem],
     qa: Sequence[datasets.QaItem],
+    actions: Sequence[datasets.ActionItem],
     smoke: datasets.SmokeSet,
-) -> tuple[list[datasets.RedTeamItem], list[datasets.QaItem]]:
-    """The red-team and Q&A items a set runs, in the order the datasets list them."""
+) -> tuple[list[datasets.RedTeamItem], list[datasets.QaItem], list[datasets.ActionItem]]:
+    """The red-team, Q&A, and action items a set runs, in the order the datasets list them."""
     if not config.smoke_only:
-        return list(redteam), list(qa)
+        return list(redteam), list(qa), list(actions)
     return (
         [item for item in redteam if item.id in smoke.redteam],
         [item for item in qa if item.id in smoke.qa],
+        [item for item in actions if item.id in smoke.actions],
     )
 
 
@@ -965,6 +1057,7 @@ class EvalPaths:
 
     redteam: Path = datasets.REDTEAM_PATH
     qa: Path = datasets.QA_PATH
+    actions: Path = datasets.ACTIONS_PATH
     smoke: Path = datasets.SMOKE_PATH
     judge_md: Path = judge.JUDGE_MD_PATH
     hand_grades: Path = handgrades.HAND_GRADES_PATH
@@ -973,7 +1066,7 @@ class EvalPaths:
 
 def dataset_hashes(paths: EvalPaths) -> dict[str, str]:
     """The SHA-256 of each file a run's results depend on, by file name."""
-    files = [paths.redteam, paths.qa, paths.smoke, paths.judge_md]
+    files = [paths.redteam, paths.qa, paths.actions, paths.smoke, paths.judge_md]
     if paths.hand_grades.exists():
         files.append(paths.hand_grades)
     return {path.name: datasets.dataset_hash(path) for path in files}
@@ -1285,6 +1378,7 @@ class EvalRun:
         mode: Literal["offline", "live"],
         redteam: Sequence[datasets.RedTeamItem],
         qa: Sequence[datasets.QaItem],
+        actions: Sequence[datasets.ActionItem] = (),
         fixtures_dir: Path,
         env: RunEnv,
         app_engine: AsyncEngine,
@@ -1301,6 +1395,7 @@ class EvalRun:
         self.mode = mode
         self.redteam = list(redteam)
         self.qa = list(qa)
+        self.actions = list(actions)
         self.fixtures_dir = fixtures_dir
         self.env = env
         self.app_engine = app_engine
@@ -1317,6 +1412,8 @@ class EvalRun:
         self.cap = SpendCap(config.cap_usd if self.live else None)
         self.records: list[scoreboard.ItemRecord] = []
         self.unjudged: list[str] = []
+        # The same, for trial 1 only: it is the only trial recorded, so it alone gates the save.
+        self.unjudged_in_trial_1: list[str] = []
         self.daily_baseline_usd = Decimal(0)
         self.prune = prune
         self.stop_cause: str | None = None
@@ -1324,11 +1421,25 @@ class EvalRun:
         self.system = env.paths.judge_md.read_text(encoding="utf-8")
         self.judge_store: FixtureStore | None = None
 
+    def _datasets(
+        self,
+    ) -> tuple[
+        tuple[
+            str,
+            Sequence[datasets.RedTeamItem]
+            | Sequence[datasets.QaItem]
+            | Sequence[datasets.ActionItem],
+        ],
+        ...,
+    ]:
+        """The datasets this run asks, in the order a trial runs them."""
+        return (("redteam", self.redteam), ("qa", self.qa), ("actions", self.actions))
+
     def _planned(self) -> list[tuple[int, str, str]]:
         return [
             (trial, dataset, item.id)
             for trial in range(1, self.trials + 1)
-            for dataset, items in (("redteam", self.redteam), ("qa", self.qa))
+            for dataset, items in self._datasets()
             for item in items
         ]
 
@@ -1348,7 +1459,7 @@ class EvalRun:
                 return FixtureStore(self.fixtures_dir / name)
             return _load_store(self.fixtures_dir / name)
 
-        stores = {"redteam": start(REDTEAM_FIXTURE), "qa": start(QA_FIXTURE)}
+        stores = {dataset: start(name) for dataset, name in FIXTURE_FILES.items()}
         judge_store = start(JUDGE_FIXTURE)
         self.judge_store = judge_store
         # Offline, each dataset replays from its own file, as it was recorded (these same stores,
@@ -1361,7 +1472,7 @@ class EvalRun:
         try:
             try:
                 for trial in range(1, self.trials + 1):
-                    for dataset, items in (("redteam", self.redteam), ("qa", self.qa)):
+                    for dataset, items in self._datasets():
                         if not items:
                             continue
                         first = trial == 1
@@ -1427,7 +1538,9 @@ class EvalRun:
         self,
         trial: int,
         dataset: str,
-        items: Sequence[datasets.RedTeamItem] | Sequence[datasets.QaItem],
+        items: Sequence[datasets.RedTeamItem]
+        | Sequence[datasets.QaItem]
+        | Sequence[datasets.ActionItem],
         transport: Transport,
         embeddings: QueryEmbeddings,
         judge_for: judge.Judge,
@@ -1461,6 +1574,8 @@ class EvalRun:
                 cost = await self._judge(record, item, trace, judge_for)
                 if cost is None:
                     self.unjudged.append(item.id)
+                    if trial == 1:
+                        self.unjudged_in_trial_1.append(item.id)
                     self.stop_cause = "the cap, which left no room for the judge's next call"
                     raise _CapReached
                 judge_cost = cost
@@ -1506,9 +1621,18 @@ class EvalRun:
         self,
         trial: int,
         dataset: str,
-        item: datasets.RedTeamItem | datasets.QaItem,
+        item: datasets.RedTeamItem | datasets.QaItem | datasets.ActionItem,
         trace: ItemTrace,
     ) -> scoreboard.ItemRecord:
+        if isinstance(item, datasets.ActionItem):
+            grade = action_graders.grade_action_item(
+                trace,
+                item,
+                scanner=self.grader.scanner_for(trace.person_id),
+                resolve=self._request_id,
+            )
+            trace = slim_trace(trace)
+            return scoreboard.ItemRecord(trial, dataset, item.id, item.group, None, grade, trace)
         if isinstance(item, datasets.QaItem):
             grade = self.grader.qa(
                 trace,
@@ -1519,9 +1643,13 @@ class EvalRun:
             )
             trace = slim_trace(trace)
             return scoreboard.ItemRecord(trial, dataset, item.id, None, item.kind, grade, trace)
-        grade = self.grader.redteam(trace, route=item.route)
+        grade = self.grader.redteam(trace, route=item.route, proposal=item.proposal)
         trace = slim_trace(trace)
         return scoreboard.ItemRecord(trial, dataset, item.id, item.group, None, grade, trace)
+
+    def _request_id(self, ref: datasets.RequestRef) -> str:
+        """The ID of the request an action item names, in this run's sandbox."""
+        return eval_sandbox.request_id(self.company, ref.person, ref.start)
 
     async def _judge(
         self,
@@ -1541,6 +1669,7 @@ class EvalRun:
             asker=judge.asker_line(self.company, item.asker),
             reference=item.reference,
             location_asked=judge.location_line(self.company, item.location_code),
+            today=NOW.date().isoformat(),
         )
         prepared = judge_for.prepare(record.judge_input)
         record.judge_key = prepared.key
@@ -1558,13 +1687,16 @@ class EvalRun:
         return record.judge.cost_usd
 
     def _all_items_ran(self) -> bool:
-        """Whether every planned item ran and was judged."""
+        """Whether every item of trial 1 ran and was judged. Only trial 1 is ever recorded, so a
+        run that stopped in a later trial still holds all the recordings there are."""
         done = {(r.trial, r.dataset, r.item_id) for r in self.records}
-        return not self.unjudged and all(key in done for key in self._planned())
+        return not self.unjudged_in_trial_1 and all(
+            key in done for key in self._planned() if key[0] == 1
+        )
 
     def _ran_everything(self, judge_store: FixtureStore) -> bool:
-        """Whether every planned item ran, was judged, and had every call recorded. Only then has a
-        full run seen every request every item asks for, so `--prune` may drop the rest. An item
+        """Whether every item of trial 1 ran, was judged, and had every call recorded. Only then has
+        a full run seen every request every item asks for, so `--prune` may drop the rest. An item
         that stopped partway (a gap, a failed judge call) never made its later requests."""
         if not self._all_items_ran():
             return False
@@ -1579,13 +1711,14 @@ class EvalRun:
         """Merge the first trial's recordings into the fixture files. An item whose calls were not
         all recorded (a transient failure) keeps its old recordings, and is named.
 
-        With `--prune`, and only when every item ran, old records no item asked for are dropped."""
+        With `--prune`, and only when every item of trial 1 ran, old records no item asked for are
+        dropped."""
         if self.fresh and not self._all_items_ran():
             # A fresh run calls every request again. Saving part of that could replace a shared
             # record under an item that never ran, so nothing is saved.
             print(
-                "--fresh run stopped before every item ran, so no recordings were saved (the query"
-                " embeddings were)."
+                "--fresh run stopped before every item of trial 1 ran, so no recordings were saved"
+                " (the query embeddings were)."
             )
             return
         prune = self.prune and self._ran_everything(judge_store)
@@ -1615,7 +1748,7 @@ class EvalRun:
                 print(f"{item}: {reason}, so it was not re-recorded and its old recordings stay")
             if dataset == "qa":
                 qa_recordable = recordable
-            name = REDTEAM_FIXTURE if dataset == "redteam" else QA_FIXTURE
+            name = FIXTURE_FILES[dataset]
             count = merge_into(self.fixtures_dir / name, store, used=used, observed=observed)
             print(f"Recorded {len(recordable)} {dataset} items into {name} ({count} records).")
         # An item's judge record is replaced only with its answer: the item's Q&A recordings were
@@ -1730,14 +1863,20 @@ def estimate_text(config: SetConfig, item_count: int) -> str:
 def _load_datasets(
     paths: EvalPaths,
     config: SetConfig,
-) -> tuple[list[datasets.RedTeamItem], list[datasets.QaItem], datasets.SmokeSet]:
+) -> tuple[
+    list[datasets.RedTeamItem], list[datasets.QaItem], list[datasets.ActionItem], datasets.SmokeSet
+]:
     redteam = datasets.load_redteam(paths.redteam)
     qa = datasets.load_qa(paths.qa)
+    actions = datasets.load_actions(paths.actions)
     smoke = datasets.load_smoke(paths.smoke)
-    datasets.check_unique_ids(redteam, qa)
+    datasets.check_unique_ids(redteam, qa, actions)
+    datasets.check_requests(
+        actions, eval_sandbox.with_eval_requests(build_company(TENANT_ID, ANCHOR_DATE))
+    )
     if config.smoke_only:
-        datasets.check_smoke(smoke, redteam, qa)
-    return redteam, qa, smoke
+        datasets.check_smoke(smoke, redteam, qa, actions)
+    return redteam, qa, actions, smoke
 
 
 @asynccontextmanager
@@ -1926,10 +2065,12 @@ async def eval_command(args: argparse.Namespace, env: RunEnv) -> int:
             f" {env.effort_fixtures_dir.name}/"
         )
     validate_startup(env)
-    redteam_items, qa_items = items_for_set(config, *_load_datasets(env.paths, config))
+    redteam_items, qa_items, action_items = items_for_set(
+        config, *_load_datasets(env.paths, config)
+    )
     live = args.mode == "live"
     if live and not args.yes:
-        print(estimate_text(config, len(redteam_items) + len(qa_items)))
+        print(estimate_text(config, len(redteam_items) + len(qa_items) + len(action_items)))
         return 0
     baseline = _read_baseline(args.compare) if args.compare else None
     # Read now: the run saves its fixtures, and a commit read after would end in `-dirty`.
@@ -1968,6 +2109,7 @@ async def eval_command(args: argparse.Namespace, env: RunEnv) -> int:
             mode="live" if live else "offline",
             redteam=redteam_items,
             qa=qa_items,
+            actions=action_items,
             fixtures_dir=args.fixtures_dir,
             env=env,
             app_engine=app_engine,

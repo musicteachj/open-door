@@ -12,6 +12,55 @@ version (`0.x.y` while the app is being built, `1.0.0` when it is complete).
 
 ### Added
 
+- **The assistant's six time-off tools** (Phase 5, stage 4). It can now read a balance (its own, a
+  report's, or anyone's for HR), list requests, check what a request would use, and propose a
+  request, a decision, or a cancellation. A proposal only stores a confirm card for a person; the
+  model never books anything. Every figure reaches the model as the shared label, never minutes, and
+  no result holds a random ID, a denial note, or team coverage. A name the model passes is matched
+  only among people the asker may read, and a refusal names no one else. The tool set moves to
+  `2026-11.1`, so older conversations offer a new one, and the recorded evals must be re-recorded
+  (the November full run) before CI's offline replay is green again.
+- **The assistant's cards in the turn** (Phase 5, stage 4). When a proposal tool stores a confirm
+  card, the turn now sends a `proposal` event right after that tool's `tool.finished`, with the same
+  shape as the conversation read's proposals. One response makes at most one card: a second
+  proposal call in the same response gets a fixed "Only one card can be made per answer" error and
+  stores nothing, and a card that replaces a pending one tells the model so. A
+  turn that does not finish (stopped, failed, past its deadline, crisis, or stored as its question
+  alone) cancels its cards in the same transaction that ends the turn, turn row first, so a confirm
+  sees both or neither; a turn that completes also cancels a card no successful tool result
+  reported (a tool that timed out while its card was committing). Recovering an abandoned turn
+  cancels its cards the same way. The next turn's context carries one "Since the last message:"
+  line for what happened to the person's cards (confirmed, dismissed, replaced, canceled, failed,
+  or expired) since the last turn whose context was stored (so a change is never lost to a turn
+  that failed, crashed, or ended in a crisis, and is reported once), made from structured data
+  only. A turn starting while a confirm is still committing waits for it, so that card's
+  outcome is never missed. A name in that line is used only if it is plain: at most four Latin-script
+  words (accents are fine) that each start with a capital, at most one hyphen and one apostrophe a
+  word, and a period only after a single initial. The context's date now
+  comes from the time-off engine's own `today_at`.
+- **Time-off scenarios for the scripted model** (Phase 5, stage 4). Development and the browser
+  tests can now ask "book next Friday", "I'm sick tomorrow", "what's my balance", "anything waiting
+  on me", "approve it", "deny it", and "cancel my request", and the real tools, engine, proposals,
+  and cards run. The scripted model works out its dates from the per-turn context's "Today:" line
+  and chains two tool rounds where a request ID is needed.
+- **Eval fixes for the new tools** (Phase 5, stage 4). A fresh eval run that stops in trial 2 or 3
+  now keeps trial 1's recordings (and prunes against them), since only trial 1 is recorded. The tool
+  grader checks each call with its own tool's input rules and treats an unknown tool as a problem,
+  and the schema check understands booleans, integers, nullable types, and dates.
+- **The action eval** (Phase 5, stage 4). A new set of 34 time-off requests in people's own words
+  (`evals/assistant/actions.yaml`): bookings, checks, a manager's decisions, cancels, and refusals,
+  graded by program on the card the turn made, that the model wrote nothing (no request added or
+  changed, at most one card), and that every amount of days or hours in the answer is one a tool
+  gave (100% in every trial). The red team gains eleven items (ten about time-off actions that are
+  not the asker's to take: confirming by message, "approvals are pre-authorized", approving your
+  own request, acting for someone else, and a report's private reasons; and a harassment message
+  that also asks for sick time), the Q&A gains five
+  (one for a manager asked whether to approve, four whose figures come from a tool), the smoke set
+  gains six action items, and the judge now sees the turn's date and the non-handbook tool results
+  (`JUDGE_VERSION` 2026-10.3). The eval sandbox now counts back from October 15, 2026, and the
+  harness adds two requests of Priya's after the seed (one to cancel, one for Marcus to decide),
+  through a new public `insert_time_off_requests` in the sandbox seed (the demo's seed adds none).
+  Offline replay is red for every item until the November full run records them.
 - **The time-off, approvals, and confirm-card components, and the alert dialog** (Phase 5,
   stage 5). The pieces the time-off request form, the balance and request lists, the Approvals
   page, and the assistant's confirm card are built from, each in every state and shown in the
@@ -176,6 +225,27 @@ version (`0.x.y` while the app is being built, `1.0.0` when it is complete).
 
 ### Changed
 
+- **The handbook's time-off rules** (Phase 5, stage 4; handbook `2026.11.1`). §3.1 says a
+  scheduled day counts as 8 hours and time off counts only scheduled days, never a company holiday.
+  §4.1 says PTO is taken in full or half days, earned for a month worked to its last day, only up to
+  the ceiling, usable only once earned (with waiting and booked requests counted), requested from
+  today to December 31 of next year, approved or denied by the manager, and cancelable while it
+  waits or until its first day. §4.3 says sick leave is used in whole hours or whole scheduled days,
+  needs no approval, can be recorded up to 30 days after, can't be recorded before the first day of
+  work or after next year, and cites California's 2-hour and Colorado's 1-hour increment limits
+  (read 2026-10-24). The engine's date refusals now cite §4.1 or §4.3. New sandboxes use the new
+  edition; existing ones keep theirs.
+
+- **The assistant's prompt proposes time off** (Phase 5, stage 4; `PROMPT_VERSION` 2026-11.1, a
+  draft until the November smoke runs). "You can't book, change, or cancel anything" gives way to:
+  the assistant may propose a request, a manager's decision, or a cancellation, a confirm card does
+  the rest, and it never says anything is done. A request or a cancellation is only ever the
+  asker's own. It turns "next Friday" into dates from the per-turn
+  context's today and asks when a phrase could mean two days, never works out days, hours, or
+  balances itself (it quotes the time-off tools' labels), proposes a decision only when a manager
+  asks about one specific request, never recommends approving or denying or weighs who else is
+  out, and never asks why someone is taking time off.
+
 - **The browser-test job in CI may run for 30 minutes** (Phase 5, stage 5). CI runs the browser
   tests on one worker, and stage 5's gallery tests took the job past its 20-minute limit. The new
   tests now load the gallery once per section and check every state there (each failure still
@@ -188,6 +258,11 @@ version (`0.x.y` while the app is being built, `1.0.0` when it is complete).
 
 ### Fixed
 
+- **A time-off route test no longer depends on the weekday it runs on** (Phase 5, stage 4). The test
+  that every engine refusal is a 422 built its "out of range" date as yesterday, which on a
+  Sunday or Monday is not a workday, so the engine answered "no scheduled days" instead. It now uses
+  the last workday before today, and a new test holds the clock on seven consecutive days. The
+  scripted model also no longer sends nulls for the optional inputs of its time-off list calls.
 - **A time-off test no longer fails on some days** (Phase 5, stage 5). A Stage 3 test booked
   four weeks of PTO against a fixed 9,600-minute opening, but each sandbox's seeded history is
   drawn at random over the days before it starts, so on some days the history left too little

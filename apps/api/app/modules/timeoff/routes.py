@@ -52,13 +52,12 @@ from app.modules.timeoff.schemas import (
 )
 from app.modules.timeoff.service import Refused
 from app.modules.timeoff.texts import refusal_text
+from app.modules.timeoff.window import DEFAULT_DAYS_AHEAD, DEFAULT_DAYS_BACK
 from app.policy import Action, can
 
 router = APIRouter(prefix="/time-off", tags=["time-off"])
 
 MAX_ROWS = 200
-DEFAULT_DAYS_BACK = 30
-DEFAULT_DAYS_AHEAD = 120
 
 _STATUS_FOR_CODE = {
     "not-found": status.HTTP_404_NOT_FOUND,

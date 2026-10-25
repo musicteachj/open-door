@@ -13,6 +13,12 @@ on Sonnet 5.5), no `thinking` (omitting it runs adaptive thinking, and `disabled
 against the owner's hand grades. Structured outputs and citations can't be combined, but the judge
 sends no documents, so that never arises.
 
+**What the judge reads besides the answer and the cited passages** is the turn's date (`<today>`)
+and what the assistant's other tools returned (`<tool_results>`: the asker's profile, the people
+directory, the time-off tools). Without them it graded a balance quoted from a tool as an uncited
+policy claim, and a date worked out from today's date as unsupported. Handbook search results are
+not tool facts: they are the passages.
+
 **The schema form** is nested: one object for each rubric line, `{"<key>": {"verdict": boolean,
 "reason": string}}`, all required, nothing else. A reason beside every verdict keeps the judge's
 explanation with the line it explains, and the owner reads those next to the hand grades.
@@ -194,6 +200,30 @@ class Passage:
         )
 
 
+# The handbook search tool's name: its results are the cited passages, not tool facts.
+SEARCH_TOOL = "search_handbook"
+# The name given to a tool result with no matching tool call in the trace.
+UNKNOWN_TOOL = "tool"
+
+
+@dataclass(frozen=True)
+class ToolFact:
+    """What one of the assistant's other tools (the asker's profile, the people directory, the
+    time-off tools) returned in the turn. The judge reads it to know where a figure or a date in the
+    answer came from: a figure from a tool is not a policy claim."""
+
+    tool: str
+    text: str
+    is_error: bool = False
+
+    def to_json(self) -> dict[str, Any]:
+        return {"tool": self.tool, "text": self.text, "is_error": self.is_error}
+
+    @classmethod
+    def from_json(cls, data: Mapping[str, Any]) -> "ToolFact":
+        return cls(str(data["tool"]), str(data["text"]), bool(data.get("is_error", False)))
+
+
 @dataclass(frozen=True)
 class JudgeInput:
     """Everything the judge is given about one answer."""
@@ -207,14 +237,21 @@ class JudgeInput:
     # The answer with a `[n]` marker where each citation sits.
     answer: str
     passages: tuple[Passage, ...] = field(default=())
+    # The date of the turn (YYYY-MM-DD), so a date the answer worked out from "today" can be
+    # checked. None for an input saved before the judge was given it.
+    today: str | None = None
+    # The non-handbook tool results of the turn, in the order they were sent to the assistant.
+    tool_facts: tuple[ToolFact, ...] = field(default=())
 
     def to_json(self) -> dict[str, Any]:
         return {
             "asker": self.asker,
             "location_asked": self.location_asked,
+            "today": self.today,
             "question": self.question,
             "reference": self.reference,
             "answer": self.answer,
+            "tool_facts": [f.to_json() for f in self.tool_facts],
             "passages": [p.to_json() for p in self.passages],
         }
 
@@ -228,6 +265,8 @@ class JudgeInput:
             reference=str(data["reference"]),
             answer=str(data["answer"]),
             passages=tuple(Passage.from_json(p) for p in data["passages"]),
+            today=None if data.get("today") is None else str(data["today"]),
+            tool_facts=tuple(ToolFact.from_json(f) for f in data.get("tool_facts", ())),
         )
 
 
@@ -246,11 +285,20 @@ def user_message(judge_input: JudgeInput) -> str:
     parts = [f"<asker>{_escape(judge_input.asker)}</asker>"]
     if judge_input.location_asked is not None:
         parts.append(f"<location_asked>{_escape(judge_input.location_asked)}</location_asked>")
+    if judge_input.today is not None:
+        parts.append(f"<today>{_escape(judge_input.today)}</today>")
     parts += [
         f"<question>{_escape(judge_input.question)}</question>",
         f"<reference_answer>{_escape(judge_input.reference)}</reference_answer>",
         f"<answer>{_escape(judge_input.answer)}</answer>",
     ]
+    if judge_input.tool_facts:
+        parts.append("<tool_results>")
+        for fact in judge_input.tool_facts:
+            flag = ' error="true"' if fact.is_error else ""
+            opening = f'<tool_result tool="{_attribute(fact.tool)}"{flag}>'
+            parts.append(f"{opening}{_escape(fact.text)}</tool_result>")
+        parts.append("</tool_results>")
     if not judge_input.passages:
         parts.append("<cited_passages>The answer cites nothing.</cited_passages>")
     else:
@@ -369,11 +417,33 @@ def annotate_answer(answer: str, citations: Iterable[Mapping[str, Any]]) -> str:
     return "".join(pieces)
 
 
+def tool_facts_of(trace: Any) -> tuple[ToolFact, ...]:
+    """The turn's tool results that are not handbook searches, in the order they were sent.
+
+    A result belongs to the search tool by its call's name. A result with no call in the trace is a
+    search result when its text holds handbook passages (`/handbook/...` lines), and a fact
+    otherwise."""
+    names = {use.id: use.name for use in trace.tool_uses}
+    facts: list[ToolFact] = []
+    for result in trace.tool_results:
+        name = names.get(result.tool_use_id)
+        if name == SEARCH_TOOL or (name is None and "/handbook/" in result.text):
+            continue
+        facts.append(ToolFact(name or UNKNOWN_TOOL, result.text, bool(result.is_error)))
+    return tuple(facts)
+
+
 def build_input(
-    trace: Any, *, asker: str, reference: str, location_asked: str | None
+    trace: Any,
+    *,
+    asker: str,
+    reference: str,
+    location_asked: str | None,
+    today: str | None = None,
 ) -> JudgeInput:
-    """The judge's input for one traced answer: the answer with its citation markers, and the
-    passages it cites with the handbook's text for each section."""
+    """The judge's input for one traced answer: the answer with its citation markers, the
+    passages it cites with the handbook's text for each section, the turn's date, and what the
+    other tools returned."""
     sections = section_texts(trace.tool_results)
     passages: dict[int, Passage] = {}
     # A marker can be cited more than once, each time for different words. The judge sees all of
@@ -402,6 +472,8 @@ def build_input(
         reference=reference,
         answer=annotate_answer(trace.answer_text, trace.citations),
         passages=tuple(passages[marker] for marker in sorted(passages)),
+        today=today,
+        tool_facts=tool_facts_of(trace),
     )
 
 
