@@ -1,6 +1,7 @@
 import { delay, http, HttpResponse } from 'msw'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { stubAbsoluteUrls } from '@/test/absolute-urls'
+import { proposalOut } from '@/test/fake-assistant'
 import { server } from '@/test/msw'
 import { ApiError } from './api-fetch'
 import { streamTurn, type TurnStreamEvent } from './stream-turn'
@@ -165,6 +166,23 @@ describe('streamTurn: the events', () => {
     expect(escalation?.type === 'escalation' && escalation.data.hrContact).toEqual([contact])
     const error = events[9]
     expect(error?.type === 'error' && error.data.code).toBe('internal')
+  })
+
+  it('hands over a proposal event with its card, and keeps the event allow-list otherwise', async () => {
+    const proposal = proposalOut()
+    server.use(
+      http.post(TURNS_URL, () =>
+        streamResponse(
+          sse('proposal', proposal),
+          sse('proposal.secret', { a: 1 }),
+          sse('status', { text: 'After' }),
+        ),
+      ),
+    )
+    expect(await run()).toEqual([
+      { type: 'proposal', data: proposal },
+      { type: 'status', data: { text: 'After' } },
+    ])
   })
 
   it('reads an event split across chunks', async () => {

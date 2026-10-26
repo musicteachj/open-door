@@ -32,9 +32,17 @@ export function useAssistantComposer(conversation: ConversationOut | null, budge
   return { props, banner, send, startNewConversation: () => void startNewConversation() }
 }
 
+const composerInput = () =>
+  document.querySelector<HTMLTextAreaElement>('[data-slot="composer"] textarea')
+
 /** Puts focus in the composer if it was lost when the page changed shape (home to conversation). */
 export function focusComposerIfLost() {
   const active = document.activeElement
   if (active !== null && active !== document.body) return
-  document.querySelector<HTMLTextAreaElement>('[data-slot="composer"] textarea')?.focus()
+  composerInput()?.focus()
+}
+
+/** Puts focus in the composer, wherever it was. A card's "Ask again" does this after it fills the box. */
+export function focusComposer() {
+  composerInput()?.focus()
 }

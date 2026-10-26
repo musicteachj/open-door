@@ -1473,7 +1473,7 @@
         "tags": [
           "time-off"
         ],
-        "summary": "Time-off requests: your own, everyone below you, or what waits for your decision",
+        "summary": "Time-off requests: your own, your team, what waits for you, or what you decided",
         "operationId": "listTimeOffRequests",
         "parameters": [
           {
@@ -1484,7 +1484,8 @@
               "enum": [
                 "mine",
                 "team",
-                "waiting"
+                "waiting",
+                "decided"
               ],
               "type": "string",
               "default": "mine",
@@ -1505,8 +1506,10 @@
                   "type": "null"
                 }
               ],
+              "description": "First day of the window. For `decided` it is the first day a decision was made, by the caller's calendar (default: 90 days ago). For the other scopes it is the first day the leave covers (default: 30 days ago). Ignored for `waiting`.",
               "title": "From"
-            }
+            },
+            "description": "First day of the window. For `decided` it is the first day a decision was made, by the caller's calendar (default: 90 days ago). For the other scopes it is the first day the leave covers (default: 30 days ago). Ignored for `waiting`."
           },
           {
             "name": "to",
@@ -1522,8 +1525,10 @@
                   "type": "null"
                 }
               ],
+              "description": "Last day of the window, inclusive. For `decided` it is the last day a decision was made (default: today). For the other scopes it is the last day the leave covers (default: 120 days ahead). Ignored for `waiting`.",
               "title": "To"
-            }
+            },
+            "description": "Last day of the window, inclusive. For `decided` it is the last day a decision was made (default: today). For the other scopes it is the last day the leave covers (default: 120 days ahead). Ignored for `waiting`."
           }
         ],
         "responses": {
@@ -1711,16 +1716,6 @@
         "operationId": "getTimeOffCalendar",
         "parameters": [
           {
-            "name": "from",
-            "in": "query",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "format": "date",
-              "title": "From"
-            }
-          },
-          {
             "name": "to",
             "in": "query",
             "required": true,
@@ -1729,6 +1724,25 @@
               "format": "date",
               "title": "To"
             }
+          },
+          {
+            "name": "from",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "First day of the holidays to list. Without it, the earliest day sick time may start, which is as far back as the form's date picker reaches.",
+              "title": "From"
+            },
+            "description": "First day of the holidays to list. Without it, the earliest day sick time may start, which is as far back as the form's date picker reaches."
           }
         ],
         "responses": {
@@ -2214,6 +2228,14 @@
             "type": "array",
             "title": "Scheduledweekdays"
           },
+          "dayMinutes": {
+            "type": "integer",
+            "title": "Dayminutes"
+          },
+          "dayLabel": {
+            "type": "string",
+            "title": "Daylabel"
+          },
           "holidays": {
             "items": {
               "$ref": "#/components/schemas/HolidayOut"
@@ -2228,14 +2250,26 @@
             "type": "string",
             "format": "date",
             "title": "Latestend"
+          },
+          "sickLookbackDays": {
+            "type": "integer",
+            "title": "Sicklookbackdays"
+          },
+          "halfDayMinutes": {
+            "type": "integer",
+            "title": "Halfdayminutes"
           }
         },
         "type": "object",
         "required": [
           "scheduledWeekdays",
+          "dayMinutes",
+          "dayLabel",
           "holidays",
           "earliestStart",
-          "latestEnd"
+          "latestEnd",
+          "sickLookbackDays",
+          "halfDayMinutes"
         ],
         "title": "CalendarOut",
         "description": "The date picker's marks for the signed-in person."
@@ -2795,6 +2829,26 @@
         ],
         "title": "DecideCard",
         "description": "A card to approve or deny a request, for its person's direct manager."
+      },
+      "DeciderOut": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "name"
+        ],
+        "title": "DeciderOut",
+        "description": "Who approved or denied a request: their id too, so a page can tell its own decisions."
       },
       "DecisionBody": {
         "properties": {
@@ -4051,6 +4105,17 @@
           "turnRunning": {
             "type": "boolean",
             "title": "Turnrunning"
+          },
+          "deniedNote": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Deniednote"
           }
         },
         "type": "object",
@@ -4370,7 +4435,7 @@
           "decidedBy": {
             "anyOf": [
               {
-                "$ref": "#/components/schemas/NameOut"
+                "$ref": "#/components/schemas/DeciderOut"
               },
               {
                 "type": "null"
@@ -4447,6 +4512,10 @@
               }
             ],
             "title": "Coverage"
+          },
+          "canCancel": {
+            "type": "boolean",
+            "title": "Cancancel"
           }
         },
         "type": "object",
@@ -4465,7 +4534,8 @@
           "decidedBy",
           "decidedAt",
           "decisionNote",
-          "canceledAt"
+          "canceledAt",
+          "canCancel"
         ],
         "title": "RequestOut"
       },
@@ -4996,6 +5066,11 @@
               }
             ],
             "title": "Waitingcount"
+          },
+          "today": {
+            "type": "string",
+            "format": "date",
+            "title": "Today"
           }
         },
         "type": "object",
@@ -5004,7 +5079,8 @@
           "ptoAvailableLabel",
           "pendingCount",
           "approver",
-          "waitingCount"
+          "waitingCount",
+          "today"
         ],
         "title": "SummaryOut"
       },

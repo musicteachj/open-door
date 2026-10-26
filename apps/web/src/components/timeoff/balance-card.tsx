@@ -9,7 +9,14 @@ import { RuleChip } from './rule-chip'
 
 type BalanceCardProps =
   | { kind: 'pto'; balance: PtoBalanceOut; rule?: RuleRefOut; className?: string }
-  | { kind: 'sick'; year: SickYearOut; rule?: RuleRefOut; className?: string }
+  | {
+      kind: 'sick'
+      year: SickYearOut
+      rule?: RuleRefOut
+      /** The heading, when it isn't "this year" (next year's grant). */
+      label?: string
+      className?: string
+    }
   | { kind: 'loading'; className?: string }
 
 const cardClass =
@@ -87,7 +94,7 @@ function BalanceCard(props: BalanceCardProps) {
     )
   }
   if (props.kind === 'sick') {
-    const { year, rule, className } = props
+    const { year, rule, label, className } = props
     return (
       <section
         data-slot="balance-card"
@@ -95,7 +102,7 @@ function BalanceCard(props: BalanceCardProps) {
         className={cn(cardClass, className)}
       >
         <div className="flex flex-col gap-1">
-          <Head id={headingId} label={balanceCopy.sickLabel} rule={rule} />
+          <Head id={headingId} label={label ?? balanceCopy.sickLabel} rule={rule} />
           <Figure label={year.availableLabel} showDays={false} />
         </div>
         <Ledger

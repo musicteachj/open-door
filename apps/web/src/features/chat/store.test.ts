@@ -14,6 +14,7 @@ import {
   onTurn,
   openStream,
   problemResponse,
+  proposalOut,
 } from '@/test/fake-assistant'
 import { useChatStore, type SendDeps } from './store'
 
@@ -279,6 +280,105 @@ describe('the state machine', () => {
     expect(state().turn?.citations).toEqual([])
     // Once: the retraction itself adds no line, the server's status event does.
     expect(state().turn?.steps.map((step) => step.text)).toEqual(['Let me look that up first.'])
+  })
+
+  it('keeps a proposal under its turn, replaces it by id, and keeps it through text.retracted', async () => {
+    const first = proposalOut({ turnRunning: true })
+    const other = proposalOut({ id: 'c0ffee00-0000-4000-8000-0000000000b2', turnRunning: true })
+    const replaced = proposalOut({ status: 'canceled', canceledReason: 'replaced' })
+    onTurn(() =>
+      eventStream(
+        started,
+        ['proposal', first],
+        ['text.delta', { text: 'Let me look. ' }],
+        ['proposal', other],
+        ['text.retracted', {}],
+        ['proposal', replaced],
+        completed,
+      ),
+    )
+    await state().send('Book Friday off', makeDeps())
+    expect(state().turn?.proposals).toEqual([replaced, other])
+  })
+
+  it('reads the conversation again when a card with a new id arrives, not when one is sent again', async () => {
+    const first = proposalOut({ turnRunning: true })
+    const stream = openStream()
+    onTurn(() => stream.response())
+    const deps = makeDeps()
+    const sending = state().send('Book Friday off', deps)
+    stream.push(...started)
+    stream.push('proposal', first)
+    await vi.waitFor(() => expect(deps.invalidateConversation).toHaveBeenCalledTimes(1))
+    // The same card again (its state changed): the stored cards were read already.
+    stream.push('proposal', { ...first, status: 'executed' })
+    await vi.waitFor(() => expect(state().turn?.proposals[0]?.status).toBe('executed'))
+    expect(deps.invalidateConversation).toHaveBeenCalledTimes(1)
+    stream.push(...completed)
+    stream.close()
+    await sending
+  })
+
+  it.each([
+    ['completes', [completed]],
+    ['fails', [['error', { code: 'internal', message: 'Something went wrong.', requestId: 'r1' }]]],
+    ['closes with no closing event', []],
+  ] as [string, [string, unknown][]][])(
+    'reads the conversation again when the card arrives and when a turn with a card %s, and keeps the card',
+    async (_ending, closing) => {
+      const card = proposalOut({ turnRunning: true })
+      onTurn(() => eventStream(started, ['proposal', card], ...closing))
+      const deps = makeDeps()
+      await state().send('Book Friday off', deps)
+      expect(deps.invalidateConversation).toHaveBeenCalledTimes(2)
+      expect(state().turn?.proposals).toEqual([card])
+    },
+  )
+
+  it('reads the conversation again when the card arrives and again when the turn is stopped, and keeps the card', async () => {
+    const stream = openStream()
+    onTurn(() => stream.response())
+    const deps = makeDeps()
+    const sending = state().send('Book Friday off', deps)
+    stream.push(...started)
+    stream.push('proposal', proposalOut({ turnRunning: true }))
+    await vi.waitFor(() => expect(state().turn?.proposals).toHaveLength(1))
+    state().stop(deps)
+    await sending
+    expect(deps.invalidateConversation).toHaveBeenCalledTimes(2)
+    expect(state().turn?.proposals).toHaveLength(1)
+  })
+
+  it('marks an earlier pending card replaced when the turn sends a card with a new id', async () => {
+    const first = proposalOut({ turnRunning: true })
+    const second = proposalOut({ id: 'c0ffee00-0000-4000-8000-0000000000b2', turnRunning: true })
+    const done = proposalOut({ id: 'c0ffee00-0000-4000-8000-0000000000b3', status: 'executed' })
+    onTurn(() =>
+      eventStream(
+        started,
+        ['proposal', done],
+        ['proposal', first],
+        ['proposal', second],
+        completed,
+      ),
+    )
+    await state().send('Book Friday off', makeDeps())
+    const [kept, replaced, latest] = state().turn?.proposals ?? []
+    // A card that already ended is left alone; a pending one is replaced; the newest stays.
+    expect(kept).toEqual(done)
+    expect(replaced).toMatchObject({
+      id: first.id,
+      status: 'canceled',
+      canceledReason: 'replaced',
+      turnRunning: false,
+    })
+    expect(latest).toEqual(second)
+  })
+
+  it('starts each turn with no proposals', async () => {
+    onTurn(() => eventStream(started, completed))
+    await state().send('Sick days?', makeDeps())
+    expect(state().turn?.proposals).toEqual([])
   })
 
   it('numbers citations by section as they arrive, once, so the components never do', async () => {

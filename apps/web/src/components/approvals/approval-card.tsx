@@ -76,10 +76,11 @@ function ApprovalCard(props: ApprovalCardProps) {
   return (
     <li
       data-slot="approval-card"
+      data-request-id={request.id}
       data-state={muted ? 'conflict' : 'default'}
       className={cn(cardClass, muted && 'bg-surface-sunken', className)}
     >
-      <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-3">
+      <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-3 max-sm:flex-col max-sm:items-start">
         <div className="flex min-w-0 items-center gap-3">
           <Avatar size="lg" muted={muted} aria-hidden="true">
             <AvatarFallback>{initialsOf(request.person.name)}</AvatarFallback>

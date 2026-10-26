@@ -40,18 +40,26 @@ type RuleChipsProps = {
   className?: string
 }
 
+/** One rule for each handbook section, in the order first seen: two rules can cite one section. */
+function uniqueBySection<T extends Pick<RuleRefOut, 'sectionId'>>(rules: T[]): T[] {
+  return rules.filter(
+    (rule, index) => rules.findIndex((other) => other.sectionId === rule.sectionId) === index,
+  )
+}
+
 /** "Sources" and a chip for each rule, wrapping onto more rows as needed. Nothing for no rules. */
 function RuleChips({ rules, className }: RuleChipsProps) {
   const labelId = useId()
   if (rules.length === 0) return null
+  const shown = uniqueBySection(rules)
   return (
     <div data-slot="rule-chips" className={cn('flex flex-wrap items-center gap-2', className)}>
       <span id={labelId} className="text-caption text-ink-muted">
         {previewCopy.sources}
       </span>
       <ul aria-labelledby={labelId} className="m-0 flex min-w-0 list-none flex-wrap gap-2 p-0">
-        {rules.map((rule) => (
-          <li key={`${rule.sectionId}-${rule.title}`} className="flex max-w-full min-w-0">
+        {shown.map((rule) => (
+          <li key={rule.sectionId} className="flex max-w-full min-w-0">
             <RuleChip rule={rule} />
           </li>
         ))}

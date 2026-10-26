@@ -10,6 +10,7 @@ import { SandboxIndicator } from '@/components/status/sandbox-indicator'
 import { Toast, ToastProvider, ToastViewport } from '@/components/ui/toast'
 import { navFor } from '@/app/nav'
 import { useMe } from '@/app/useMe'
+import { useTimeOffSummary } from '@/features/time-off/use-time-off'
 import { getGetHandbookQueryKey, useGetHandbook } from '@/api/generated'
 import {
   ConversationSourcePanel,
@@ -21,6 +22,7 @@ import { useMediaQuery } from '@/hooks/use-media-query'
 import { cn } from '@/lib/utils'
 import { formatMonthDay, formatTimeLeft, isExpiringSoon } from '@/lib/time'
 import { useExpiryBannerDismissal } from './expiry-banner-dismissal'
+import { timeOffGlance } from './glance'
 import { useIdentityActions } from './use-identity-actions'
 import { ShellBannerSlot } from './shell-slots'
 import { useShellLayout } from './shell-layout-store'
@@ -38,7 +40,6 @@ const COMPANY = 'Juniper Row'
 const BUILT_PATH = '/how-its-built'
 // The only page with the right rail (the sandbox status and the at-a-glance list).
 const RAIL_PATH = '/ask'
-// The balance and pending-request figures arrive with their data in Phase 5.
 const PERSONA_OPTIONS = PERSONAS.map(({ key, name, title }) => ({ key, name, title }))
 
 export function AppShell() {
@@ -51,10 +52,13 @@ function Frame({ me }: { me: NonNullable<ReturnType<typeof useMe>['data']> }) {
   const actions = useIdentityActions()
   const now = useNow()
   // The right rail belongs to the assistant home alone. Every other page takes the sheet's width.
-  const showRail = useLocation().pathname === RAIL_PATH
+  const { pathname } = useLocation()
+  const showRail = pathname === RAIL_PATH
   // The conversation has its own sandbox pill in its header, so the shell's two (the top bar's and
   // the rail's) step aside, and "At a glance" moves up and hides on a phone (screen 07's notes).
   const conversation = useShellLayout((s) => s.conversation) && showRail
+  // A page that docks a panel beside its content asks for the sheet to clip, not scroll.
+  const stickyPanel = useShellLayout((s) => s.stickyPanel)
   // A passage open from a citation (`?source=`) takes the rail's place (`w-panel`, 420 px) from
   // 1280 px up. Below that it is a modal sheet instead, over everything. The rail itself stops
   // being a side column at 1100 px.
@@ -72,17 +76,23 @@ function Frame({ me }: { me: NonNullable<ReturnType<typeof useMe>['data']> }) {
   const handbook = useGetHandbook({
     query: { queryKey: [...getGetHandbookQueryKey(), 'glance'], enabled: showRail },
   })
-  const glance: GlanceItem[] = handbook.data
-    ? [
-        {
-          id: 'handbook-updated',
-          value: formatMonthDay(handbook.data.version.updatedOn),
-          label: 'Handbook updated',
-          destination: 'Handbook',
-          to: '/handbook',
-        },
-      ]
-    : []
+  // The time-off summary feeds the rail on the assistant home and a manager's Approvals badge on
+  // every page. A failure leaves the figures and the badge out, as the handbook figure is.
+  const summary = useTimeOffSummary({ enabled: showRail || me.isManager })
+  const glance: GlanceItem[] = [
+    ...(summary.data && showRail ? timeOffGlance(summary.data) : []),
+    ...(handbook.data
+      ? [
+          {
+            id: 'handbook-updated',
+            value: formatMonthDay(handbook.data.version.updatedOn),
+            label: 'Handbook updated',
+            destination: 'Handbook',
+            to: '/handbook',
+          },
+        ]
+      : []),
+  ]
   const [navRef, navScrolls] = useScrollsMore<HTMLElement>()
   const [dismissed, dismiss] = useExpiryBannerDismissal(me.tenantExpiresAt)
 
@@ -138,6 +148,9 @@ function Frame({ me }: { me: NonNullable<ReturnType<typeof useMe>['data']> }) {
                 icon={item.icon}
                 label={item.label}
                 to={item.to}
+                count={
+                  item.to === '/approvals' ? (summary.data?.waitingCount ?? undefined) : undefined
+                }
                 className="max-[760px]:shrink-0"
               />
             ))}
@@ -176,7 +189,7 @@ function Frame({ me }: { me: NonNullable<ReturnType<typeof useMe>['data']> }) {
               'relative flex min-h-[calc(100dvh-24px)] flex-col rounded-xl border border-border bg-surface-raised',
               // `clip` clips the rounded corners without making the sheet a scroll container, so
               // the conversation's header and composer can stick to the window.
-              conversation ? 'overflow-clip' : 'overflow-hidden',
+              conversation || stickyPanel ? 'overflow-clip' : 'overflow-hidden',
             )}
           >
             <output data-slot="shell-announcement" className="sr-only">

@@ -123,9 +123,13 @@ export interface EarliestStart {
  */
 export interface CalendarOut {
   scheduledWeekdays: number[]
+  dayMinutes: number
+  dayLabel: string
   holidays: HolidayOut[]
   earliestStart: EarliestStart
   latestEnd: string
+  sickLookbackDays: number
+  halfDayMinutes: number
 }
 
 export type CancelCardKind = (typeof CancelCardKind)[keyof typeof CancelCardKind]
@@ -440,6 +444,7 @@ export interface ProposalOut {
   card: Card
   failure: FailureOut | null
   turnRunning: boolean
+  deniedNote?: string | null
 }
 
 export interface TurnOut {
@@ -470,6 +475,14 @@ export interface ConversationOut {
   longHistory: boolean
   historyTooLong: boolean
   outdated: boolean
+}
+
+/**
+ * Who approved or denied a request: their id too, so a page can tell its own decisions.
+ */
+export interface DeciderOut {
+  id: string
+  name: string
 }
 
 export type DecisionBodyDecision = (typeof DecisionBodyDecision)[keyof typeof DecisionBodyDecision]
@@ -775,13 +788,14 @@ export interface RequestOut {
   status: RequestOutStatus
   createdAt: string
   createdVia: RequestOutCreatedVia
-  decidedBy: NameOut | null
+  decidedBy: DeciderOut | null
   decidedAt: string | null
   decisionNote: string | null
   canceledAt: string | null
   availableAfterMinutes?: number | null
   availableAfterLabel?: string | null
   coverage?: CoverageOut[] | null
+  canCancel: boolean
 }
 
 export interface RequestList {
@@ -866,6 +880,7 @@ export interface SummaryOut {
   pendingCount: number
   approver: NameOut | null
   waitingCount: number | null
+  today: string
 }
 
 export interface TurnIn {
@@ -906,7 +921,13 @@ export type GetTimeOffBalancesParams = {
 
 export type ListTimeOffRequestsParams = {
   scope?: ListTimeOffRequestsScope
+  /**
+   * First day of the window. For `decided` it is the first day a decision was made, by the caller's calendar (default: 90 days ago). For the other scopes it is the first day the leave covers (default: 30 days ago). Ignored for `waiting`.
+   */
   from?: string | null
+  /**
+   * Last day of the window, inclusive. For `decided` it is the last day a decision was made (default: today). For the other scopes it is the last day the leave covers (default: 120 days ahead). Ignored for `waiting`.
+   */
   to?: string | null
 }
 
@@ -917,11 +938,15 @@ export const ListTimeOffRequestsScope = {
   mine: 'mine',
   team: 'team',
   waiting: 'waiting',
+  decided: 'decided',
 } as const
 
 export type GetTimeOffCalendarParams = {
-  from: string
   to: string
+  /**
+   * First day of the holidays to list. Without it, the earliest day sick time may start, which is as far back as the form's date picker reaches.
+   */
+  from?: string | null
 }
 
 type SecondParameter<T extends (...args: never) => unknown> = Parameters<T>[1]
@@ -3427,7 +3452,7 @@ export const getListTimeOffRequestsUrl = (params?: ListTimeOffRequestsParams) =>
 }
 
 /**
- * @summary Time-off requests: your own, everyone below you, or what waits for your decision
+ * @summary Time-off requests: your own, your team, what waits for you, or what you decided
  */
 export const listTimeOffRequests = async (
   params?: ListTimeOffRequestsParams,
@@ -3526,7 +3551,7 @@ export function useListTimeOffRequests<
   queryClient?: QueryClient,
 ): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
 /**
- * @summary Time-off requests: your own, everyone below you, or what waits for your decision
+ * @summary Time-off requests: your own, your team, what waits for you, or what you decided
  */
 
 export function useListTimeOffRequests<

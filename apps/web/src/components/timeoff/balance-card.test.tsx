@@ -10,6 +10,7 @@ import {
 } from '@/app/gallery/fixtures/timeoff'
 import { renderWithRouter } from '@/test/render-with-router'
 import { BalanceCard } from './balance-card'
+import { sickCardLabel } from './labels'
 
 function ledger(name: string) {
   const list = screen.getByRole('region', { name }).querySelector('dl')!
@@ -108,6 +109,29 @@ describe('BalanceCard, sick leave', () => {
     expect(
       screen.getByRole('link', { name: 'Source: Handbook CA-4.3, Sick leave' }),
     ).toBeInTheDocument()
+  })
+})
+
+describe('BalanceCard, a later sick year', () => {
+  it('can be named for its year, so next year’s grant is not "this year"', () => {
+    renderWithRouter(
+      <BalanceCard
+        kind="sick"
+        year={SICK_YEAR}
+        rule={SICK_RULE}
+        label={sickCardLabel(2027, 2026)}
+      />,
+    )
+    expect(
+      screen.getByRole('heading', { name: 'Sick leave available in 2027' }),
+    ).toBeInTheDocument()
+  })
+})
+
+describe('sickCardLabel', () => {
+  it('says "this year" for the current year and the year for another', () => {
+    expect(sickCardLabel(2026, 2026)).toBe('Sick leave available this year')
+    expect(sickCardLabel(2027, 2026)).toBe('Sick leave available in 2027')
   })
 })
 

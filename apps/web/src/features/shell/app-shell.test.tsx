@@ -6,8 +6,11 @@ import { getSessionStatus } from '@/app/session-status'
 import { useChatStore } from '@/features/chat/store'
 import { installFakeApi } from '@/test/fake-api'
 import { installFakeHandbook } from '@/test/fake-handbook'
+import { installFakeTimeOff } from '@/test/fake-time-off'
+import { PRIYA_WAITING } from '@/app/gallery/fixtures/timeoff'
 import { DIRECTORY_PEOPLE, installFakeDirectory } from '@/test/fake-directory'
 import { meFor } from '@/test/fixtures'
+import { useShellLayout } from './shell-layout-store'
 import { useShellToast } from './toast-store'
 import { personaSwitcher, signOutViaMenu, switchViaMenu } from '@/test/persona-menu'
 import { server } from '@/test/msw'
@@ -103,7 +106,7 @@ describe('the shell: layout', () => {
       within(nav)
         .getAllByRole('link')
         .map((a) => a.textContent),
-    ).toEqual(['Ask', 'Directory', 'Handbook'])
+    ).toEqual(['Ask', 'Time off', 'Directory', 'Handbook'])
   })
 
   it('marks the page you are on, and Directory for a profile below it', async () => {
@@ -181,7 +184,7 @@ describe('the shell: layout', () => {
     )
   })
 
-  it('leaves the glance list out when the handbook fails, and the page still works', async () => {
+  it('leaves out only the handbook figure when the handbook fails, and the page still works', async () => {
     installFakeApi('priya')
     let hits = 0
     server.use(
@@ -207,6 +210,33 @@ describe('the shell: layout', () => {
         name: /^Good (morning|afternoon|evening), Priya\.$/,
       }),
     ).toBeVisible()
+    const glance = await within(rail).findByRole('region', { name: 'At a glance' })
+    expect(
+      within(glance)
+        .getAllByRole('link')
+        .map((link) => link.getAttribute('aria-label')),
+    ).toEqual(['92 hours PTO available. Open Time off', '0 requests pending. Open Time off'])
+  })
+
+  it('leaves the rail empty, and hidden below 760 px, when both the handbook and the summary fail', async () => {
+    installFakeApi('priya')
+    const boom = () =>
+      HttpResponse.json(
+        { type: 'about:blank', title: 'Boom', status: 500, instance: '/x' },
+        { status: 500 },
+      )
+    server.use(
+      http.get(`${window.location.origin}/api/v1/handbook`, boom),
+      http.get(`${window.location.origin}/api/v1/time-off/summary`, boom),
+    )
+    const { queryClient } = renderApp({ at: '/ask' })
+    const rail = await screen.findByRole('complementary', { name: 'Sandbox status' })
+    await waitFor(() =>
+      expect(queryClient.getQueryState(['/api/v1/handbook', 'glance'])?.status).toBe('error'),
+    )
+    await waitFor(() =>
+      expect(queryClient.getQueryState(['/api/v1/time-off/summary'])?.status).toBe('error'),
+    )
     expect(within(rail).queryByRole('region', { name: 'At a glance' })).not.toBeInTheDocument()
     // With nothing to list, the rail is hidden on a narrow screen: the indicator is in the top bar.
     expect(rail).toHaveClass('max-[760px]:hidden')
@@ -652,5 +682,184 @@ describe('the shell: review fixes', () => {
     const rail = await screen.findByRole('complementary', { name: 'Sandbox status' })
     await within(rail).findByRole('region', { name: 'At a glance' })
     expect(rail).not.toHaveClass('max-[760px]:hidden')
+  })
+})
+
+describe('the shell: time off, approvals, and the rail', () => {
+  it('clips the sheet without a scroll container on the Time off page, so its docked form can stick', async () => {
+    installFakeApi('priya')
+    installFakeTimeOff()
+    renderApp({ at: '/time-off' })
+    await screen.findByRole('heading', { level: 3, name: 'Upcoming' })
+    expect(document.querySelector('[data-slot="shell-sheet"]')).toHaveClass('overflow-clip')
+  })
+
+  it('clips the sheet when a page asks for it and not otherwise, and stops when the page is left', async () => {
+    installFakeApi('priya')
+    installFakeTimeOff()
+    const { router } = renderApp({ at: '/ask' })
+    await screen.findByRole('navigation', { name: 'Main' })
+    const sheet = () => document.querySelector('[data-slot="shell-sheet"]')
+    expect(sheet()).toHaveClass('overflow-hidden')
+    expect(sheet()).not.toHaveClass('overflow-clip')
+
+    act(() => useShellLayout.getState().setStickyPanel(true))
+    expect(sheet()).toHaveClass('overflow-clip')
+    act(() => useShellLayout.getState().setStickyPanel(false))
+    expect(sheet()).toHaveClass('overflow-hidden')
+
+    // The Time off page sets it by itself, and leaving the page clears it.
+    await act(() => router.navigate('/time-off'))
+    await screen.findByRole('heading', { level: 3, name: 'Upcoming' })
+    expect(sheet()).toHaveClass('overflow-clip')
+    await act(() => router.navigate('/ask'))
+    await waitFor(() => expect(sheet()).toHaveClass('overflow-hidden'))
+    expect(useShellLayout.getState().stickyPanel).toBe(false)
+  })
+
+  const navLinks = () =>
+    within(screen.getByRole('navigation', { name: 'Main' }))
+      .getAllByRole('link')
+      .map((link) => link.getAttribute('aria-label') ?? link.textContent)
+
+  it('shows Marcus the Approvals item with the count in its name, and Priya none', async () => {
+    installFakeApi('marcus')
+    renderApp({ at: '/ask' })
+    const nav = await screen.findByRole('navigation', { name: 'Main' })
+    const approvals = await within(nav).findByRole('link', { name: 'Approvals, 2 waiting' })
+    expect(approvals).toHaveAttribute('href', '/approvals')
+    expect(within(approvals).getByText('2')).toBeVisible()
+  })
+
+  it('shows Priya no Approvals item', async () => {
+    installFakeApi('priya')
+    renderApp({ at: '/ask' })
+    await screen.findByRole('navigation', { name: 'Main' })
+    expect(navLinks()).toEqual(['Ask', 'Time off', 'Directory', 'Handbook'])
+  })
+
+  it('shows plain "Approvals" with no badge when nothing is waiting', async () => {
+    installFakeApi('marcus')
+    installFakeTimeOff({ manager: true, waiting: [] })
+    renderApp({ at: '/ask' })
+    const nav = await screen.findByRole('navigation', { name: 'Main' })
+    const approvals = await within(nav).findByRole('link', { name: 'Approvals' })
+    expect(within(approvals).queryByText('0')).not.toBeInTheDocument()
+    expect(approvals.querySelector('[data-slot="nav-count"]')).toBeNull()
+  })
+
+  it('keeps the Approvals item, without a count, when the summary fails', async () => {
+    installFakeApi('marcus')
+    server.use(
+      http.get(`${window.location.origin}/api/v1/time-off/summary`, () =>
+        HttpResponse.json(
+          { type: 'about:blank', title: 'Boom', status: 500, instance: '/x' },
+          { status: 500 },
+        ),
+      ),
+    )
+    renderApp({ at: '/ask' })
+    const nav = await screen.findByRole('navigation', { name: 'Main' })
+    expect(await within(nav).findByRole('link', { name: 'Approvals' })).toBeVisible()
+  })
+
+  it('removes Approvals when Marcus switches to Priya, and never shows it as Priya', async () => {
+    installFakeApi('marcus')
+    const { user } = renderApp({ at: '/ask' })
+    const nav = await screen.findByRole('navigation', { name: 'Main' })
+    await within(nav).findByRole('link', { name: 'Approvals, 2 waiting' })
+
+    // From the first change on, note the person the switcher names and whether Approvals shows.
+    const seen: { who: string; approvals: boolean }[] = []
+    const observer = new MutationObserver(() => {
+      const main = document.querySelector('nav[aria-label="Main"]')
+      const switcher = document.querySelector('[aria-label^="Switch persona"]')
+      if (!main || !switcher) return
+      seen.push({
+        who: switcher.getAttribute('aria-label') ?? '',
+        approvals: main.textContent?.includes('Approvals') ?? false,
+      })
+    })
+    observer.observe(document.body, { childList: true, subtree: true, attributes: true })
+    await switchViaMenu(user, 'Priya')
+    await waitFor(() => expect(personaSwitcher()).toHaveAccessibleName(PRIYA))
+    await waitFor(() => expect(toast()).not.toBeNull())
+    observer.disconnect()
+
+    expect(navLinks()).toEqual(['Ask', 'Time off', 'Directory', 'Handbook'])
+    expect(seen.filter((entry) => entry.who === PRIYA).length).toBeGreaterThan(0)
+    expect(seen.filter((entry) => entry.who === PRIYA && entry.approvals)).toEqual([])
+  })
+
+  it('adds PTO available and requests pending to the rail, before "Handbook updated"', async () => {
+    installFakeApi('priya')
+    installFakeTimeOff({ mine: [PRIYA_WAITING] })
+    renderApp({ at: '/ask' })
+    const rail = await screen.findByRole('complementary', { name: 'Sandbox status' })
+    const glance = await within(rail).findByRole('region', { name: 'At a glance' })
+    await within(glance).findByRole('link', { name: 'Sep 12 Handbook updated. Open Handbook' })
+    const links = within(glance).getAllByRole('link')
+    expect(links.map((link) => link.getAttribute('aria-label'))).toEqual([
+      '92 hours PTO available. Open Time off',
+      '1 request pending. Open Time off',
+      'Sep 12 Handbook updated. Open Handbook',
+    ])
+    expect(links[0]).toHaveAttribute('href', '/time-off')
+    expect(links[1]).toHaveAttribute('href', '/time-off')
+    // Requests pending carry the marker when some wait, as approvals waiting do; PTO never does.
+    expect(links[1]!.querySelector('[data-slot="glance-marker"]')).not.toBeNull()
+    expect(links[0]!.querySelector('[data-slot="glance-marker"]')).toBeNull()
+    // The figure is the API's label split at its parenthesis, with no days beside it.
+    expect(within(links[0]!).getByText('92 hours')).toBeVisible()
+    expect(within(links[0]!).queryByText(/days/)).not.toBeInTheDocument()
+  })
+
+  it('adds "approvals waiting" for a manager, with the marker when some wait', async () => {
+    installFakeApi('marcus')
+    renderApp({ at: '/ask' })
+    const glance = await screen.findByRole('region', { name: 'At a glance' })
+    const link = await within(glance).findByRole('link', {
+      name: '2 approvals waiting. Open Approvals',
+    })
+    expect(link).toHaveAttribute('href', '/approvals')
+    expect(link.querySelector('[data-slot="glance-marker"]')).not.toBeNull()
+  })
+
+  it('shows no marker when a manager has nothing waiting, and no approvals line for anyone else', async () => {
+    installFakeApi('marcus')
+    installFakeTimeOff({ manager: true, waiting: [] })
+    renderApp({ at: '/ask' })
+    const glance = await screen.findByRole('region', { name: 'At a glance' })
+    const link = await within(glance).findByRole('link', {
+      name: '0 approvals waiting. Open Approvals',
+    })
+    expect(link.querySelector('[data-slot="glance-marker"]')).toBeNull()
+  })
+
+  it('adds no approvals line to the rail of someone who manages no one', async () => {
+    installFakeApi('priya')
+    renderApp({ at: '/ask' })
+    const priyas = await screen.findByRole('region', { name: 'At a glance' })
+    await within(priyas).findByRole('link', { name: /Handbook updated/ })
+    expect(within(priyas).queryByRole('link', { name: /approvals waiting/ })).toBeNull()
+  })
+
+  it('leaves the time-off figures out when the summary fails, and keeps "Handbook updated"', async () => {
+    installFakeApi('priya')
+    server.use(
+      http.get(`${window.location.origin}/api/v1/time-off/summary`, () =>
+        HttpResponse.json(
+          { type: 'about:blank', title: 'Boom', status: 500, instance: '/x' },
+          { status: 500 },
+        ),
+      ),
+    )
+    renderApp({ at: '/ask' })
+    const glance = await screen.findByRole('region', { name: 'At a glance' })
+    expect(
+      within(glance)
+        .getAllByRole('link')
+        .map((link) => link.getAttribute('aria-label')),
+    ).toEqual(['Sep 12 Handbook updated. Open Handbook'])
   })
 })

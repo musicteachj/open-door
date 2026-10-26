@@ -13,14 +13,18 @@ _QUARTER_DAY_MINUTES = DAY_MINUTES // 4  # 120
 _QUARTER_FRACTIONS = {0: "", 1: ".25", 2: ".5", 3: ".75"}
 
 
+def hours_label(minutes: int) -> str:
+    """The hours-only text ("8 hours", "1 hour 30 minutes"), with no days. Not negative."""
+    hours, rest = divmod(minutes, 60)
+    if rest:
+        return _minutes_text(hours, rest)
+    return f"{hours} hour" if hours == 1 else f"{hours} hours"
+
+
 def label(minutes: int) -> str:
     sign = "-" if minutes < 0 else ""
     amount = abs(minutes)
-    hours, rest = divmod(amount, 60)
-    if rest:
-        text = _minutes_text(hours, rest)
-    else:
-        text = f"{hours} hour" if hours == 1 else f"{hours} hours"
+    text = hours_label(amount)
     if amount == HALF_DAY_MINUTES and minutes > 0:
         return f"{text} (half a day)"
     if amount >= DAY_MINUTES and amount % _QUARTER_DAY_MINUTES == 0:

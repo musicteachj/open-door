@@ -37,11 +37,13 @@ describe('NAV_ITEMS', () => {
     for (const item of NAV_ITEMS) expect(item.icon).toBeTruthy()
   })
 
-  it('has only Ask, Directory, and Handbook available in Phase 3', () => {
+  it('has only Ask, Time off, Directory, Handbook, and Approvals available in Phase 5', () => {
     expect(NAV_ITEMS.filter((i) => i.available).map((i) => i.label)).toEqual([
       'Ask',
+      'Time off',
       'Directory',
       'Handbook',
+      'Approvals',
     ])
   })
 
@@ -65,14 +67,24 @@ describe('navFor with every item available (the 02 notes)', () => {
   })
 })
 
-describe('navFor in Phase 3', () => {
+describe('navFor in Phase 5', () => {
+  const everyone = ['Ask', 'Time off', 'Directory', 'Handbook']
+
   it.each([
     ['Priya', priya],
     ['Mateo', mateo],
-    ['Marcus', marcus],
     ['Dana', dana],
-  ])('%s sees exactly Ask, Directory, and Handbook', (_name, me) => {
-    expect(labels(navFor(me))).toEqual(['Ask', 'Directory', 'Handbook'])
+  ])('%s sees Ask, Time off, Directory, and Handbook, and no Approvals', (_name, me) => {
+    expect(labels(navFor(me))).toEqual(everyone)
+  })
+
+  it('shows Approvals to a manager, after Handbook', () => {
+    expect(labels(navFor(marcus))).toEqual([...everyone, 'Approvals'])
+  })
+
+  it('hides Approvals again for the employee a manager switches to', () => {
+    expect(labels(navFor(marcus))).toContain('Approvals')
+    expect(labels(navFor(priya))).not.toContain('Approvals')
   })
 
   it('applies roles to a manager who is also HR', () => {

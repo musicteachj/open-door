@@ -13,7 +13,8 @@ type RequestRowProps = {
   variant: 'mine' | 'team'
   /** Whether the caller may cancel this request (mine only). The server decides; this shows it. */
   canCancel?: boolean
-  onCancel?: (request: RequestOut) => void
+  /** Called with the request and the button, so the page can return focus to it. */
+  onCancel?: (request: RequestOut, button: HTMLButtonElement) => void
   /** Team rows: "Approved October 5", "Denied today". */
   decidedLine?: string | null
   /** Team rows: "Your note". Mine reads "Marcus Bell's note" from the decider. */
@@ -90,7 +91,7 @@ function RequestRow({
               variant="secondary"
               size="sm"
               aria-label={`Cancel ${typeLabel(request.type, { lower: true })} on ${dates}`}
-              onClick={() => onCancel?.(request)}
+              onClick={(event) => onCancel?.(request, event.currentTarget)}
             >
               Cancel
             </Button>

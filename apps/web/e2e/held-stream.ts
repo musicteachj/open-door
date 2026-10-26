@@ -97,3 +97,63 @@ export async function pushSearchSteps(stream: Awaited<ReturnType<typeof holdNext
   })
   await stream.push('tool.finished', { id: 't1', ok: true, summary: 'done', durationMs: 12 })
 }
+
+declare global {
+  interface Window {
+    __releaseTurnCompletion?: () => void
+  }
+}
+
+/**
+ * Lets the next turn run for real against the API and holds back only its closing `turn.completed`
+ * event until the returned function is called. Everything before it (the tool steps, the text, a
+ * `proposal` event) reaches the page as it is sent, so the page shows a real confirm card while its
+ * turn is still "answering". Wraps the page's `fetch` for one POST to a conversation's turns.
+ */
+export async function holdTurnCompletion(page: Page) {
+  await page.evaluate(() => {
+    const realFetch = window.fetch.bind(window)
+    window.fetch = async (input, init) => {
+      const url =
+        typeof input === 'string' ? input : input instanceof Request ? input.url : String(input)
+      const method = (
+        init?.method ?? (input instanceof Request ? input.method : 'GET')
+      ).toUpperCase()
+      if (method !== 'POST' || !/\/assistant\/conversations\/[^/]+\/turns$/.test(url)) {
+        return realFetch(input, init)
+      }
+      window.fetch = realFetch
+      const real = await realFetch(input, init)
+      if (!real.body) return real
+      let release!: () => void
+      const gate = new Promise<void>((resolve) => {
+        release = resolve
+      })
+      window.__releaseTurnCompletion = release
+      const reader = real.body.getReader()
+      const decoder = new TextDecoder()
+      const encoder = new TextEncoder()
+      let buffer = ''
+      const body = new ReadableStream<Uint8Array>({
+        async pull(controller) {
+          const { done, value } = await reader.read()
+          if (done) {
+            if (buffer) controller.enqueue(encoder.encode(buffer))
+            controller.close()
+            return
+          }
+          buffer += decoder.decode(value, { stream: true })
+          const frames = buffer.split('\n\n')
+          buffer = frames.pop() ?? ''
+          for (const frame of frames) {
+            if (frame.startsWith('event: turn.completed')) await gate
+            controller.enqueue(encoder.encode(`${frame}\n\n`))
+          }
+        },
+        cancel: () => reader.cancel(),
+      })
+      return new Response(body, { status: real.status, headers: real.headers })
+    }
+  })
+  return () => page.evaluate(() => window.__releaseTurnCompletion!())
+}

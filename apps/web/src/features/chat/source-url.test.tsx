@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest'
 import { useSourceUrl } from './source-url'
 
 function Probe() {
-  const { key, open, close } = useSourceUrl()
+  const { key, open, close, clear } = useSourceUrl()
   const location = useLocation()
   return (
     <div>
@@ -13,6 +13,7 @@ function Probe() {
       <button onClick={() => open('CA-4.3~p1')}>open p1</button>
       <button onClick={() => open('4.3~p1')}>open other</button>
       <button onClick={() => close()}>close</button>
+      <button onClick={() => clear()}>clear</button>
       <button
         onClick={() => {
           close()
@@ -96,5 +97,30 @@ describe('useSourceUrl', () => {
     // One entry back is "/ask?first=1". Two would be "/ask".
     expect(url()).toBe('/ask?first=1')
     expect(router.state.location.pathname).toBe('/ask')
+  })
+
+  it('marks only the entry that opens the panel, and a swap keeps what that entry said', async () => {
+    const { router, press } = setup('/ask')
+    await press('open p1')
+    expect(router.state.location.state).toMatchObject({ keepScroll: true, openedSource: true })
+    await press('open other')
+    expect(router.state.location.state).toMatchObject({ keepScroll: true, openedSource: true })
+  })
+
+  it('leaves no marker on a plain entry: a swap on a deep link, or a replace that closes one', async () => {
+    const { router, press } = setup('/ask?source=CA-4.3~p1')
+    await press('open other')
+    // A replace on the same page never moves the scroll, so it needs no marker, and this entry is
+    // the page itself, not a panel's.
+    expect(router.state.location.state).toBeNull()
+    await press('close')
+    expect(router.state.location.state).toBeNull()
+  })
+
+  it('leaves no marker when the source is cleared', async () => {
+    const { router, press } = setup('/ask?source=CA-4.3~p1')
+    await press('clear')
+    expect(router.state.location.state).toBeNull()
+    expect(router.state.location.search).toBe('')
   })
 })

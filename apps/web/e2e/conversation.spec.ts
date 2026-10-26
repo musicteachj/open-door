@@ -863,10 +863,11 @@ test.describe('the header and the conversation', () => {
     await startAs(page, 'Priya')
     await askAndWaitForAnswer(page, QUESTIONS.cited)
     await focusPageStart(page)
-    const stops = await tabStops(page, 14)
+    const stops = await tabStops(page, 17)
     const source = 'Source 1: Handbook §4.3, Time off'
     expect(stops.map((stop) => stop.name)).toEqual([
       'Ask',
+      'Time off',
       'Directory',
       'Handbook',
       'Switch persona. Current: Priya Raman, Visual Merchandiser',
@@ -880,11 +881,13 @@ test.describe('the header and the conversation', () => {
       'Show your work',
       'Ask Open Door',
       'Ask',
-      // The rail comes last.
+      // The rail comes last: the two time-off figures, then the handbook.
+      expect.stringMatching(/ PTO available\. Open Time off$/),
+      expect.stringMatching(/ requests? pending\. Open Time off$/),
       expect.stringMatching(/Handbook updated\. Open Handbook$/),
     ])
-    expect(stops[11]!.tag).toBe('TEXTAREA')
-    expect(stops[12]!.slot).toBe('composer-ask')
+    expect(stops[12]!.tag).toBe('TEXTAREA')
+    expect(stops[13]!.slot).toBe('composer-ask')
   })
 
   test("while an answer streams, Stop takes Ask's place in the Tab order", async ({ page }) => {
@@ -894,7 +897,7 @@ test.describe('the header and the conversation', () => {
     await composerBox(page).focus()
     const stops = await tabStops(page, 2)
     expect(stops[0]).toMatchObject({ name: 'Stop', slot: 'composer-stop' })
-    expect(stops[1]!.name).toMatch(/Handbook updated\. Open Handbook$/)
+    expect(stops[1]!.name).toMatch(/ PTO available\. Open Time off$/)
     await stopButton(page).click()
   })
 })
@@ -969,7 +972,7 @@ test.describe('budget and length states (STUB: the conversation GET)', () => {
   /** Tab stops from the top of the page until the focus leaves the last control. */
   async function allTabStops(page: Page) {
     await focusPageStart(page)
-    return tabStops(page, 18)
+    return tabStops(page, 22)
   }
 
   for (const kind of ['sandbox', 'daily'] as const) {
@@ -1026,23 +1029,25 @@ test.describe('budget and length states (STUB: the conversation GET)', () => {
       // thread, then the two links in place of the composer, and the rail. The box and Ask are skipped.
       const stops = await allTabStops(page)
       const names = stops.map((stop) => stop.name)
-      expect(names.slice(0, 4)).toEqual([
+      expect(names.slice(0, 5)).toEqual([
         'Ask',
+        'Time off',
         'Directory',
         'Handbook',
         'Switch persona. Current: Priya Raman, Visual Merchandiser',
       ])
       // The banner comes before the page: its two emergency links, then (sandbox only) its action.
-      const afterSwitcher = names.slice(4)
+      const afterSwitcher = names.slice(5)
       expect(afterSwitcher.slice(0, 2)).toEqual(['call 911', 'call or text 988'])
       if (kind === 'sandbox') expect(afterSwitcher[2]).toBe('Start a new sandbox')
       expect(afterSwitcher[kind === 'sandbox' ? 3 : 2]).toBe('Start a new conversation')
       expect(stops.some((stop) => stop.tag === 'TEXTAREA')).toBe(false)
       expect(stops.some((stop) => stop.slot === 'composer-ask')).toBe(false)
-      const handbookAt = names.indexOf('Handbook', 4)
+      const handbookAt = names.indexOf('Handbook', 5)
       expect(handbookAt).toBeGreaterThan(names.indexOf('Show your work'))
       expect(names[handbookAt + 1]).toBe('Directory')
-      expect(names[handbookAt + 2]).toMatch(/Handbook updated\. Open Handbook$/)
+      expect(names[handbookAt + 2]).toMatch(/ PTO available\. Open Time off$/)
+      expect(names[handbookAt + 4]).toMatch(/Handbook updated\. Open Handbook$/)
     })
   }
 

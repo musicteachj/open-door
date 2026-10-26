@@ -94,3 +94,35 @@ export function decisionFacts(
 ): string {
   return `${longRange(request.startDate, request.endDate)}, ${request.amountLabel}.`
 }
+
+export const approvalsPageCopy = {
+  title: 'Approvals',
+  waiting: 'Waiting for you',
+  /** The heading's accessible name: "Waiting for you, 2". With none waiting it is just the words. */
+  waitingName: (count: number) => (count > 0 ? `Waiting for you, ${count}` : 'Waiting for you'),
+  waitingSubtitle:
+    'PTO requests from your direct reports, oldest first. Sick time is recorded, not approved, so it appears only under Coming up.',
+  waitingEmpty:
+    'Nothing is waiting for you. When someone on your team asks for time off, it shows up here.',
+  comingUp: 'Coming up on your team',
+  comingUpSubtitle: 'Approved and recorded time off in the next 30 days, soonest first.',
+  comingUpEmpty: 'No time off on your team in the next 30 days.',
+  recent: 'Recent decisions',
+  recentSubtitle: 'Your decisions from the last 90 days, newest first.',
+  recentEmpty: 'No decisions in the last 90 days.',
+  yourNote: 'Your note',
+  loading: 'Loading approvals',
+  decisionFailed: 'Couldn’t send that decision. Nothing was changed. Try again in a moment.',
+} as const
+
+/** "Approved. Zara will see it on the Time off page." */
+export function approvedToast(firstName: string): string {
+  return `Approved. ${approvalsCopy.seeOnTimeOff(firstName)}`
+}
+
+/** "Denied. Zara will see your note on the Time off page." or, with no note, "...will see it...". */
+export function deniedToast(firstName: string, withNote: boolean): string {
+  return withNote
+    ? `Denied. ${firstName} will see your note on the Time off page.`
+    : `Denied. ${approvalsCopy.seeOnTimeOff(firstName)}`
+}

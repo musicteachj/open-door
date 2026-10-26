@@ -45,19 +45,15 @@ test.describe('usable at 390 px', () => {
     expect(await scrollWidth(page)).toBeLessThanOrEqual(390)
   })
 
-  test('the navigation shows that it scrolls: it is a scroll container, and fades its edge only when there is more to see', async ({
+  test('the navigation shows that it scrolls: it is a scroll container with a fade while more is to see, and none at the end (a nav with nothing to scroll is no longer reachable at 390 px, so that case is not proven here)', async ({
     page,
   }) => {
-    // Phase 2 has two items, which fit at 390 px, so nothing needs scrolling yet. The test shows
-    // the container and its fade logic anyway, then narrows the window until the real items
-    // overflow, and watches the real logic switch on and off with the scroll position.
+    // Phase 5 added Time off, so Priya's four items no longer fit at 390 px: the bar scrolls
+    // sideways (the owner kept it so, 2026-10-25) and shows a fade where more is to see. The test
+    // watches the real logic switch off at the end of the scroll.
     const nav = page.getByRole('navigation', { name: 'Main' })
     const fade = () => nav.evaluate((el) => getComputedStyle(el).maskImage)
     await expect(nav).toHaveCSS('overflow-x', 'auto')
-    await expect(nav).toHaveAttribute('data-more', 'false')
-    expect(await fade()).toBe('none')
-
-    await page.setViewportSize({ width: 150, height: 844 })
     await expect(nav).toHaveAttribute('data-more', 'true')
     expect(await fade()).toContain('linear-gradient')
     expect(await nav.evaluate((el) => el.scrollWidth > el.clientWidth)).toBe(true)
@@ -103,15 +99,15 @@ test('every interactive element is reachable by keyboard in the order above and 
 }) => {
   // The notes list the logo first, but the logo is not a control in the kit (the plan's Task 36
   // note), so the first stop is the navigation. "How it's built" is hidden until Phase 7. The rail
-  // follows the page, so the "Handbook updated" link is the last stop (the Phase 5 figures will
-  // join it).
+  // follows the page: PTO available, requests pending, then "Handbook updated" as the last stop.
   await page.reload()
   await expect(greetingHeading(page, 'Priya')).toBeVisible()
   // The glance link arrives with its own request, after the greeting.
   await expect(page.getByRole('link', { name: /Handbook updated/ })).toBeVisible()
+  await expect(page.getByRole('link', { name: /requests? pending/ })).toBeVisible()
   const stops: { name: string; ring: unknown }[] = []
   const priya = PERSONAS[0]!
-  for (let i = 0; i < 11; i += 1) {
+  for (let i = 0; i < 14; i += 1) {
     await page.keyboard.press('Tab')
     stops.push({
       name: await page.evaluate(() => {
@@ -123,19 +119,22 @@ test('every interactive element is reachable by keyboard in the order above and 
   }
   expect(stops.map((stop) => stop.name)).toEqual([
     'Ask',
+    'Time off',
     'Directory',
     'Handbook',
     `Switch persona. Current: ${priya.name}, ${priya.title}`,
     'Ask Open Door',
     'Ask',
     ...priya.tryAsking,
+    expect.stringMatching(/ PTO available\. Open Time off$/),
+    expect.stringMatching(/ requests? pending\. Open Time off$/),
     // The date is the published handbook's, so it changes with each edition.
     expect.stringMatching(/^[A-Z][a-z]{2} \d{1,2} Handbook updated\. Open Handbook$/),
   ])
   // The ring is 2 px, offset 2 px. The composer's box shows its own primary border and halo
   // instead (components.spec.ts), so its stop is checked there.
   for (const [index, stop] of stops.entries()) {
-    if (index === 4) continue
+    if (index === 5) continue
     expect(stop.ring).toEqual({ width: '2px', style: 'solid', offset: '2px' })
   }
   // Focus then leaves the page's controls: nothing after the last row takes it.
@@ -169,7 +168,7 @@ test('the composer shows its primary border and halo when the keyboard reaches i
   const [light, dark] = [luminance(sheet), luminance(resting.border)].sort((a, b) => b - a)
   expect((light! + 0.05) / (dark! + 0.05)).toBeGreaterThanOrEqual(3)
 
-  for (let i = 0; i < 5; i += 1) await page.keyboard.press('Tab')
+  for (let i = 0; i < 6; i += 1) await page.keyboard.press('Tab')
   await expect(box(page)).toBeFocused()
   await expect.poll(async () => (await read()).border).toBe(await themeColor(page, 'primary'))
   // The halo transitions in with the border, so wait for it too.

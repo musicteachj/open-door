@@ -15,7 +15,7 @@ import json
 import threading
 from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, date, datetime, timedelta
-from typing import Any
+from typing import Any, Literal
 from uuid import UUID, uuid4
 
 import pytest
@@ -54,6 +54,7 @@ PROPOSAL_KEYS = {
     "card",
     "failure",
     "turnRunning",
+    "deniedNote",
 }
 
 
@@ -1000,3 +1001,132 @@ async def test_a_replaced_card_keeps_its_own_409_and_a_dismissed_one_too(start: 
     for body in (replaced, dismissed):
         assert (body["type"], body["currentStatus"]) == ("canceled", "canceled")
         assert body["detail"] == PROPOSAL_CONFLICT_TEXTS["canceled"]
+
+
+# ---------------------------------------------------------------------------------------------
+# The denial's note, read back by the person who wrote it
+
+
+DENIAL_NOTE = "Two of the team are out that week, sorry."
+
+
+async def deny_card(
+    world: World, decision: Literal["approve", "deny"] = "deny"
+) -> tuple[UUID, UUID]:
+    """Marcus's pending card to decide Priya's request. Returns (proposal, request)."""
+    request_id = await world.put("priya", world.workday(30))
+    chat = await chat_for(world, "marcus")
+    proposal_id = await propose_decision(
+        world.engine,
+        world.tenant_id,
+        world.person("marcus"),
+        chat,
+        request_id,
+        decision,
+        world.now,
+    )
+    return proposal_id, request_id
+
+
+async def test_an_executed_denial_reads_back_the_note_stored_on_its_request(
+    start: StartWorld,
+) -> None:
+    world = start("marcus")
+    proposal_id, _ = await deny_card(world)
+    confirmed = post(world, confirm_path(proposal_id), {"note": f"  {DENIAL_NOTE}  "})
+    assert confirmed.status_code == 200, confirmed.text
+
+    proposal = only(world)
+
+    assert proposal["status"] == "executed"
+    assert proposal["deniedNote"] == DENIAL_NOTE
+    # Only the conversation read carries it: the confirm's own answer stays null.
+    assert confirmed.json()["deniedNote"] is None
+
+
+async def test_an_executed_denial_without_a_note_reads_null(start: StartWorld) -> None:
+    world = start("marcus")
+    proposal_id, _ = await deny_card(world)
+    assert post(world, confirm_path(proposal_id)).status_code == 200
+
+    assert only(world)["deniedNote"] is None
+
+
+async def test_a_blank_note_on_a_denial_reads_null(start: StartWorld) -> None:
+    world = start("marcus")
+    proposal_id, _ = await deny_card(world)
+    assert post(world, confirm_path(proposal_id), {"note": "   "}).status_code == 200
+
+    assert only(world)["deniedNote"] is None
+
+
+async def test_a_pending_denial_reads_null(start: StartWorld) -> None:
+    world = start("marcus")
+    await deny_card(world)
+
+    proposal = only(world)
+
+    assert (proposal["status"], proposal["deniedNote"]) == ("pending", None)
+
+
+async def test_an_executed_approval_reads_null(start: StartWorld) -> None:
+    world = start("marcus")
+    proposal_id, _ = await deny_card(world, "approve")
+    assert post(world, confirm_path(proposal_id)).status_code == 200
+
+    proposal = only(world)
+
+    assert (proposal["status"], proposal["deniedNote"]) == ("executed", None)
+
+
+async def test_nobody_else_reads_the_note_and_the_read_makes_one_extra_query_at_most(
+    start: StartWorld,
+) -> None:
+    from sqlalchemy import event
+    from sqlalchemy.engine import Engine
+
+    world = start("marcus")
+    proposal_id, _ = await deny_card(world)
+    assert post(world, confirm_path(proposal_id), {"note": DENIAL_NOTE}).status_code == 200
+    seen: list[str] = []
+
+    def record(conn: Any, cursor: Any, statement: str, *rest: Any) -> None:
+        if "decision_note" in statement:
+            seen.append(statement)
+
+    event.listen(Engine, "before_cursor_execute", record)
+    try:
+        response = world.browser.client.get(CURRENT)
+    finally:
+        event.remove(Engine, "before_cursor_execute", record)
+
+    assert DENIAL_NOTE in response.text
+    assert len(seen) == 1
+    # A person with no such proposal (Priya's own conversation) never sees the text.
+    priya = start("priya")
+    assert DENIAL_NOTE not in priya.browser.client.get(CURRENT).text
+
+
+async def test_a_note_on_a_request_this_person_did_not_decide_is_not_read(
+    start: StartWorld, owner_engine: AsyncEngine
+) -> None:
+    """The proposal's recorded request must be one this person decided, or the note stays unread."""
+    from sqlalchemy import text
+
+    world = start("marcus")
+    proposal_id, request_id = await deny_card(world)
+    assert post(world, confirm_path(proposal_id), {"note": DENIAL_NOTE}).status_code == 200
+    # Past the freeze trigger, in one transaction that puts the trigger back.
+    async with owner_engine.begin() as connection:
+        await connection.execute(
+            text("ALTER TABLE time_off_requests DISABLE TRIGGER enforce_time_off_request_update")
+        )
+        await connection.execute(
+            text("UPDATE time_off_requests SET decided_by = :other WHERE id = :id"),
+            {"other": world.person("dana"), "id": request_id},
+        )
+        await connection.execute(
+            text("ALTER TABLE time_off_requests ENABLE TRIGGER enforce_time_off_request_update")
+        )
+
+    assert only(world)["deniedNote"] is None

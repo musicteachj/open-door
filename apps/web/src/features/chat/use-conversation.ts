@@ -195,7 +195,7 @@ export function useConversationTurns(options: SettleOptions = {}) {
  * Reads the conversation again, and the budget with it: the banner for a person with no
  * conversation yet comes from the budget route, and both change together.
  */
-function invalidateConversation(queryClient: QueryClient) {
+export function invalidateConversation(queryClient: QueryClient) {
   return Promise.all([
     queryClient.invalidateQueries({ queryKey: getGetCurrentConversationQueryKey() }),
     queryClient.invalidateQueries({ queryKey: getGetAssistantBudgetQueryKey() }),

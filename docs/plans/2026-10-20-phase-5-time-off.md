@@ -1389,7 +1389,7 @@ outcome stores its sentence, which nothing reads; `outcomes_since` doesn't know 
 which Stage 4's cancel inside `finish_turn` makes moot; a 409 that wrote rebuilds its problem
 body in the route rather than through a commit option on `ProblemError`.
 
-### Stage 4: the assistant (`feat/phase-5-assistant`, in progress)
+### Stage 4: the assistant (`feat/phase-5-assistant`, merged in #72)
 
 Built in October off `dev` at `716c89a` (Stage 5, #70, and the web audit fix, #71), in three
 batches: A (Tasks 20 and 21), B (Tasks 22 and 23), and C (Tasks 24 and 25, plus a draft of Task
@@ -1762,6 +1762,109 @@ For Stage 6:
   person types elsewhere stays quiet.
 - **The picker doesn't move focus into itself when it opens;** the Dates field keeps focus, and
   Tab enters the grid. Check this against the page's flow.
+
+### Stage 6: the pages (`feat/phase-5-pages`)
+
+Built in three batches off `dev` at `da30d41` (Stage 4, #72): A (Tasks 33 and 34), B (Tasks 35 and
+36), and C (Task 37). Each batch had one Sonnet implementer, writing tests first, and one combined
+Sonnet review; the fixes were written test first and mutation-proved. Before each batch's report I
+drove the real app with the scripted model at 1440 and 390 px (every card state, both pages, the
+form and picker, every dialog, the toasts, both home rails) and compared it with the frames. No
+review found anything high. No paid AI call was made. Counts are under "The close" below.
+
+Owner decisions (2026-10-25):
+
+- **The phone nav keeps Phase 2's top bar.** Below 760 px the nav is a bar that scrolls sideways,
+  and the Approvals item carries its count and the name "Approvals, 2 waiting". Screen 09's "Menu,
+  2 approvals waiting" button isn't built; the item can sit past the edge until scrolled to.
+- **A deny card's note after a reload comes from the request.** `ProposalOut.deniedNote` is filled
+  only in the conversation read, for an executed denial, from the note stored on the request,
+  filtered to the person who decided it. The stream event and the confirm and cancel answers carry
+  nothing, and a test proves no note reaches the model.
+
+Calls made at the stage's start, pinned by tests:
+
+- **The API sends what the pages would otherwise work out.** The calendar gained `dayMinutes` and
+  `dayLabel` (the schedule line's "8 hours a day", from a new hours-only label in the engine),
+  `sickLookbackDays`, and `halfDayMinutes`; each request gained `canCancel` (the cancel route's own
+  rule) and `decidedBy.id`; the summary gained `today`. The browser counts and computes nothing,
+  and no copy of a policy rule lives in the web app.
+- **A card that expires, in the browser:** no lifetime setting. A test-only script,
+  `apps/api/scripts/expire_proposal_for_tests.py`, moves one pending card 16 minutes back. It refuses
+  a database that isn't on this machine (including a host in the URL's query string) and refuses
+  production. This replaces the plan's "short expiry in the test settings".
+- **"Marcus approves in chat"** decides Zara's seeded request on the page first, so "approve it"
+  reaches Priya's. No scripted-model change.
+- **One invalidation helper, never `setQueryData`.** Every time-off write and every card action ends
+  by reading time off and the conversation again; a test fails if any source file other than the
+  sign-in code sets query data. A write that finishes after a persona switch only refreshes the new
+  person's reads, and its toast is keyed to the old person.
+- **"Ask again" on a card** puts the turn's question in the composer and focuses it; the turn-level
+  "Ask again" still sends.
+- **"Show your work"** reads "Checked your time off" for the three read tools and "Prepared a
+  confirm card" for the three proposal tools; no request ID shows.
+
+Departures from the design, recorded:
+
+- **The request form docks beside the page from 1280 px,** as the source panel does, and is a
+  bottom sheet below that. A 420 px panel beside the sidebar squeezes the page under 1280.
+- **The error pages** use the shared "Something went wrong on our side." body, not the per-page
+  texts in the notes. **Loading** is one whole-page skeleton per page.
+- **The seed decides some figures,** so the capture rows differ from the frames where the dates do,
+  and a few frames get their nearest reachable state (the PTO limit, the holiday card, the approve
+  and deny cards reaching Zara's request); each row says so.
+
+**Batch A** (the card in chat, the hooks): the `proposal` event, cards under the message with the
+feedback row and "Show your work" under the cards, the sensitive order (card, HR panel, then the
+footer), Confirm and Dismiss with a ref guard against a double click, a calm 409, "This card is no
+longer available." for a 404, a timer at `expiresAt` with up to three reads 2 seconds apart if the
+browser's clock runs ahead, and the note field disabled while the turn runs. The review's three
+mediums: a second card in one turn left the first pending on screen; a deny note typed on the live
+card was lost when the saved copy replaced it; no retry when the browser's clock ran ahead. Recorded
+without a change: a card remounted mid-confirm forgets the press (a second press gets a calm 409),
+and "Ask again" replaces the composer's draft.
+
+**Batch B** (the pages, the nav, the rail, scroll): the review's four mediums: requests for December
+of next year fell outside the lists' window (now the end of next year); the sick look-back's "30
+days" was counted in the browser (now from the API); a failed refresh after a write replaced the page
+with the error page (page reads now throw only on their first load); a double click on "Cancel
+request" could show a conflict over the success toast. My photos found "Sent today" beside the name
+at 390 px (now under the title) and the schedule line's "·" without spacing and starting a wrapped
+line. The scroll marker marks only the opening push; a replace never carries it.
+
+**Batch C** (browser tests and captures): `proposals.spec.ts`, `time-off.spec.ts`, and
+`approvals.spec.ts`, with the flow both ways, an expired card, a persona switch with a pending card,
+and the ledgers adding up; the shell, home, and conversation specs changed only where the nav and
+rail did. Tests that book through chat skip, with a reason, on the dates when the scripted model's
+next Friday is a holiday or tomorrow is a day off (backlogged). The capture report gained a row for
+each of the 53 frames of screens 08 to 10, and its timeout rose to 900 seconds with a step per row.
+The captures showed two product bugs, both fixed: a section's chip listed twice when two rules cite
+it, and no cinnamon dot on "requests pending".
+
+**The close:** `/code-review medium` on the whole branch ran three rounds. Round 1: focus after a conflicting
+decision went to the first card instead of the next; Recent decisions could be cut off by the
+requests route's 200-row cap (a new `decided` scope now lists the viewer's own decisions from the
+last 90 days); an earlier turn's replaced card looked pending until the next read (a new card now
+reads the conversation again); Cancel was hidden on a past request still waiting; a failed preview
+couldn't be retried ("Try again"); plus an extra time-zone read and cleanups. Round 2: a decision
+could answer 404 after it was written (from round 1's change); a stopped or failed turn's card kept
+"Wait for the answer to finish"; the card's year came from the browser's zone; a 409 without a
+known status hid a card's buttons; the calendar's look-back window was a second constant (the
+calendar's `from` is now optional and defaults to the earliest sick day); and the sheet's sticky
+panel no longer depends on the page's path. Round 3 found nothing high or medium, so the loop
+stopped; its small items were fixed (the decider's view without a time-zone read, the note trimmed
+as the server trims it, the cancel dialog kept open after a server error, an empty schedule's text,
+`can_cancel` required) or backlogged (decisions on requests later canceled or about someone who
+moved, the 200-row cap, a scroll edge across several history steps).
+
+The final `make check` also found two tests that failed by chance, both fixed: the personal-data
+test matched "4111" inside a log record's timestamp (it now searches messages and extra fields
+only), and the "more than the balance" browser test assumed 16 days exceed Priya's balance, which
+the seed changes with the date (it now asks the API how many days that takes). One gallery
+accessibility test failed once under load with its page closed mid-scan and passed on rerun.
+
+The API has 4,434 tests (4,400 before), the web app 2,731 (2,503 before), and the browser suite
+371 (354 before); the three new browser specs take under 30 seconds on one worker.
 
 ## Backlog
 

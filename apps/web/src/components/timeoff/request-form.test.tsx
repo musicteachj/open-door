@@ -36,6 +36,9 @@ type Setup = {
   approverName?: string | null
   submitting?: boolean
   checking?: boolean
+  submitError?: string | null
+  previewFailed?: boolean
+  onRetryPreview?: () => void
   onClose?: () => void
   onSubmit?: (choice: { howMuch: HowMuch; hours: number | null }) => void
 }
@@ -67,6 +70,9 @@ function Harness(setup: Setup) {
       thisYear={THIS_YEAR}
       submitting={setup.submitting}
       checking={setup.checking}
+      submitError={setup.submitError}
+      previewFailed={setup.previewFailed}
+      onRetryPreview={setup.onRetryPreview}
       onSubmit={setup.onSubmit ?? (() => {})}
       onClose={setup.onClose ?? (() => {})}
     />
@@ -248,6 +254,51 @@ describe('RequestForm, the preview and messages', () => {
       },
     })
     expect(screen.getByRole('alert')).toHaveTextContent('That is too long.')
+  })
+
+  it('shows the refusal a failed send came back with, as an alert, and leaves the button usable', () => {
+    setup({
+      start: '2026-10-30',
+      check: CHECK_ONE_DAY,
+      submitError: 'Some of those days are already covered by another request.',
+    })
+    expect(screen.getByRole('alert')).toHaveTextContent(
+      'Some of those days are already covered by another request.',
+    )
+    expect(submitButton()).toBeEnabled()
+  })
+
+  it('says the preview did not load, as an alert, when told so, and never while checking', () => {
+    setup({ start: '2026-10-30', check: null, previewFailed: true })
+    expect(screen.getByRole('alert')).toHaveTextContent('The preview didn’t load.')
+    expect(submitButton()).toBeDisabled()
+  })
+
+  it('offers Try again on the failed preview when a retry is wired, and calls it', async () => {
+    const onRetryPreview = vi.fn<() => void>()
+    const { user } = setup({
+      start: '2026-10-30',
+      check: null,
+      previewFailed: true,
+      onRetryPreview,
+    })
+    await user.click(within(screen.getByRole('alert')).getByRole('button', { name: 'Try again' }))
+    expect(onRetryPreview).toHaveBeenCalledTimes(1)
+  })
+
+  it('offers no Try again when nothing handles it', () => {
+    setup({ start: '2026-10-30', check: null, previewFailed: true })
+    expect(screen.queryByRole('button', { name: 'Try again' })).not.toBeInTheDocument()
+  })
+
+  it('hides the preview message while a new check is on its way', () => {
+    setup({ start: '2026-10-30', check: null, previewFailed: true, checking: true })
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  })
+
+  it('shows no alert when the send has not failed', () => {
+    setup({ start: '2026-10-30', check: CHECK_ONE_DAY, submitError: null })
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
   })
 
   it('disables the button until the dates have a check that passes', () => {

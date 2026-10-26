@@ -61,7 +61,8 @@ export const VIKRAM: PersonOut = {
   name: 'Vikram Morales',
   title: 'Visual Merchandiser',
 }
-export const MARCUS = { name: 'Marcus Bell' }
+// The id is the test persona's (test/fixtures.ts), so a decision "by the viewer" matches `me.id`.
+export const MARCUS = { id: '00000000-0000-4000-8000-00000000f002', name: 'Marcus Bell' }
 
 // ---- Balances
 
@@ -144,6 +145,7 @@ function request(patch: RequestPatch): RequestOut {
     decidedAt: null,
     decisionNote: null,
     canceledAt: null,
+    canCancel: false,
     ...patch,
   }
 }
@@ -155,12 +157,14 @@ export const MINE_APPROVED = request({
   status: 'approved',
   decidedBy: MARCUS,
   decidedAt: '2026-10-05T17:00:00Z',
+  canCancel: true,
 })
 export const MINE_WAITING = request({
   id: 'req-oct-30',
   startDate: '2026-10-30',
   endDate: '2026-10-30',
   status: 'pending',
+  canCancel: true,
 })
 export const MINE_RECORDED = request({
   id: 'req-oct-22',
@@ -171,6 +175,7 @@ export const MINE_RECORDED = request({
   amountMinutes: 180,
   amountLabel: '3 hours',
   status: 'recorded',
+  canCancel: true,
 })
 export const MINE_CANCELED = request({
   id: 'req-oct-12',

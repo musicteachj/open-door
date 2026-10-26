@@ -74,6 +74,7 @@ from app.ai.proposals import (
     cancel,
     confirm,
     conversation_proposals,
+    denial_notes,
     proposal_out,
     turn_state_of,
 )
@@ -272,9 +273,18 @@ async def conversation_out(
     # would find it now, by the database's clock: a read writes nothing.
     by_turn: dict[UUID, list[ProposalOut]] = {}
     turn_states = {t.id: turn_state_of(t.status, t.started_at, database_now) for t in turns}
-    for row in await conversation_proposals(db, conversation.id):
+    stored = await conversation_proposals(db, conversation.id)
+    # A denial's note, for the person who wrote it: the card's "Zara will see your note" after a
+    # reload. It goes to the page only, never to the model.
+    notes = await denial_notes(db, signed_in.actor, stored)
+    for row in stored:
         by_turn.setdefault(row.turn_id, []).append(
-            proposal_out(row, database_now, turn_states.get(row.turn_id, "incomplete"))
+            proposal_out(
+                row,
+                database_now,
+                turn_states.get(row.turn_id, "incomplete"),
+                notes.get(row.id),
+            )
         )
     contacts = await hr_contact(db) if needs_hr_contact(shows) else []
     history = await model_history(db, conversation.id)

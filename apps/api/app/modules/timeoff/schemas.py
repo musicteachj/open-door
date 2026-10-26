@@ -189,6 +189,13 @@ class NameOut(CamelModel):
     name: str
 
 
+class DeciderOut(CamelModel):
+    """Who approved or denied a request: their id too, so a page can tell its own decisions."""
+
+    id: UUID
+    name: str
+
+
 class CoveragePerson(CamelModel):
     id: UUID
     name: str
@@ -232,7 +239,7 @@ class RequestOut(CamelModel):
     # When it was sent: the Approvals card's "Sent October 17".
     created_at: datetime
     created_via: Literal["ui", "assistant"]
-    decided_by: NameOut | None
+    decided_by: DeciderOut | None
     decided_at: datetime | None
     # A denial's note. Anyone who may read the request sees it, on pages and cards only.
     decision_note: str | None
@@ -243,6 +250,9 @@ class RequestOut(CamelModel):
     available_after_minutes: int | None = None
     available_after_label: str | None = None
     coverage: list[CoverageOut] | None = None
+    # Whether the signed-in person may cancel it now, by the rule the cancel route enforces: their
+    # own, pending, or approved or recorded and not yet started. The page shows Cancel from this.
+    can_cancel: bool
 
     @classmethod
     def of(
@@ -251,6 +261,7 @@ class RequestOut(CamelModel):
         *,
         available_after_minutes: int | None = None,
         coverage: tuple[CoverageEntry, ...] | None = None,
+        can_cancel: bool,
     ) -> "RequestOut":
         return cls(
             id=row.id,
@@ -264,7 +275,11 @@ class RequestOut(CamelModel):
             status=row.status,
             created_at=row.created_at,
             created_via=row.created_via,
-            decided_by=None if row.decided_by_name is None else NameOut(name=row.decided_by_name),
+            decided_by=(
+                None
+                if row.decided_by_id is None or row.decided_by_name is None
+                else DeciderOut(id=row.decided_by_id, name=row.decided_by_name)
+            ),
             decided_at=row.decided_at,
             decision_note=row.decision_note,
             canceled_at=row.canceled_at,
@@ -273,6 +288,7 @@ class RequestOut(CamelModel):
                 None if available_after_minutes is None else label(available_after_minutes)
             ),
             coverage=None if coverage is None else [CoverageOut.of(entry) for entry in coverage],
+            can_cancel=can_cancel,
         )
 
 
@@ -378,10 +394,17 @@ class CalendarOut(CamelModel):
 
     # ISO weekdays, 1 (Monday) to 7 (Sunday).
     scheduled_weekdays: list[int]
+    # The length of a scheduled day, so the page can write "8 hours a day" without computing it.
+    day_minutes: int
+    day_label: str
     holidays: list[HolidayOut]
     earliest_start: EarliestStart
     # December 31 of next year, for both types.
     latest_end: date
+    # How far back sick time may start (the engine's window), so the legend needn't count.
+    sick_lookback_days: int
+    # What a PTO half day is, in minutes: the one number the check and the request accept.
+    half_day_minutes: int
 
 
 class SummaryOut(CamelModel):
@@ -393,3 +416,5 @@ class SummaryOut(CamelModel):
     approver: NameOut | None
     # Requests waiting for them to decide. Null unless they have direct reports.
     waiting_count: int | None
+    # Today at the signed-in person's location, which every time-off page's windows start from.
+    today: date

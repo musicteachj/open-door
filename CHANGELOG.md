@@ -12,6 +12,86 @@ version (`0.x.y` while the app is being built, `1.0.0` when it is complete).
 
 ### Added
 
+- **Confirm cards in the conversation** (Phase 5, stage 6). When the assistant prepares a booking,
+  a decision, or a cancellation, the card now appears under its message at `/ask`, with Confirm and
+  Dismiss. While the answer is still arriving, Confirm waits and says so. When the turn ends, the
+  page reads the conversation again, so Confirm turns on, and a card the turn's ending canceled
+  shows its final state. A card never ticks: at the moment it expires, the page reads again and the
+  card offers "Ask again", which puts the original question back in the box and moves focus there.
+  If a card was already confirmed in another tab, or its turn is still running, Confirm shows the
+  card calmly as it now stands, never an error. On a sensitive question the order is the message,
+  the card, the HR panel, then "Show your work". When a new card arrives, the page reads the conversation again,
+  so an earlier turn's pending card shows "Replaced by a newer card" at once.
+- **A denial's note after a reload** (Phase 5, stage 6). The conversation read now gives a manager's
+  executed denial card the note stored on the request, so the card can say "Zara will see your note"
+  after a reload. Only the manager who wrote it gets it, and only in that read: the live stream, the
+  confirm's own answer, and every other card carry nothing. It never reaches the model, and a test
+  proves the next turn's context, every tool result, and the history hold none of its text.
+- **The schedule line's hours** (Phase 5, stage 6). The calendar read now says how long a scheduled
+  day is (`dayMinutes` and `dayLabel`, "8 hours"), so the Time off page can write "Monday to Friday,
+  8 hours a day" without working anything out. The engine gained an hours-only label for it.
+- **Time-off hooks** (Phase 5, stage 6). The web app has shared hooks for balances, requests, the
+  calendar, the summary, and the three time-off writes. Every write, and every card's Confirm and
+  Dismiss, ends by reading time off and the conversation again and never sets query data, so a write
+  that finishes after a persona switch leaves nothing of the old person in the new person's cache. A
+  test fails if any file other than the sign-in code sets query data.
+- **The Time off page** (Phase 5, stage 6). `/time-off` is open to everyone. It shows the PTO card and
+  each sick-leave year with their handbook source chips, the schedule line ("Monday to Friday, 8
+  hours a day"), and My requests in Upcoming and Past, with the manager's note on a denial. Cancel
+  shows only where the rule allows it, and asks first: focus starts on "Keep it", and after "Cancel
+  request" a toast says how many hours went back and focus moves to "My requests". If the cancel fails for a reason that
+  changed nothing (a network or server error), the dialog stays open with a toast so the person can
+  press it again. "Request time
+  off" opens the form as a panel beside the page on a wide window and as a bottom sheet on a narrow
+  one. The page asks the server to check the dates on every change, drops an answer that arrives for
+  older dates, and holds Submit until the answer for the current ones is in, so a request is never
+  sent beside figures for other dates. If the check fails, the message offers "Try again", which asks again for the same dates. A pending
+  request whose days have passed sits in Past and still shows Cancel, since it can still be canceled. Submitting closes the form, says so in a toast ("Requested.
+  Marcus Bell will review it." or "Recorded."), and puts focus back on the button.
+- **The Approvals page** (Phase 5, stage 6). `/approvals` is for managers; anyone else sees the
+  Not found page. It lists the requests waiting for a decision, oldest first, each with team
+  coverage; Approve and Deny each ask first, and a denial can carry a note. After a decision the
+  toast says what the person will see, the request moves to Recent decisions, and focus goes to the
+  next request's Approve (or the heading when none are left). If the request was canceled or decided
+  elsewhere, its card stays on the page, muted, with the reason, until the next visit. Below are
+  what is coming up on the team in the next 30 days and the manager's own decisions from the last
+  90 days. Sick time never appears as something to decide. After a decision (or one that
+  was already made), focus goes to the card after the one decided, wherever the page has drawn.
+- **What the time-off pages need from the API** (Phase 5, stage 6). Each request now says whether
+  the signed-in person may cancel it (`canCancel`, by the same rule the cancel route enforces) and
+  who decided it by id as well as name (`decidedBy.id`), so the page shows Cancel from the server's
+  answer and tells a manager's own decisions by id. The summary gives today at the person's
+  location, and the calendar gives the sick-time look-back in days and the half-day minutes, the
+  engine's own numbers, so the pages count and compute nothing. The request list has a new
+  `decided` scope: the requests the signed-in person approved or denied, newest decision first (at
+  most 200), by default from the last 90 days up to today. `from` and `to` bound the day of the
+  decision for this scope. Recent decisions on the Approvals page reads it, so a manager of a large
+  team no longer loses recent decisions to the team list's cap. The calendar's `from` is now optional and defaults to the earliest day sick time may
+  start, so the Time off page no longer repeats the look-back as a number of its own.
+- **Navigation and the rail** (Phase 5, stage 6). Time off and Approvals are in the sidebar, and
+  Approvals shows "Approvals, N waiting" for a manager (and is gone after a switch to someone who
+  manages no one). On the assistant home, "At a glance" now starts with PTO available, requests
+  pending, and for a manager approvals waiting, all from the time-off summary; they are left out if
+  the summary can't be read. Requests pending and approvals waiting carry the cinnamon dot when
+  there are any.
+- **Browser tests and captures for the time-off screens** (Phase 5, stage 6). Three new browser
+  specs run the pages against the real API with the scripted model: the confirm cards in the
+  conversation (the card waiting for its turn, one booking from a double click, dismissed and
+  replaced cards, an expired card and "Ask again", the rail following a confirm), the Time off page
+  (the form, the check on each change, the toast and focus after a send and a cancel, the
+  short-notice advice, a refusal, 390 px), and the Approvals page (the queue, both dialogs, the
+  lists, the count, a request that was canceled while the page was open, Not found for a
+  non-manager). Two tests walk the employee-to-manager flow both ways: Priya books in chat and
+  Marcus approves on the page, and Priya books on the page and Marcus approves in chat. axe finds
+  nothing in any state. A test-only script, `apps/api/scripts/expire_proposal_for_tests.py`, moves
+  one pending card 16 minutes into the past so a test need not wait 15 minutes. It refuses any
+  database that is not on this machine and any card that is not pending. The capture report gains
+  one row for each of the 53 frames of screens 08 to 10, and the rows for screens 02 to 07 no
+  longer say the Time off and Approvals items or the at-a-glance figures are missing. Existing
+  browser tests changed only where the page changed by design: the sidebar gained Time off (and
+  Approvals for a manager), the rail gained two figures before "Handbook updated", and the phone
+  top bar now scrolls sideways with four items.
+
 - **The assistant's six time-off tools** (Phase 5, stage 4). It can now read a balance (its own, a
   report's, or anyone's for HR), list requests, check what a request would use, and propose a
   request, a decision, or a cancellation. A proposal only stores a confirm card for a person; the
@@ -225,6 +305,22 @@ version (`0.x.y` while the app is being built, `1.0.0` when it is complete).
 
 ### Changed
 
+- **One source chip per handbook section** (Phase 5, stage 6). When two of the engine's rules cite
+  the same section, "What this uses" and the confirm card now show that section's chip once, in the
+  order the rules came.
+- **Scroll restoration uses a history marker** (Phase 5, stage 6). A navigation that only opens or
+  closes a panel now says so in its history state (`keepScroll`), and the scroll hook keeps the
+  position for it on a push, a replace, and Back or Forward between the page and the panel's entry.
+  The special case for `?source=` is gone, so any panel can use the marker. Only the entry that
+  opens a panel carries it; a replace never needs one.
+- **The request form can show a failed send or a failed preview** (Phase 5, stage 6). It takes an
+  optional message and shows it as an alert under the figures, and says "The preview didn't load"
+  (with Submit off) when the check for the dates fails, and Cancel on a request row now passes its button to the
+  page so focus can return to it.
+- **"Show your work" names the time-off tools plainly** (Phase 5, stage 6). Reading a balance,
+  listing requests, and checking a request show as "Checked your time off", and the three propose
+  tools show as "Prepared a confirm card", with matching lines while they run. No request ID shows
+  anywhere in the trace.
 - **The handbook's time-off rules** (Phase 5, stage 4; handbook `2026.11.1`). §3.1 says a
   scheduled day counts as 8 hours and time off counts only scheduled days, never a company holiday.
   §4.1 says PTO is taken in full or half days, earned for a month worked to its last day, only up to
@@ -262,6 +358,15 @@ version (`0.x.y` while the app is being built, `1.0.0` when it is complete).
 
 ### Fixed
 
+- **A personal-data test that failed by chance** (Phase 5, stage 6). The test that proves a card or
+  Social Security number never reaches the logs searched every field of each log record, including
+  the logging module's own timestamps, so a timing value such as 411106.6 matched "4111" and failed
+  the run. It now searches each message and the extra fields a log call adds, which is where a leak
+  would be.
+- **A confirm card stuck on "Wait for the answer to finish"** (Phase 5, stage 6). A card the stream
+  sent stayed unconfirmable until something else read the conversation. The page now reads it again
+  when a turn completes, fails, stops, or closes with no closing event, and the stored card takes
+  over with the server's own word, with a test for each ending.
 - **A card's outcome is told once, and a failed card save is called that** (Phase 5, stage 4). A
   confirm that committed between a turn's start and its read of the cards was reported in that turn
   and again in the next; the "since the last message" line now covers only changes up to the turn's

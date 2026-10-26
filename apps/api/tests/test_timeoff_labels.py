@@ -6,7 +6,7 @@ Hours always; days in parentheses only from a full day up, in whole quarter days
 
 import pytest
 
-from app.domain.timeoff.labels import label
+from app.domain.timeoff.labels import hours_label, label
 
 
 @pytest.mark.parametrize(
@@ -40,3 +40,18 @@ from app.domain.timeoff.labels import label
 )
 def test_label(minutes: int, expected: str) -> None:
     assert label(minutes) == expected
+
+
+@pytest.mark.parametrize(
+    ("minutes", "expected"),
+    [
+        (480, "8 hours"),  # 480 / 60 = 8; no days in the hours-only text
+        (60, "1 hour"),
+        (240, "4 hours"),  # 240 / 60 = 4; not "(half a day)"
+        (90, "1 hour 30 minutes"),  # 90 = 1 hour and 30 minutes, nothing rounded
+        (45, "45 minutes"),
+        (600, "10 hours"),  # 600 / 60 = 10; no "(1.25 days)"
+    ],
+)
+def test_the_hours_only_label_never_adds_days(minutes: int, expected: str) -> None:
+    assert hours_label(minutes) == expected

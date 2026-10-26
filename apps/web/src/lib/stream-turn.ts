@@ -1,4 +1,4 @@
-import type { CitationOut, EscalationOut } from '@/api/generated'
+import type { CitationOut, EscalationOut, ProposalOut } from '@/api/generated'
 import { ApiError, applyCsrfHeader, apiErrorFrom } from './api-fetch'
 import { readSse } from './sse'
 
@@ -30,6 +30,8 @@ export type TurnStreamEvent =
       data: { id: string; ok: boolean; summary: string; durationMs: number }
     }
   | { type: 'escalation'; data: EscalationEvent }
+  /** A confirm card the assistant prepared. A later event for the same `id` replaces the card. */
+  | { type: 'proposal'; data: ProposalOut }
   | { type: 'error'; data: TurnErrorEvent }
   | {
       type: 'turn.completed'
@@ -51,6 +53,7 @@ const EVENT_NAMES: ReadonlySet<string> = new Set<TurnStreamEvent['type']>([
   'tool.started',
   'tool.finished',
   'escalation',
+  'proposal',
   'error',
   'turn.completed',
 ])

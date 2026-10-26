@@ -27,7 +27,7 @@ export type NavItemConfig = {
 
 export const NAV_ITEMS: readonly NavItemConfig[] = [
   { label: 'Ask', to: '/ask', icon: MessageCircle, roles: 'everyone', available: true },
-  { label: 'Time off', to: '/time-off', icon: Calendar, roles: 'everyone', available: false },
+  { label: 'Time off', to: '/time-off', icon: Calendar, roles: 'everyone', available: true },
   { label: 'Directory', to: '/directory', icon: Users, roles: 'everyone', available: true },
   { label: 'Handbook', to: '/handbook', icon: BookOpen, roles: 'everyone', available: true },
   {
@@ -35,7 +35,7 @@ export const NAV_ITEMS: readonly NavItemConfig[] = [
     to: '/approvals',
     icon: ClipboardCheck,
     roles: 'manager',
-    available: false,
+    available: true,
   },
   { label: 'Cases', to: '/cases', icon: FolderLock, roles: 'hr', available: false },
   { label: 'Console', to: '/console', icon: LayoutDashboard, roles: 'hr', available: false },

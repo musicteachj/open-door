@@ -1,12 +1,16 @@
 import { useCallback, useEffect, useRef } from 'react'
 import { useLocation, useNavigate } from 'react-router'
+import { KEEP_SCROLL_STATE } from '@/app/use-scroll-restoration'
 import { parseSourceKey } from './source-key'
 
 /** The one search parameter: the open passage, as a source key ("CA-4.3~p2"). */
 export const SOURCE_PARAM = 'source'
 
-/** Set on the history entry that opening the panel added, so closing can go back over it. */
-type SourceState = { openedSource?: true } | null
+/**
+ * Set on the history entry that opening the panel added, so closing can go back over it, with the
+ * scroll marker every panel navigation carries (the scroll hook keeps the position for it).
+ */
+type SourceState = { openedSource?: true; keepScroll?: true } | null
 
 /**
  * The open source panel, kept in the URL (`?source=`) so Back closes it and the address can be
@@ -46,7 +50,11 @@ export function useSourceUrl() {
     if (value === null || closing.current) return
     closing.current = true
     if (state?.openedSource === true) void navigate(-1)
-    else void navigate(withSource(null), { replace: true, preventScrollReset: true })
+    else {
+      // A replace on the same page never moves the scroll, so it carries no marker: the entry it
+      // leaves behind is the page itself.
+      void navigate(withSource(null), { replace: true, preventScrollReset: true })
+    }
   }, [navigate, state, value, withSource])
 
   const open = useCallback(
@@ -54,10 +62,17 @@ export function useSourceUrl() {
       if (next === value) return close()
       const to = withSource(next)
       if (value === null) {
-        void navigate(to, { state: { openedSource: true }, preventScrollReset: true })
+        void navigate(to, {
+          state: { ...KEEP_SCROLL_STATE, openedSource: true },
+          preventScrollReset: true,
+        })
       } else {
         // Keeps what the entry says about who opened it.
-        void navigate(to, { replace: true, state, preventScrollReset: true })
+        void navigate(to, {
+          replace: true,
+          state,
+          preventScrollReset: true,
+        })
       }
     },
     [close, navigate, state, value, withSource],

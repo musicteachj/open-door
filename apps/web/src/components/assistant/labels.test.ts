@@ -243,6 +243,25 @@ describe('toolLine', () => {
     expect(toolLine('find_people', 'garbage')).toBe('Looked up the directory')
   })
 
+  it('words the time-off reads as one line, with no summary text', () => {
+    for (const name of ['get_time_off_balance', 'list_time_off_requests', 'check_time_off']) {
+      expect(toolLine(name, 'anything')).toBe('Checked your time off')
+    }
+  })
+
+  it('words the propose tools as a confirm card and never shows a request id', () => {
+    const id = '3f2a1b4c-5d6e-4f70-8a9b-0c1d2e3f4a5b'
+    for (const name of [
+      'propose_time_off_request',
+      'propose_time_off_decision',
+      'propose_cancel_time_off',
+    ]) {
+      const line = toolLine(name, `approve request ${id}`)
+      expect(line).toBe('Prepared a confirm card')
+      expect(line).not.toContain(id)
+    }
+  })
+
   it('falls back to a generic line for an unknown tool, never the raw summary', () => {
     expect(toolLine('delete_everything', "query='x'")).toBe('Used a tool')
     expect(toolLine('', '')).toBe('Used a tool')
@@ -254,6 +273,12 @@ describe('toolIcon', () => {
     expect(toolIcon('search_handbook')).toBe('search')
     expect(toolIcon('get_my_profile')).toBe('profile')
     expect(toolIcon('find_people')).toBe('people')
+    expect(toolIcon('check_time_off')).toBe('calendar')
+    expect(toolIcon('get_time_off_balance')).toBe('calendar')
+    expect(toolIcon('list_time_off_requests')).toBe('calendar')
+    expect(toolIcon('propose_time_off_request')).toBe('card')
+    expect(toolIcon('propose_time_off_decision')).toBe('card')
+    expect(toolIcon('propose_cancel_time_off')).toBe('card')
   })
 
   it('has a generic icon for an unknown tool', () => {
@@ -293,6 +318,13 @@ describe('toolRunningLine', () => {
     expect(toolRunningLine('get_my_profile', false)).toBe('Looking up your profile…')
     expect(toolRunningLine('find_people', false)).toBe('Searching the directory…')
     expect(toolRunningLine('find_people', true)).toBe('Searching the directory again…')
+  })
+
+  it('words the time-off tools in the present tense', () => {
+    expect(toolRunningLine('check_time_off', false)).toBe('Checking your time off…')
+    expect(toolRunningLine('get_time_off_balance', true)).toBe('Checking your time off again…')
+    expect(toolRunningLine('propose_time_off_request', false)).toBe('Preparing a confirm card…')
+    expect(toolRunningLine('propose_cancel_time_off', false)).toBe('Preparing a confirm card…')
   })
 
   it('gives an unknown tool a plain line', () => {
