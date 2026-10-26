@@ -52,7 +52,21 @@ from datetime import date, datetime
 from typing import Any, Literal, Protocol, cast
 from uuid import UUID
 
-from sqlalchemy import and_, func, insert, literal_column, null, or_, select, text, update
+from sqlalchemy import (
+    Text,
+    and_,
+    any_,
+    case,
+    exists,
+    func,
+    insert,
+    literal_column,
+    null,
+    select,
+    text,
+    update,
+)
+from sqlalchemy import cast as sql_cast
 from sqlalchemy.exc import DBAPIError, IntegrityError
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 from sqlalchemy.sql import ColumnElement
@@ -74,7 +88,7 @@ from app.ai.proposal_cards import (
 )
 from app.api.schemas import CamelModel
 from app.db.errors import constraint_name, has_sqlstate
-from app.db.models import AiProposal, AiTurn, TimeOffRequest
+from app.db.models import AiMessage, AiProposal, AiTurn, TimeOffRequest
 from app.db.tenancy import TenantContext, tenant_session
 from app.domain.timeoff.evaluate import NewRequest, overlapping_days
 from app.modules.audit.service import AuditAction, Via, record_event
@@ -238,7 +252,7 @@ def shown_ending(
         if turn_state == "incomplete":
             return "canceled", "turn-incomplete"
         return "pending", None
-    reason = (row.outcome or {}).get("reason") if row.status == "canceled" else None
+    reason = _canceled_reason(row.status, row.outcome)
     return cast("ProposalStatus", row.status), cast("CanceledReason | None", reason)
 
 
@@ -326,20 +340,29 @@ async def denial_notes(
 
 
 async def conversation_proposals(
-    db: AsyncSession, conversation_id: UUID, *, relevant_since: datetime | None = None
+    db: AsyncSession, conversation_id: UUID, *, untold_at: datetime | None = None
 ) -> list[AiProposal]:
     """Every proposal of the conversation, oldest first, in one query. Postgres shows a person
-    only their own. With `relevant_since`, only those `outcomes_since` can use for that point:
-    still pending, or ended or expiring after it."""
+    only their own. With `untold_at` (the database's clock), a proposal is left out when a stored
+    context of the conversation has already told the model its status as of that moment: the
+    check is in SQL, on the "<id>:<status>" entries each context recorded."""
     query = select(AiProposal).where(AiProposal.conversation_id == conversation_id)
-    if relevant_since is not None:
-        query = query.where(
-            or_(
-                AiProposal.status == "pending",
-                AiProposal.ended_at > relevant_since,
-                AiProposal.expires_at > relevant_since,
-            )
+    if untold_at is not None:
+        shown = case(
+            (and_(AiProposal.status == "pending", untold_at > AiProposal.expires_at), "expired"),
+            else_=AiProposal.status,
         )
+        told = (
+            exists()
+            .where(
+                AiMessage.conversation_id == conversation_id,
+                AiMessage.role == "system",
+                func.concat(sql_cast(AiProposal.id, Text), ":", shown)
+                == any_(AiMessage.reported_outcomes),
+            )
+            .correlate(AiProposal)
+        )
+        query = query.where(~told)
     return list((await db.scalars(query.order_by(AiProposal.created_at, AiProposal.id))).all())
 
 
@@ -1067,20 +1090,11 @@ def _predicate(row: OutcomeRow, status: str) -> str:
     return "expired, so nothing was changed"
 
 
-def outcomes_since(rows: Sequence[OutcomeRow], since: datetime, now: datetime) -> tuple[str, ...]:
-    """What happened to the person's cards since `since` (the last turn), for the next turn's
-    per-turn context (ADR 0013): no lines when nothing changed, otherwise ONE line, "Since the last
-    message:" and then one sentence for each proposal that ended, oldest first.
-
-    Made from structured fields only: the action, the status, the outcome's reason or code, the
-    card's dates, and the approver's or requester's directory name (and that only if it is a plain
-    name). Wording is fixed in the tables above. The outcome's stored text, a note, any other key,
-    and anything unexpected in a field never reach a line. A pending proposal past its expiry
-    counts as expired, at its `expires_at`, as `status_as_of` shows it (pass the database's clock
-    as `now`). Only changes after `since` and up to `now` count. Nothing is added for a proposal
-    still pending.
-    """
-    changes: list[tuple[datetime, str]] = []
+def _changes[R: OutcomeRow](
+    rows: Sequence[R], now: datetime
+) -> list[tuple[datetime, R, ProposalStatus, str]]:
+    """Each ended card with when it changed, the status shown, and its sentence."""
+    changes: list[tuple[datetime, R, ProposalStatus, str]] = []
     for row in rows:
         status = status_as_of(row, now)
         if status == "pending":
@@ -1089,12 +1103,49 @@ def outcomes_since(rows: Sequence[OutcomeRow], since: datetime, now: datetime) -
         changed_at = row.expires_at if status == "expired" or row.ended_at is None else row.ended_at
         # A change after `now` (a confirm that began after this turn did and committed before the
         # rows were read) is left for the next turn, which reports it once.
-        if changed_at <= since or changed_at > now:
+        if changed_at > now:
             continue
-        changes.append((changed_at, f"{_subject(row)} {_predicate(row, status)}."))
+        changes.append((changed_at, row, status, f"{_subject(row)} {_predicate(row, status)}."))
+    return changes
+
+
+class _Identified(OutcomeRow, Protocol):
+    @property
+    def id(self) -> UUID: ...
+
+
+def told_entry(proposal_id: UUID, status: str) -> str:
+    """What a stored context records for a card it told the model about: "<id>:<status>"."""
+    return f"{proposal_id}:{status}"
+
+
+def unreported_outcomes(
+    rows: Sequence[_Identified], now: datetime
+) -> tuple[tuple[str, ...], tuple[str, ...]]:
+    """The next turn's per-turn context line (ADR 0013) for the cards in `rows` that have ended or
+    expired by `now`, and the `told_entry` of each card it tells about. No line when nothing
+    changed, otherwise ONE line, "Since the last message:" and then one sentence for each card,
+    oldest first.
+
+    The caller passes only cards whose shown status no stored context has told (see
+    `conversation_proposals`), so what was told, not when a transaction began, decides what is
+    news: a confirm that began before a turn but committed after the turn read the card is told by
+    the next turn, even when the turn had shown the card as expired by the clock. A card that
+    changed after `now` is left for the next turn.
+
+    Made from structured fields only: the action, the status, the outcome's reason or code, the
+    card's dates, and the approver's or requester's directory name (and that only if it is a plain
+    name). Wording is fixed in the tables above. The outcome's stored text, a note, any other key,
+    and anything unexpected in a field never reach a line. A pending proposal past its expiry
+    counts as expired, at its `expires_at`, as `status_as_of` shows it (pass the database's clock
+    as `now`). Nothing is added for a proposal still pending.
+    """
+    changes = sorted(_changes(rows, now), key=lambda change: change[0])
     if not changes:
-        return ()
-    sentences = [sentence for _, sentence in sorted(changes, key=lambda change: change[0])]
+        return (), ()
+    sentences = [sentence for _, _, _, sentence in changes]
     # The first follows the prefix as it is; each later one starts a sentence of its own.
     joined = " ".join([sentences[0], *(s[0].upper() + s[1:] for s in sentences[1:])])
-    return (OUTCOME_PREFIX + joined,)
+    return (OUTCOME_PREFIX + joined,), tuple(
+        told_entry(row.id, status) for _, row, status, _ in changes
+    )

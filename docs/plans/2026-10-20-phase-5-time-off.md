@@ -1866,6 +1866,44 @@ accessibility test failed once under load with its page closed mid-scan and pass
 The API has 4,434 tests (4,400 before), the web app 2,731 (2,503 before), and the browser suite
 371 (354 before); the three new browser specs take under 30 seconds on one worker.
 
+### The phase review (`fix/phase-5-review`)
+
+Run on 2026-10-26 after #73 merged, on `dev` at `e2e9c95` against the base `4557963`, at effort
+`medium`, as Phase 4's was: three `/code-review high` runs one after another, one per area (the
+API's engine, data, routes, policy, migrations, and scripts, about 4,700 lines; the assistant, the
+evals' runner, graders, and datasets, the `Makefile`, and `.github`, about 3,750; the web app
+without the generated client, tests, and gallery, about 5,500), and one Fable 5.1 security
+reviewer briefed with the invariants and the spec's Security seams.
+
+**The security reviewer** proved, with small experiments, that every seam held: row-level security
+forced on the three tables with the restrictive rule on proposals, the exact column grants, one-way
+statuses, the confirm running only the stored payload (the body takes nothing but `note`), 404 for
+anything unreadable, exactly one execution under concurrent confirms, tools acting only for the
+session's person, the denial note kept from the model and given back only to its decider, coverage
+kept from the model, and the test-only expire script refusing anything not local. Its one finding,
+low: a window ending on December 31, 9999 made the `decided` list answer 500.
+
+**The code reviews** found no high issue and three medium ones, all fixed:
+
+- a saved turn that couldn't find the answer and also made a card dropped its HR contacts
+  (invariant 4);
+- team coverage listed a colleague as off on any day inside their range, including days they don't
+  work; it now counts each colleague's own scheduled days;
+- a confirm whose transaction started before a new question, but that reached the card after the
+  turn read it, ended with a time earlier than the turn's start, so no later turn reported it to
+  the model. Migration 0011 adds `ai_messages.reported_outcomes`, the list of `"<card id>:<status>"` pairs each stored context told the model; the next turn reports every ended card whose current status no stored context has told, so no timestamps are compared across transactions, a card is told once per outcome, and a card first told as expired by the clock is told again if a confirm already in flight then executes it. The backfill turns off forced row-level security on the three tables only around itself, in the migration's one transaction, so it works for a table owner without BYPASSRLS; it can't recover outcomes the old race already lost.
+
+Fixed lows: the `decided` window overflow, a person recorded as their own manager getting PTO that
+no one could decide (now `no-approver`), a held Approvals card's position, no busy state while
+Dismiss runs, a "try again" line after a conflict that can't succeed, the half-day label now from
+the API, and small cleanups. Recorded without a change: duplicated date tables and toast texts, the
+Approvals page's per-person queries, the preview checked on every keystroke, and the earlier
+backlog items the reviews repeated. **The tool results' bare `amount` key** breaks the naming rule;
+renaming it changes what the model reads, so it waits for Phase 7's next paid full run (October's
+AI spend was already about $24 of $25).
+
+**Checking the fixes:** each fix test first and mutation-proved; one combined Sonnet review (its medium: the backfill under forced row-level security); then `/code-review medium` on the branch, two rounds (round 1: the expired-then-confirmed card and the backfill's row-security handling, both fixed; round 2 nothing high or medium, its cheap items fixed and the rest backlogged). The final `make db && make check` is green: API 4,443 tests, web 2,739, browser 371. One run hung for an hour in the API suite after an earlier run was stopped mid-way and passed when rerun, and the approvals gallery's "deciding" dialog scan failed twice under local load and passed on rerun (backlogged). `make eval-offline` passes: nothing changes a prompt, a tool, the guard, or retrieval, so no paid run.
+
 ## Backlog
 
 Deferrals found during execution go in `docs/BACKLOG.md` under the phase that should pick them up,

@@ -322,6 +322,15 @@ describe('ConfirmCard, confirming', () => {
   })
 })
 
+describe('ConfirmCard, dismissing', () => {
+  it('shows Dismissing… busy and disables Confirm and the note', () => {
+    card(CARD_DENY, { dismissing: true, note: 'Not that week.', onNoteChange: vi.fn<() => void>() })
+    expect(screen.getByRole('button', { name: 'Dismissing…' })).toHaveAttribute('aria-busy', 'true')
+    expect(screen.getByRole('button', { name: /^Confirm:/ })).toBeDisabled()
+    expect(screen.getByRole('textbox')).toBeDisabled()
+  })
+})
+
 describe('ConfirmCard, executed', () => {
   it.each([
     [

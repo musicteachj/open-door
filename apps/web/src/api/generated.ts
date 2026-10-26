@@ -130,6 +130,7 @@ export interface CalendarOut {
   latestEnd: string
   sickLookbackDays: number
   halfDayMinutes: number
+  halfDayLabel: string
 }
 
 export type CancelCardKind = (typeof CancelCardKind)[keyof typeof CancelCardKind]

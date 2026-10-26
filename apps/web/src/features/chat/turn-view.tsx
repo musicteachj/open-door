@@ -147,6 +147,11 @@ export const StoredTurn = memo(function StoredTurn({
 }) {
   const citations = withSourceKeys(turn.citations)
   const escalation = turn.escalation
+  // The HR contacts card of a not-found answer, whatever else the turn made, so no branch below
+  // can leave it out.
+  const notFoundContacts = turn.notFound ? (
+    <HrContacts variant="card" contacts={context.hrContacts} />
+  ) : undefined
   // The confirm cards the turn made, under its message. A card whose turn did not finish is
   // already canceled in the saved copy, and shows that.
   const cards = <ProposalCards proposals={turn.proposals} question={turn.question} />
@@ -186,6 +191,7 @@ export const StoredTurn = memo(function StoredTurn({
       <>
         <UserMessage text={turn.question} />
         <Message
+          contacts={notFoundContacts}
           status="stopped"
           text={turn.answerText}
           citations={citations}
@@ -202,6 +208,7 @@ export const StoredTurn = memo(function StoredTurn({
       <>
         <UserMessage text={turn.question} />
         <Message
+          contacts={notFoundContacts}
           status="error"
           errorMessage={turn.error?.message}
           text={turn.answerText}
@@ -221,6 +228,7 @@ export const StoredTurn = memo(function StoredTurn({
       <>
         <UserMessage text={turn.question} />
         <Message
+          contacts={notFoundContacts}
           status="streaming"
           text={turn.answerText}
           citations={citations}
@@ -241,6 +249,7 @@ export const StoredTurn = memo(function StoredTurn({
       <>
         <UserMessage text={turn.question} />
         <Message
+          contacts={notFoundContacts}
           status={status}
           text={turn.answerText}
           citations={citations}
@@ -266,7 +275,13 @@ export const StoredTurn = memo(function StoredTurn({
     return (
       <>
         <UserMessage text={turn.question} />
-        <Message status={status} text={turn.answerText} citations={citations} context={context} />
+        <Message
+          status={status}
+          text={turn.answerText}
+          citations={citations}
+          contacts={notFoundContacts}
+          context={context}
+        />
         {cards}
         <div className="max-w-[680px]">
           <AnswerFooter feedback={<TurnFeedback turn={turn} />} work={trace(turn, citations)} />
@@ -281,9 +296,7 @@ export const StoredTurn = memo(function StoredTurn({
         status={status}
         text={turn.answerText}
         citations={citations}
-        contacts={
-          turn.notFound ? <HrContacts variant="card" contacts={context.hrContacts} /> : undefined
-        }
+        contacts={notFoundContacts}
         footer={
           <AnswerFooter feedback={<TurnFeedback turn={turn} />} work={trace(turn, citations)} />
         }

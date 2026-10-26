@@ -41,8 +41,6 @@ export const timeOffCopy = {
   datesPlaceholder: 'Pick a day or a range',
   howMuchLabel: 'How much',
   fullDay: 'Full day',
-  // Fixed copy, not a figure the browser works out: a PTO half day is 240 minutes by the spec.
-  halfDay: 'Half day (4 hours)',
   someHours: 'Some hours',
   hoursLabel: 'Hours',
   hoursHint: '1 to 8 hours',
@@ -59,6 +57,11 @@ export const timeOffCopy = {
   hintEmpty: 'Pick a day, or a first and last day.',
   hintInProgress: 'Now pick the last day. For one day, choose Done.',
 } as const
+
+/** The PTO half-day choice: "Half day (4 hours)". The hours come from the API's `halfDayLabel`. */
+export function halfDayChoice(halfDayLabel: string): string {
+  return `Half day (${halfDayLabel})`
+}
 
 export function statusLabel(status: TimeOffStatus): string {
   return STATUS_WORDS[status]
@@ -312,6 +315,8 @@ export const pageCopy = {
   /** Shown in the form when the request could not be sent for a reason the server did not name. */
   submitFailed: 'Couldn’t send this request. Nothing was changed. Try again in a moment.',
   cancelFailed: 'Couldn’t cancel this request. Nothing was changed. Try again in a moment.',
+  /** A 404 or 409 that names no reason: trying again can't succeed, so say what happened. */
+  changedMeanwhile: 'This request changed in the meantime. The page now shows it as it stands.',
 } as const
 
 /** The weekday's name from its ISO number, 1 for Monday through 7 for Sunday. */

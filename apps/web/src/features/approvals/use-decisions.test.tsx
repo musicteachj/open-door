@@ -33,6 +33,7 @@ function answer(page: { live: string[]; order: string[] }, status: number) {
   server.use(
     http.post(url('/api/v1/time-off/requests/:id/decision'), () => {
       page.live = ['first', 'last']
+      page.order = ['first', 'last']
       return status === 409
         ? HttpResponse.json(
             {
@@ -69,4 +70,18 @@ describe('useDecisions: where focus goes', () => {
       expect(hook.result.current.focusPlan()).toEqual({ to: 'request', id: 'last' })
     },
   )
+})
+
+describe('useDecisions: where a held card sits', () => {
+  it('keeps the held card in the place it had when the decision started, though the page has drawn without it', async () => {
+    const { hook, page } = setup()
+    answer(page, 409)
+    const opener = document.createElement('button')
+    await act(async () => {
+      hook.result.current.begin('approve', { ...PRIYA_WAITING, id: 'middle' }, opener)
+    })
+    act(() => hook.result.current.confirm())
+    await waitFor(() => expect(hook.result.current.held).toHaveLength(1))
+    expect(hook.result.current.held[0]?.index).toBe(1)
+  })
 })

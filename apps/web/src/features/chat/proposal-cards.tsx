@@ -75,6 +75,7 @@ function ProposalCard({ proposal, question, turnRunning }: ProposalCardProps) {
         timeZone={timeZone}
         turnRunning={turnRunning ?? proposal.turnRunning}
         confirming={actions.confirming}
+        dismissing={actions.dismissing}
         note={note}
         onNoteChange={setNote}
         deniedNote={proposal.deniedNote}

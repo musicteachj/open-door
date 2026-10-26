@@ -22,6 +22,7 @@ from uuid import UUID
 
 import yaml
 
+from app.ai.tools.timeoff import MAX_SICK_HOURS
 from app.ai.turn import MAX_QUESTION_CHARACTERS
 from app.domain.handbook.applicability import Asker
 from app.modules.sandbox.seed import SeedCompany, build_company
@@ -64,7 +65,6 @@ ACTION_GROUPS = ("requests", "checks", "decisions", "cancels", "refused")
 CHECK_TOOLS = ("check_time_off", "get_time_off_balance", "list_time_off_requests")
 LEAVE_TYPES = ("pto", "sick")
 DECISIONS = ("approve", "deny")
-MAX_SICK_HOURS = 8
 KINDS = (
     "answerable",
     "unanswerable",
@@ -591,8 +591,8 @@ def check_smoke(
     qa: Sequence[QaItem],
     actions: Sequence[ActionItem] = (),
 ) -> None:
-    """The smoke list names 15 Q&A items, 11 red-team items, and 6 action items, each once, each
-    existing."""
+    """The smoke list names `SMOKE_QA_COUNT` Q&A items, `SMOKE_REDTEAM_COUNT` red-team items, and
+    `SMOKE_ACTION_COUNT` action items, each once, each existing."""
     lines: list[str] = []
     for name, ids, known, count in (
         ("qa", smoke.qa, {i.id for i in qa}, SMOKE_QA_COUNT),

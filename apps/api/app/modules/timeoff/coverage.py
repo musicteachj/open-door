@@ -3,7 +3,9 @@
 For a request R by person P, whose direct manager M is the viewer, it lists M's OTHER direct
 reports with approved or recorded time off (a request still waiting isn't time off, and a denied
 or canceled one never was) on any of R's counted days: P's scheduled weekdays, less the company
-holidays at P's location. One entry per colleague, with the days they overlap and the type of each.
+holidays at P's location. A colleague's time off counts only on days that are also counted for them
+(their own schedule and holidays). One entry per colleague, with the days they overlap and the type
+of each.
 
 It is context only: plain data that nothing ranks or recommends (invariant 5). It is shown on the
 card and the page, never sent to the model and never written to an audit event. Only the person's
@@ -60,8 +62,8 @@ async def team_coverage(
 
     A request of anyone else is not in the answer at all (not an empty entry, which would read as
     "no one is off"). One query reads the colleagues' time off for every request together; the
-    person's facts are read once per distinct person, so a caller passes the few that wait, not a
-    page.
+    facts of each person (the requesters, and each colleague who has time off in range) are read
+    once, one query per person, so a caller passes the few that wait, not a page.
     """
     mine = [request for request in requests if request.person_id in actor.direct_report_ids]
     if not mine:
@@ -76,6 +78,25 @@ async def team_coverage(
     found: dict[UUID, tuple[CoverageEntry, ...]] = {}
     # A caller that has read the people's facts already passes them, so they are read once.
     known: dict[UUID, queries.PersonFacts | None] = dict(facts or {})
+    # Each time-off row's own counted days, once: the days that row is time off for its person
+    # (their schedule and holidays). None when their facts can't be read, which falls back to the
+    # plain date range.
+    theirs: list[set[date] | None] = []
+    for time_off in off:
+        if time_off.person_id not in known:
+            known[time_off.person_id] = await queries.load_facts(
+                db, actor.tenant_id, time_off.person_id
+            )
+        colleague = known[time_off.person_id]
+        theirs.append(
+            None
+            if colleague is None
+            else set(
+                count_days(
+                    colleague.person, time_off.start_date, time_off.end_date, colleague.holidays
+                ).counted
+            )
+        )
     for request in mine:
         if request.person_id not in known:
             known[request.person_id] = await queries.load_facts(
@@ -88,12 +109,16 @@ async def team_coverage(
             person_facts.person, request.start_date, request.end_date, person_facts.holidays
         ).counted
         days_by_colleague: dict[tuple[UUID, str], dict[date, tuple[str, int | None]]] = {}
-        for time_off in off:
+        for time_off, own_days in zip(off, theirs, strict=True):
             if time_off.person_id == request.person_id:
                 continue
             days = days_by_colleague.setdefault((time_off.person_id, time_off.person_name), {})
             for day in counted:
-                if time_off.start_date <= day <= time_off.end_date:
+                if (
+                    day in own_days
+                    if own_days is not None
+                    else time_off.start_date <= day <= time_off.end_date
+                ):
                     days[day] = (time_off.type, time_off.partial_minutes)
         found[request.id] = tuple(
             CoverageEntry(

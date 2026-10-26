@@ -7,7 +7,7 @@ model calls. Priya Raman is the asker (the seed company, "now" is Thursday 2026-
 
 import asyncio
 import json
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from typing import Any
 from uuid import UUID
 
@@ -710,6 +710,41 @@ async def test_with_no_turn_stored_yet_every_change_is_reported(
     assert "canceled because the answer did not finish" in context_of(env.transport.requests, 1)
 
 
+async def test_a_confirm_that_began_before_a_turn_but_committed_after_its_read_is_still_reported(
+    app_engine: AsyncEngine, seeded_sandbox: SeedCompany
+) -> None:
+    transport = PlanTransport(
+        tool_use_plan(book()),
+        text_plan("Ok."),
+        text_plan("Fine."),
+        text_plan("Fine again."),
+        text_plan("And again."),
+    )
+    env = await make_env(app_engine, seeded_sandbox, transport=transport)
+    await env.ask("Please book Friday off.")
+    row = await only_proposal(env)
+    # The confirm's transaction starts first (its `ended_at` will be that moment), but it takes the
+    # card only after the next turn has read the card as pending.
+    async with acting(env.engine, env.ctx.tenant_id, env.ctx.person_id) as (db, actor):  # type: ignore[arg-type]
+        await db.execute(text("SELECT now()"))
+        run = await start_turn_run(env.deps, conversation=env.conversation, question="Hi", now=NOW)
+        confirmed = await confirm(db, actor, row.id, None, NOW)
+    assert confirmed.status == "executed"
+    async for _ in run.events():
+        pass
+    turns = await env.turns()
+    assert (await only_proposal(env)).ended_at < turns[1].started_at  # type: ignore[operator]
+
+    await env.ask("And now?")
+    await env.ask("Anything else?")
+
+    requests = env.transport.requests
+    assert "Since the last message" not in context_of(requests, 2)
+    assert "was confirmed" in context_of(requests, 3)
+    # Reported once.
+    assert "Since the last message" not in context_of(requests, 4)
+
+
 async def test_a_card_that_never_changed_adds_nothing_to_the_next_context(
     app_engine: AsyncEngine, seeded_sandbox: SeedCompany
 ) -> None:
@@ -823,3 +858,126 @@ async def test_the_recovery_helper_returns_nothing_when_no_turn_is_abandoned(
     env = await make_env(app_engine, seeded_sandbox)
     async with tenant_session(app_engine, env.ctx) as db:
         assert await recover_abandoned_turns(db, env.ctx, env.conversation.id) == 0
+
+
+# --- The reported-cards record -----------------------------------------------------------------
+
+
+def _migration_0011() -> Any:
+    import importlib.util
+    from pathlib import Path
+
+    path = Path(__file__).parents[2] / "migrations" / "versions" / "0011_reported_proposals.py"
+    spec = importlib.util.spec_from_file_location("migration_0011", path)
+    assert spec is not None
+    assert spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+async def test_the_backfill_gives_an_old_context_the_cards_ended_by_its_turns_start(
+    app_engine: AsyncEngine, owner_engine: AsyncEngine, seeded_sandbox: SeedCompany
+) -> None:
+    transport = PlanTransport(tool_use_plan(book()), text_plan("Ok."), text_plan("Fine."))
+    env = await make_env(app_engine, seeded_sandbox, transport=transport)
+    await env.ask("Please book Friday off.")
+    row = await only_proposal(env)
+    await confirm_it(env, row.id)
+    await env.ask("And now?")
+    # As if the contexts were stored before the column existed.
+    async with owner_engine.begin() as connection:
+        await connection.execute(text("UPDATE ai_messages SET reported_outcomes = NULL"))
+        # What the migration does: lift FORCE on the tables, backfill, put FORCE back.
+        for table in _migration_0011().TABLES:
+            await connection.execute(text(f"ALTER TABLE {table} NO FORCE ROW LEVEL SECURITY"))
+        await connection.execute(text(_migration_0011().BACKFILL))
+        for table in _migration_0011().TABLES:
+            await connection.execute(text(f"ALTER TABLE {table} FORCE ROW LEVEL SECURITY"))
+    async with owner_engine.connect() as connection:
+        forced: int = (
+            await connection.execute(
+                text(
+                    "SELECT count(*) FROM pg_class WHERE relname = ANY(:tables)"
+                    " AND relforcerowsecurity"
+                ),
+                {"tables": list(_migration_0011().TABLES)},
+            )
+        ).scalar_one()
+
+    systems = [m for m in await env.messages() if m.role == "system"]
+    # The first turn began before the card ended; the second began after.
+    assert [m.reported_outcomes for m in systems] == [None, [f"{row.id}:executed"]]
+    assert forced == len(_migration_0011().TABLES)
+
+
+async def test_an_expired_card_nobody_confirmed_is_reported_exactly_once(
+    app_engine: AsyncEngine, owner_engine: AsyncEngine, seeded_sandbox: SeedCompany
+) -> None:
+    transport = PlanTransport(
+        tool_use_plan(book()), text_plan("Ok."), text_plan("Fine."), text_plan("Again.")
+    )
+    env = await make_env(app_engine, seeded_sandbox, transport=transport)
+    await env.ask("Please book Friday off.")
+    row = await only_proposal(env)
+    async with owner_engine.begin() as connection:
+        await connection.execute(text("ALTER TABLE ai_proposals DISABLE TRIGGER USER"))
+        await connection.execute(
+            text(
+                "UPDATE ai_proposals SET created_at = now() - interval '65 minutes',"
+                " expires_at = now() - interval '1 hour' WHERE id = :id"
+            ),
+            {"id": row.id},
+        )
+        await connection.execute(text("ALTER TABLE ai_proposals ENABLE TRIGGER USER"))
+    await env.ask("And now?")
+    await env.ask("Anything else?")
+
+    requests = env.transport.requests
+    assert "expired" in context_of(requests, 2)
+    assert "Since the last message" not in context_of(requests, 3)
+
+
+async def test_a_card_told_as_expired_is_told_again_when_a_confirm_in_flight_executes_it(
+    app_engine: AsyncEngine, owner_engine: AsyncEngine, seeded_sandbox: SeedCompany
+) -> None:
+    transport = PlanTransport(
+        tool_use_plan(book()),
+        text_plan("Ok."),
+        text_plan("Fine."),
+        text_plan("Again."),
+        text_plan("Last."),
+    )
+    env = await make_env(app_engine, seeded_sandbox, transport=transport)
+    await env.ask("Please book Friday off.")
+    row = await only_proposal(env)
+    async with acting(env.engine, env.ctx.tenant_id, env.ctx.person_id) as (db, actor):  # type: ignore[arg-type]
+        # The confirm's transaction starts while the card is still live...
+        began: datetime = (await db.execute(text("SELECT now()"))).scalar_one()
+        async with owner_engine.begin() as connection:
+            await connection.execute(text("ALTER TABLE ai_proposals DISABLE TRIGGER USER"))
+            await connection.execute(
+                text(
+                    "UPDATE ai_proposals"
+                    " SET created_at = CAST(:began AS timestamptz) - interval '14 minutes',"
+                    " expires_at = CAST(:began AS timestamptz) + interval '300 milliseconds'"
+                    " WHERE id = :id"
+                ),
+                {"began": began, "id": row.id},
+            )
+            await connection.execute(text("ALTER TABLE ai_proposals ENABLE TRIGGER USER"))
+        await asyncio.sleep(0.6)
+        # ...and the next turn reads it after its time ran out: told as expired.
+        run = await start_turn_run(env.deps, conversation=env.conversation, question="Hi", now=NOW)
+        confirmed = await confirm(db, actor, row.id, None, NOW)
+    assert confirmed.status == "executed"
+    async for _ in run.events():
+        pass
+
+    await env.ask("And now?")
+    await env.ask("Anything else?")
+
+    requests = env.transport.requests
+    assert "expired" in context_of(requests, 2)
+    assert "was confirmed" in context_of(requests, 3)
+    assert "Since the last message" not in context_of(requests, 4)

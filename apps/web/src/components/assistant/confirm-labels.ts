@@ -14,6 +14,7 @@ export const confirmCopy = {
   deny: 'Deny',
   confirming: 'Confirming…',
   dismiss: 'Dismiss',
+  dismissing: 'Dismissing…',
   wait: 'Wait for the answer to finish',
   askAgain: 'Ask again',
   viewTimeOff: 'View in Time off',

@@ -67,6 +67,8 @@ type ConfirmCardProps = {
   turnRunning?: boolean
   /** Confirm was pressed and the server is working. */
   confirming?: boolean
+  /** Dismiss was pressed and the server is working: Dismiss shows busy and Confirm waits. */
+  dismissing?: boolean
   /** A denial's note, owned by the page while the card is pending. */
   note?: string
   onNoteChange?: (note: string) => void
@@ -154,6 +156,7 @@ function ConfirmCard({
   timeZone,
   turnRunning = false,
   confirming = false,
+  dismissing = false,
   note = '',
   onNoteChange,
   deniedNote = null,
@@ -331,7 +334,7 @@ function ConfirmCard({
             firstName={requesterFirst}
             value={note}
             onChange={onNoteChange ?? (() => {})}
-            disabled={confirming || turnRunning}
+            disabled={confirming || dismissing || turnRunning}
           />
         )}
         {denial && executed && hasNote && (
@@ -361,6 +364,7 @@ function ConfirmCard({
           <div className="flex flex-wrap items-center gap-3 max-sm:grid max-sm:grid-cols-2">
             <Button
               loading={confirming}
+              disabled={dismissing}
               aria-label={confirming ? undefined : confirmName(card)}
               aria-disabled={turnRunning || undefined}
               aria-describedby={turnRunning ? waitId : undefined}
@@ -378,15 +382,16 @@ function ConfirmCard({
             </Button>
             <Button
               variant="secondary"
+              loading={dismissing}
               disabled={confirming}
-              aria-label={dismissName(card)}
+              aria-label={dismissing ? undefined : dismissName(card)}
               onClick={() => {
                 touched.current = true
                 onDismiss?.()
               }}
               className="max-sm:justify-center"
             >
-              {confirmCopy.dismiss}
+              {dismissing ? confirmCopy.dismissing : confirmCopy.dismiss}
             </Button>
             {turnRunning && (
               <span id={waitId} className="text-small text-ink-muted max-sm:col-span-full">

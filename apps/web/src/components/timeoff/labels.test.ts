@@ -40,7 +40,6 @@ describe('timeOffCopy', () => {
       datesPlaceholder: 'Pick a day or a range',
       howMuchLabel: 'How much',
       fullDay: 'Full day',
-      halfDay: 'Half day (4 hours)',
       someHours: 'Some hours',
       hoursLabel: 'Hours',
       hoursHint: '1 to 8 hours',

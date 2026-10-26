@@ -358,6 +358,38 @@ version (`0.x.y` while the app is being built, `1.0.0` when it is complete).
 
 ### Fixed
 
+- **The assistant is told about a card even when a confirm raced the turn** (Phase 5, phase review).
+  A confirm or dismiss that began just before a new turn but finished after the turn read the card
+  could be skipped forever, so the model never learned the card had been confirmed. Each stored
+  context now records which cards it told the model about and the status it showed (migration 0011,
+  with a backfill), and the next turn reports every card whose shown status was not yet told, once.
+  A card shown as expired by the clock and then confirmed by a request already in flight is told
+  again as confirmed. The wording of the line is unchanged.
+- **Team coverage counts each colleague's own working days** (Phase 5, phase review). A colleague
+  with time off across a weekend was listed as off on a Saturday they do not work. Coverage now
+  keeps only days that are scheduled working days for both people.
+- **A not-found answer that also made a card keeps its HR contacts** (Phase 5, phase review). After
+  a reload, the contacts card was missing from that turn.
+- **A decision list ending at the last calendar day no longer fails** (Phase 5, phase review).
+  `GET /time-off/requests?scope=decided&to=9999-12-31` answered 500; it now answers with an empty
+  list.
+- **A person recorded as their own manager has no approver** (Phase 5, phase review). A PTO request
+  from such a person is refused as having no approver, instead of waiting for a decision no one
+  can make.
+- **A held Approvals card keeps its place** (Phase 5, phase review). A card held after a refusal
+  is placed where it was when the decision started, or last on the page, not second to last.
+- **Dismiss shows it is working** (Phase 5, phase review). While a Dismiss is on its way, the card
+  shows "Dismissing…" and Confirm waits.
+- **A request that changed is told so** (Phase 5, phase review). When Cancel or a decision meets a
+  request that changed or is gone and the server gave no reason, the toast says the request changed
+  and the page shows it as it stands, not "try again".
+- **The half-day choice takes its hours from the API** (Phase 5, phase review). The calendar read
+  now gives `halfDayLabel` ("4 hours") beside `halfDayMinutes`, and the form writes "Half day (4
+  hours)" from it.
+- **Small cleanups** (Phase 5, phase review). A card's canceled reason is read through one checked
+  lookup, the cancel path reads only the time zone, the eval dataset imports the sick-hours limit
+  instead of copying it, and two identical error tables became one.
+
 - **A personal-data test that failed by chance** (Phase 5, stage 6). The test that proves a card or
   Social Security number never reaches the logs searched every field of each log record, including
   the logging module's own timestamps, so a timing value such as 411106.6 matched "4111" and failed

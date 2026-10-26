@@ -144,6 +144,7 @@ function RequestPanel({
           ? pastLabelSick(calendar.sickLookbackDays, minDate)
           : timeOffCopy.pastLabelPto,
       }}
+      halfDayLabel={calendar.halfDayLabel}
       howMuch={howMuch}
       onHowMuchChange={changed(setHowMuch)}
       hours={hours}

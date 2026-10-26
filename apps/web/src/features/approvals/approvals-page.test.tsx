@@ -551,6 +551,21 @@ describe('Approvals: a request that has moved on', () => {
     expect(deny(...ZARA)).toBeEnabled()
   })
 
+  it('says the request changed when a 409 names no reason or status, not "try again"', async () => {
+    const { user, fake } = await openPage()
+    fake.state.decideFailure = {
+      status: 409,
+      type: 'status-changed',
+      detail: '',
+      currentStatus: null,
+    }
+    await user.click(approve(...ZARA))
+    await user.click(await screen.findByRole('button', { name: 'Approve' }))
+    await waitFor(() => expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument())
+    await waitFor(() => expect(toast()).toHaveTextContent('This request changed in the meantime.'))
+    expect(toast()).not.toHaveTextContent('Try again')
+  })
+
   it('moves focus to the heading when nothing else is waiting', async () => {
     const open = await openPage({ waiting: [ZARA_WAITING] })
     await decideStale(open)
