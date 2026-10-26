@@ -24,7 +24,9 @@ from app.api import deps
 from app.db.models import Person, TimeOffRequest
 from app.db.tenancy import TenantContext, tenant_session
 from app.domain.holidays import holidays_for
+from app.domain.timeoff.evaluate import SICK_WINDOW_DAYS
 from app.domain.timeoff.labels import label
+from app.domain.timeoff.model import HALF_DAY_MINUTES
 from app.domain.timeoff.today import today_at
 from app.modules.identity.actor import load_actor
 from app.modules.identity.cookies import CSRF_COOKIE, SESSION_COOKIE
@@ -114,12 +116,18 @@ class World:
         partial_minutes: int | None = None,
         created_at: datetime | None = None,
         note: str | None = None,
+        decided_at: datetime | None = None,
+        decided_by: str | None = None,
     ) -> UUID:
         person_id = key if isinstance(key, UUID) else self.person(key)
         status = status or ("pending" if type == "pto" else "recorded")
         decided = status in {"approved", "denied"}
         decider = (
-            self.person("dana") if person_id == self.person("marcus") else self.person("marcus")
+            self.person(decided_by)
+            if decided_by is not None
+            else self.person("dana")
+            if person_id == self.person("marcus")
+            else self.person("marcus")
         )
         request_id = uuid4()
         values: dict[str, Any] = {
@@ -134,7 +142,7 @@ class World:
             "status": status,
             "created_via": "ui",
             "decided_by": decider if decided else None,
-            "decided_at": self.now if decided else None,
+            "decided_at": (decided_at or self.now) if decided else None,
             "decision_note": note if status == "denied" else None,
             "canceled_at": self.now if status == "canceled" else None,
         }
@@ -493,6 +501,80 @@ async def test_waiting_is_pending_pto_from_direct_reports_only_oldest_sent_first
     assert not (set(ids) & {str(value) for value in excluded.values()})
 
 
+async def test_decided_is_only_the_callers_own_decisions_from_the_last_90_days_newest_first(
+    start: StartWorld,
+) -> None:
+    world = start("marcus", now=far())
+    day = world.today + timedelta(days=30)
+    when = world.now
+    old = await world.put("priya", day, status="approved", decided_at=when - timedelta(days=5))
+    new = await world.put(
+        "leo", day + timedelta(days=7), status="denied", decided_at=when - timedelta(days=1)
+    )
+    edge = await world.put(
+        "priya", day + timedelta(days=14), status="approved", decided_at=when - timedelta(days=89)
+    )
+    too_old = await world.put(
+        "leo", day + timedelta(days=21), status="approved", decided_at=when - timedelta(days=92)
+    )
+    # Not the caller's: Zara decided it (Marcus sees it as skip-level, but it is not his decision).
+    zaras = await world.put(
+        "oak-apparel-1",
+        day,
+        status="approved",
+        decided_at=when - timedelta(days=2),
+        decided_by="oak-apparel-lead",
+    )
+    still_waiting = await world.put("priya", day + timedelta(days=28))
+    canceled = await world.put("leo", day + timedelta(days=35), status="canceled")
+
+    body = world.get("/requests", scope="decided").json()
+    ids = [item["id"] for item in body["items"]]
+
+    assert ids == [str(new), str(old), str(edge)]
+    assert not ({str(too_old), str(zaras), str(still_waiting), str(canceled)} & set(ids))
+    assert body["toDate"] == world.today.isoformat()
+    assert body["fromDate"] == (world.today - timedelta(days=90)).isoformat()
+    assert {item["decidedBy"]["id"] for item in body["items"]} == {str(world.person("marcus"))}
+
+
+async def test_decided_does_not_list_another_managers_decisions_to_the_caller(
+    start: StartWorld,
+) -> None:
+    world = start("marcus", now=far())
+    day = world.today + timedelta(days=30)
+    await world.put(
+        "oak-apparel-1",
+        day,
+        status="approved",
+        decided_at=world.now - timedelta(days=2),
+        decided_by="oak-apparel-lead",
+    )
+
+    assert world.get("/requests", scope="decided").json()["items"] == []
+    world.switch("priya")
+    assert world.get("/requests", scope="decided").json()["items"] == []
+
+
+async def test_decided_from_and_to_bound_the_day_of_the_decision(start: StartWorld) -> None:
+    world = start("marcus", now=far())
+    day = world.today + timedelta(days=30)
+    older = await world.put(
+        "priya", day, status="approved", decided_at=world.now - timedelta(days=40)
+    )
+    await world.put(
+        "leo", day + timedelta(days=7), status="approved", decided_at=world.now - timedelta(days=3)
+    )
+
+    window = {
+        "from": (world.today - timedelta(days=45)).isoformat(),
+        "to": (world.today - timedelta(days=20)).isoformat(),
+    }
+    items = world.get("/requests", scope="decided", **window).json()["items"]
+
+    assert [item["id"] for item in items] == [str(older)]
+
+
 async def seeded_zara_request(world: World) -> UUID:
     async with tenant_session(world.engine, TenantContext(world.tenant_id, None)) as session:
         return (
@@ -563,7 +645,7 @@ async def test_a_row_carries_its_people_dates_amount_label_and_decision(start: S
     }
     assert (row["type"], row["status"], row["partialMinutes"]) == ("pto", "approved", 240)
     assert (row["amountMinutes"], row["amountLabel"]) == (240, "4 hours (half a day)")
-    assert row["decidedBy"] == {"name": "Marcus Bell"}
+    assert row["decidedBy"] == {"id": str(world.person("marcus")), "name": "Marcus Bell"}
     assert row["decidedAt"] is not None
     assert row["createdVia"] == "ui"
     assert row["createdAt"]
@@ -919,6 +1001,24 @@ async def test_a_waiting_queue_reads_each_requesters_facts_once(
     assert len(loads) == len(set(loads)) == 2
 
 
+async def test_a_decisions_answer_never_reads_the_callers_location_after_the_write(
+    start: StartWorld, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Today comes from what the service already worked out, so a write that has been applied can
+    never turn into a 404 because of a second read."""
+
+    async def never(*_args: Any, **_kwargs: Any) -> date:
+        raise AssertionError("the route read today again after the write")
+
+    monkeypatch.setattr(routes, "_today", never)
+    world = start("marcus")
+    zara = await seeded_zara_request(world)
+
+    decided = world.post(f"/requests/{zara}/decision", {"decision": "approve"})
+    assert decided.status_code == 200, decided.text
+    assert decided.json()["status"] == "approved"
+
+
 async def test_one_request_is_read_once_per_get(
     start: StartWorld, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -977,7 +1077,7 @@ async def test_the_direct_manager_approves_and_it_is_audited_via_the_ui(start: S
     body = response.json()
     assert (body["status"], body["decidedBy"], body["decisionNote"]) == (
         "approved",
-        {"name": "Marcus Bell"},
+        {"id": str(world.person("marcus")), "name": "Marcus Bell"},
         None,
     )
     assert body["decidedAt"] is not None
@@ -1245,6 +1345,76 @@ async def test_canceling_a_request_in_another_sandbox_is_a_404(start: StartWorld
 
 # ---------------------------------------------------------------------------------------------
 # Making a request
+
+
+async def test_a_request_says_whether_the_caller_may_cancel_it_by_the_rule_the_cancel_route_uses(
+    start: StartWorld,
+) -> None:
+    world = start("priya", now=far())
+    today = world.today
+    pending_started = await world.put(
+        "priya", today - timedelta(days=3), today - timedelta(days=2), status="pending"
+    )
+    approved_ahead = await world.put("priya", today + timedelta(days=1), status="approved")
+    approved_today = await world.put("priya", today, status="approved")
+    sick_ahead = await world.put("priya", today + timedelta(days=2), type="sick")
+    sick_started = await world.put("priya", today - timedelta(days=1), type="sick")
+    denied = await world.put("priya", today + timedelta(days=5), status="denied")
+    canceled = await world.put("priya", today + timedelta(days=6), status="canceled")
+
+    items = {
+        item["id"]: item["canCancel"]
+        for item in world.get(
+            "/requests",
+            **{
+                "from": (today - timedelta(days=2)).isoformat(),
+                "to": (today + timedelta(days=9)).isoformat(),
+            },
+        ).json()["items"]
+    }
+
+    assert items == {
+        str(pending_started): True,
+        str(approved_ahead): True,
+        str(approved_today): False,
+        str(sick_ahead): True,
+        str(sick_started): False,
+        str(denied): False,
+        str(canceled): False,
+    }
+    # And the route agrees with each answer: the ones it offers are the ones it accepts.
+    assert world.post(f"/requests/{approved_today}/cancel").status_code == 409
+    assert world.post(f"/requests/{approved_ahead}/cancel").status_code == 200
+
+
+async def test_a_managers_view_of_a_reports_request_never_offers_cancel(start: StartWorld) -> None:
+    world = start("marcus", now=far())
+    day = world.today + timedelta(days=10)
+    await world.put("priya", day)
+    waiting = world.get("/requests", scope="waiting").json()["items"]
+    team = world.get(
+        "/requests", scope="team", **{"from": day.isoformat(), "to": day.isoformat()}
+    ).json()["items"]
+    assert waiting
+    assert team
+    assert [item["canCancel"] for item in waiting + team] == [False] * len(waiting + team)
+
+
+async def test_the_answers_to_create_and_cancel_say_whether_cancel_is_still_open(
+    start: StartWorld,
+) -> None:
+    world = start("priya", now=far())
+    day = world.workday(10)
+
+    created = world.post(
+        "/requests", {"type": "pto", "startDate": day.isoformat(), "endDate": day.isoformat()}
+    )
+    assert created.status_code == 201, created.text
+    assert created.json()["canCancel"] is True
+
+    canceled = world.post(f"/requests/{created.json()['id']}/cancel")
+    assert canceled.json()["canCancel"] is False
+    assert world.get(f"/requests/{created.json()['id']}").json()["canCancel"] is False
 
 
 async def test_a_pto_request_is_pending_with_its_label_and_audit_event(start: StartWorld) -> None:
@@ -1723,6 +1893,44 @@ def test_the_calendar_gives_weekdays_holidays_across_new_year_and_the_earliest_d
     assert body["latestEnd"] == f"{year + 1}-12-31"
 
 
+def test_the_calendar_gives_the_sick_look_back_and_the_half_day_from_the_engine(
+    start: StartWorld,
+) -> None:
+    body = start("priya").get("/calendar", **{"from": "2030-01-01", "to": "2030-01-02"}).json()
+
+    assert body["sickLookbackDays"] == SICK_WINDOW_DAYS == 30
+    assert body["halfDayMinutes"] == HALF_DAY_MINUTES == 240
+    # The earliest sick day is exactly that many days back.
+    assert date.fromisoformat(body["earliestStart"]["pto"]) - date.fromisoformat(
+        body["earliestStart"]["sick"]
+    ) == timedelta(days=body["sickLookbackDays"])
+
+
+def test_a_calendar_without_from_starts_at_the_earliest_sick_day(start: StartWorld) -> None:
+    # 30 days after December 31, 2027, the day New Year's Day 2028 (a Saturday) is observed.
+    world = start("priya", now=datetime(2028, 1, 30, 20, 0, tzinfo=UTC))
+
+    body = world.get("/calendar", to="2028-02-01").json()
+
+    assert body["earliestStart"]["sick"] == "2027-12-31"
+    days = [holiday["day"] for holiday in body["holidays"]]
+    # That first day is in; Christmas, observed on the 24th, is before the window and is not.
+    assert "2027-12-31" in days
+    assert min(days) == "2027-12-31"
+
+
+def test_the_calendar_gives_the_hours_in_a_scheduled_day_as_minutes_and_a_label(
+    start: StartWorld,
+) -> None:
+    world = start("priya")
+
+    body = world.get("/calendar", **{"from": "2030-01-01", "to": "2030-01-02"}).json()
+
+    # Every scheduled day counts as 8 hours (handbook 3.1): 8 * 60 = 480 minutes.
+    assert body["dayMinutes"] == 480
+    assert body["dayLabel"] == "8 hours"
+
+
 def test_the_calendar_follows_the_held_clock_and_the_locations_today(start: StartWorld) -> None:
     moment = datetime(datetime.now(UTC).year + 1, 1, 2, 3, 0, tzinfo=UTC)
     world = start("priya", now=moment)
@@ -1765,6 +1973,7 @@ async def test_an_employees_summary_has_pto_pending_approver_and_no_waiting_coun
         "pendingCount": 0,
         "approver": {"name": "Marcus Bell"},
         "waitingCount": None,
+        "today": world.today.isoformat(),
     }
 
 

@@ -10,6 +10,8 @@ import { DirectoryPage } from '@/features/directory/directory-page'
 import { ProfilePage } from '@/features/directory/profile-page'
 import { HandbookPage } from '@/features/handbook/handbook-page'
 import { SectionPage } from '@/features/handbook/section-page'
+import { TimeOffPage } from '@/features/time-off/time-off-page'
+import { ApprovalsPage } from '@/features/approvals/approvals-page'
 
 // The component gallery is compiled in for development and for the e2e build, which sets
 // VITE_GALLERY. In a production build both conditions are constants Vite folds to false, so the
@@ -45,6 +47,8 @@ export const routes: RouteObject[] = [
                 errorElement: <RouteError />,
                 children: [
                   { path: '/ask', element: <HomePage /> },
+                  { path: '/time-off', element: <TimeOffPage /> },
+                  { path: '/approvals', element: <ApprovalsPage /> },
                   { path: '/directory', element: <DirectoryPage /> },
                   { path: '/directory/:personId', element: <ProfilePage /> },
                   { path: '/handbook', element: <HandbookPage /> },

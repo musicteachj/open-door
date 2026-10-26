@@ -3,6 +3,9 @@ import type { CoverageOut } from '@/api/generated'
 import { ZARA, ZARA_WAITING } from '@/app/gallery/fixtures/timeoff'
 import {
   actionName,
+  approvedToast,
+  approvalsPageCopy,
+  deniedToast,
   NOTE_LIMIT_CHARACTERS,
   approvalsCopy,
   conflictText,
@@ -133,6 +136,48 @@ describe('approvalsCopy', () => {
     it('trims first, so a leading no-break space gives no empty first name', () => {
       expect(firstNameOf('\u00a0Zara Bautista')).toBe('Zara')
       expect(firstNameOf('  Zara  Bautista ')).toBe('Zara')
+    })
+  })
+})
+
+describe('the Approvals page copy', () => {
+  it('holds the headings, subtitles, and empty lines from the notes', () => {
+    expect(approvalsPageCopy).toMatchObject({
+      title: 'Approvals',
+      waiting: 'Waiting for you',
+      waitingSubtitle:
+        'PTO requests from your direct reports, oldest first. Sick time is recorded, not approved, so it appears only under Coming up.',
+      waitingEmpty:
+        'Nothing is waiting for you. When someone on your team asks for time off, it shows up here.',
+      comingUp: 'Coming up on your team',
+      comingUpSubtitle: 'Approved and recorded time off in the next 30 days, soonest first.',
+      comingUpEmpty: 'No time off on your team in the next 30 days.',
+      recent: 'Recent decisions',
+      recentSubtitle: 'Your decisions from the last 90 days, newest first.',
+      recentEmpty: 'No decisions in the last 90 days.',
+      yourNote: 'Your note',
+      loading: 'Loading approvals',
+    })
+    const text = JSON.stringify(approvalsPageCopy)
+    expect(text).not.toContain(String.fromCharCode(0x2014))
+    expect(text).not.toMatch(/\b(he|she|him|her|his|hers|they|them|their)\b/i)
+  })
+
+  it('names the heading with its count for a screen reader, and plainly with none waiting', () => {
+    expect(approvalsPageCopy.waitingName(2)).toBe('Waiting for you, 2')
+    expect(approvalsPageCopy.waitingName(0)).toBe('Waiting for you')
+  })
+
+  describe('the toasts', () => {
+    it('names the person, with no pronoun', () => {
+      expect(approvedToast('Zara')).toBe('Approved. Zara will see it on the Time off page.')
+    })
+
+    it('says a denial’s note will be seen only when there is one', () => {
+      expect(deniedToast('Zara', true)).toBe(
+        'Denied. Zara will see your note on the Time off page.',
+      )
+      expect(deniedToast('Zara', false)).toBe('Denied. Zara will see it on the Time off page.')
     })
   })
 })

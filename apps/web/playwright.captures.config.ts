@@ -28,7 +28,9 @@ export default defineConfig({
   workers: 1,
   retries: 0,
   reporter: 'list',
-  timeout: 300_000,
+  // The whole run is one test: the gallery states and every screen, about 100 rows. Phase 5's
+  // screens 08 to 10 added 53 that start real sandboxes and sign in as two people.
+  timeout: 900_000,
   use: {
     baseURL: WEB_ORIGIN,
     viewport: { width: 1440, height: 900 },

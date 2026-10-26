@@ -110,6 +110,11 @@ export function addDays(day: string, days: number): string {
   return toDay(new Date(toUtc(day).getTime() + days * DAY_MS))
 }
 
+/** December 31 of the year after `day`: the last day a request can reach, as the calendar says. */
+export function endOfNextYear(day: string): string {
+  return `${Number(day.slice(0, 4)) + 1}-12-31`
+}
+
 /** The same date in another month, or that month's last day when it is shorter. */
 export function addMonths(day: string, months: number): string {
   const date = toUtc(day)

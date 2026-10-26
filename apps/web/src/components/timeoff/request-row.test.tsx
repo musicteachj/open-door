@@ -50,7 +50,7 @@ describe('RequestRow, mine', () => {
   })
 
   it('offers Cancel only when the caller says so, named for the request', async () => {
-    const onCancel = vi.fn<() => void>()
+    const onCancel = vi.fn<(request: unknown, button: HTMLButtonElement) => void>()
     const user = userEvent.setup()
     const { rerender } = inList(<RequestRow variant="mine" request={MINE_APPROVED} />)
     expect(screen.queryByRole('button')).not.toBeInTheDocument()
@@ -59,8 +59,10 @@ describe('RequestRow, mine', () => {
         <RequestRow variant="mine" request={MINE_APPROVED} canCancel onCancel={onCancel} />
       </ul>,
     )
-    await user.click(screen.getByRole('button', { name: 'Cancel PTO on Wednesday, December 23' }))
-    expect(onCancel).toHaveBeenCalledWith(MINE_APPROVED)
+    const button = screen.getByRole('button', { name: 'Cancel PTO on Wednesday, December 23' })
+    await user.click(button)
+    // The button comes too, so the page can put focus back on it.
+    expect(onCancel).toHaveBeenCalledWith(MINE_APPROVED, button)
   })
 
   it('names a sick Cancel button for sick time', () => {

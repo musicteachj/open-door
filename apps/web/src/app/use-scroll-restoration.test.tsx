@@ -68,9 +68,9 @@ describe('scroll restoration', () => {
     expect(y).toBe(300)
   })
 
-  it('keeps the position when a push only opens or closes the source panel (?source=)', () => {
+  it('keeps the position when a push is marked as opening a panel', () => {
     scrollBy(900)
-    act(() => void go('/directory?source=CA-4.3~p2'))
+    act(() => void go('/directory?source=CA-4.3~p2', { state: { keepScroll: true } }))
     expect(scrollTo).not.toHaveBeenCalled()
     expect(y).toBe(900)
     // Back closes it, and the page stays where the reader is.
@@ -78,9 +78,9 @@ describe('scroll restoration', () => {
     expect(scrollTo).not.toHaveBeenCalled()
   })
 
-  it('keeps the position when Back or Forward only closes or opens the source panel', () => {
+  it('keeps the position when Back or Forward moves between a marked entry and its page', () => {
     scrollBy(500)
-    act(() => void go('/directory?source=CA-4.3~p2'))
+    act(() => void go('/directory?source=CA-4.3~p2', { state: { keepScroll: true } }))
     // The reader scrolls on with the panel open (an answer kept streaming, say).
     scrollBy(1400)
     scrollTo.mockClear()
@@ -88,11 +88,39 @@ describe('scroll restoration', () => {
     // Closing is Back (a POP), but the page stays where the reader is, not where it was opened.
     expect(scrollTo).not.toHaveBeenCalled()
     expect(y).toBe(1400)
+    // Forward reopens it: the marked entry is the one being returned to.
     act(() => void go(1))
     expect(scrollTo).not.toHaveBeenCalled()
+    expect(y).toBe(1400)
   })
 
-  it('still restores Back to a page that differs by more than ?source=', () => {
+  it('keeps the position for a marked replace, as when another passage is shown', () => {
+    scrollBy(700)
+    act(() => void go('/directory?source=a', { state: { keepScroll: true } }))
+    act(() => void go('/directory?source=b', { replace: true, state: { keepScroll: true } }))
+    expect(scrollTo).not.toHaveBeenCalled()
+    expect(y).toBe(700)
+  })
+
+  it('starts at the top for a marked replace that goes to another page', () => {
+    scrollBy(700)
+    act(() => void go('/ask', { replace: true, state: { keepScroll: true } }))
+    expect(scrollTo).toHaveBeenLastCalledWith(0, 0)
+  })
+
+  it('starts at the top for a marked push to another page', () => {
+    scrollBy(900)
+    act(() => void go('/ask?source=CA-4.3~p2', { state: { keepScroll: true } }))
+    expect(scrollTo).toHaveBeenLastCalledWith(0, 0)
+  })
+
+  it('does not treat a ?source= in the URL as a marker: an unmarked push still starts at the top', () => {
+    scrollBy(900)
+    act(() => void go('/directory?source=CA-4.3~p2'))
+    expect(scrollTo).toHaveBeenLastCalledWith(0, 0)
+  })
+
+  it('still restores Back between unmarked entries of the same page', () => {
     scrollBy(500)
     act(() => void go('/directory?location=x&source=CA-4.3~p2'))
     scrollBy(120)
@@ -100,12 +128,9 @@ describe('scroll restoration', () => {
     expect(scrollTo).toHaveBeenLastCalledWith(0, 500)
   })
 
-  it('still starts at the top for a push that changes anything besides ?source=', () => {
+  it('starts at the top for an unmarked push on the same page, whatever else the URL holds', () => {
     scrollBy(900)
-    act(() => void go('/directory?location=x&source=CA-4.3~p2'))
-    expect(scrollTo).toHaveBeenLastCalledWith(0, 0)
-    scrollTo.mockClear()
-    act(() => void go('/ask?source=CA-4.3~p2'))
+    act(() => void go('/directory?location=x'))
     expect(scrollTo).toHaveBeenLastCalledWith(0, 0)
   })
 

@@ -1,6 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { useLocation, useNavigationType } from 'react-router'
-import { SOURCE_PARAM } from '@/features/chat/source-url'
 
 // How long Back keeps trying to reach the saved position while the page is still too short.
 const SETTLE_MS = 2000
@@ -38,11 +37,20 @@ function remember(positions: Map<string, number>, key: string, top: number) {
   while (positions.size > MAX_ENTRIES) positions.delete(positions.keys().next().value!)
 }
 
-/** The search with the open source panel's parameter taken out. */
-function withoutSource(search: string): string {
-  const params = new URLSearchParams(search)
-  params.delete(SOURCE_PARAM)
-  return params.toString()
+/**
+ * What a navigation puts in its history state to say "this only opens or closes a panel on the
+ * page, so leave the scroll alone". Pass it with `preventScrollReset`, which keeps React Router's
+ * own handling out of the way.
+ */
+export const KEEP_SCROLL_STATE = { keepScroll: true } as const
+
+/** True for a history entry that was marked with `keepScroll`. */
+function isMarked(state: unknown): boolean {
+  return (
+    typeof state === 'object' &&
+    state !== null &&
+    (state as { keepScroll?: unknown }).keepScroll === true
+  )
 }
 
 /**
@@ -52,9 +60,11 @@ function withoutSource(search: string): string {
  * place.
  *
  * - A new page (a push) starts at the top.
- * - A push, Back or Forward that only opens or closes the conversation's source panel (`?source=`)
- *   keeps the position: pressing a marker must not throw the reader to the top of the thread, and
- *   closing the panel must not jump back to where the page was when it opened.
+ * - A push to a history entry marked `keepScroll` (see `KEEP_SCROLL_STATE`), on the same page,
+ *   keeps the position, and so do Back and Forward between two entries of the same page when
+ *   either is marked: opening a panel must not throw the reader to the top of the thread, and
+ *   closing it must not jump back to where the page was when it opened. The marker, not the URL,
+ *   says so, so any panel can use it.
  * - A replace on the same page keeps the position: typing a search must not throw the visitor up.
  *   A replace to another page starts at the top.
  * - Back and Forward (a pop) return to where that history entry was left, saved by `location.key`.
@@ -67,7 +77,7 @@ export function useScrollRestoration() {
   const current = useRef({
     key: location.key,
     pathname: location.pathname,
-    search: location.search,
+    keep: isMarked(location.state),
   })
   // True while a restore is still trying to reach its position. The page is too short then, so
   // what the browser reports is a cut-short position that must not replace the saved one.
@@ -92,7 +102,8 @@ export function useScrollRestoration() {
 
   useLayoutEffect(() => {
     const previous = current.current
-    current.current = { key: location.key, pathname: location.pathname, search: location.search }
+    const marked = isMarked(location.state)
+    current.current = { key: location.key, pathname: location.pathname, keep: marked }
     if (previous.key === location.key) {
       // The first render. After a reload the browser's own restoration is off, so this puts the
       // page back where this history entry was left. A visit with no saved position stays at the
@@ -103,18 +114,17 @@ export function useScrollRestoration() {
       return
     }
 
-    // A move between two URLs that differ only in `?source=` (the conversation's source panel
-    // opening or closing, by a push or by Back and Forward) never moves the page.
-    const onlySource =
-      previous.pathname === location.pathname &&
-      previous.search !== location.search &&
-      withoutSource(previous.search) === withoutSource(location.search)
+    // A move on the same page that opens or closes a panel never moves it. A push counts when
+    // its own entry is marked; Back and Forward when either entry is (closing goes back to the
+    // unmarked page, reopening forward to the marked one).
+    const samePage = previous.pathname === location.pathname
+    const keep = samePage && (type === 'POP' ? previous.keep || marked : type === 'PUSH' && marked)
     let stop = () => {}
-    if (onlySource) {
+    if (keep) {
       // Nothing to do: the reader stays where they are, and this entry is noted below.
     } else if (type === 'POP') {
       stop = restore(positions.get(location.key) ?? 0, restoring)
-    } else if (type === 'PUSH' || previous.pathname !== location.pathname) {
+    } else if (type === 'PUSH' || !samePage) {
       window.scrollTo(0, 0)
     }
     // This entry's position starts as wherever the page is now, so leaving it unscrolled and
@@ -125,7 +135,7 @@ export function useScrollRestoration() {
       persist(positions)
     }
     return stop
-  }, [location.key, location.pathname, location.search, type, positions])
+  }, [location.key, location.pathname, location.state, type, positions])
 }
 
 // What a visitor does to take over the scroll themselves.

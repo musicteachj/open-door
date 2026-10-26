@@ -4,6 +4,13 @@ import type { CheckOut } from '@/api/generated'
 import { BottomSheet, SheetTitle } from '@/components/ui/bottom-sheet'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
+import {
+  howMuchOptionsFor,
+  resolveChoice,
+  type HowMuch,
+  type LeaveKind,
+  type SubmitChoice,
+} from './choice'
 import { ChoiceGroup } from './choice-group'
 import { DateField } from './date-field'
 import { DatePicker, type DatePickerProps, type DatePickerSelection } from './date-picker'
@@ -14,11 +21,6 @@ import { formCopy, problemText, timeOffCopy } from './labels'
 import { parseHours } from './parse-hours'
 import { PreviewBlock } from './preview-block'
 import { SegmentedControl } from './segmented-control'
-
-type HowMuch = 'full' | 'half' | 'hours'
-/** How much to request, as the form shows it: `hours` is set only for "Some hours". */
-type SubmitChoice = { howMuch: HowMuch; hours: number | null }
-type LeaveKind = 'pto' | 'sick'
 
 type RequestFormProps = {
   /** A docked, non-modal panel beside the page (wide window) or a modal bottom sheet (narrow). */
@@ -54,21 +56,17 @@ type RequestFormProps = {
    */
   checking?: boolean
   submitting?: boolean
+  /** What a failed send came back with: the server's refusal or a plain "try again". Shown as an alert. */
+  submitError?: string | null
+  /** The check for the current inputs failed: the preview says so, and Submit stays off. */
+  previewFailed?: boolean
+  /** Asks for the same check again. With it, the failed-preview message offers "Try again". */
+  onRetryPreview?: () => void
   /** What to send for how much, matching what the form shows: Full day for a range, and the hours only for "Some hours". */
   onSubmit: (choice: SubmitChoice) => void
   /** Close and Cancel. The page returns focus to "Request time off". */
   onClose: () => void
   className?: string
-}
-
-/** The "how much" choices a type offers: PTO is full or half a day, sick time full or some hours. */
-function howMuchOptionsFor(type: LeaveKind) {
-  return [
-    { value: 'full', label: timeOffCopy.fullDay },
-    type === 'sick'
-      ? { value: 'hours', label: timeOffCopy.someHours }
-      : { value: 'half', label: timeOffCopy.halfDay },
-  ]
 }
 
 /**
@@ -99,6 +97,9 @@ function RequestForm({
   thisYear,
   checking = false,
   submitting = false,
+  submitError = null,
+  previewFailed = false,
+  onRetryPreview,
   onSubmit,
   onClose,
   className,
@@ -150,12 +151,7 @@ function RequestForm({
   // What the form reports is what it shows: a range is always Full day, and a how-much the type
   // does not offer is Full day too. Hours count only for "Some hours" on one sick day.
   const howMuchOptions = howMuchOptionsFor(type)
-  const offered = howMuchOptions.map((option) => option.value)
-  const effectiveHowMuch: HowMuch = single && offered.includes(howMuch) ? howMuch : 'full'
-  const effectiveChoice: SubmitChoice = {
-    howMuch: effectiveHowMuch,
-    hours: effectiveHowMuch === 'hours' ? parseHours(hours) : null,
-  }
+  const effectiveChoice = resolveChoice(type, start, end, howMuch, hours)
   const hoursInvalid = sick && single && howMuch === 'hours' && parseHours(hours) === null
   const cannotSubmit =
     start === undefined || check === null || !check.ok || refused || hoursInvalid || checking
@@ -296,6 +292,19 @@ function RequestForm({
               })}
             </FormMessage>
           ))}
+        {previewFailed && !checking && check === null && (
+          <FormMessage tone="refusal">
+            <span className="flex flex-wrap items-center gap-x-3 gap-y-2">
+              {formCopy.previewFailed}
+              {onRetryPreview && (
+                <Button variant="secondary" size="sm" onClick={onRetryPreview}>
+                  {formCopy.tryAgain}
+                </Button>
+              )}
+            </span>
+          </FormMessage>
+        )}
+        {submitError && <FormMessage tone="refusal">{submitError}</FormMessage>}
       </div>
       <footer className="flex flex-none flex-col gap-3 border-t border-border-subtle px-6 py-4">
         {(sick || approverName) && (

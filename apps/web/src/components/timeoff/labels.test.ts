@@ -2,6 +2,13 @@ import { describe, expect, it } from 'vitest'
 import type { DrawOut } from '@/api/generated'
 import {
   availableAfter,
+  canceledToast,
+  cancelCopy,
+  cancelDescription,
+  cancelTitle,
+  pageCopy,
+  scheduleLine,
+  submittedToast,
   balanceCopy,
   decisionLine,
   failureText,
@@ -265,6 +272,14 @@ describe('problemText', () => {
   })
 })
 
+describe('failureText, a card that is gone', () => {
+  it('says so in its own words, whatever the verb', () => {
+    expect(
+      failureText({ code: 'unavailable', text: 'This card is no longer available.' }, 'deny'),
+    ).toBe('This card is no longer available. Nothing was changed.')
+  })
+})
+
 describe('failureText', () => {
   it('names the clashing days for an overlap', () => {
     expect(failureText({ code: 'overlaps', text: 'x', dates: ['2026-10-30'] }, 'book')).toBe(
@@ -395,6 +410,99 @@ describe('the preview, form, and balance copy', () => {
       expect(lines[0]).toContain('left this year')
       expect(lines.join(' ')).not.toContain('null')
       expect(lines[1]).toContain('left in 2027')
+    })
+  })
+})
+
+describe('the Time off page copy', () => {
+  it('holds the headings and empty lines from the notes', () => {
+    expect(pageCopy).toMatchObject({
+      title: 'Time off',
+      myRequests: 'My requests',
+      upcoming: 'Upcoming',
+      past: 'Past',
+      noUpcoming: 'No upcoming time off.',
+      noPast: 'No past time off.',
+      requestButton: 'Request time off',
+    })
+  })
+
+  describe('scheduleLine', () => {
+    it('writes a run of weekdays as "first to last", with the hours from the API', () => {
+      expect(scheduleLine([1, 2, 3, 4, 5], '8 hours')).toBe(
+        'Your schedule: Monday to Friday, 8 hours a day',
+      )
+      expect(scheduleLine([2, 3, 4, 5, 6], '8 hours')).toBe(
+        'Your schedule: Tuesday to Saturday, 8 hours a day',
+      )
+    })
+
+    it('says there are no scheduled days, with no hours, when there are none', () => {
+      expect(scheduleLine([], '8 hours')).toBe('Your schedule: no scheduled days')
+    })
+
+    it('lists days that do not run together, in week order', () => {
+      expect(scheduleLine([5, 1, 3], '8 hours')).toBe(
+        'Your schedule: Monday, Wednesday, and Friday, 8 hours a day',
+      )
+      expect(scheduleLine([6, 7, 1], '8 hours')).toBe(
+        'Your schedule: Monday, Saturday, and Sunday, 8 hours a day',
+      )
+    })
+
+    it('says "and" for two days, even side by side, and names a single day', () => {
+      expect(scheduleLine([1, 2], '8 hours')).toBe(
+        'Your schedule: Monday and Tuesday, 8 hours a day',
+      )
+      expect(scheduleLine([4], '8 hours')).toBe('Your schedule: Thursday, 8 hours a day')
+    })
+
+    it('ignores order and repeats in what the API sends', () => {
+      expect(scheduleLine([5, 4, 3, 3, 2, 1], '8 hours')).toBe(
+        'Your schedule: Monday to Friday, 8 hours a day',
+      )
+    })
+  })
+
+  describe('cancel copy', () => {
+    it('titles the dialog with the dates, one day or a range', () => {
+      expect(cancelTitle('2026-12-23', '2026-12-23')).toBe(
+        'Cancel your time off on Wednesday, December 23?',
+      )
+      expect(cancelTitle('2026-11-09', '2026-11-10')).toBe(
+        'Cancel your time off on Monday, November 9 to Tuesday, November 10?',
+      )
+    })
+
+    it('quotes the API label for the hours that go back, without its days', () => {
+      expect(cancelDescription('8 hours (1 day)')).toBe('8 hours go back to your balance.')
+      expect(cancelDescription('16 hours (2 days)')).toBe('16 hours go back to your balance.')
+      expect(canceledToast('8 hours (1 day)')).toBe('Canceled. 8 hours went back to your balance.')
+    })
+
+    it('agrees the verb with one hour', () => {
+      expect(cancelDescription('1 hour')).toBe('1 hour goes back to your balance.')
+      expect(canceledToast('1 hour')).toBe('Canceled. 1 hour went back to your balance.')
+    })
+
+    it('has the buttons from the design', () => {
+      expect(cancelCopy).toMatchObject({
+        keepIt: 'Keep it',
+        cancelRequest: 'Cancel request',
+        canceling: 'Canceling…',
+      })
+    })
+  })
+
+  describe('submittedToast', () => {
+    it('names the approver for PTO and says only "Recorded." for sick time', () => {
+      expect(submittedToast('pto', 'Marcus Bell')).toBe('Requested. Marcus Bell will review it.')
+      expect(submittedToast('sick', 'Marcus Bell')).toBe('Recorded.')
+    })
+
+    it('says "Requested." when no approver is known', () => {
+      expect(submittedToast('pto', null)).toBe('Requested.')
+      expect(submittedToast('pto', undefined)).toBe('Requested.')
     })
   })
 })

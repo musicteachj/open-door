@@ -130,6 +130,8 @@ class Created:
     request_id: UUID
     status: Literal["pending", "recorded"]
     evaluation: Evaluation
+    # The date at the person's location, which the service already worked out.
+    today: date
 
 
 @dataclass(frozen=True, slots=True)
@@ -141,6 +143,8 @@ class Decided:
 @dataclass(frozen=True, slots=True)
 class Canceled:
     request_id: UUID
+    # The date at the person's location, which the service already worked out.
+    today: date
 
 
 async def resolve_rules(
@@ -382,7 +386,7 @@ async def create(
         via=via,
         proposal_id=proposal_id,
     )
-    return Created(request_id, status, evaluation)
+    return Created(request_id, status, evaluation, today)
 
 
 async def _lock_request(
@@ -586,4 +590,4 @@ async def cancel(
         via=via,
         proposal_id=proposal_id,
     )
-    return Canceled(request_id)
+    return Canceled(request_id, today)

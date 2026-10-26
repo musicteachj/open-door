@@ -74,7 +74,7 @@ from app.ai.proposal_cards import (
 )
 from app.api.schemas import CamelModel
 from app.db.errors import constraint_name, has_sqlstate
-from app.db.models import AiProposal, AiTurn
+from app.db.models import AiProposal, AiTurn, TimeOffRequest
 from app.db.tenancy import TenantContext, tenant_session
 from app.domain.timeoff.evaluate import NewRequest, overlapping_days
 from app.modules.audit.service import AuditAction, Via, record_event
@@ -165,6 +165,11 @@ class ProposalOut(CamelModel):
     # True while the card's turn is still answering (and the card still pending): Confirm waits
     # until it finishes. Always false in a confirm's or a dismiss's own answer.
     turn_running: bool
+    # A denial's note, for the person who wrote it, in the conversation read only (so the card can
+    # say "Zara will see your note" after a reload). Null everywhere else: the stream event, the
+    # confirm's and the dismiss's own answers, and every card that is not an executed denial. It
+    # goes to the page and never to the model.
+    denied_note: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -244,11 +249,14 @@ def status_as_of(row: ProposalRow, now: datetime) -> ProposalStatus:
 
 
 def proposal_out(
-    row: ProposalData, now: datetime, turn_state: TurnState | None = None
+    row: ProposalData,
+    now: datetime,
+    turn_state: TurnState | None = None,
+    denied_note: str | None = None,
 ) -> ProposalOut:
     """The proposal as the person sees it, with the status as of `now` (the database's clock).
     `turn_state` is the proposal's turn, for the conversation read; a confirm's own answer leaves
-    it out."""
+    it out. `denied_note` is the conversation read's `denial_notes` entry for this row."""
     status, reason = shown_ending(row, now, turn_state)
     outcome = row.outcome or {}
     failure = None
@@ -272,7 +280,49 @@ def proposal_out(
         card=CARD_TYPES[row.action].model_validate(row.card),
         failure=failure,
         turn_running=status == "pending" and turn_state == "answering",
+        denied_note=denied_note,
     )
+
+
+async def denial_notes(
+    db: AsyncSession, actor: Actor, rows: Sequence[ProposalData]
+) -> dict[UUID, str]:
+    """The note on each executed denial among `rows`, by proposal ID, for the conversation read.
+
+    One query for all of them, and none when there is no executed denial. Read as the signed-in
+    person: the request must be one this person decided, so a note is only ever handed back to the
+    person who wrote it. A denial with no note, or a blank one, has no entry.
+    """
+    request_of: dict[UUID, UUID] = {}
+    for row in rows:
+        if row.status != "executed" or row.action != "timeoff.decide":
+            continue
+        if row.card.get("decision") != "deny":
+            continue
+        request_id = (row.outcome or {}).get("requestId")
+        if isinstance(request_id, str):
+            try:
+                request_of[row.id] = UUID(request_id)
+            except ValueError:
+                continue
+    if not request_of:
+        return {}
+    found = (
+        await db.execute(
+            select(TimeOffRequest.id, TimeOffRequest.decision_note).where(
+                TimeOffRequest.id.in_(request_of.values()),
+                TimeOffRequest.decided_by == actor.person_id,
+                TimeOffRequest.status == "denied",
+                TimeOffRequest.decision_note.is_not(None),
+            )
+        )
+    ).all()
+    notes = {request_id: note for request_id, note in found if note is not None and note.strip()}
+    return {
+        proposal_id: notes[request_id]
+        for proposal_id, request_id in request_of.items()
+        if request_id in notes
+    }
 
 
 async def conversation_proposals(

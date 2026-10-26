@@ -43,6 +43,7 @@ from app.db.tenancy import tenant_session
 from app.modules.sandbox.seed import SeedCompany
 from tests.integration.conftest import audit_events
 from tests.integration.test_timeoff_service import acting
+from tests.integration.test_timeoff_tools import put_request
 from tests.integration.test_turn import (
     NOW,
     Env,
@@ -135,7 +136,10 @@ async def test_a_proposal_tool_sends_a_proposal_event_right_after_its_tool_finis
         "card",
         "failure",
         "turnRunning",
+        "deniedNote",
     }
+    # The stream never carries a denial's note.
+    assert data["deniedNote"] is None
     assert data["card"]["startDate"] == FRIDAY.isoformat()
     json.dumps(data)  # What the stream sends is plain JSON.
     assert Proposal.name == "proposal"
@@ -737,6 +741,44 @@ async def test_the_stored_context_of_an_old_turn_is_never_rebuilt(
     history = [m for m in requests[3].messages if m["role"] == "system"]
     assert history[-2]["content"][0]["text"] == second_context
     assert history[-1]["content"][0]["text"] != second_context
+
+
+async def test_a_denials_note_never_reaches_the_model_in_a_context_a_result_or_the_history(
+    app_engine: AsyncEngine, seeded_sandbox: SeedCompany
+) -> None:
+    note = "ZEBRA the team is thin that week, sorry."
+    request_id = await put_request(app_engine, seeded_sandbox, "priya", date(2026, 11, 9))
+    transport = PlanTransport(
+        tool_use_plan(
+            ("propose_time_off_decision", {"request_id": str(request_id), "decision": "deny"})
+        ),
+        text_plan("Here is the card."),
+        tool_use_plan(("list_time_off_requests", {"scope": "team"})),
+        text_plan("That is the list."),
+        text_plan("Anything else?"),
+    )
+    env = await make_env(app_engine, seeded_sandbox, persona="marcus", transport=transport)
+    await env.ask("Deny Priya's request for November 9.")
+    row = await only_proposal(env)
+    async with acting(env.engine, env.ctx.tenant_id, env.ctx.person_id) as (db, actor):  # type: ignore[arg-type]
+        executed = await confirm(db, actor, row.id, note, NOW)
+    assert executed.status == "executed"
+    await env.ask("Show me the team's requests.")
+    await env.ask("And now?")
+
+    requests = env.transport.requests
+    # The turn after the confirm was told the card was confirmed, in fixed words.
+    assert "Since the last message" in context_of(requests, 2)
+    # Every request the model was sent (context, tool results, history) is free of the note.
+    assert len(requests) == 5
+    # The list tool did run and showed the denied request, so the scan below has something to find.
+    assert "Priya Raman" in repr(requests[3])
+    assert "denied" in repr(requests[3])
+    for request in requests:
+        assert "ZEBRA" not in repr(request)
+        assert "team is thin" not in repr(request)
+    for guard_request in env.transport.guard_requests:
+        assert "ZEBRA" not in repr(guard_request)
 
 
 async def test_a_name_that_holds_a_sentence_never_reaches_the_context(

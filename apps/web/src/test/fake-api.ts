@@ -33,6 +33,18 @@ export function installFakeApi(initial: PersonaKey | null = null) {
     http.get(url('/api/v1/handbook'), () =>
       HttpResponse.json(handbookOverview(current === 'mateo' ? 'mateo' : 'priya')),
     ),
+    // The shell reads the time-off summary for the Approvals count and the rail's figures, so every
+    // signed-in test has an answer: Marcus has two waiting, nobody else has any. A test that
+    // installs the fake time-off routes (fake-time-off.ts) overrides it.
+    http.get(url('/api/v1/time-off/summary'), () =>
+      HttpResponse.json({
+        ptoAvailableMinutes: 5520,
+        ptoAvailableLabel: '92 hours (11.5 days)',
+        pendingCount: 0,
+        approver: { name: 'Marcus Bell' },
+        waitingCount: current === 'marcus' ? 2 : null,
+      }),
+    ),
     // The assistant page reads these two on arrival: nothing asked yet, and the fixed texts. A test
     // that needs a conversation or a stream installs its own (fake-assistant.ts), which wins.
     http.get(url('/api/v1/assistant/texts'), () => HttpResponse.json(TEXTS)),

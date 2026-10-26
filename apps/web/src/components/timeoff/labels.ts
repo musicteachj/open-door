@@ -11,7 +11,15 @@ import type {
   SkippedDay,
 } from '@/api/generated'
 import { sectionNumber } from '@/components/handbook/labels'
-import { calendarDayIn, isoWeekday, longDate, monthDay, shortRange } from './dates'
+import {
+  calendarDayIn,
+  isoWeekday,
+  longDate,
+  longRange,
+  monthDay,
+  shortRange,
+  WEEKDAY_NAMES,
+} from './dates'
 import { splitLabel } from './label-parts'
 
 /** The five states a request can show. The API's `pending` is `waiting` here. */
@@ -191,6 +199,8 @@ export const formCopy = {
   cancel: 'Cancel',
   sickNote: 'Sick time is recorded right away, with no approval.',
   shortNotice: 'More than 3 days usually needs 2 weeks’ notice. You can still request it.',
+  previewFailed: 'The preview didn’t load.',
+  tryAgain: 'Try again',
   approverNote: (name: string) => `${name}, your manager, reviews PTO requests.`,
 } as const
 
@@ -226,6 +236,8 @@ export function problemText(problem: ProblemOut, context: ProblemContext): strin
 
 /** What a failed confirm says on a card. `verb` is book, record, approve, deny, or cancel. */
 export function failureText(failure: FailureOut, verb: string): string {
+  // The page's own code for a card the server no longer has for this person: no verb to name.
+  if (failure.code === 'unavailable') return `${failure.text} Nothing was changed.`
   if (failure.code === 'overlaps' && failure.dates?.length) {
     return `Couldn’t ${verb} this: you already have time off on ${joinList(failure.dates.map(longDate))}. Nothing was changed.`
   }
@@ -243,6 +255,11 @@ export function decisionLine(
   const word = status === 'approved' ? 'Approved' : 'Denied'
   const day = calendarDayIn(decidedAt, timeZone)
   return `${word} ${day === today ? 'today' : monthDay(day)}`
+}
+
+/** The sick card's heading: "this year" for the current year, the year's number for another. */
+export function sickCardLabel(year: number, thisYear: number): string {
+  return year === thisYear ? balanceCopy.sickLabel : `Sick leave available in ${year}`
 }
 
 export const balanceCopy = {
@@ -279,4 +296,67 @@ export function availableNow(label: string): string {
 /** "84 hours (10.5 days) available after this": the balance line on a card and in a dialog. */
 export function availableAfter(label: string): string {
   return `${label} available after this`
+}
+
+export const pageCopy = {
+  title: 'Time off',
+  myRequests: 'My requests',
+  upcoming: 'Upcoming',
+  past: 'Past',
+  noUpcoming: 'No upcoming time off.',
+  noPast: 'No past time off.',
+  requestButton: 'Request time off',
+  /** The schedule line's link, to the handbook section that sets the 8-hour day. */
+  scheduleSource: 'Handbook §3.1',
+  loading: 'Loading your time off',
+  /** Shown in the form when the request could not be sent for a reason the server did not name. */
+  submitFailed: 'Couldn’t send this request. Nothing was changed. Try again in a moment.',
+  cancelFailed: 'Couldn’t cancel this request. Nothing was changed. Try again in a moment.',
+} as const
+
+/** The weekday's name from its ISO number, 1 for Monday through 7 for Sunday. */
+const weekdayName = (iso: number) => WEEKDAY_NAMES[iso % 7]!
+
+/**
+ * "Your schedule: Monday to Friday, 8 hours a day". The weekdays are the API's numbers (1 for
+ * Monday) written as names: three or more in a row read "first to last", anything else is a list
+ * in week order. The hours are the API's own label for a day ("8 hours"), never worked out here.
+ */
+export function scheduleLine(weekdays: number[], dayHours: string): string {
+  const days = [...new Set(weekdays)].sort((a, b) => a - b)
+  if (days.length === 0) return 'Your schedule: no scheduled days'
+  const run =
+    days.length >= 3 && days.every((day, index) => index === 0 || day === days[index - 1]! + 1)
+  const names = run
+    ? `${weekdayName(days[0]!)} to ${weekdayName(days[days.length - 1]!)}`
+    : joinList(days.map(weekdayName))
+  return `Your schedule: ${names}, ${dayHours} a day`
+}
+
+export const cancelCopy = {
+  keepIt: 'Keep it',
+  cancelRequest: 'Cancel request',
+  canceling: 'Canceling…',
+} as const
+
+/** "Cancel your time off on Wednesday, December 23?" */
+export function cancelTitle(start: string, end: string): string {
+  return `Cancel your time off on ${longRange(start, end)}?`
+}
+
+/** "8 hours go back to your balance." The hours are the API's label for the request, less its days. */
+export function cancelDescription(amountLabel: string): string {
+  const hours = splitLabel(amountLabel).hours
+  return `${hours} ${hours === '1 hour' ? 'goes' : 'go'} back to your balance.`
+}
+
+/** "Canceled. 8 hours went back to your balance." */
+export function canceledToast(amountLabel: string): string {
+  return `Canceled. ${splitLabel(amountLabel).hours} went back to your balance.`
+}
+
+/** "Requested. Marcus Bell will review it." for PTO, "Recorded." for sick time (no approval). */
+export function submittedToast(type: LeaveTypeName, approverName?: string | null): string {
+  if (type === 'sick') return 'Recorded.'
+  return approverName ? `Requested. ${approverName} will review it.` : 'Requested.'
 }

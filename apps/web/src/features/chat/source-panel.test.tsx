@@ -641,6 +641,7 @@ describe('the panel’s group-name lookup', () => {
       text: ANSWER,
       citations: [CA, COMPANY],
       escalation: null,
+      proposals: [],
       error: null,
       completed: true,
       incomplete: false,

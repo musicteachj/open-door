@@ -21,17 +21,19 @@ person's location, never the sandbox's anchor date.
 """
 
 from collections.abc import Sequence
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, time, timedelta
 from typing import Annotated, Literal
 from uuid import UUID
+from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, HTTPException, Query, Request, status
 
 from app.api.deps import Now
 from app.api.problems import problem_responses
 from app.core.problems import ProblemError
-from app.domain.timeoff.evaluate import NewRequest, request_bounds
-from app.domain.timeoff.labels import label
+from app.domain.timeoff.evaluate import SICK_WINDOW_DAYS, NewRequest, request_bounds
+from app.domain.timeoff.labels import hours_label, label
+from app.domain.timeoff.model import DAY_MINUTES, HALF_DAY_MINUTES
 from app.domain.timeoff.today import today_at
 from app.modules.identity.deps import SignedIn, SignedInDep
 from app.modules.identity.security_log import SecurityEvent, log_security_event
@@ -147,8 +149,28 @@ async def _one(
     return rows[0]
 
 
+async def _zone_and_today(signed_in: SignedIn, now: datetime) -> tuple[str, date]:
+    """The signed-in person's location's time zone, and today there."""
+    actor = signed_in.actor
+    zone = await queries.timezone_of(signed_in.db, actor.tenant_id, actor.person_id)
+    if zone is None:
+        raise _not_found()
+    return zone, today_at(zone, now)
+
+
+async def _today(signed_in: SignedIn, now: datetime) -> date:
+    """Today at the signed-in person's location."""
+    return (await _zone_and_today(signed_in, now))[1]
+
+
+def _can_cancel(signed_in: SignedIn, row: queries.RequestRow, today: date) -> bool:
+    """Whether the signed-in person may cancel this row now: the rule `cancel_precheck` applies
+    once the request is readable, so a Cancel the page offers is one the route accepts."""
+    return can(signed_in.actor, Action.TIMEOFF_CANCEL, service.request_resource(row), today=today)
+
+
 async def _managed_view(
-    signed_in: SignedIn, rows: Sequence[queries.RequestRow], now: datetime
+    signed_in: SignedIn, rows: Sequence[queries.RequestRow], now: datetime, today: date
 ) -> list[RequestOut]:
     """Each row as the actor's page shows it. A direct manager's view of a request also carries
     the person's available PTO and team coverage; nobody else's does."""
@@ -180,8 +202,46 @@ async def _managed_view(
                     signed_in.db, actor, row.person_id, now, facts=facts.get(row.person_id)
                 )
             after = available[row.person_id]
-        out.append(RequestOut.of(row, available_after_minutes=after, coverage=entries))
+        out.append(
+            RequestOut.of(
+                row,
+                available_after_minutes=after,
+                coverage=entries,
+                can_cancel=_can_cancel(signed_in, row, today),
+            )
+        )
     return out
+
+
+async def _own_view(
+    signed_in: SignedIn, request_id: UUID, now: datetime, today: date | None = None
+) -> RequestOut:
+    """The request as a write's answer shows it, with whether it can still be canceled. A write
+    that already worked out today at the person's location passes it, so it isn't read again."""
+    row = await _one(signed_in, request_id)
+    if today is None:
+        today = await _today(signed_in, now)
+    return RequestOut.of(row, can_cancel=_can_cancel(signed_in, row, today))
+
+
+DEFAULT_DECISION_DAYS_BACK = 90
+
+
+def _decision_window(first: date | None, last: date | None, today: date) -> tuple[date, date]:
+    """The days a `decided` list covers: the 90 days up to today unless chosen."""
+    return _window(
+        first or today - timedelta(days=DEFAULT_DECISION_DAYS_BACK), last or today, today
+    )
+
+
+def _decision_moments(first: date, last: date, zone: str) -> tuple[datetime, datetime]:
+    """The window's first and last days as moments at the caller's location: the start of the
+    first day, and the start of the day after the last."""
+    here = ZoneInfo(zone)
+    return (
+        datetime.combine(first, time.min, tzinfo=here),
+        datetime.combine(last + timedelta(days=1), time.min, tzinfo=here),
+    )
 
 
 def _window(first: date | None, last: date | None, today: date) -> tuple[date, date]:
@@ -217,26 +277,50 @@ async def get_balances(
 @router.get(
     "/requests",
     operation_id="listTimeOffRequests",
-    summary="Time-off requests: your own, everyone below you, or what waits for your decision",
+    summary="Time-off requests: your own, your team, what waits for you, or what you decided",
     response_model=RequestList,
     responses=READ_ERRORS,
 )
 async def list_requests(
     signed_in: SignedInDep,
     now: Now,
-    scope: Annotated[Literal["mine", "team", "waiting"], Query()] = "mine",
-    from_date: Annotated[date | None, Query(alias="from")] = None,
-    to_date: Annotated[date | None, Query(alias="to")] = None,
+    scope: Annotated[Literal["mine", "team", "waiting", "decided"], Query()] = "mine",
+    from_date: Annotated[
+        date | None,
+        Query(
+            alias="from",
+            description=(
+                "First day of the window. For `decided` it is the first day a decision was made, "
+                "by the caller's calendar (default: 90 days ago). For the other scopes it is the "
+                "first day the leave covers (default: 30 days ago). Ignored for `waiting`."
+            ),
+        ),
+    ] = None,
+    to_date: Annotated[
+        date | None,
+        Query(
+            alias="to",
+            description=(
+                "Last day of the window, inclusive. For `decided` it is the last day a decision "
+                "was made (default: today). For the other scopes it is the last day the leave "
+                "covers (default: 120 days ahead). Ignored for `waiting`."
+            ),
+        ),
+    ] = None,
 ) -> RequestList:
     actor = signed_in.actor
-    zone = await queries.timezone_of(signed_in.db, actor.tenant_id, actor.person_id)
-    if zone is None:
-        raise _not_found()
-    first, last = _window(from_date, to_date, today_at(zone, now))
+    zone, today = await _zone_and_today(signed_in, now)
+    decided = scope == "decided"
+    first, last = (
+        _decision_window(from_date, to_date, today)
+        if decided
+        else _window(from_date, to_date, today)
+    )
     people = {
         "mine": frozenset({actor.person_id}),
         "team": actor.report_ids,
         "waiting": actor.direct_report_ids,
+        "decided": actor.report_ids,
     }[scope]
     rows = (
         await queries.load_request_rows(
@@ -244,8 +328,11 @@ async def list_requests(
             actor.tenant_id,
             person_ids=people,
             # What waits for a decision is shown whenever its days fall: it still needs deciding.
-            overlapping=None if scope == "waiting" else (first, last),
+            # What the caller decided is bounded by the day of the decision instead.
+            overlapping=None if scope in ("waiting", "decided") else (first, last),
             pending_pto_only=scope == "waiting",
+            decided_by=actor.person_id if decided else None,
+            decided_between=_decision_moments(first, last, zone) if decided else None,
             limit=MAX_ROWS,
         )
         if people
@@ -256,9 +343,9 @@ async def list_requests(
         row for row in rows if can(actor, Action.TIMEOFF_READ, service.request_resource(row))
     ]
     items = (
-        await _managed_view(signed_in, readable, now)
+        await _managed_view(signed_in, readable, now, today)
         if scope == "waiting"
-        else [RequestOut.of(row) for row in readable]
+        else [RequestOut.of(row, can_cancel=_can_cancel(signed_in, row, today)) for row in readable]
     )
     return RequestList(items=items, from_date=first, to_date=last)
 
@@ -276,7 +363,7 @@ async def get_request(request_id: UUID, signed_in: SignedInDep, now: Now) -> Req
     if stored is None or not can(actor, Action.TIMEOFF_READ, service.request_resource(stored)):
         raise _not_found()
     row = await _one(signed_in, request_id, stored)
-    [view] = await _managed_view(signed_in, [row], now)
+    [view] = await _managed_view(signed_in, [row], now, await _today(signed_in, now))
     return view
 
 
@@ -290,20 +377,33 @@ async def get_request(request_id: UUID, signed_in: SignedInDep, now: Now) -> Req
 async def get_calendar(
     signed_in: SignedInDep,
     now: Now,
-    from_date: Annotated[date, Query(alias="from")],
     to_date: Annotated[date, Query(alias="to")],
+    from_date: Annotated[
+        date | None,
+        Query(
+            alias="from",
+            description=(
+                "First day of the holidays to list. Without it, the earliest day sick time may "
+                "start, which is as far back as the form's date picker reaches."
+            ),
+        ),
+    ] = None,
 ) -> CalendarOut:
-    if to_date < from_date:
-        raise HTTPException(
-            status.HTTP_422_UNPROCESSABLE_CONTENT, "The window can't end before it starts."
-        )
     actor = signed_in.actor
     facts = await queries.load_facts(signed_in.db, actor.tenant_id, actor.person_id)
     if facts is None:
         raise _not_found()
     bounds = request_bounds(facts.person, facts.opening, today_at(facts.timezone, now))
+    if from_date is None:
+        from_date = bounds.earliest_sick_start
+    if to_date < from_date:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_CONTENT, "The window can't end before it starts."
+        )
     return CalendarOut(
         scheduled_weekdays=sorted(facts.person.schedule.weekdays),
+        day_minutes=DAY_MINUTES,
+        day_label=hours_label(DAY_MINUTES),
         holidays=[
             HolidayOut(day=day, name=name)
             for day, name in sorted(facts.holidays.items())
@@ -313,6 +413,8 @@ async def get_calendar(
             pto=bounds.earliest_pto_start, sick=bounds.earliest_sick_start
         ),
         latest_end=bounds.latest_end,
+        sick_lookback_days=SICK_WINDOW_DAYS,
+        half_day_minutes=HALF_DAY_MINUTES,
     )
 
 
@@ -342,7 +444,7 @@ async def create_request(
     result = await service.create(signed_in.db, signed_in.actor, _new(body), now, via="ui")
     if isinstance(result, Refused):
         raise await _refusal(signed_in, request, result, None, "create")
-    return RequestOut.of(await _one(signed_in, result.request_id))
+    return await _own_view(signed_in, result.request_id, now, result.today)
 
 
 @router.post(
@@ -360,7 +462,8 @@ async def decide_request(
     )
     if isinstance(result, Refused):
         raise await _refusal(signed_in, request, result, request_id, "decision")
-    return RequestOut.of(await _one(signed_in, request_id))
+    # A decider can never cancel someone else's request, so there is no Cancel to work out.
+    return RequestOut.of(await _one(signed_in, request_id), can_cancel=False)
 
 
 @router.post(
@@ -376,7 +479,7 @@ async def cancel_request(
     result = await service.cancel(signed_in.db, signed_in.actor, request_id, now, via="ui")
     if isinstance(result, Refused):
         raise await _refusal(signed_in, request, result, request_id, "cancel")
-    return RequestOut.of(await _one(signed_in, request_id))
+    return await _own_view(signed_in, request_id, now, result.today)
 
 
 @router.get(
@@ -388,7 +491,11 @@ async def cancel_request(
 )
 async def get_summary(signed_in: SignedInDep, now: Now) -> SummaryOut:
     db, actor = signed_in.db, signed_in.actor
-    available = await service.pto_available_minutes(db, actor, actor.person_id, now)
+    # The person's facts hold their time zone, so today needs no second read.
+    facts = await queries.load_facts(db, actor.tenant_id, actor.person_id)
+    if facts is None:
+        raise _not_found()
+    available = await service.pto_available_minutes(db, actor, actor.person_id, now, facts=facts)
     if available is None:
         raise _not_found()
     manager = await queries.manager_name(db, actor.tenant_id, actor.person_id)
@@ -407,6 +514,7 @@ async def get_summary(signed_in: SignedInDep, now: Now) -> SummaryOut:
         ),
         approver=None if manager is None else NameOut(name=manager),
         waiting_count=waiting,
+        today=today_at(facts.timezone, now),
     )
 
 

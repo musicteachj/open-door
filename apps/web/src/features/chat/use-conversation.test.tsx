@@ -930,6 +930,7 @@ describe('a saved turn that is still running (a reload in the middle of an answe
         text: '',
         citations: [],
         escalation: null,
+        proposals: [],
         error: null,
         completed: false,
         incomplete: false,

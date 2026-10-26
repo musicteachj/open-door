@@ -72,6 +72,18 @@ describe('ConfirmCard, structure', () => {
   })
 })
 
+describe('ConfirmCard, a denial while its turn runs', () => {
+  it('disables the note, so nothing typed can be lost when the card is drawn again', () => {
+    card(CARD_DENY, { turnRunning: true })
+    expect(screen.getByRole('textbox', { name: /Note to Zara/ })).toBeDisabled()
+  })
+
+  it('leaves the note usable once the turn is over', () => {
+    card(CARD_DENY)
+    expect(screen.getByRole('textbox', { name: /Note to Zara/ })).toBeEnabled()
+  })
+})
+
 describe('ConfirmCard, a booking', () => {
   it('lists Type and Dates, with the dates in 600', () => {
     card(CARD_BOOK)

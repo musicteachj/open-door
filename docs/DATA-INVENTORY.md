@@ -265,7 +265,7 @@ stage 3.
 | `created_at`, `created_via` | When (UTC), and `ui` or `assistant` | How it was made. |
 | `proposal_id` | The assistant's proposal that made it, or null for a request made on the page | Ties the request to what the person confirmed. It is always the same person's proposal, and one proposal makes at most one request. |
 | `decided_by`, `decided_at` | Who approved or denied it, and when | The decision's record. They stay when an approved request is canceled. A person never decides their own request: a database check refuses it. |
-| `decision_note` | A manager's reason for a denial, up to 300 characters, or null | Shown to the employee on the page and the card. **User-written text: it is never sent to a model**, in a tool result or anywhere else. |
+| `decision_note` | A manager's reason for a denial, up to 300 characters, or null | Shown to the employee on the page and the card. Also read back to the manager who wrote it, in the conversation read (`deniedNote` on an executed denial's card), so the card can say whether a note was sent after a reload; no other person gets it there, and the stream event and the confirm's own answer never carry it. **User-written text: it is never sent to a model**, in a tool result or anywhere else. |
 | `canceled_at` | When it was canceled, or null | The record. |
 
 Two open requests (pending, approved, or recorded) for one person can't share a day: an exclusion

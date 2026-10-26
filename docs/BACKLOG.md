@@ -5,6 +5,23 @@ should pick it up. When one is done, delete it here and record it in the changel
 
 ## Any phase
 
+- **The scripted model's "next Friday" and "tomorrow" ignore holidays and days off.** The browser
+  tests that book through chat skip, with a stated reason, on the few dates a year when next Friday
+  is a company holiday or tomorrow isn't on the person's schedule (`skipUnlessScriptedDayCounts`).
+  The scripted model could pick the next day that counts instead, so those tests never skip. (Phase 5
+  stage 6.)
+- **A confirm card can forget a confirm in flight.** If the live answer gives way to its saved copy
+  while Confirm is being pressed, the card remounts and shows Confirm enabled again; a second press
+  gets the card's current state calmly (a 409), so nothing is booked twice. A shared key for the card
+  across the live and saved views would keep its state. (Phase 5 stage 6 review.)
+- **Resizing across 1280 px with the request form open resets the form.** The form docks beside the
+  page from 1280 px and is a bottom sheet below it; crossing that width remounts it, clearing the
+  dates. The same happens to the date picker since Stage 5. (Phase 5 stage 6 review.)
+- **Some seeded past requests start or end on a day off.** Priya's history can read "Sunday, August 2
+  to Monday, August 3 · 8 hours (1 day)": the figures are right (the engine counts only scheduled
+  days), but a person would pick their first and last working days. The seed could snap each drawn
+  range to scheduled days. (Phase 5 stage 6 photos.)
+
 - **A conversation layout browser test can lose its element mid-check.** At 390 px, "streaming,
   stopped, and an error mid-stream stay inside the column" (`e2e/conversation-layout.spec.ts`)
   failed once with "no box for a visible element": the element was visible, then gone before its
@@ -14,15 +31,6 @@ should pick it up. When one is done, delete it here and record it in the changel
   measuring the page; all passed on the rerun.
   (Phase 5 stage 2 close.)
 
-- **Small conversation-page glitches the v0.4.0 release review left alone.** When a
-  remembered conversation turns out to be gone (a 404 on send), the page drops to "Loading…" while
-  it reloads, and the composer loses focus. And "Start a new conversation" with a source panel open
-  replaces the panel's history entry, leaving a Back step that changes nothing. The release review
-  tried fixes for both, and each brought new edge cases (a stale Forward step, a conversation id
-  missed on a send that created it), so they were reverted. Also: "Start a new conversation"
-  clicked after a send has already begun still lets that send go to the old conversation, and a
-  second Enter while a send waits for the new conversation is dropped without a word. Fix them with
-  the page's next real change, with browser tests. (v0.4.0 release review.)
 - **Tie the gallery's fixed texts and the running lines to the API's.** The conversation gallery
   keeps word-for-word copies of the owner-approved fixed texts (crisis, "can't answer right now",
   both budget texts, "still answering", the personal-data warning), and the chat store merges a
@@ -152,34 +160,24 @@ should pick it up. When one is done, delete it here and record it in the changel
 
 ## Phase 5: time off
 
-- **Check the nav after a switch from a manager to an employee.** `navFor` builds the nav from the
-  fresh `/me` inside a remounted shell, but in Phase 2 everyone sees only Ask and Directory, so the
-  manager's items disappearing after a switch can't be observed. When Approvals becomes available,
-  add a `navFor` test and extend the shell's switch test to prove the employee never sees it.
-  (Phase 2 stage 5 security re-check.)
-- **Keep a write from the old identity out of the new cache.** `resetIdentity` clears the query
-  cache, but a mutation already in flight still runs its callbacks when it finishes. If its
-  `onSuccess` calls `setQueryData`, the old person's data lands in the new person's cache. Phase
-  2's only writes start or end a session, so nothing does this yet. Write hooks should invalidate
-  queries rather than set their data. Where one must set data, `resetIdentity` should count
-  identities and the write should check the count first. (Phase 2 stage 2 security review.)
-- **Make the scroll-restoration exception general.** `use-scroll-restoration.ts` special-cases the
-  source panel's `?source=` parameter (an import from the chat feature into the app shell), while
-  the panel's navigations already pass `preventScrollReset`. Phase 5's first panel that lives in
-  the URL (a confirm card, say) would jump to the top until another parameter is hard-coded. Mark
-  such navigations in history state and honor that for push, replace, and back instead. (v0.4.0
-  release review.)
-- **Show friendly text for the decide and cancel tools in "Show your work".** Their trace
-  summaries hold the request's UUID ("approve request 3f2a..."). Stage 6 should map those tool
-  names to the design's lines ("Checked your time off", "Prepared a confirm card"). (Phase 5 stage
-  4 review.)
-- **Refetch the conversation when a turn ends.** A card the stream sent stays `turnRunning` with
-  Confirm disabled until the conversation is read again, and a card canceled by its turn's ending
-  shows its final state only then. Stage 6 should refetch after `turn.completed`, an `error`, or a
-  closed stream. (Phase 5 stage 4 review.)
+All five items were closed in stage 6 (2026-10-25): the nav after a switch (a `navFor` test and the
+shell's switch test), writes from an old identity (no write sets query data; a test enforces it),
+the scroll-restoration exception (a history marker), "Show your work" for the time-off tools, and
+the conversation read after a turn ends.
 
 ## Phase 6: cases and escalation
 
+- **Small conversation-page glitches the v0.4.0 release review left alone.** When a
+  remembered conversation turns out to be gone (a 404 on send), the page drops to "Loading…" while
+  it reloads, and the composer loses focus. And "Start a new conversation" with a source panel open
+  replaces the panel's history entry, leaving a Back step that changes nothing. The release review
+  tried fixes for both, and each brought new edge cases (a stale Forward step, a conversation id
+  missed on a send that created it), so they were reverted. Also: "Start a new conversation"
+  clicked after a send has already begun still lets that send go to the old conversation, and a
+  second Enter while a send waits for the new conversation is dropped without a word. Fix them with
+  the page's next real change, with browser tests. (v0.4.0 release review. Phase 5 stage 6 added the
+  confirm card to the page without touching these paths, so they move to Phase 6, whose escalation
+  panel and confidential-case confirm change the conversation page next.)
 - **The hand-off says only what's true.** Before the person writes anything, say:
   - only HR sees it, never managers;
   - it's encrypted;
@@ -258,6 +256,24 @@ should pick it up. When one is done, delete it here and record it in the changel
   database, so neither has mattered yet. (Phase 4 phase review.)
 
 ## Phase 8: hardening and deploy-readiness
+
+- **Recent decisions leave out two kinds of past decision.** The `decided` scope lists requests
+  the manager approved or denied that are still approved or denied, among the manager's current
+  reports. An approval the employee later canceled, and a decision about someone who has since moved
+  to another manager, drop out of "Your decisions from the last 90 days", though the request still
+  records who decided it. Showing them needs a line such as "Approved October 20, later canceled".
+  Reporting lines can't change in the demo yet. (Phase 5 stage 6 review.)
+
+- **Time-off lists stop silently at 200 rows.** `GET /time-off/requests` caps every scope at 200,
+  ordered by start date (newest decision first for `decided`). A person with very many short sick
+  entries would lose the newest rows of My requests, and a manager of a large organization the end
+  of Coming up, with nothing saying the list is incomplete. Add paging or say when a list was cut.
+  (Phase 5 stage 6 review.)
+- **Back across several panel entries can keep the wrong scroll position.** The scroll hook keeps
+  the position on a Back or Forward when either entry is marked as a panel move. A jump of several
+  steps between same-page entries that aren't an open-and-close pair then skips restoring that
+  entry's saved position. Rare: it needs history steps, not the panel's own close. (Phase 5 stage 6
+  review.)
 
 - **Check the production image's CA store for the emSign roots.** `certifi` 2026.10.19 dropped the
   emSign roots whose intermediate keys were compromised (GHSA-6q48-6c7w-9gw2), which covers the

@@ -331,7 +331,7 @@ function ConfirmCard({
             firstName={requesterFirst}
             value={note}
             onChange={onNoteChange ?? (() => {})}
-            disabled={confirming}
+            disabled={confirming || turnRunning}
           />
         )}
         {denial && executed && hasNote && (

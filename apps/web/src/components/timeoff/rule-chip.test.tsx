@@ -2,6 +2,7 @@ import { screen, within } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 import { HOLIDAY_RULE, PTO_RULE, SICK_RULE } from '@/app/gallery/fixtures/timeoff'
 import { renderWithRouter } from '@/test/render-with-router'
+import { ruleChipName } from './labels'
 import { RuleChip, RuleChips } from './rule-chip'
 
 describe('RuleChip', () => {
@@ -48,6 +49,16 @@ describe('RuleChips', () => {
     const list = screen.getByRole('list', { name: 'Sources' })
     expect(within(list).getAllByRole('link')).toHaveLength(2)
     expect(list).toHaveClass('flex-wrap')
+  })
+
+  it('shows one chip for a section two rules cite, in first-seen order', () => {
+    const second = { ...PTO_RULE, rule: 'pto-ceiling' as const }
+    renderWithRouter(<RuleChips rules={[PTO_RULE, HOLIDAY_RULE, second]} />)
+    const links = within(screen.getByRole('list', { name: 'Sources' })).getAllByRole('link')
+    expect(links.map((link) => link.getAttribute('aria-label'))).toEqual([
+      ruleChipName(PTO_RULE),
+      ruleChipName(HOLIDAY_RULE),
+    ])
   })
 
   it('renders nothing for no rules', () => {

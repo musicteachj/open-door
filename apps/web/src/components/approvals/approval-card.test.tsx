@@ -36,6 +36,20 @@ describe('ApprovalCard, default', () => {
     ).toBeInTheDocument()
   })
 
+  it('carries its request id, so a page can find a card to move focus to', () => {
+    card(<ApprovalCard request={ZARA_WAITING} {...base} />)
+    expect(screen.getByRole('listitem')).toHaveAttribute('data-request-id', ZARA_WAITING.id)
+  })
+
+  it('stacks the head on a phone, so the sent date is always under the title', () => {
+    card(<ApprovalCard request={PRIYA_WAITING} {...base} />)
+    const head = screen.getByRole('listitem').firstElementChild as HTMLElement
+    expect(head).toHaveClass('max-sm:flex-col', 'max-sm:items-start')
+    // The person comes first in the document, then the date.
+    expect(head.children[0]).toContainElement(screen.getByRole('heading', { name: 'Priya Raman' }))
+    expect(head.children[1]).toHaveTextContent('Sent today')
+  })
+
   it('says Sent today for a request made today', () => {
     card(
       <ApprovalCard

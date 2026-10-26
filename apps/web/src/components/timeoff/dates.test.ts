@@ -4,6 +4,7 @@ import {
   addMonths,
   calendarDayIn,
   compareDays,
+  endOfNextYear,
   firstOfMonth,
   lastOfMonth,
   shiftMonth,
@@ -207,5 +208,13 @@ describe('calendarDayIn', () => {
     // 03:00 UTC on the 21st is still the evening of the 20th in Oakland.
     expect(calendarDayIn('2026-10-21T03:00:00Z', 'America/Los_Angeles')).toBe('2026-10-20')
     expect(calendarDayIn('2026-10-21T03:00:00Z', 'UTC')).toBe('2026-10-21')
+  })
+})
+
+describe('endOfNextYear', () => {
+  it('is December 31 of the year after the date, the last day a request can reach', () => {
+    expect(endOfNextYear('2026-10-20')).toBe('2027-12-31')
+    expect(endOfNextYear('2026-12-31')).toBe('2027-12-31')
+    expect(endOfNextYear('2027-01-01')).toBe('2028-12-31')
   })
 })

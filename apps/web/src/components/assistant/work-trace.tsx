@@ -1,4 +1,14 @@
-import { ChevronDown, ChevronUp, Search, ShieldCheck, User, Users, Wrench } from 'lucide-react'
+import {
+  CalendarCheck,
+  ChevronDown,
+  ChevronUp,
+  ClipboardCheck,
+  Search,
+  ShieldCheck,
+  User,
+  Users,
+  Wrench,
+} from 'lucide-react'
 import { useId, useState } from 'react'
 import type { CitationOut, GuardOut, SectionOut, ToolCallOut } from '@/api/generated'
 import { sectionNumber } from '@/components/handbook/labels'
@@ -29,6 +39,8 @@ const TOOL_ICONS: Record<ToolIconKind, typeof Search> = {
   search: Search,
   profile: User,
   people: Users,
+  calendar: CalendarCheck,
+  card: ClipboardCheck,
   tool: Wrench,
 }
 

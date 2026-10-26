@@ -243,6 +243,7 @@ class RequestRow:
     amount_minutes: int
     created_at: datetime
     created_via: str
+    decided_by_id: UUID | None
     decided_by_name: str | None
     decided_at: datetime | None
     decision_note: str | None
@@ -263,13 +264,17 @@ async def load_request_rows(
     person_ids: Collection[UUID],
     overlapping: tuple[date, date] | None = None,
     pending_pto_only: bool = False,
+    decided_by: UUID | None = None,
+    decided_between: tuple[datetime, datetime] | None = None,
     request_id: UUID | None = None,
     limit: int | None = None,
 ) -> list[RequestRow]:
     """Requests of the given people, as pages show them.
 
     `overlapping` keeps requests whose dates meet [from, to]. `pending_pto_only` keeps what waits
-    for a decision and orders it oldest sent first; otherwise the order is by first day. Who may
+    for a decision and orders it oldest sent first. `decided_by` keeps what that person approved or
+    denied, newest decision first, and `decided_between` (from, until) bounds the moment of the
+    decision, the end excluded. Otherwise the order is by first day. Who may
     see which rows is the caller's to ask the policy: these functions only read.
     """
     decider = aliased(Person)
@@ -287,6 +292,7 @@ async def load_request_rows(
             TimeOffRequest.amount_minutes,
             TimeOffRequest.created_at,
             TimeOffRequest.created_via,
+            TimeOffRequest.decided_by.label("decided_by_id"),
             _name(decider.given_name, decider.family_name).label("decided_by_name"),
             TimeOffRequest.decided_at,
             TimeOffRequest.decision_note,
@@ -309,7 +315,18 @@ async def load_request_rows(
     if overlapping is not None:
         first, last = overlapping
         query = query.where(TimeOffRequest.start_date <= last, TimeOffRequest.end_date >= first)
-    if pending_pto_only:
+    if decided_by is not None:
+        query = query.where(
+            TimeOffRequest.status.in_(("approved", "denied")),
+            TimeOffRequest.decided_by == decided_by,
+        )
+        if decided_between is not None:
+            since, until = decided_between
+            query = query.where(
+                TimeOffRequest.decided_at >= since, TimeOffRequest.decided_at < until
+            )
+        query = query.order_by(TimeOffRequest.decided_at.desc(), TimeOffRequest.id)
+    elif pending_pto_only:
         query = query.where(TimeOffRequest.type == "pto", TimeOffRequest.status == "pending")
         query = query.order_by(TimeOffRequest.created_at, TimeOffRequest.id)
     else:
@@ -330,6 +347,7 @@ async def load_request_rows(
             amount_minutes=row.amount_minutes,
             created_at=row.created_at,
             created_via=row.created_via,
+            decided_by_id=row.decided_by_id,
             decided_by_name=row.decided_by_name,
             decided_at=row.decided_at,
             decision_note=row.decision_note,
