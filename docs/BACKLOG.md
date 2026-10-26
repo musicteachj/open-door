@@ -5,6 +5,15 @@ should pick it up. When one is done, delete it here and record it in the changel
 
 ## Any phase
 
+- **A "still answering" conflict on Confirm gives no feedback.** `use-proposal-actions.ts` treats
+  every 409 as "the card changed; the next read shows it". A 409 `turn-running` leaves the card
+  pending, so if the page's view of the turn and the server's briefly differ, Confirm does nothing
+  visible. Show the "still answering" text for a 409 whose status is still pending. (v0.5.0 release
+  review.)
+- **The decide and cancel cards read their request twice.** `proposal_cards.py` loads the stored
+  request and then the same row again through `load_request_rows` (and the cancel card loads the
+  person's facts as well); one read would do. (v0.5.0 release review.)
+
 - **The approvals gallery's "deciding" dialog scan can fail under heavy local load.** In
   `gallery-approvals.spec.ts`, the scan of `decision-dialog-deciding` nudges a held page clock while
   axe runs, and twice in full local `make check` runs (2026-10-26) a clock step found the page

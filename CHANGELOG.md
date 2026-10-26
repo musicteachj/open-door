@@ -10,6 +10,22 @@ version (`0.x.y` while the app is being built, `1.0.0` when it is complete).
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-10-26
+
+Phase 5: time off. A pure engine counts every day and balance from each person's schedule, the
+location's holidays, and the handbook's rules, and every figure carries its handbook section. The
+Time off page shows the balances and the person's requests and books PTO or records sick time with a
+live preview; the Approvals page lets a direct manager approve or deny, with plain team coverage
+beside each request. In the conversation the assistant can read balances, check dates, and propose
+a booking, a decision, or a cancellation, but it never writes: it shows a confirm card built by the
+server from the engine's result, and nothing happens until the person confirms. A confirm runs the
+stored card exactly once, re-checked at that moment, and a card expires after 15 minutes. The last
+full live eval run (2026-10-25, $10.39) scored the Q&A and unanswerable sets at 100% in every
+trial, the red team at 97%, the new action set at 96% with its figures matching the engine's 98% of
+the time, and the judge at 72% (its 85% bar and its agreement with the hand grades, 89.7%, are
+Phase 7 items). The phase closed with a whole-phase review, a Fable 5.1 security review that found
+every seam holding, a release review, and their fixes.
+
 ### Added
 
 - **Confirm cards in the conversation** (Phase 5, stage 6). When the assistant prepares a booking,
