@@ -62,8 +62,9 @@ dev       ●──●──●──●──●──●──●──●─�
   their stage's code. The phase review catches problems between stages that per-PR reviews can't
   see. Fix real findings in a small follow-up PR before the phase is released.
   - **The phases that guard the invariants also get one security review.** Phase 1 (permissions
-    and tenant isolation), Phase 4 (the assistant loop, the guard, prompt injection), and Phase 6
-    (cases, encryption, escalation) add a single reviewer on the strongest model. It is briefed
+    and tenant isolation), Phase 4 (the assistant loop, the guard, prompt injection), Phase 5
+    (proposals, the first write path the model can start), and Phase 6 (cases, encryption,
+    escalation) add a single reviewer on the strongest model. It is briefed
     with the invariants the phase guards and the seams between its stages. It proves each finding
     with the smallest experiment that shows it, not with exhaustive fuzzing.
 - **Never run `/code-review max` or `/code-review ultra`.** `max` sends many reviewers over the
@@ -159,10 +160,11 @@ the owner's explicit agreement first.
 ## AI development rules
 
 - **A change to a prompt, a tool description or schema, the guard, or the retrieval needs a full
-  run before its PR** (`make eval-live SET=full YES=1`, estimated at $14, cap $16; the run of
-  2026-10-19 cost $8.02). CI replays the full set offline, and a smoke run re-records only its own
-  items, so CI stays red until the full run is committed. Use smoke runs (`make eval-live YES=1`,
-  about $0.65, cap $2) to try wording before that. Put the scoreboard change in the PR description.
+  run before its PR** (`make eval-live SET=full FRESH=1 PRUNE=1 YES=1`, estimated at $14, cap $16;
+  with Phase 5's 153 items, the runs of 2026-10-25 cost $10.31 and $10.39). CI replays the full
+  set offline, and a smoke run re-records only its own items, so CI stays red until the full run is
+  committed. Use smoke runs (`make eval-live YES=1`, about $0.80, cap $2) to try wording before
+  that. Put the scoreboard change in the PR description.
   **A release gets the full run too**, unless the last one already covers everything it ships.
 - **Model IDs are pinned.** A new model is adopted only after an eval comparison.
 - **No paid AI calls on push or PR.** CI replays recorded fixtures. Live evals are a manual

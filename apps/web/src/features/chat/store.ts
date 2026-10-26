@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import type { AssistantTextsOut, CitationOut } from '@/api/generated'
+import type { AssistantTextsOut, CitationOut, ProposalOut } from '@/api/generated'
 import { conversationCopy, toolCallLine, toolRunningLine } from '@/components/assistant/labels'
 import { numberBySection } from '@/components/assistant/sources'
 import type { StatusStep } from '@/components/assistant/status-line'
@@ -34,6 +34,12 @@ export type LiveTurn = {
   /** Numbered by section as they arrive (`numberBySection`), so the components never number. */
   citations: CitationOut[]
   escalation: LiveEscalation | null
+  /**
+   * The confirm cards the turn prepared, in the order they arrived, one per id (a newer event for
+   * the same id replaces it). Kept through `text.retracted`: a card is not answer text. The
+   * stored copy takes over when the conversation is read again.
+   */
+  proposals: ProposalOut[]
   /** The stream's `error` event. */
   error: { code: string; message: string } | null
   /** `turn.completed` arrived. The turn stays until the refetched conversation holds it. */
@@ -143,6 +149,7 @@ function freshTurn(question: string): LiveTurn {
     text: '',
     citations: [],
     escalation: null,
+    proposals: [],
     error: null,
     completed: false,
     incomplete: false,
@@ -219,6 +226,30 @@ function applyEvent(turn: LiveTurn, event: TurnStreamEvent): [LiveTurn, boolean]
       return [{ ...turn, citations: numberBySection([...turn.citations, event.data]) }, false]
     case 'escalation':
       return [{ ...turn, escalation: { ...event.data, live: true } }, false]
+    case 'proposal': {
+      const at = turn.proposals.findIndex((earlier) => earlier.id === event.data.id)
+      // A card with a new id replaces the turn's earlier pending cards on the server, which
+      // cancels them as `replaced` but sends only the new one, so the live copies say so too.
+      // It replaces pending cards across the whole conversation, so a new card also reads the
+      // conversation again: the stored turns' cards then say so as well.
+      const proposals =
+        at === -1
+          ? [
+              ...turn.proposals.map((earlier): ProposalOut =>
+                earlier.status === 'pending'
+                  ? {
+                      ...earlier,
+                      status: 'canceled',
+                      canceledReason: 'replaced',
+                      turnRunning: false,
+                    }
+                  : earlier,
+              ),
+              event.data,
+            ]
+          : turn.proposals.map((earlier, index) => (index === at ? event.data : earlier))
+      return [{ ...turn, proposals }, at === -1]
+    }
     case 'error':
       return [
         {

@@ -17,6 +17,7 @@ import { UserMessage } from '@/components/assistant/user-message'
 import { WorkTrace } from '@/components/assistant/work-trace'
 import { OpenSourceContext } from './open-source'
 import { withSourceKeys } from './source-key'
+import { ProposalCards } from './proposal-cards'
 import type { LiveTurn } from './store'
 import { useAssistantTexts, useFeedback } from './use-conversation'
 
@@ -146,6 +147,14 @@ export const StoredTurn = memo(function StoredTurn({
 }) {
   const citations = withSourceKeys(turn.citations)
   const escalation = turn.escalation
+  // The HR contacts card of a not-found answer, whatever else the turn made, so no branch below
+  // can leave it out.
+  const notFoundContacts = turn.notFound ? (
+    <HrContacts variant="card" contacts={context.hrContacts} />
+  ) : undefined
+  // The confirm cards the turn made, under its message. A card whose turn did not finish is
+  // already canceled in the saved copy, and shows that.
+  const cards = <ProposalCards proposals={turn.proposals} question={turn.question} />
   // Under a budget stop the server refuses every question, so there is nothing to ask again.
   const again = context.budgetStop ? undefined : () => context.onAskAgain(turn.question)
   // A sensitive turn shows its HR panel whatever became of the answer (it can fail, or be cut
@@ -182,12 +191,14 @@ export const StoredTurn = memo(function StoredTurn({
       <>
         <UserMessage text={turn.question} />
         <Message
+          contacts={notFoundContacts}
           status="stopped"
           text={turn.answerText}
           citations={citations}
           onAskAgain={again}
           context={context}
         />
+        {cards}
         {panel}
       </>
     )
@@ -197,6 +208,7 @@ export const StoredTurn = memo(function StoredTurn({
       <>
         <UserMessage text={turn.question} />
         <Message
+          contacts={notFoundContacts}
           status="error"
           errorMessage={turn.error?.message}
           text={turn.answerText}
@@ -204,6 +216,7 @@ export const StoredTurn = memo(function StoredTurn({
           onRetry={again}
           context={context}
         />
+        {cards}
         {panel}
       </>
     )
@@ -215,11 +228,13 @@ export const StoredTurn = memo(function StoredTurn({
       <>
         <UserMessage text={turn.question} />
         <Message
+          contacts={notFoundContacts}
           status="streaming"
           text={turn.answerText}
           citations={citations}
           context={context}
         />
+        {cards}
         {panel}
       </>
     )
@@ -227,18 +242,21 @@ export const StoredTurn = memo(function StoredTurn({
 
   const status = turn.incomplete ? 'incomplete' : 'complete'
   if (escalation?.kind === 'sensitive') {
-    // The assistant's answer, then the fixed panel, then "Show your work" under the panel, kept to
-    // the assistant message's 680 px (the Build decisions in notes.md).
+    // The assistant's answer, then the cards, then the fixed panel with the thread's wider gap
+    // before it, then "Show your work" under all of it, kept to the assistant message's 680 px
+    // (the Build decisions in notes.md).
     return (
       <>
         <UserMessage text={turn.question} />
         <Message
+          contacts={notFoundContacts}
           status={status}
           text={turn.answerText}
           citations={citations}
           footer={<AnswerFooter feedback={<TurnFeedback turn={turn} />} work={null} />}
           context={context}
         />
+        {cards}
         <EscalationPanel
           key={`escalation-${turn.id}`}
           kind="sensitive"
@@ -251,6 +269,26 @@ export const StoredTurn = memo(function StoredTurn({
       </>
     )
   }
+  if (turn.proposals.length > 0) {
+    // The card sits directly under the message, and the one footer row (feedback on the left,
+    // "Show your work" on the right) goes under the card, as screen 10 draws it.
+    return (
+      <>
+        <UserMessage text={turn.question} />
+        <Message
+          status={status}
+          text={turn.answerText}
+          citations={citations}
+          contacts={notFoundContacts}
+          context={context}
+        />
+        {cards}
+        <div className="max-w-[680px]">
+          <AnswerFooter feedback={<TurnFeedback turn={turn} />} work={trace(turn, citations)} />
+        </div>
+      </>
+    )
+  }
   return (
     <>
       <UserMessage text={turn.question} />
@@ -258,9 +296,7 @@ export const StoredTurn = memo(function StoredTurn({
         status={status}
         text={turn.answerText}
         citations={citations}
-        contacts={
-          turn.notFound ? <HrContacts variant="card" contacts={context.hrContacts} /> : undefined
-        }
+        contacts={notFoundContacts}
         footer={
           <AnswerFooter feedback={<TurnFeedback turn={turn} />} work={trace(turn, citations)} />
         }
@@ -289,6 +325,14 @@ export function LiveTurnView({
 }) {
   const citations = withSourceKeys(live.citations)
   const escalation = live.escalation
+  // A card waits for its turn: until the answer is complete, Confirm says so. After that the saved
+  // copy (read again as the turn ends) takes over with the server's own word. A turn that failed
+  // or was stopped is not being answered either, whatever the read says or whether it arrives.
+  const answering =
+    phase !== 'error' && phase !== 'stopped' && !(phase === 'idle' && live.completed)
+  const cards = (
+    <ProposalCards proposals={live.proposals} question={live.question} turnRunning={answering} />
+  )
   // Under a budget stop the server refuses every question, so there is nothing to ask again.
   const again = context.budgetStop ? undefined : () => context.onAskAgain(live.question)
 
@@ -338,6 +382,7 @@ export function LiveTurnView({
         onRetry={phase === 'error' ? again : undefined}
         context={context}
       />
+      {cards}
       {panel}
     </>
   )

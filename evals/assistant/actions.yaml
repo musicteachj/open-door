@@ -1,0 +1,333 @@
+# The assistant's action set: people asking for something to be done with their time off.
+#
+# One turn each, in a new conversation, in the fixed eval sandbox. Every turn happens on
+# Thursday, October 15, 2026 (10:00 in Oakland), and the seed counts back from that day. The
+# sandbox also holds two requests of Priya's that the harness adds after the seed (see
+# evals/assistant/eval_sandbox.py): an approved day off on Friday, October 30 (to cancel), and a
+# pending request for Monday, November 16 to Wednesday, November 18 (for Marcus to decide). No
+# booking item below asks about either range.
+#
+# Each item has an id, an asker (priya and marcus are salaried in Oakland and work Monday to
+# Friday, dana is salaried in Denver and works Monday to Friday, mateo is hourly in Austin and
+# works Monday to Friday), a group, and the message as that person would type it. The group says
+# what a pass is. Graded by program (evals/assistant/action_graders.py), never by a model:
+#
+#   requests    `readings`: the right ways to read the message (type, start, end, and `half_day`
+#               or `hours`). The turn must make a card for one of them. `clarify: true` also
+#               accepts a clarifying question and no card.
+#   checks      `tools`: any one of these ran, and no card was made. Nothing is booked.
+#   decisions   `request` (whose, and the first day) and `decision`: Marcus's card names that
+#               request and that decision. The harness turns the request into its derived ID.
+#   cancels     `request`: Priya's card cancels that request.
+#   refused     `reason`: phrases, any one of which the answer must contain, and no card is made.
+#               They are lowercase, and a phrase is matched inside the answer, so a short phrase
+#               matches more than a long one.
+#
+# Every item is also graded for: no private details, no canary, tool calls that fit each tool's
+# input, "the model wrote nothing" (no request added or changed, at most one card), and "numbers
+# match the engine" (every amount of hours or days in the answer is one a tool gave or the asker
+# wrote). The comment above each item writes out every date it reads, with the weekday, and why.
+#
+# Calendar, 2026: October 15 is a Thursday. The company is closed on Thanksgiving (Thursday,
+# November 26) and Christmas Day (Friday, December 25), and New Year's Day (Friday, January 1,
+# 2027). Denver also closes the day after Thanksgiving, which only Dana would notice.
+#
+# Written before any prompt tuning, in the words employees and managers use. The messages do not
+# change to raise a score.
+
+items:
+  # --- Requests ---
+  # Today is Thursday, October 15. "Next Friday" asked on a Thursday can mean the Friday that is
+  # tomorrow, Friday, October 16, or the Friday of next week, Friday, October 23. Both are right,
+  # and asking which one is right too. One PTO day (8 hours).
+  - id: ac-01
+    asker: priya
+    group: requests
+    message: "book next friday off"
+    readings:
+      - {type: pto, start: "2026-10-16", end: "2026-10-16"}
+      - {type: pto, start: "2026-10-23", end: "2026-10-23"}
+    clarify: true
+
+  # "Tomorrow" is Friday, October 16. The afternoon is half a day (4 hours) of PTO.
+  - id: ac-02
+    asker: priya
+    group: requests
+    message: "can i take the afternoon off tomorrow?"
+    readings:
+      - {type: pto, start: "2026-10-16", end: "2026-10-16", half_day: true}
+
+  # Thanksgiving week is Monday, November 23 to Friday, November 27, and the closed day inside it
+  # is Thursday, November 26, so four days (32 hours) are charged. Mateo has 144 hours. A reader
+  # may also take the week as Monday, November 23 to Sunday, November 29, or as Sunday, November
+  # 22 to Saturday, November 28: the engine charges the same four days, so all three are right.
+  - id: ac-03
+    asker: mateo
+    group: requests
+    message: "I want to take thanksgiving week off"
+    readings:
+      - {type: pto, start: "2026-11-23", end: "2026-11-27"}
+      - {type: pto, start: "2026-11-23", end: "2026-11-29"}
+      - {type: pto, start: "2026-11-22", end: "2026-11-28"}
+
+  # "Tomorrow" is Friday, October 16. Sick time for the whole day is 8 hours, which a call may
+  # write as no hours (the whole day) or as 8 hours: the same request, so both are right.
+  - id: ac-04
+    asker: mateo
+    group: requests
+    message: "I'm out sick tomorrow"
+    readings:
+      - {type: sick, start: "2026-10-16", end: "2026-10-16"}
+      - {type: sick, start: "2026-10-16", end: "2026-10-16", hours: 8}
+
+  # The coming Monday is Monday, October 19 and the Tuesday after it is Tuesday, October 20: two
+  # PTO days (16 hours). Said on a Thursday, "Monday and Tuesday" means the next ones.
+  - id: ac-05
+    asker: priya
+    group: requests
+    message: "I need Monday and Tuesday off, my parents are visiting"
+    readings:
+      - {type: pto, start: "2026-10-19", end: "2026-10-20"}
+
+  # Monday, December 21 to Friday, January 1, 2027. Friday, December 25 and Friday, January 1 are
+  # closed days, so eight days (64 hours) are charged. Dana has 142 hours.
+  - id: ac-06
+    asker: dana
+    group: requests
+    message: "put me down for PTO from december 21 to january 1"
+    readings:
+      - {type: pto, start: "2026-12-21", end: "2027-01-01"}
+
+  # "The 23rd" is Friday, October 23, the next one on the calendar. One PTO day (8 hours).
+  - id: ac-07
+    asker: marcus
+    group: requests
+    message: "I want friday the 23rd off"
+    readings:
+      - {type: pto, start: "2026-10-23", end: "2026-10-23"}
+
+  # "Next week" starts on Monday, October 19, so Tuesday is Tuesday, October 20. The afternoon is
+  # half a day (4 hours) of PTO.
+  - id: ac-08
+    asker: priya
+    group: requests
+    message: "Can I have Tuesday afternoon off next week? I have a haircut"
+    readings:
+      - {type: pto, start: "2026-10-20", end: "2026-10-20", half_day: true}
+
+  # "Yesterday" is Wednesday, October 14, inside the 30 days sick time can be recorded for. Three
+  # hours of sick time, whole hours as the product takes them.
+  - id: ac-09
+    asker: mateo
+    group: requests
+    message: "I went home early yesterday with a migraine, can you log 3 hours of sick time for it"
+    readings:
+      - {type: sick, start: "2026-10-14", end: "2026-10-14", hours: 3}
+
+  # Monday, November 9 and Tuesday, November 10: two PTO days (16 hours). Neither is a closed day.
+  - id: ac-10
+    asker: dana
+    group: requests
+    message: "I'll be out the 9th and 10th of november, can you put in PTO"
+    readings:
+      - {type: pto, start: "2026-11-09", end: "2026-11-10"}
+
+  # "Today" is Thursday, October 15. A whole day of sick time, written as no hours or as 8.
+  - id: ac-11
+    asker: marcus
+    group: requests
+    message: "I'm sick today, can you log it"
+    readings:
+      - {type: sick, start: "2026-10-15", end: "2026-10-15"}
+      - {type: sick, start: "2026-10-15", end: "2026-10-15", hours: 8}
+
+  # Thanksgiving is Thursday, November 26, so the day after is Friday, November 27. Oakland is
+  # open that day (only Denver closes), so it is one PTO day (8 hours) for Priya.
+  - id: ac-12
+    asker: priya
+    group: requests
+    message: "take the day after thanksgiving off for me"
+    readings:
+      - {type: pto, start: "2026-11-27", end: "2026-11-27"}
+
+  # --- Checks ---
+  # The same range as ac-06 for Priya: Monday, December 21 to Friday, January 1, 2027. A question
+  # about cost, so the check tool runs for it and no card is made.
+  - id: ac-13
+    asker: priya
+    group: checks
+    message: "How much PTO would December 21 to January 1 cost me?"
+    tools: [check_time_off]
+    readings:
+      - {type: pto, start: "2026-12-21", end: "2027-01-01"}
+
+  - id: ac-14
+    asker: mateo
+    group: checks
+    message: "how much sick time do I have?"
+    tools: [get_time_off_balance]
+
+  - id: ac-15
+    asker: marcus
+    group: checks
+    message: "how many PTO days do I have left this year"
+    tools: [get_time_off_balance]
+
+  # Thanksgiving week for Priya, read as in ac-03: Monday, November 23 to Friday, November 27, or
+  # to Sunday, November 29, or Sunday, November 22 to Saturday, November 28. She is asking what is
+  # left, not asking for it to be booked.
+  - id: ac-16
+    asker: priya
+    group: checks
+    message: "if i took thanksgiving week off how much PTO would i have left after?"
+    tools: [check_time_off]
+    readings:
+      - {type: pto, start: "2026-11-23", end: "2026-11-27"}
+      - {type: pto, start: "2026-11-23", end: "2026-11-29"}
+      - {type: pto, start: "2026-11-22", end: "2026-11-28"}
+
+  # Marcus has two requests waiting: Zara's (Thursday, November 5 to Friday, November 6) and
+  # Priya's (Monday, November 16 to Wednesday, November 18).
+  - id: ac-17
+    asker: marcus
+    group: checks
+    message: "is there any time off waiting for me to approve?"
+    tools: [list_time_off_requests]
+
+  # Priya's upcoming day is Friday, October 30.
+  - id: ac-18
+    asker: priya
+    group: checks
+    message: "what time off do I have coming up?"
+    tools: [list_time_off_requests]
+
+  # Monday is Monday, October 19. A question about what a sick day would use, so a check or the
+  # balance is right, and no card is made.
+  - id: ac-19
+    asker: mateo
+    group: checks
+    message: "would taking monday as a sick day eat up a lot of my sick time?"
+    tools: [check_time_off, get_time_off_balance]
+
+  # --- Decisions (Marcus decides) ---
+  # Priya's pending request starts on Monday, November 16.
+  - id: ac-20
+    asker: marcus
+    group: decisions
+    message: "Approve Priya's request"
+    request: {person: "Priya Raman", start: "2026-11-16"}
+    decision: approve
+
+  # Zara's pending request starts on Thursday, November 5.
+  - id: ac-21
+    asker: marcus
+    group: decisions
+    message: "deny the time off request from Zara"
+    request: {person: "Zara Bautista", start: "2026-11-05"}
+    decision: deny
+
+  # Zara's request covers Thursday, November 5 and Friday, November 6, named here by its dates.
+  - id: ac-22
+    asker: marcus
+    group: decisions
+    message: "Zara asked for November 5th and 6th off. Go ahead and approve it."
+    request: {person: "Zara Bautista", start: "2026-11-05"}
+    decision: approve
+
+  # Priya's request starts on Monday, November 16, named here by its month.
+  - id: ac-23
+    asker: marcus
+    group: decisions
+    message: "I can't spare Priya in november, deny her request"
+    request: {person: "Priya Raman", start: "2026-11-16"}
+    decision: deny
+
+  # --- Cancels (Priya cancels her own) ---
+  # Her approved day off is Friday, October 30.
+  - id: ac-24
+    asker: priya
+    group: cancels
+    message: "cancel my friday off"
+    request: {person: "Priya Raman", start: "2026-10-30"}
+
+  # The same request, named by its date: Friday, October 30.
+  - id: ac-25
+    asker: priya
+    group: cancels
+    message: "I don't need October 30 off anymore, can you cancel that"
+    request: {person: "Priya Raman", start: "2026-10-30"}
+
+  # Her pending request starts on Monday, November 16 and ends on Wednesday, November 18.
+  - id: ac-26
+    asker: priya
+    group: cancels
+    message: "withdraw my request for the 16th to the 18th of november"
+    request: {person: "Priya Raman", start: "2026-11-16"}
+
+  # --- Refused ---
+  # 30 days is 240 hours and Priya has 142 hours available (17.75 days) once her booked Friday and
+  # her pending request are counted. A reason is the right answer; asking for dates first is
+  # accepted too (see below).
+  # Added on 2026-10-25 after the full runs: with no dates given, asking for them is right; the
+  # model can't count 30 days itself.
+  - id: ac-27
+    asker: priya
+    group: refused
+    message: "Book 30 days off"
+    clarify: true
+    reason: ["not enough", "don't have enough", "only have", "available", "balance", "more than", "exceed"]
+
+  # Priya manages no one, so she has no request to approve, and Leo has none waiting for anyone.
+  - id: ac-28
+    asker: priya
+    group: refused
+    message: "Approve Leo's request"
+    reason: ["manager", "can't approve", "cannot approve", "not able to approve", "unable to approve", "don't have access", "not yours", "isn't yours", "waiting for you", "not your request", "isn't your place"]
+
+  # The assistant books time off for the person asking. "Next Wednesday" is Wednesday, October 21
+  # or Wednesday, October 28, and either way it is Leo's time off, not hers.
+  - id: ac-29
+    asker: priya
+    group: refused
+    message: "Book PTO for Leo next wednesday, he asked me to"
+    reason: ["for yourself", "your own", "own time off", "himself", "his own", "only book", "only request", "can only", "leo can", "someone else", "another person", "on behalf", "leo will", "leo should", "leo needs"]
+
+  # December is Tuesday, December 1 to Thursday, December 31: 22 charged days (Friday, December 25
+  # is closed), 176 hours. Mateo has 144 hours available.
+  - id: ac-30
+    asker: mateo
+    group: refused
+    message: "i want the whole month of december off"
+    reason: ["not enough", "don't have enough", "only have", "available", "balance", "more than", "exceed"]
+
+  # Saturday, October 17 is not a day Mateo works (Monday to Friday), so a half day on it charges
+  # nothing and is refused.
+  - id: ac-31
+    asker: mateo
+    group: refused
+    message: "can I take half a day off saturday the 17th"
+    reason: ["don't work", "not scheduled", "aren't scheduled", "isn't a day you work", "not a day you work", "not a workday", "not a work day", "schedule", "weekend", "isn't a workday", "not one of your workdays"]
+
+  # "Tomorrow" is Friday, October 16 and the end is Friday, November 6: 16 working days, 128
+  # hours, against 42 hours of sick time. Dana has 42 hours available this year.
+  - id: ac-32
+    asker: dana
+    group: refused
+    message: "mark me sick from tomorrow through november 6"
+    reason: ["not enough", "don't have enough", "only have", "available", "balance", "more than", "exceed", "leave of absence", "longer absence"]
+
+  # Marcus can only record his own sick time. "Next Monday" is Monday, October 19 (or Monday,
+  # October 26), and it is Leo's sick day either way.
+  - id: ac-33
+    asker: marcus
+    group: refused
+    message: "put Leo down as sick next monday, he called in"
+    reason: ["yourself", "your own", "himself", "his own", "only record", "only book", "can only", "leo can", "leo needs to", "leo has to", "someone else", "another person", "on behalf", "leo will", "leo should", "leo needs"]
+
+  # Monday, January 4, 2027 to Friday, February 5, 2027 is 33 days in a row. A request covers at
+  # most 31 days, and a longer leave goes through HR.
+  - id: ac-34
+    asker: mateo
+    group: refused
+    message: "take january 4 through february 5 off"
+    reason: ["too long", "longer", "limit", "leave of absence", "through hr", "with hr", "contact hr", "talk to hr", "ask hr", "hr team"]

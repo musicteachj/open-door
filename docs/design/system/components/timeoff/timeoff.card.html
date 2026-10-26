@@ -1,0 +1,166 @@
+<!-- @dsCard group="Components" viewport="1180x6400" name="Time off" -->
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><link rel="stylesheet" href="../../styles.css"><script src="https://unpkg.com/react@18.3.1/umd/react.production.min.js"></script><script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.production.min.js"></script><script src="https://unpkg.com/@babel/standalone@7.24.7/babel.min.js"></script><script src="../../preview/loader.js"></script></head><body style="margin:0;background:var(--surface-raised)"><div id="root"></div>
+<script type="text/babel" data-presets="react">
+loadOpenDoor("../../", OD_FILES).then(function (OD) {
+  const { Button, StatusBadge, SegmentedControl, ChoiceGroup, HoursStepper, DateField, DatePicker, CalendarDay, BalanceCard, RequestRow, RequestGroup, PreviewBlock, FormMessage } = OD;
+  const HOL = { '2026-11-26': 'Thanksgiving', '2026-12-25': 'Christmas Day' };
+  const TODAY = '2026-10-20';
+  const Lbl = ({ children }) => <div style={{ font: "400 11px/16px var(--font-sans)", color: "var(--ink-muted)", marginBottom: 8 }}>{children}</div>;
+  const H = ({ children }) => <h2 style={{ margin: "0 0 12px", font: "600 15px/24px var(--font-sans)", color: "var(--ink)" }}>{children}</h2>;
+  const Row = ({ children, gap = 24 }) => <div style={{ display: "flex", flexWrap: "wrap", gap, alignItems: "flex-start" }}>{children}</div>;
+  const Cell = ({ label, w, children }) => <div style={{ width: w, display: "flex", flexDirection: "column", gap: 8 }}><Lbl>{label}</Lbl>{children}</div>;
+  const typeOpts = (s) => [{ value: 'pto', label: 'PTO', state: s && s[0] }, { value: 'sick', label: 'Sick time', state: s && s[1] }];
+  const dayOpts = (s) => [{ value: 'full', label: 'Full day', state: s && s[0] }, { value: 'half', label: 'Half day (4 hours)', state: s && s[1] }];
+  const src = (l) => ({ href: '#', label: l });
+  function LivePicker({ sick }) {
+    const [mo, setMo] = React.useState([2026, 9]);
+    const [sel, setSel] = React.useState({ s: null, e: null, p: false });
+    const [hk, setHk] = React.useState(null);
+    const [fk, setFk] = React.useState(null);
+    const pick = (k) => setSel((c) => !c.s || !c.p ? { s: k, e: null, p: true } : k < c.s ? { s: k, e: null, p: true } : k === c.s ? { s: k, e: null, p: false } : { s: c.s, e: k, p: false });
+    return <DatePicker id={sick ? 'live-sick' : 'live'} month={mo} start={sel.s} end={sel.e} inProgress={sel.p} hoverKey={hk} focusKey={fk} today={TODAY}
+      minKey={sick ? '2026-09-20' : TODAY} pastLabel={sick ? 'Sick time can go back 30 days, to September 20' : undefined} holidays={HOL}
+      onSelect={pick} onMonthChange={setMo} onHoverChange={setHk} onFocusChange={setFk} onDone={() => setSel((c) => ({ ...c, p: false }))} />;
+  }
+  const Day = ({ label, ...p }) => (
+    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 6, width: 88 }}>
+      <div role="grid" aria-label={label} style={{ width: 52 }}><div role="row" className="od-cal__row" style={{ gridTemplateColumns: "1fr" }}><CalendarDay {...p} /></div></div>
+      <span style={{ font: "400 11px/14px var(--font-sans)", color: "var(--ink-muted)", textAlign: "center" }}>{label}</span>
+    </div>);
+  function Card() {
+    const [seg, setSeg] = React.useState('pto');
+    const [ch, setCh] = React.useState('full');
+    const [hrs, setHrs] = React.useState('3');
+    return (
+      <div style={{ padding: "20px 24px 40px", display: "flex", flexDirection: "column", gap: 40 }}>
+        <div><H>Status badges</H><Lbl>Each pairs a glyph with its word, never color alone: cinnamon clock, success check, ink cross (a decision, not an error), success clipboard, muted slash. Badges aren't interactive, so they have one state.</Lbl>
+          <Row gap={8}>{['waiting', 'approved', 'denied', 'recorded', 'canceled'].map((s) => <StatusBadge key={s} status={s} />)}</Row></div>
+
+        <div><H>Two-option control (Type)</H>
+          <Row gap={20}>
+            <Cell label="Live" w={250}><SegmentedControl id="s1" label="Type" options={typeOpts()} value={seg} onChange={setSeg} /></Cell>
+            <Cell label="Default: PTO selected" w={250}><SegmentedControl id="s0" label="Type" options={typeOpts()} value="pto" /></Cell>
+            <Cell label="Hover on the unselected option" w={250}><SegmentedControl id="s2" label="Type" options={typeOpts([null, 'hover'])} value="pto" /></Cell>
+            <Cell label="Focus on the selected option" w={250}><SegmentedControl id="s3" label="Type" options={typeOpts(['focus'])} value="pto" /></Cell>
+            <Cell label="Selected: Sick time" w={250}><SegmentedControl id="s6" label="Type" options={typeOpts()} value="sick" /></Cell>
+            <Cell label="Active (pressed)" w={250}><SegmentedControl id="s4" label="Type" options={typeOpts([null, 'active'])} value="pto" /></Cell>
+            <Cell label="Disabled (while submitting)" w={250}><SegmentedControl id="s5" label="Type" options={typeOpts()} value="pto" disabled /></Cell>
+          </Row></div>
+
+        <div><H>Day choice (How much)</H>
+          <Row gap={20}>
+            <Cell label="Live" w={340}><ChoiceGroup id="c1" label="How much" options={dayOpts()} value={ch} onChange={setCh} /></Cell>
+            <Cell label="Default: Full day selected" w={340}><ChoiceGroup id="c0" label="How much" options={dayOpts()} value="full" /></Cell>
+            <Cell label="Hover on Half day" w={340}><ChoiceGroup id="c2" label="How much" options={dayOpts([null, 'hover'])} value="full" /></Cell>
+            <Cell label="Focus on the selected option" w={340}><ChoiceGroup id="c3" label="How much" options={dayOpts(['focus'])} value="full" /></Cell>
+            <Cell label="Selected: Half day" w={340}><ChoiceGroup id="c7" label="How much" options={dayOpts()} value="half" /></Cell>
+            <Cell label="Active (pressed)" w={340}><ChoiceGroup id="c4" label="How much" options={dayOpts([null, 'active'])} value="full" /></Cell>
+            <Cell label="Disabled" w={340}><ChoiceGroup id="c5" label="How much" options={dayOpts()} value="half" disabled /></Cell>
+            <Cell label="Sick time variant" w={340}><ChoiceGroup id="c6" label="How much" options={[{ value: 'full', label: 'Full day' }, { value: 'hours', label: 'Some hours' }]} value="hours" /></Cell>
+          </Row></div>
+
+        <div><H>Hours stepper (sick time)</H>
+          <Row gap={20}>
+            <Cell label="Live" w={240}><HoursStepper id="h1" value={hrs} onChange={setHrs} error={/^[1-8]$/.test(hrs) ? null : 'Enter a whole number from 1 to 8.'} /></Cell>
+            <Cell label="Default" w={240}><HoursStepper id="h0" value="3" /></Cell>
+            <Cell label="Hover" w={240}><HoursStepper id="h2" value="3" data-state="hover" /></Cell>
+            <Cell label="Focus" w={240}><HoursStepper id="h3" value="3" data-state="focus" /></Cell>
+            <Cell label="At 1: minus disabled" w={240}><HoursStepper id="h4" value="1" /></Cell>
+            <Cell label="At 8: plus disabled" w={240}><HoursStepper id="h7" value="8" /></Cell>
+            <Cell label="Error" w={240}><HoursStepper id="h5" value="9" error="Enter a whole number from 1 to 8." /></Cell>
+            <Cell label="Disabled" w={240}><HoursStepper id="h6" value="3" disabled /></Cell>
+          </Row></div>
+
+        <div><H>Date field</H><Lbl>Short dates so a range fits on one line. The full dates are its accessible name.</Lbl>
+          <Row gap={20}>
+            <Cell label="Empty" w={340}><DateField id="d1" /></Cell>
+            <Cell label="One day" w={340}><DateField id="d2" value="Fri, Oct 30" fullValue="Friday, October 30" /></Cell>
+            <Cell label="Range, hover" w={340}><DateField id="d3" value="Mon, Nov 2 to Thu, Nov 5" fullValue="Monday, November 2 to Thursday, November 5" data-state="hover" /></Cell>
+            <Cell label="Focus" w={340}><DateField id="d4" value="Fri, Oct 30" data-state="focus" /></Cell>
+            <Cell label="Open" w={340}><DateField id="d5" value="Fri, Oct 30" open /></Cell>
+            <Cell label="Error" w={340}><DateField id="d6" error="Pick at least one day." /></Cell>
+            <Cell label="Disabled" w={340}><DateField id="d7" value="Fri, Oct 30" disabled /></Cell>
+          </Row></div>
+
+        <div><H>Date picker: day cells</H><Lbl>Every state of a day on its own. Accessible names carry the marks, for example "Thursday, November 26, Thanksgiving, company holiday".</Lbl>
+          <Row gap={8}>
+            <Day label="Default" dayKey="2026-10-21" />
+            <Day label="Hover" dayKey="2026-10-21" state="hover" />
+            <Day label="Focus" dayKey="2026-10-21" state="focus" />
+            <Day label="Active" dayKey="2026-10-21" state="active" />
+            <Day label="Selected" dayKey="2026-10-30" selected />
+            <Day label="Range start" dayKey="2026-11-25" selected band="start" />
+            <Day label="In range" dayKey="2026-11-04" band="mid" />
+            <Day label="Range end" dayKey="2026-11-27" selected band="end" />
+            <Day label="Skipped (not on schedule)" dayKey="2026-10-31" off />
+            <Day label="Skipped, in range" dayKey="2026-10-31" off band="mid" />
+            <Day label="Holiday" dayKey="2026-11-26" holiday="Thanksgiving" />
+            <Day label="Today" dayKey="2026-10-20" today />
+            <Day label="Disabled (past, PTO)" dayKey="2026-10-14" disabled />
+            <Day label="Disabled weekend" dayKey="2026-10-17" off disabled />
+          </Row></div>
+
+        <div><H>Date picker</H><Lbl>Sunday first. Arrow keys move by day, Page Up and Page Down by month, Home and End to the week's ends, Enter selects, Escape closes.</Lbl>
+          <Row gap={20}>
+            <Cell label="Live, PTO" w={392}><LivePicker /></Cell>
+            <Cell label="Live, sick time: the last 30 days are open" w={392}><LivePicker sick /></Cell>
+            <Cell label="Open, PTO: focus on October 30, past days disabled" w={392}><DatePicker id="p2" month={[2026, 9]} today={TODAY} minKey={TODAY} holidays={HOL} focusKey="2026-10-30" stateKey="2026-10-30" dayState="focus" /></Cell>
+            <Cell label="Range in progress: first day November 2, pointer on November 5" w={392}><DatePicker id="p3" month={[2026, 10]} today={TODAY} minKey={TODAY} holidays={HOL} start="2026-11-02" inProgress hoverKey="2026-11-05" stateKey="2026-11-05" dayState="hover" /></Cell>
+            <Cell label="Range selected: November 25 to 27, Thanksgiving's name showing" w={392}><DatePicker id="p4" month={[2026, 10]} today={TODAY} minKey={TODAY} holidays={HOL} start="2026-11-25" end="2026-11-27" tipKey="2026-11-26" focusKey="2026-11-26" stateKey="2026-11-26" dayState="focus" /></Cell>
+            <Cell label="Sick time, September: the 20th onward is open" w={392}><DatePicker id="p5" month={[2026, 8]} today={TODAY} minKey="2026-09-20" pastLabel="Sick time can go back 30 days, to September 20" holidays={{ '2026-09-07': 'Labor Day' }} start="2026-09-22" /></Cell>
+          </Row></div>
+
+        <div><H>Balance cards</H><Lbl>PTO, sick leave, PTO at the ceiling, loading. The source chip shows hover in the sick card and focus in the ceiling card.</Lbl>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 20, maxWidth: 1060 }}>
+            <BalanceCard id="b1" label="PTO available" hours="92 hours" days="11.5 days" source={src('Handbook §4.1 · Paid time off')}
+              rows={[{ label: 'Earned to date', value: '132 hours' }, { label: 'Taken', value: '32 hours' }, { label: 'Booked', value: '8 hours' }, { label: 'Waiting for approval', value: '0 hours' }]}
+              footer={['Next: 10 hours on October 31', 'You can save up to 180 hours.']} />
+            <BalanceCard id="b2" label="Sick leave available this year" hours="32 hours" source={{ ...src('Handbook CA-4.3 · California addendum'), state: 'hover' }}
+              rows={[{ label: 'Granted on January 1', value: '40 hours' }, { label: 'Used', value: '8 hours' }, { label: 'Booked', value: '0 hours' }]} footer={['Renews January 1.']} />
+            <BalanceCard id="b3" label="PTO available" hours="172 hours" days="21.5 days" source={{ ...src('Handbook §4.1 · Paid time off'), state: 'focus' }}
+              notice="You’ve saved 180 hours, the most you can hold, so you won’t earn more PTO until you take some time off."
+              rows={[{ label: 'Earned to date', value: '212 hours' }, { label: 'Taken', value: '32 hours' }, { label: 'Booked', value: '8 hours' }, { label: 'Waiting for approval', value: '0 hours' }]}
+              footer={['Next: paused at the 180-hour limit']} />
+            <BalanceCard loading />
+          </div></div>
+
+        <div style={{ maxWidth: 1060 }}><H>Request rows</H><Lbl>Default, hover, and focus (focus is on the row's Cancel; the row tints while anything inside it has focus). Cancel appears only where canceling is allowed.</Lbl>
+          <RequestGroup title="Upcoming">
+            <RequestRow dates="Friday, October 30" amount="8 hours (1 day)" status="waiting" canCancel />
+            <RequestRow dates="Wednesday, December 23" amount="8 hours (1 day)" status="approved" decidedBy="Marcus Bell" canCancel data-state="hover" cancelState="hover" />
+            <RequestRow type="sick" dates="Thursday, October 22" amount="3 hours" status="recorded" canCancel data-state="focus" cancelState="focus" />
+          </RequestGroup>
+          <RequestGroup title="Past">
+            <RequestRow dates="Monday, October 12" amount="8 hours (1 day)" status="canceled" />
+            <RequestRow dates="Friday, August 28" amount="8 hours (1 day)" status="denied" decidedBy="Marcus Bell" note="We’re short-staffed for the back-to-school sale that week. Could you pick another Friday?" />
+            <RequestRow dates="Monday, July 6 to Wednesday, July 8" amount="24 hours (3 days)" status="approved" decidedBy="Marcus Bell" />
+            <RequestRow loading />
+          </RequestGroup>
+          <RequestGroup title="Upcoming" empty="No upcoming time off." />
+        </div>
+
+        <div><H>Preview block</H><Lbl>Counted days have a check, skipped days a calendar-minus icon, a day already booked an error icon. Source chips name the rules used.</Lbl>
+          <Row gap={20}>
+            <Cell label="One day" w={392}><PreviewBlock id="v1" counted={[{ label: 'Friday, October 30', hours: '8 hours' }]} amount="8 hours (1 day)" left="84 hours (10.5 days) left after this" sources={[src('Handbook §4.1 · Paid time off')]} /></Cell>
+            <Cell label="Weekend skipped" w={392}><PreviewBlock id="v2" counted={[{ label: 'Friday, October 30', hours: '8 hours' }, { label: 'Monday, November 2', hours: '8 hours' }]} skipped={['Saturday, October 31 and Sunday, November 1 aren’t on your schedule']} amount="16 hours (2 days)" left="76 hours (9.5 days) left after this" sources={[src('Handbook §4.1 · Paid time off')]} /></Cell>
+            <Cell label="Holiday skipped" w={392}><PreviewBlock id="v3" counted={[{ label: 'Wednesday, November 25', hours: '8 hours' }, { label: 'Friday, November 27', hours: '8 hours' }]} skipped={['Thursday, November 26 is Thanksgiving, a company holiday']} amount="16 hours (2 days)" left="76 hours (9.5 days) left after this" sources={[src('Handbook §4.1 · Paid time off'), src('Handbook §4.2 · Holidays')]} /></Cell>
+            <Cell label="Sick hours" w={392}><PreviewBlock id="v4" counted={[{ label: 'Thursday, October 22', hours: '3 hours' }]} amount="3 hours" left="29 hours of sick leave left this year" sources={[src('Handbook CA-4.3 · California addendum')]} /></Cell>
+            <Cell label="Overlap: the day is already booked" w={392}><PreviewBlock id="v5" counted={[{ label: 'Wednesday, December 23', blocked: true }]} amount="8 hours (1 day)" sources={[src('Handbook §4.1 · Paid time off')]} /></Cell>
+            <Cell label="Nothing picked" w={392}><PreviewBlock empty /></Cell>
+          </Row></div>
+
+        <div><H>Warning and refusal messages</H><Lbl>A warning is amber and the request can still be sent. A refusal disables the button. Ink text 15.0:1 on the warning tint and 14.7:1 on the refusal tint; icons 5.8:1 and 5.9:1. Messages aren't interactive, so they have one state each.</Lbl>
+          <Row gap={20}>
+            <Cell label="Warning: short notice" w={392}><FormMessage tone="warning">More than 3 days usually needs 2 weeks’ notice. You can still request it.</FormMessage></Cell>
+            <Cell label="Refusal: not enough PTO" w={392}><FormMessage tone="refusal">You have 92 hours (11.5 days) available. This request needs 120 hours (15 days).</FormMessage></Cell>
+            <Cell label="Refusal: overlap" w={392}><FormMessage tone="refusal">You already have time off on Wednesday, December 23.</FormMessage></Cell>
+          </Row></div>
+
+        <div><H>Form buttons</H>
+          <Row gap={12}><Button>Request time off</Button><Button data-state="hover">Request time off</Button><Button data-state="focus">Request time off</Button><Button loading>Requesting…</Button><Button disabled>Request time off</Button><Button>Record sick time</Button><Button variant="secondary">Cancel</Button></Row></div>
+      </div>);
+  }
+  ReactDOM.createRoot(document.getElementById("root")).render(<Card />);
+});
+</script></body></html>

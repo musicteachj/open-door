@@ -9,9 +9,9 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Literal
-from zoneinfo import ZoneInfo
 
 from app.ai.text import one_line
+from app.domain.timeoff.today import today_at
 from app.modules.people.schemas import Me
 
 Role = Literal["employee", "manager", "hr"]
@@ -63,20 +63,24 @@ def turn_context(
     now: datetime,
     handbook_label: str,
     operator_notes: Sequence[str],
+    outcomes: Sequence[str] = (),
 ) -> str:
-    if now.tzinfo is None or now.utcoffset() is None:
-        msg = "`now` must be timezone-aware"
-        raise ValueError(msg)
-    local = now.astimezone(ZoneInfo(actor_view.timezone))
+    """The context text. `outcomes` is what happened to the person's cards since the last turn,
+    already worded from structured data (`proposals.unreported_outcomes`); each goes on its own
+    line."""
+    # The engine's own "today", so the model's date and the engine's can't drift apart. It also
+    # refuses a naive `now`.
+    local = today_at(actor_view.timezone, now)
     lines = [
         "Context for this turn.",
         f"Asker: {one_line(actor_view.given_name)}, role {ROLE_LABELS[actor_view.role]}, "
         f"{actor_view.employment_type} employee.",
         f"Location: {one_line(actor_view.location_name)} "
         f"({actor_view.state}, code {actor_view.location_code}).",
-        f"Today: {_WEEKDAYS[local.weekday()]}, {local.date().isoformat()} ({actor_view.timezone}).",
+        f"Today: {_WEEKDAYS[local.weekday()]}, {local.isoformat()} ({actor_view.timezone}).",
         f"Handbook version: {handbook_label}.",
     ]
+    lines.extend(one_line(outcome) for outcome in outcomes)
     if operator_notes:
         lines.append("Operator notes:")
         lines.extend(f"- {one_line(note)}" for note in operator_notes)

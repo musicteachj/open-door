@@ -14,9 +14,28 @@ import {
   specimenPath,
   type Area,
   type ComponentRow,
+  type ApprovalsState,
+  type ConfirmCardState,
   type ScreenRow,
+  type TimeOffState,
 } from './manifest'
 import { holdRequests, problem, setSandboxLeft, startAs } from '../helpers'
+import {
+  addDaysTo,
+  bookOnPage,
+  enterGrid,
+  expireProposal,
+  factsOf,
+  moveToDay,
+  newestProposalId,
+  openFromNav,
+  pickDays,
+  railLink,
+  switchPersona,
+  daysPastBalance,
+  workdays,
+  type Facts,
+} from '../time-off-helpers'
 import {
   ask,
   askAndWaitForAnswer,
@@ -27,7 +46,12 @@ import {
   stopButton,
   stubConversation,
 } from '../conversation-helpers'
-import { holdNextTurnStream, SICK_LEAVE_CITATION, SICK_LEAVE_SENTENCE } from '../held-stream'
+import {
+  holdNextTurnStream,
+  holdTurnCompletion,
+  SICK_LEAVE_CITATION,
+  SICK_LEAVE_SENTENCE,
+} from '../held-stream'
 import { holdList, isListRequest, openProfileBySearch } from '../directory-helpers'
 import { renderReport, type ReportRow } from './report'
 
@@ -126,6 +150,31 @@ async function reachScreen(page: Page, row: ScreenRow) {
       if (row.setup === 'handbook-loading') await holdRequests(page, '**/api/v1/handbook', 'GET')
       if (row.setup === 'section-loading') {
         await holdRequests(page, '**/api/v1/handbook/sections/4.3', 'GET')
+      }
+      // Screens 08 and 09: a request held or failed before the page opens, so its first read is it.
+      if (row.setup === 'time-off' && row.state === 'loading') {
+        await holdRequests(page, '**/api/v1/time-off/balances', 'GET')
+      }
+      if (row.setup === 'approvals' && row.state === 'loading') {
+        await holdRequests(page, '**/api/v1/time-off/requests*', 'GET')
+      }
+      const failing =
+        row.state === 'error'
+          ? row.setup === 'time-off'
+            ? '**/api/v1/time-off/balances'
+            : row.setup === 'approvals'
+              ? '**/api/v1/time-off/requests*'
+              : null
+          : null
+      if (failing !== null) {
+        await page.route(failing, (route) =>
+          route.fulfill({
+            status: 500,
+            contentType: 'application/problem+json',
+            headers: { 'X-Request-ID': '7f3a9c2e5b1d4a60918c2e4f6a8b0d13' },
+            body: problem(500, 'Internal Server Error'),
+          }),
+        )
       }
       if (row.route !== '/ask') await page.goto(row.route)
     } else {
@@ -286,6 +335,15 @@ async function reachScreen(page: Page, row: ScreenRow) {
     case 'conversation':
       await reachConversation(page, row.scenario!)
       break
+    case 'time-off':
+      await reachTimeOff(page, row.state as TimeOffState)
+      break
+    case 'approvals':
+      await reachApprovals(page, row.state as ApprovalsState)
+      break
+    case 'confirm-card':
+      await reachConfirmCard(page, row.state as ConfirmCardState)
+      break
     case 'home':
     case 'expiry-banner':
       await expect(page.getByRole('heading', { level: 1 })).toBeVisible()
@@ -293,6 +351,412 @@ async function reachScreen(page: Page, row: ScreenRow) {
     case 'not-found':
       await expect(page.getByRole('heading', { level: 1, name: "We couldn't find that page." })).toBeVisible()
       break
+  }
+}
+
+
+// ---------------------------------------------------------------------------------------------
+// Screens 08 to 10: the real Time off, Approvals, and conversation pages, brought to each state
+// the way a person (or the browser tests) would. Dates come from the API's own calendar, since the
+// seed's dates move with today.
+
+const NOTE_77 = 'Please pick another week, the store needs everyone on the floor for the sale.'
+
+/** The workday nearest `from` going `step` days at a time (-1 back, 1 forward). */
+function nearestWorkday(facts: Facts, from: string, step: 1 | -1): string {
+  for (let day = addDaysTo(from, step); ; day = addDaysTo(day, step)) {
+    const weekday = new Date(Date.parse(day)).getUTCDay() || 7
+    if (facts.weekdays.includes(weekday) && !facts.holidays.includes(day)) return day
+  }
+}
+
+/** The first company holiday after today. */
+function nextHoliday(facts: Facts): string {
+  const holiday = facts.holidays.filter((day) => day > facts.today).sort()[0]
+  if (holiday === undefined) throw new Error('The calendar has no holiday ahead')
+  return holiday
+}
+
+async function reachTimeOff(page: Page, state: TimeOffState) {
+  const open = page.getByRole('button', { name: 'Request time off' }).first()
+  const form = page.locator('#request-form')
+  const toast = page.locator('[data-slot="toast"]')
+  if (state === 'loading') {
+    await expect(page.getByText('Loading your time off')).toBeAttached()
+    await expect(page.locator('[data-slot="requests-skeleton"]')).toBeVisible()
+    return
+  }
+  if (state === 'error') {
+    await expect(
+      page.getByRole('heading', { level: 1, name: 'Something went wrong on our side.' }),
+    ).toBeVisible({ timeout: 15_000 })
+    return
+  }
+  await expect(open).toBeVisible()
+  if (state === 'default' || state === 'default-full' || state === 'ceiling' || state === 'empty') {
+    return
+  }
+  const facts = await factsOf(page)
+  const day = () => workdays(facts, 14, 1)[0]!
+  switch (state) {
+    case 'form-one-day':
+    case 'form-half-day':
+      await open.click()
+      await pickDays(page, form, day())
+      if (state === 'form-half-day') {
+        await form.getByRole('radio', { name: /^Half day/ }).click()
+      }
+      await expect(form.getByRole('region', { name: 'What this uses' })).toContainText('left after')
+      break
+    case 'form-weekend': {
+      // A Friday and the Monday after it, so the weekend between is skipped.
+      let friday = day()
+      while ((new Date(Date.parse(friday)).getUTCDay() || 7) !== 5) friday = addDaysTo(friday, 1)
+      await open.click()
+      await pickDays(page, form, friday, addDaysTo(friday, 3))
+      await expect(form.getByRole('region', { name: 'What this uses' })).toContainText('left after')
+      break
+    }
+    case 'form-holiday': {
+      const holiday = nextHoliday(facts)
+      await open.click()
+      await pickDays(
+        page,
+        form,
+        nearestWorkday(facts, holiday, -1),
+        nearestWorkday(facts, holiday, 1),
+      )
+      await expect(form.getByRole('region', { name: 'What this uses' })).toContainText('holiday')
+      break
+    }
+    case 'form-sick-hours':
+      await open.click()
+      await form.getByRole('radio', { name: 'Sick time' }).click()
+      await pickDays(page, form, nearestWorkday(facts, facts.today, -1))
+      await form.getByRole('radio', { name: 'Some hours' }).click()
+      await expect(form.getByRole('region', { name: 'What this uses' })).toContainText('left')
+      break
+    case 'form-short-notice': {
+      const soon = workdays(facts, 1, 4)
+      await open.click()
+      await pickDays(page, form, soon[0]!, soon[3]!)
+      await expect(form.getByText('usually needs 2 weeks')).toBeVisible()
+      break
+    }
+    case 'form-not-enough': {
+      const long = await daysPastBalance(page, facts)
+      await open.click()
+      await pickDays(page, form, long[0]!, long.at(-1)!)
+      await expect(form.getByRole('alert')).toContainText('You have')
+      break
+    }
+    case 'form-overlap': {
+      const booked = await bookOnPage(page)
+      await open.click()
+      await pickDays(page, form, booked)
+      await expect(form.getByRole('region', { name: 'What this uses' })).toContainText(
+        'Already booked',
+      )
+      break
+    }
+    case 'form-submitting':
+      await holdRequests(page, '**/api/v1/time-off/requests', 'POST')
+      await open.click()
+      await pickDays(page, form, day())
+      await form.getByRole('button', { name: 'Request time off' }).click()
+      await expect(form.getByRole('button', { name: 'Requesting…' })).toBeVisible()
+      break
+    case 'submitted':
+      await bookOnPage(page)
+      await toast.hover()
+      break
+    case 'submitted-sick':
+      await open.click()
+      await form.getByRole('radio', { name: 'Sick time' }).click()
+      await pickDays(page, form, workdays(facts, 1, 1)[0]!)
+      await form.getByRole('button', { name: 'Record sick time' }).click()
+      await expect(toast).toContainText('Recorded.')
+      await toast.hover()
+      break
+    case 'cancel-confirm':
+      await bookOnPage(page)
+      await page.getByRole('button', { name: /^Cancel PTO on / }).click()
+      await expect(page.getByRole('alertdialog')).toBeVisible()
+      break
+    case 'canceled':
+      await bookOnPage(page)
+      await page.getByRole('button', { name: /^Cancel PTO on / }).click()
+      await page.getByRole('alertdialog').getByRole('button', { name: 'Cancel request' }).click()
+      await expect(toast).toContainText('Canceled.')
+      await toast.hover()
+      break
+    case 'date-picker-open':
+      await open.click()
+      await enterGrid(page, form)
+      await expect(form.getByRole('grid')).toBeVisible()
+      break
+    case 'date-picker-sick':
+      await open.click()
+      await form.getByRole('radio', { name: 'Sick time' }).click()
+      await enterGrid(page, form)
+      await expect(form.getByRole('grid')).toBeVisible()
+      break
+    case 'date-picker-range': {
+      const holiday = nextHoliday(facts)
+      await open.click()
+      await pickDays(
+        page,
+        form,
+        nearestWorkday(facts, holiday, -1),
+        nearestWorkday(facts, holiday, 1),
+        { close: false },
+      )
+      await moveToDay(page, holiday)
+      await expect(page.getByRole('tooltip')).toBeVisible()
+      break
+    }
+  }
+}
+
+/** Marcus's page with Priya's request waiting beside Zara's, as the frames show two. */
+async function twoWaiting(page: Page) {
+  await switchPersona(page, 'Priya')
+  await bookOnPage(page)
+  await switchPersona(page, 'Marcus')
+  await openFromNav(page, /^Approvals, 2 waiting$/, '/approvals')
+  await expect(page.locator('[data-slot="approval-card"]')).toHaveCount(2)
+}
+
+async function reachApprovals(page: Page, state: ApprovalsState) {
+  const cards = page.locator('[data-slot="approval-card"]')
+  const zara = cards.filter({ hasText: 'Zara Bautista' })
+  const dialog = page.getByRole('alertdialog')
+  const toast = page.locator('[data-slot="toast"]')
+  if (state === 'loading') {
+    await expect(page.getByText('Loading approvals')).toBeAttached()
+    await expect(page.locator('[data-slot="approvals-skeleton"]')).toBeVisible()
+    return
+  }
+  if (state === 'error') {
+    await expect(
+      page.getByRole('heading', { level: 1, name: 'Something went wrong on our side.' }),
+    ).toBeVisible({ timeout: 15_000 })
+    return
+  }
+  if (state === 'empty') {
+    await zara.getByRole('button', { name: /^Approve / }).click()
+    await dialog.getByRole('button', { name: 'Approve', exact: true }).click()
+    await expect(toast).toContainText('Approved.')
+    await page.reload()
+    await expect(page.getByText('Nothing is waiting for you.')).toBeVisible()
+    return
+  }
+  if (state === 'home-manager') {
+    await twoWaiting(page)
+    await openFromNav(page, 'Ask', '/ask')
+    await expect(railLink(page, 'approvals? waiting')).toBeVisible()
+    return
+  }
+  if (state === 'conflict') {
+    // See the browser test of the same name: Priya cancels for real, Marcus's read stays out of date.
+    await switchPersona(page, 'Priya')
+    await bookOnPage(page)
+    const listed = await page.evaluate(async () => {
+      const response = await fetch(
+        '/api/v1/time-off/requests?scope=mine&from=2000-01-01&to=2100-01-01',
+      )
+      const { items } = (await response.json()) as { items: { status: string }[] }
+      return items.find((item) => item.status === 'pending')!
+    })
+    await page.getByRole('button', { name: /^Cancel PTO on / }).click()
+    await page.getByRole('alertdialog').getByRole('button', { name: 'Cancel request' }).click()
+    await expect(page.locator('[data-slot="toast"]')).toContainText('Canceled.')
+    let stale = true
+    await page.route('**/api/v1/time-off/requests?*scope=waiting*', async (route) => {
+      const response = await route.fetch()
+      const body = (await response.json()) as { items: unknown[] }
+      if (stale) body.items.push(listed)
+      await route.fulfill({ response, json: body })
+    })
+    page.on('response', (response) => {
+      if (response.url().endsWith('/decision')) stale = false
+    })
+    await switchPersona(page, 'Marcus')
+    await openFromNav(page, /^Approvals, 1 waiting$/, '/approvals')
+    await expect(cards).toHaveCount(2)
+    const priya = cards.filter({ hasText: 'Priya Raman' })
+    await priya.getByRole('button', { name: /^Approve / }).click()
+    await dialog.getByRole('button', { name: 'Approve', exact: true }).click()
+    await expect(priya.getByRole('alert')).toContainText('canceled this request')
+    return
+  }
+  await twoWaiting(page)
+  switch (state) {
+    case 'default':
+    case 'default-full':
+    case 'nav-manager':
+      break
+    case 'approve-confirm':
+      await zara.getByRole('button', { name: /^Approve / }).click()
+      await expect(dialog.getByRole('button', { name: 'Go back' })).toBeFocused()
+      break
+    case 'deny-confirm':
+      await zara.getByRole('button', { name: /^Deny / }).click()
+      await dialog.getByRole('textbox').fill(NOTE_77)
+      await expect(dialog).toContainText('77 of 300')
+      break
+    case 'deciding':
+      await holdRequests(page, '**/api/v1/time-off/requests/*/decision', 'POST')
+      await zara.getByRole('button', { name: /^Approve / }).click()
+      await dialog.getByRole('button', { name: 'Approve', exact: true }).click()
+      await expect(dialog.getByRole('button', { name: 'Approving…' })).toBeVisible()
+      break
+    case 'approved':
+      await zara.getByRole('button', { name: /^Approve / }).click()
+      await dialog.getByRole('button', { name: 'Approve', exact: true }).click()
+      await expect(toast).toContainText('Approved.')
+      await toast.hover()
+      break
+    case 'denied':
+      await zara.getByRole('button', { name: /^Deny / }).click()
+      await dialog.getByRole('textbox').fill(NOTE_77)
+      await dialog.getByRole('button', { name: 'Deny', exact: true }).click()
+      await expect(toast).toContainText('Denied.')
+      await toast.hover()
+      break
+  }
+}
+
+async function reachConfirmCard(page: Page, state: ConfirmCardState) {
+  const BOOK = 'book next friday'
+  const card = (index = 0) => page.locator('[data-slot="confirm-card"]').nth(index)
+  const confirm = (index = 0) => card(index).getByRole('button', { name: /^(Confirm|Deny): / })
+  const dismiss = (index = 0) => card(index).getByRole('button', { name: /^Dismiss, / })
+  const executed = (index = 0) => card(index).locator('output')
+  const ledger = page.locator('[data-slot="glance-list"]')
+  switch (state) {
+    case 'pending':
+    case 'holiday':
+      await askAndWaitForAnswer(page, BOOK)
+      await expect(confirm()).toBeVisible()
+      break
+    case 'pending-streaming': {
+      await holdTurnCompletion(page)
+      await ask(page, BOOK)
+      await expect(card().getByText('Wait for the answer to finish')).toBeVisible()
+      await expect(stopButton(page)).toBeVisible()
+      break
+    }
+    case 'confirming':
+      await askAndWaitForAnswer(page, BOOK)
+      await holdRequests(page, '**/api/v1/assistant/proposals/*/confirm', 'POST')
+      await confirm().click()
+      await expect(card().getByRole('button', { name: 'Confirming…' })).toBeVisible()
+      break
+    case 'executed':
+      await askAndWaitForAnswer(page, BOOK)
+      await confirm().click()
+      await expect(executed()).toContainText('Requested.')
+      await expect(ledger.getByRole('link', { name: /1 request pending/ })).toBeVisible()
+      break
+    case 'failed': {
+      await askAndWaitForAnswer(page, BOOK)
+      // The same day is booked behind the card's back, so Confirm is refused for real.
+      const taken = await page.evaluate(async () => {
+        const read = await fetch('/api/v1/assistant/conversations/current')
+        const body = (await read.json()) as {
+          turns: { proposals: { card: { startDate: string; endDate: string } }[] }[]
+        }
+        const { startDate, endDate } = body.turns.flatMap((turn) => turn.proposals).at(-1)!.card
+        const token = /(?:^|; )__Host-od_csrf=([^;]*)/.exec(document.cookie)![1]!
+        const response = await fetch('/api/v1/time-off/requests', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': token },
+          body: JSON.stringify({ type: 'pto', startDate, endDate, partialMinutes: null }),
+        })
+        return response.status
+      })
+      expect(taken).toBeLessThan(300)
+      await confirm().click()
+      await expect(card().getByRole('alert')).toContainText('Nothing was changed.')
+      break
+    }
+    case 'dismissed':
+      await askAndWaitForAnswer(page, BOOK)
+      await dismiss().click()
+      await expect(card()).toContainText('You dismissed this.')
+      break
+    case 'replaced':
+      await askAndWaitForAnswer(page, BOOK)
+      await askAndWaitForAnswer(page, BOOK)
+      await expect(card(0)).toContainText('Replaced by a newer card.')
+      break
+    case 'expired':
+      await askAndWaitForAnswer(page, BOOK)
+      await expireProposal(await newestProposalId(page))
+      await confirm().click()
+      await expect(card()).toContainText('This card expired after 15 minutes.')
+      break
+    case 'sick':
+      await askAndWaitForAnswer(page, "I'm sick tomorrow")
+      await expect(confirm()).toBeVisible()
+      break
+    case 'approve':
+      await askAndWaitForAnswer(page, 'approve it')
+      await expect(confirm()).toBeVisible()
+      break
+    case 'deny':
+      await askAndWaitForAnswer(page, 'deny it')
+      await card().getByRole('textbox').fill(NOTE_77)
+      await expect(card()).toContainText('77 of 300')
+      break
+    case 'cancel':
+      await bookOnPage(page)
+      await openFromNav(page, 'Ask', '/ask')
+      await askAndWaitForAnswer(page, 'cancel my request')
+      await expect(confirm()).toBeVisible()
+      break
+    case 'executed-variants':
+      await askAndWaitForAnswer(page, BOOK)
+      await confirm(0).click()
+      await expect(executed(0)).toContainText('Requested.')
+      await askAndWaitForAnswer(page, "I'm sick tomorrow")
+      await confirm(1).click()
+      await expect(executed(1)).toContainText('Recorded.')
+      await askAndWaitForAnswer(page, 'cancel my request')
+      await confirm(2).click()
+      await expect(executed(2)).toContainText('Canceled.')
+      break
+    case 'conversation':
+      await askAndWaitForAnswer(page, BOOK)
+      await page.getByRole('button', { name: 'Show your work' }).click()
+      break
+    case 'conversation-executed':
+      await askAndWaitForAnswer(page, BOOK)
+      await confirm().click()
+      await expect(executed()).toContainText('Requested.')
+      await page.getByRole('button', { name: 'Show your work' }).click()
+      break
+    case 'sensitive':
+    case 'sensitive-work': {
+      // STUB: the scripted model answers one trigger per message, so a real sick-time card (turn
+      // 1) is moved under the sensitive turn (turn 2) in the conversation GET.
+      await askAndWaitForAnswer(page, "I'm sick tomorrow")
+      await askAndWaitForAnswer(page, QUESTIONS.sensitive)
+      await stubConversation(page, (body) => {
+        const turns = body.turns as unknown as { proposals: unknown[] }[]
+        turns[1]!.proposals = turns[0]!.proposals
+        body.turns = [turns[1]!] as unknown as typeof body.turns
+      })
+      await page.reload()
+      await expect(confirm()).toBeVisible()
+      await expect(page.locator('[data-slot="escalation-panel"]')).toBeVisible()
+      await expect(railLink(page, 'PTO available')).toBeVisible()
+      if (state === 'sensitive-work') {
+        await page.getByRole('button', { name: 'Show your work' }).click()
+      }
+      break
+    }
   }
 }
 
@@ -393,7 +857,8 @@ async function reachConversation(page: Page, scenario: NonNullable<ScreenRow['sc
       await expect(page.getByText('Thanks for the feedback.')).toBeVisible()
       break
     case 'other-state':
-      await askAndWaitForAnswer(page, 'sick leave')
+      // As in conversation.spec.ts: this question keeps CA-4.3 in the full-text results.
+      await askAndWaitForAnswer(page, 'how much sick leave do I get')
       await page.getByRole('button', { name: 'Show your work' }).click()
       break
     case 'not-found':
@@ -455,6 +920,7 @@ async function reachConversation(page: Page, scenario: NonNullable<ScreenRow['sc
 }
 
 async function photographScreen(browser: Browser, row: ScreenRow): Promise<string | null> {
+  console.log(`Photographing ${row.title}`)
   const context = await browser.newContext({
     baseURL: 'http://localhost:4173',
     viewport: row.viewport ?? { width: 1440, height: 900 },
@@ -521,7 +987,7 @@ test('captures the build and the design specimens, then writes the report', asyn
     for (const row of COMPONENT_ROWS) {
       let build: string | null = null
       try {
-        build = await photographState(page, row)
+        build = await test.step(`state row: ${row.id}`, () => photographState(page, row))
       } catch (error) {
         console.warn(`State "${row.id}" not captured: ${String(error).split('\n')[0]}`)
       }
@@ -535,7 +1001,8 @@ test('captures the build and the design specimens, then writes the report', asyn
     }
 
     for (const row of SCREEN_ROWS) {
-      const build = await photographScreen(browser, row)
+      // A step per row, so a timeout of the run's 900 s names the row that was stuck.
+      const build = await test.step(`screen row: ${row.title}`, () => photographScreen(browser, row))
       rows.push({
         group: screenGroup(row),
         title: row.title,

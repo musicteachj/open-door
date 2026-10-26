@@ -1,0 +1,85 @@
+<!-- @dsCard group="Components" viewport="1180x4200" name="Confirm card" -->
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><link rel="stylesheet" href="../../styles.css"><script src="https://unpkg.com/react@18.3.1/umd/react.production.min.js"></script><script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.production.min.js"></script><script src="https://unpkg.com/@babel/standalone@7.24.7/babel.min.js"></script><script src="../../preview/loader.js"></script></head><body style="margin:0;background:var(--surface-raised)"><div id="root"></div>
+<script type="text/babel" data-presets="react">
+loadOpenDoor("../../", OD_FILES).then(function (OD) {
+  const { ConfirmCard } = OD;
+  const Lbl = ({ children }) => <div style={{ font: "400 11px/16px var(--font-sans)", color: "var(--ink-muted)", marginBottom: 8 }}>{children}</div>;
+  const H = ({ children }) => <h2 style={{ margin: "0 0 12px", font: "600 15px/24px var(--font-sans)", color: "var(--ink)" }}>{children}</h2>;
+  const Grid = ({ children }) => <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 540px))", gap: 24, alignItems: "start" }}>{children}</div>;
+  const Cell = ({ label, children }) => <div><Lbl>{label}</Lbl>{children}</div>;
+  const S41 = { label: 'Handbook §4.1 · Paid time off', href: '#' }, S42 = { label: 'Handbook §4.2 · Holidays', href: '#' }, SCA = { label: 'Handbook CA-4.3 · California addendum', href: '#' };
+  const TO = { label: 'View in Time off', href: '#' };
+  const v1 = { title: 'Book PTO', icon: 'calendar-plus', facts: [{ label: 'Type', value: 'PTO' }, { label: 'Dates', value: 'Friday, October 30' }],
+    preview: { counted: [{ label: 'Friday, October 30', hours: '8 hours' }], amount: '8 hours (1 day)', left: '84 hours (10.5 days) left after this' },
+    info: 'Marcus Bell, your manager, reviews PTO requests.', sources: [S41], confirmAria: 'Confirm: book PTO on Friday, October 30', dismissAria: 'Dismiss, don’t book PTO on Friday, October 30',
+    executedText: 'Requested. Marcus Bell will review it.', executedLink: TO, badge: 'waiting', failedText: 'Couldn’t book this: you already have time off on Friday, October 30. Nothing was changed.' };
+  const v2 = { ...v1, facts: [{ label: 'Type', value: 'PTO' }, { label: 'Dates', value: 'Wednesday, November 25 to Friday, November 27' }],
+    preview: { counted: [{ label: 'Wednesday, November 25', hours: '8 hours' }, { label: 'Friday, November 27', hours: '8 hours' }], skipped: ['Thursday, November 26 is Thanksgiving, a company holiday'], amount: '16 hours (2 days)', left: '76 hours (9.5 days) left after this' }, sources: [S41, S42] };
+  const v3 = { title: 'Record sick time', icon: 'calendar-plus', facts: [{ label: 'Type', value: 'Sick time' }, { label: 'Dates', value: 'Thursday, October 22' }],
+    preview: { counted: [{ label: 'Thursday, October 22', hours: '3 hours' }], amount: '3 hours', left: '29 hours of sick leave left this year' },
+    info: 'Sick time is recorded right away, with no approval. Your manager will see it in Coming up.', sources: [SCA], executedText: 'Recorded.', executedLink: TO, badge: 'recorded' };
+  const v4 = { title: 'Approve a request', icon: 'clipboard-check', who: { name: 'Priya Raman', title: 'Visual Merchandiser', initials: 'PR' },
+    facts: [{ label: 'Type', value: 'PTO' }, { label: 'Dates', value: 'Friday, October 30' }, { label: 'Amount', value: '8 hours (1 day)' }, { label: 'Balance', value: '84 hours (10.5 days) available after this' }],
+    coverage: 'No one else on your team is off that day.', sources: [S41], executedLink: { label: 'View in Approvals', href: '#' }, executedText: 'Approved. Priya will see it on the Time off page.', badge: 'approved' };
+  const NOTE = 'Inventory runs November 9 and 10 this year. Could you move this a week later?';
+  const v5 = { title: 'Deny a request', icon: 'clipboard-check', confirmLabel: 'Deny', who: { name: 'Zara Bautista', title: 'Department Lead, Apparel', initials: 'ZB' },
+    facts: [{ label: 'Type', value: 'PTO' }, { label: 'Dates', value: 'Monday, November 9 to Tuesday, November 10' }, { label: 'Amount', value: '16 hours (2 days)' }, { label: 'Balance', value: '62 hours (7.75 days) available after this' }],
+    coverage: 'Also off: Vikram Morales, Tuesday, November 10 · PTO', sources: [S41], badge: 'denied', executedLink: { label: 'View in Approvals', href: '#' } };
+  const v6 = { title: 'Cancel time off', icon: 'calendar-x', facts: [{ label: 'Type', value: 'PTO' }, { label: 'Dates', value: 'Wednesday, December 23' }, { label: 'Status', badge: 'approved' }, { label: 'Amount', value: '8 hours (1 day) go back' }, { label: 'Balance', value: '100 hours (12.5 days) available after this' }],
+    sources: [S41], executedText: 'Canceled. 8 hours are back in your balance.', executedLink: TO, badge: 'canceled' };
+  function Live() {
+    const [st, setSt] = React.useState('pending');
+    return <div><ConfirmCard id="live" {...v1} state={st} onConfirm={() => { setSt('confirming'); setTimeout(() => setSt('executed'), 1200); }} onDismiss={() => setSt('dismissed')} />
+      <button type="button" className="od-btn od-btn--ghost od-btn--sm" style={{ marginTop: 8 }} onClick={() => setSt('pending')}>Reset</button></div>;
+  }
+  function LiveDeny() {
+    const [st, setSt] = React.useState('pending'); const [note, setNote] = React.useState('');
+    return <ConfirmCard id="ld" {...v5} state={st} note={note} onNoteChange={setNote} executedText={note.trim() ? 'Denied. Zara will see your note on the Time off page.' : 'Denied. Zara will see it on the Time off page.'}
+      onConfirm={() => { setSt('confirming'); setTimeout(() => setSt('executed'), 1200); }} onDismiss={() => setSt('dismissed')} />;
+  }
+  function Card() {
+    return (
+      <div style={{ padding: "20px 24px 40px", display: "flex", flexDirection: "column", gap: 40 }}>
+        <div><H>Live</H><Grid><Cell label="Book PTO: Confirm, then Reset"><Live /></Cell><Cell label="Deny with a note"><LiveDeny /></Cell></Grid></div>
+        <div><H>Pending and its buttons</H><Lbl>Confirm is primary on every variant. Tab order: source chips, note field, Confirm, Dismiss.</Lbl>
+          <Grid>
+            <Cell label="Pending (default)"><ConfirmCard id="p0" {...v1} /></Cell>
+            <Cell label="Confirm hover, Dismiss focus"><ConfirmCard id="p1" {...v1} confirmState="hover" dismissState="focus" /></Cell>
+            <Cell label="Confirm focus, Dismiss hover"><ConfirmCard id="p2" {...v1} confirmState="focus" dismissState="hover" /></Cell>
+            <Cell label="Streaming: Confirm disabled"><ConfirmCard id="p3" {...v1} state="streaming" /></Cell>
+            <Cell label="Confirming: loading, Dismiss disabled"><ConfirmCard id="p4" {...v1} state="confirming" /></Cell>
+            <Cell label="With the short-notice warning (screen 08)"><ConfirmCard id="p5" {...v1} facts={[{ label: 'Type', value: 'PTO' }, { label: 'Dates', value: 'Monday, November 2 to Thursday, November 5' }]}
+              preview={{ counted: [{ label: 'Monday, November 2', hours: '8 hours' }, { label: 'Tuesday, November 3', hours: '8 hours' }, { label: 'Wednesday, November 4', hours: '8 hours' }, { label: 'Thursday, November 5', hours: '8 hours' }], amount: '32 hours (4 days)', left: '60 hours (7.5 days) left after this' }}
+              warning="More than 3 days usually needs 2 weeks’ notice. You can still request it." /></Cell>
+          </Grid></div>
+        <div><H>Final states</H><Lbl>Buttons are gone; the card stays as a record. Only executed keeps the facts at full strength.</Lbl>
+          <Grid>
+            <Cell label="Executed"><ConfirmCard id="f0" {...v1} state="executed" /></Cell>
+            <Cell label="Failed (role=alert)"><ConfirmCard id="f1" {...v1} state="failed" /></Cell>
+            <Cell label="Dismissed"><ConfirmCard id="f2" {...v1} state="dismissed" /></Cell>
+            <Cell label="Replaced"><ConfirmCard id="f3" {...v1} state="replaced" /></Cell>
+            <Cell label="Expired, with Ask again"><ConfirmCard id="f4" {...v1} state="expired" /></Cell>
+          </Grid></div>
+        <div><H>Variants, pending</H>
+          <Grid>
+            <Cell label="2. PTO over a holiday"><ConfirmCard id="v2" {...v2} /></Cell>
+            <Cell label="3. Sick time in hours"><ConfirmCard id="v3" {...v3} /></Cell>
+            <Cell label="4. Approve"><ConfirmCard id="v4" {...v4} /></Cell>
+            <Cell label="5. Deny, note focused"><ConfirmCard id="v5" {...v5} note={NOTE} onNoteChange={() => {}} /></Cell>
+            <Cell label="6. Cancel time off"><ConfirmCard id="v6" {...v6} /></Cell>
+          </Grid></div>
+        <div><H>Variants, executed</H>
+          <Grid>
+            <Cell label="2"><ConfirmCard id="e2" {...v2} state="executed" /></Cell>
+            <Cell label="3"><ConfirmCard id="e3" {...v3} state="executed" /></Cell>
+            <Cell label="4"><ConfirmCard id="e4" {...v4} state="executed" /></Cell>
+            <Cell label="5, with a note"><ConfirmCard id="e5" {...v5} state="executed" note={NOTE} executedText="Denied. Zara will see your note on the Time off page." /></Cell>
+            <Cell label="5, no note"><ConfirmCard id="e5b" {...v5} state="executed" executedText="Denied. Zara will see it on the Time off page." /></Cell>
+            <Cell label="6"><ConfirmCard id="e6" {...v6} facts={v6.facts.filter((f) => !f.badge)} state="executed" /></Cell>
+          </Grid></div>
+      </div>);
+  }
+  ReactDOM.createRoot(document.getElementById("root")).render(<Card />);
+});
+</script></body></html>

@@ -3,6 +3,7 @@ import {
   formatMonthDay,
   formatShortDate,
   formatTimeLeft,
+  formatterFor,
   greetingFor,
   greetingLine,
   isExpiringSoon,
@@ -119,5 +120,14 @@ describe('formatMonthDay', () => {
 
   it('returns text that is not a date unchanged', () => {
     expect(formatMonthDay('soon')).toBe('soon')
+  })
+
+  describe('formatterFor', () => {
+    it('gives the same formatter for the same zone and options', () => {
+      const options = { hour: 'numeric' } as const
+      expect(formatterFor('UTC', options)).toBe(formatterFor('UTC', options))
+      expect(formatterFor('UTC', options)).not.toBe(formatterFor('America/Denver', options))
+      expect(formatterFor('UTC', options)).not.toBe(formatterFor('UTC', { minute: '2-digit' }))
+    })
   })
 })

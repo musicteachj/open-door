@@ -6,6 +6,7 @@ window.OD_FILES = [
   'components/core/Icon.jsx',
   'components/core/Button.jsx',
   'components/core/Logo.jsx',
+  'components/core/Avatar.jsx',
   'components/navigation/Tooltip.jsx',
   'components/navigation/NavItem.jsx',
   'components/navigation/PersonaSwitcher.jsx',
@@ -37,7 +38,21 @@ window.OD_FILES = [
   'components/handbook/LinkBlock.jsx',
   'components/handbook/SourcesBlock.jsx',
   'components/handbook/SearchResultRow.jsx',
-  'components/handbook/PassagePanel.jsx'
+  'components/handbook/PassagePanel.jsx',
+  'components/timeoff/StatusBadge.jsx',
+  'components/timeoff/SegmentedControl.jsx',
+  'components/timeoff/ChoiceGroup.jsx',
+  'components/timeoff/HoursStepper.jsx',
+  'components/timeoff/DateField.jsx',
+  'components/timeoff/DatePicker.jsx',
+  'components/timeoff/BalanceCard.jsx',
+  'components/timeoff/RequestRow.jsx',
+  'components/timeoff/PreviewBlock.jsx',
+  'components/timeoff/FormMessage.jsx',
+  'components/approvals/ApprovalCard.jsx',
+  'components/approvals/NoteField.jsx',
+  'components/approvals/DecisionDialog.jsx',
+  'components/assistant/ConfirmCard.jsx'
 ];
 window.loadOpenDoor = async function (root, files) {
   var mods = {};

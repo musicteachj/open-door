@@ -37,6 +37,51 @@ export interface AudienceOut {
   locations: string[]
 }
 
+export interface PtoBalanceOut {
+  earnedMinutes: number
+  earnedLabel: string
+  takenMinutes: number
+  takenLabel: string
+  bookedMinutes: number
+  bookedLabel: string
+  pendingMinutes: number
+  pendingLabel: string
+  availableMinutes: number
+  availableLabel: string
+  ceilingMinutes: number
+  ceilingLabel: string
+  nextEarningDate: string | null
+  nextEarningMinutes: number
+  nextEarningLabel: string
+}
+
+export interface SickYearOut {
+  year: number
+  grantedMinutes: number
+  grantedLabel: string
+  usedMinutes: number
+  usedLabel: string
+  bookedMinutes: number
+  bookedLabel: string
+  availableMinutes: number
+  availableLabel: string
+}
+
+export interface RuleRefOut {
+  sectionId: string
+  rule: string
+  title: string
+  deepLink: string
+}
+
+export interface BalancesOut {
+  personId: string
+  today: string
+  pto: PtoBalanceOut
+  sick: SickYearOut[]
+  rules: RuleRefOut[]
+}
+
 export type BudgetBannerOutKind = (typeof BudgetBannerOutKind)[keyof typeof BudgetBannerOutKind]
 
 export const BudgetBannerOutKind = {
@@ -63,6 +108,204 @@ export interface BudgetOut {
   banner: BudgetBannerOut | null
 }
 
+export interface HolidayOut {
+  day: string
+  name: string
+}
+
+export interface EarliestStart {
+  pto: string
+  sick: string
+}
+
+/**
+ * The date picker's marks for the signed-in person.
+ */
+export interface CalendarOut {
+  scheduledWeekdays: number[]
+  dayMinutes: number
+  dayLabel: string
+  holidays: HolidayOut[]
+  earliestStart: EarliestStart
+  latestEnd: string
+  sickLookbackDays: number
+  halfDayMinutes: number
+  halfDayLabel: string
+}
+
+export type CancelCardKind = (typeof CancelCardKind)[keyof typeof CancelCardKind]
+
+export const CancelCardKind = {
+  cancel: 'cancel',
+} as const
+
+export type CancelCardStatus = (typeof CancelCardStatus)[keyof typeof CancelCardStatus]
+
+export const CancelCardStatus = {
+  pending: 'pending',
+  approved: 'approved',
+  recorded: 'recorded',
+} as const
+
+export type LeaveTypeName = (typeof LeaveTypeName)[keyof typeof LeaveTypeName]
+
+export const LeaveTypeName = {
+  pto: 'pto',
+  sick: 'sick',
+} as const
+
+/**
+ * A card to cancel a request of the person's own.
+ */
+export interface CancelCard {
+  kind: CancelCardKind
+  type: LeaveTypeName
+  startDate: string
+  endDate: string
+  partialMinutes: number | null
+  status: CancelCardStatus
+  amountMinutes: number
+  amountLabel: string
+  returnsMinutes: number | null
+  returnsLabel: string | null
+  availableAfterMinutes: number | null
+  availableAfterLabel: string | null
+  rules: RuleRefOut[]
+}
+
+export type CanceledReason = (typeof CanceledReason)[keyof typeof CanceledReason]
+
+export const CanceledReason = {
+  dismissed: 'dismissed',
+  replaced: 'replaced',
+  'turn-incomplete': 'turn-incomplete',
+} as const
+
+export type RequestCardKind = (typeof RequestCardKind)[keyof typeof RequestCardKind]
+
+export const RequestCardKind = {
+  request: 'request',
+} as const
+
+export interface SkippedDay {
+  day: string
+  reason: string
+}
+
+export interface DrawOut {
+  year: number | null
+  amountMinutes: number
+  amountLabel: string
+  availableBeforeMinutes: number
+  availableBeforeLabel: string
+  availableAfterMinutes: number
+  availableAfterLabel: string
+}
+
+export interface NameOut {
+  name: string
+}
+
+/**
+ * A card to book PTO or record sick time.
+ */
+export interface RequestCard {
+  kind: RequestCardKind
+  type: LeaveTypeName
+  startDate: string
+  endDate: string
+  partialMinutes: number | null
+  countedDays: string[]
+  skippedDays: SkippedDay[]
+  amountMinutes: number
+  amountLabel: string
+  draws: DrawOut[]
+  warnings: string[]
+  approver: NameOut | null
+  rules: RuleRefOut[]
+}
+
+export type DecideCardKind = (typeof DecideCardKind)[keyof typeof DecideCardKind]
+
+export const DecideCardKind = {
+  decide: 'decide',
+} as const
+
+export interface PersonOut {
+  id: string
+  name: string
+  title: string
+}
+
+export interface CoveragePerson {
+  id: string
+  name: string
+}
+
+export interface CoverageDayOut {
+  date: string
+  type: LeaveTypeName
+  partialMinutes: number | null
+}
+
+/**
+ * One colleague who is off on some of the request's days. Plain context, never a verdict.
+ */
+export interface CoverageOut {
+  person: CoveragePerson
+  days: CoverageDayOut[]
+}
+
+export type DecideCardDecision = (typeof DecideCardDecision)[keyof typeof DecideCardDecision]
+
+export const DecideCardDecision = {
+  approve: 'approve',
+  deny: 'deny',
+} as const
+
+/**
+ * A card to approve or deny a request, for its person's direct manager.
+ */
+export interface DecideCard {
+  kind: DecideCardKind
+  requester: PersonOut
+  type: LeaveTypeName
+  startDate: string
+  endDate: string
+  partialMinutes: number | null
+  amountMinutes: number
+  amountLabel: string
+  availableAfterMinutes: number | null
+  availableAfterLabel: string | null
+  coverage: CoverageOut[]
+  decision: DecideCardDecision
+  rules: RuleRefOut[]
+}
+
+export type Card = RequestCard | DecideCard | CancelCard
+
+export interface ProblemOut {
+  code: string
+  text: string
+}
+
+/**
+ * The engine's answer for a possible request. It is a preview: nothing was written, and it is
+ * a 200 even when the request has problems.
+ */
+export interface CheckOut {
+  ok: boolean
+  problems: ProblemOut[]
+  warnings: string[]
+  countedDays: string[]
+  skippedDays: SkippedDay[]
+  overlappingDays: string[]
+  amountMinutes: number | null
+  amountLabel: string | null
+  draws: DrawOut[]
+  rules: RuleRefOut[]
+}
+
 /**
  * A citation as the `citation` event sent it.
  */
@@ -77,6 +320,14 @@ export interface CitationOut {
   lastUpdated: string
   deepLink: string
   citedText: string
+}
+
+/**
+ * The body of a confirm. A denial's note is the only thing the client sends: the proposal's
+ * action, payload, and person are the server's own, so any other field is a 422.
+ */
+export interface ConfirmIn {
+  note?: string | null
 }
 
 export type TurnOutStatus = (typeof TurnOutStatus)[keyof typeof TurnOutStatus]
@@ -157,6 +408,46 @@ export interface FeedbackOut {
   reason?: string | null
 }
 
+export type ProposalAction = (typeof ProposalAction)[keyof typeof ProposalAction]
+
+export const ProposalAction = {
+  timeoffrequest: 'timeoff.request',
+  timeoffdecide: 'timeoff.decide',
+  timeoffcancel: 'timeoff.cancel',
+} as const
+
+export type ProposalStatus = (typeof ProposalStatus)[keyof typeof ProposalStatus]
+
+export const ProposalStatus = {
+  pending: 'pending',
+  executed: 'executed',
+  failed: 'failed',
+  canceled: 'canceled',
+  expired: 'expired',
+} as const
+
+/**
+ * Why a confirmed proposal didn't go through: the engine's or the service's code, and its one
+ * fixed sentence. `dates` is the days that clash, for `overlaps` only.
+ */
+export interface FailureOut {
+  code: string
+  text: string
+  dates?: string[] | null
+}
+
+export interface ProposalOut {
+  id: string
+  action: ProposalAction
+  status: ProposalStatus
+  canceledReason: CanceledReason | null
+  expiresAt: string
+  card: Card
+  failure: FailureOut | null
+  turnRunning: boolean
+  deniedNote?: string | null
+}
+
 export interface TurnOut {
   id: string
   question: string
@@ -171,6 +462,7 @@ export interface TurnOut {
   toolCalls: ToolCallOut[]
   sections: SectionOut[]
   feedback: FeedbackOut | null
+  proposals: ProposalOut[]
   startedAt: string
   endedAt: string | null
 }
@@ -184,6 +476,26 @@ export interface ConversationOut {
   longHistory: boolean
   historyTooLong: boolean
   outdated: boolean
+}
+
+/**
+ * Who approved or denied a request: their id too, so a page can tell its own decisions.
+ */
+export interface DeciderOut {
+  id: string
+  name: string
+}
+
+export type DecisionBodyDecision = (typeof DecisionBodyDecision)[keyof typeof DecisionBodyDecision]
+
+export const DecisionBodyDecision = {
+  approve: 'approve',
+  deny: 'deny',
+} as const
+
+export interface DecisionBody {
+  decision: DecisionBodyDecision
+  note?: string | null
 }
 
 export interface DepartmentCount {
@@ -417,6 +729,16 @@ export interface PersonaChoice {
   persona: PersonaKey
 }
 
+/**
+ * The body of a check and of a request: type, dates, and a partial amount for a single day.
+ */
+export interface PossibleRequest {
+  type: LeaveTypeName
+  startDate: string
+  endDate: string
+  partialMinutes?: number | null
+}
+
 export interface PrivateDetails {
   personalEmail: string
   phone: string
@@ -435,6 +757,52 @@ export interface Problem {
   detail?: string | null
   requestId?: string | null
   errors?: FieldError[] | null
+  currentStatus?: string | null
+}
+
+export type RequestOutStatus = (typeof RequestOutStatus)[keyof typeof RequestOutStatus]
+
+export const RequestOutStatus = {
+  pending: 'pending',
+  approved: 'approved',
+  denied: 'denied',
+  recorded: 'recorded',
+  canceled: 'canceled',
+} as const
+
+export type RequestOutCreatedVia = (typeof RequestOutCreatedVia)[keyof typeof RequestOutCreatedVia]
+
+export const RequestOutCreatedVia = {
+  ui: 'ui',
+  assistant: 'assistant',
+} as const
+
+export interface RequestOut {
+  id: string
+  person: PersonOut
+  type: LeaveTypeName
+  startDate: string
+  endDate: string
+  partialMinutes: number | null
+  amountMinutes: number
+  amountLabel: string
+  status: RequestOutStatus
+  createdAt: string
+  createdVia: RequestOutCreatedVia
+  decidedBy: DeciderOut | null
+  decidedAt: string | null
+  decisionNote: string | null
+  canceledAt: string | null
+  availableAfterMinutes?: number | null
+  availableAfterLabel?: string | null
+  coverage?: CoverageOut[] | null
+  canCancel: boolean
+}
+
+export interface RequestList {
+  items: RequestOut[]
+  fromDate: string
+  toDate: string
 }
 
 export interface TenantInfo {
@@ -507,6 +875,15 @@ export interface SectionDetail {
   next: SectionLink | null
 }
 
+export interface SummaryOut {
+  ptoAvailableMinutes: number
+  ptoAvailableLabel: string
+  pendingCount: number
+  approver: NameOut | null
+  waitingCount: number | null
+  today: string
+}
+
 export interface TurnIn {
   /** @maxLength 20000 */
   question: string
@@ -537,6 +914,40 @@ export type SearchHandbookParams = {
    * @maxLength 100
    */
   q: string
+}
+
+export type GetTimeOffBalancesParams = {
+  person?: string | null
+}
+
+export type ListTimeOffRequestsParams = {
+  scope?: ListTimeOffRequestsScope
+  /**
+   * First day of the window. For `decided` it is the first day a decision was made, by the caller's calendar (default: 90 days ago). For the other scopes it is the first day the leave covers (default: 30 days ago). Ignored for `waiting`.
+   */
+  from?: string | null
+  /**
+   * Last day of the window, inclusive. For `decided` it is the last day a decision was made (default: today). For the other scopes it is the last day the leave covers (default: 120 days ahead). Ignored for `waiting`.
+   */
+  to?: string | null
+}
+
+export type ListTimeOffRequestsScope =
+  (typeof ListTimeOffRequestsScope)[keyof typeof ListTimeOffRequestsScope]
+
+export const ListTimeOffRequestsScope = {
+  mine: 'mine',
+  team: 'team',
+  waiting: 'waiting',
+  decided: 'decided',
+} as const
+
+export type GetTimeOffCalendarParams = {
+  to: string
+  /**
+   * First day of the holidays to list. Without it, the earliest day sick time may start, which is as far back as the form's date picker reaches.
+   */
+  from?: string | null
 }
 
 type SecondParameter<T extends (...args: never) => unknown> = Parameters<T>[1]
@@ -2593,6 +3004,196 @@ export const useGiveFeedback = <TError = ErrorType<Problem>, TContext = unknown>
   return useMutation(getGiveFeedbackMutationOptions(options), queryClient)
 }
 
+export const getConfirmProposalUrl = (proposalId: string) => {
+  return `/api/v1/assistant/proposals/${proposalId}/confirm`
+}
+
+/**
+ * Nothing but the denial's note comes from the client. A proposal the engine refuses at
+ * confirm time is a 200 with status `failed` and the reason: the confirm itself worked.
+ * @summary Confirm one of the person's own proposals: the server runs its stored payload, once
+ */
+export const confirmProposal = async (
+  proposalId: string,
+  confirmInNull?: ConfirmIn | null,
+  options?: Parameters<typeof apiFetch>[1],
+): Promise<ProposalOut> => {
+  const getHeaders = (
+    h?: NonNullable<RequestInit['headers']>,
+  ): Record<string, string | readonly string[]> => {
+    if (!h) return {}
+    if (h instanceof Headers) return Object.fromEntries(h.entries())
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(
+          h as Iterable<Iterable<string>>,
+          (entry) => Array.from(entry) as [string, string],
+        ),
+      )
+    }
+    const headers: Record<string, string | readonly string[]> = {}
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value
+    }
+    return headers
+  }
+  return apiFetch<ProposalOut>(getConfirmProposalUrl(proposalId), {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(confirmInNull),
+  })
+}
+
+export const getConfirmProposalMutationKey = () => ['confirmProposal'] as const
+
+export const getConfirmProposalMutationOptions = <
+  TError = ErrorType<Problem>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof confirmProposal>>,
+    TError,
+    ConfirmProposalMutationVariables,
+    TContext
+  >
+  request?: SecondParameter<typeof apiFetch>
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof confirmProposal>>,
+  TError,
+  ConfirmProposalMutationVariables,
+  TContext
+> => {
+  const mutationKey = getConfirmProposalMutationKey()
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined }
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof confirmProposal>>,
+    ConfirmProposalMutationVariables
+  > = (props) => {
+    const { proposalId, data } = props ?? {}
+
+    return confirmProposal(proposalId, data, requestOptions)
+  }
+
+  return { mutationFn, ...mutationOptions }
+}
+
+export type ConfirmProposalMutationResult = NonNullable<Awaited<ReturnType<typeof confirmProposal>>>
+export type ConfirmProposalMutationBody = ConfirmIn | null | undefined
+export type ConfirmProposalMutationError = ErrorType<Problem>
+export type ConfirmProposalMutationVariables = { proposalId: string; data?: ConfirmIn | null }
+
+/**
+ * @summary Confirm one of the person's own proposals: the server runs its stored payload, once
+ */
+export const useConfirmProposal = <TError = ErrorType<Problem>, TContext = unknown>(
+  options?: {
+    mutation?: UseMutationOptions<
+      Awaited<ReturnType<typeof confirmProposal>>,
+      TError,
+      ConfirmProposalMutationVariables,
+      TContext
+    >
+    request?: SecondParameter<typeof apiFetch>
+  },
+  queryClient?: QueryClient,
+): UseMutationResult<
+  Awaited<ReturnType<typeof confirmProposal>>,
+  TError,
+  ConfirmProposalMutationVariables,
+  TContext
+> => {
+  return useMutation(getConfirmProposalMutationOptions(options), queryClient)
+}
+
+export const getCancelProposalUrl = (proposalId: string) => {
+  return `/api/v1/assistant/proposals/${proposalId}/cancel`
+}
+
+/**
+ * @summary Dismiss one of the person's own proposals
+ */
+export const cancelProposal = async (
+  proposalId: string,
+  options?: Parameters<typeof apiFetch>[1],
+): Promise<ProposalOut> => {
+  return apiFetch<ProposalOut>(getCancelProposalUrl(proposalId), {
+    ...options,
+    method: 'POST',
+  })
+}
+
+export const getCancelProposalMutationKey = () => ['cancelProposal'] as const
+
+export const getCancelProposalMutationOptions = <
+  TError = ErrorType<Problem>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof cancelProposal>>,
+    TError,
+    CancelProposalMutationVariables,
+    TContext
+  >
+  request?: SecondParameter<typeof apiFetch>
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof cancelProposal>>,
+  TError,
+  CancelProposalMutationVariables,
+  TContext
+> => {
+  const mutationKey = getCancelProposalMutationKey()
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined }
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof cancelProposal>>,
+    CancelProposalMutationVariables
+  > = (props) => {
+    const { proposalId } = props ?? {}
+
+    return cancelProposal(proposalId, requestOptions)
+  }
+
+  return { mutationFn, ...mutationOptions }
+}
+
+export type CancelProposalMutationResult = NonNullable<Awaited<ReturnType<typeof cancelProposal>>>
+
+export type CancelProposalMutationError = ErrorType<Problem>
+export type CancelProposalMutationVariables = { proposalId: string }
+
+/**
+ * @summary Dismiss one of the person's own proposals
+ */
+export const useCancelProposal = <TError = ErrorType<Problem>, TContext = unknown>(
+  options?: {
+    mutation?: UseMutationOptions<
+      Awaited<ReturnType<typeof cancelProposal>>,
+      TError,
+      CancelProposalMutationVariables,
+      TContext
+    >
+    request?: SecondParameter<typeof apiFetch>
+  },
+  queryClient?: QueryClient,
+): UseMutationResult<
+  Awaited<ReturnType<typeof cancelProposal>>,
+  TError,
+  CancelProposalMutationVariables,
+  TContext
+> => {
+  return useMutation(getCancelProposalMutationOptions(options), queryClient)
+}
+
 export const getStartTurnUrl = (conversationId: string) => {
   return `/api/v1/assistant/conversations/${conversationId}/turns`
 }
@@ -2696,4 +3297,1062 @@ export const useStartTurn = <TError = ErrorType<Problem>, TContext = unknown>(
   TContext
 > => {
   return useMutation(getStartTurnMutationOptions(options), queryClient)
+}
+
+export const getGetTimeOffBalancesUrl = (params?: GetTimeOffBalancesParams) => {
+  const normalizedParams = new URLSearchParams()
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  })
+
+  const stringifiedParams = normalizedParams.toString()
+
+  return stringifiedParams.length > 0
+    ? `/api/v1/time-off/balances?${stringifiedParams}`
+    : `/api/v1/time-off/balances`
+}
+
+/**
+ * @summary PTO and sick balances for yourself or a person you may read
+ */
+export const getTimeOffBalances = async (
+  params?: GetTimeOffBalancesParams,
+  options?: Parameters<typeof apiFetch>[1],
+): Promise<BalancesOut> => {
+  return apiFetch<BalancesOut>(getGetTimeOffBalancesUrl(params), {
+    ...options,
+    method: 'GET',
+  })
+}
+
+export const getGetTimeOffBalancesQueryKey = (params?: GetTimeOffBalancesParams) => {
+  return [`/api/v1/time-off/balances`, ...(params ? [params] : [])] as const
+}
+
+export const getGetTimeOffBalancesQueryOptions = <
+  TData = Awaited<ReturnType<typeof getTimeOffBalances>>,
+  TError = ErrorType<Problem>,
+>(
+  params?: GetTimeOffBalancesParams,
+  options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof getTimeOffBalances>>, TError, TData>>
+    request?: SecondParameter<typeof apiFetch>
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {}
+
+  const queryKey = queryOptions?.queryKey ?? getGetTimeOffBalancesQueryKey(params)
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getTimeOffBalances>>> = ({ signal }) =>
+    getTimeOffBalances(params, { signal, ...requestOptions })
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getTimeOffBalances>>,
+    TError,
+    TData
+  > & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type GetTimeOffBalancesQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getTimeOffBalances>>
+>
+export type GetTimeOffBalancesQueryError = ErrorType<Problem>
+
+export function useGetTimeOffBalances<
+  TData = Awaited<ReturnType<typeof getTimeOffBalances>>,
+  TError = ErrorType<Problem>,
+>(
+  params: undefined | GetTimeOffBalancesParams,
+  options: {
+    query: Partial<UseQueryOptions<Awaited<ReturnType<typeof getTimeOffBalances>>, TError, TData>> &
+      Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getTimeOffBalances>>,
+          TError,
+          Awaited<ReturnType<typeof getTimeOffBalances>>
+        >,
+        'initialData'
+      >
+    request?: SecondParameter<typeof apiFetch>
+  },
+  queryClient?: QueryClient,
+): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetTimeOffBalances<
+  TData = Awaited<ReturnType<typeof getTimeOffBalances>>,
+  TError = ErrorType<Problem>,
+>(
+  params?: GetTimeOffBalancesParams,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof getTimeOffBalances>>, TError, TData>
+    > &
+      Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getTimeOffBalances>>,
+          TError,
+          Awaited<ReturnType<typeof getTimeOffBalances>>
+        >,
+        'initialData'
+      >
+    request?: SecondParameter<typeof apiFetch>
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetTimeOffBalances<
+  TData = Awaited<ReturnType<typeof getTimeOffBalances>>,
+  TError = ErrorType<Problem>,
+>(
+  params?: GetTimeOffBalancesParams,
+  options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof getTimeOffBalances>>, TError, TData>>
+    request?: SecondParameter<typeof apiFetch>
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary PTO and sick balances for yourself or a person you may read
+ */
+
+export function useGetTimeOffBalances<
+  TData = Awaited<ReturnType<typeof getTimeOffBalances>>,
+  TError = ErrorType<Problem>,
+>(
+  params?: GetTimeOffBalancesParams,
+  options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof getTimeOffBalances>>, TError, TData>>
+    request?: SecondParameter<typeof apiFetch>
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+  const queryOptions = getGetTimeOffBalancesQueryOptions(params, options)
+
+  const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
+    queryKey: DataTag<QueryKey, TData, TError>
+  }
+
+  return withQueryKey(query, queryOptions.queryKey)
+}
+
+export const getListTimeOffRequestsUrl = (params?: ListTimeOffRequestsParams) => {
+  const normalizedParams = new URLSearchParams()
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  })
+
+  const stringifiedParams = normalizedParams.toString()
+
+  return stringifiedParams.length > 0
+    ? `/api/v1/time-off/requests?${stringifiedParams}`
+    : `/api/v1/time-off/requests`
+}
+
+/**
+ * @summary Time-off requests: your own, your team, what waits for you, or what you decided
+ */
+export const listTimeOffRequests = async (
+  params?: ListTimeOffRequestsParams,
+  options?: Parameters<typeof apiFetch>[1],
+): Promise<RequestList> => {
+  return apiFetch<RequestList>(getListTimeOffRequestsUrl(params), {
+    ...options,
+    method: 'GET',
+  })
+}
+
+export const getListTimeOffRequestsQueryKey = (params?: ListTimeOffRequestsParams) => {
+  return [`/api/v1/time-off/requests`, ...(params ? [params] : [])] as const
+}
+
+export const getListTimeOffRequestsQueryOptions = <
+  TData = Awaited<ReturnType<typeof listTimeOffRequests>>,
+  TError = ErrorType<Problem>,
+>(
+  params?: ListTimeOffRequestsParams,
+  options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof listTimeOffRequests>>, TError, TData>>
+    request?: SecondParameter<typeof apiFetch>
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {}
+
+  const queryKey = queryOptions?.queryKey ?? getListTimeOffRequestsQueryKey(params)
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof listTimeOffRequests>>> = ({ signal }) =>
+    listTimeOffRequests(params, { signal, ...requestOptions })
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof listTimeOffRequests>>,
+    TError,
+    TData
+  > & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type ListTimeOffRequestsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listTimeOffRequests>>
+>
+export type ListTimeOffRequestsQueryError = ErrorType<Problem>
+
+export function useListTimeOffRequests<
+  TData = Awaited<ReturnType<typeof listTimeOffRequests>>,
+  TError = ErrorType<Problem>,
+>(
+  params: undefined | ListTimeOffRequestsParams,
+  options: {
+    query: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof listTimeOffRequests>>, TError, TData>
+    > &
+      Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof listTimeOffRequests>>,
+          TError,
+          Awaited<ReturnType<typeof listTimeOffRequests>>
+        >,
+        'initialData'
+      >
+    request?: SecondParameter<typeof apiFetch>
+  },
+  queryClient?: QueryClient,
+): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useListTimeOffRequests<
+  TData = Awaited<ReturnType<typeof listTimeOffRequests>>,
+  TError = ErrorType<Problem>,
+>(
+  params?: ListTimeOffRequestsParams,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof listTimeOffRequests>>, TError, TData>
+    > &
+      Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof listTimeOffRequests>>,
+          TError,
+          Awaited<ReturnType<typeof listTimeOffRequests>>
+        >,
+        'initialData'
+      >
+    request?: SecondParameter<typeof apiFetch>
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useListTimeOffRequests<
+  TData = Awaited<ReturnType<typeof listTimeOffRequests>>,
+  TError = ErrorType<Problem>,
+>(
+  params?: ListTimeOffRequestsParams,
+  options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof listTimeOffRequests>>, TError, TData>>
+    request?: SecondParameter<typeof apiFetch>
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary Time-off requests: your own, your team, what waits for you, or what you decided
+ */
+
+export function useListTimeOffRequests<
+  TData = Awaited<ReturnType<typeof listTimeOffRequests>>,
+  TError = ErrorType<Problem>,
+>(
+  params?: ListTimeOffRequestsParams,
+  options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof listTimeOffRequests>>, TError, TData>>
+    request?: SecondParameter<typeof apiFetch>
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+  const queryOptions = getListTimeOffRequestsQueryOptions(params, options)
+
+  const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
+    queryKey: DataTag<QueryKey, TData, TError>
+  }
+
+  return withQueryKey(query, queryOptions.queryKey)
+}
+
+export const getCreateTimeOffRequestUrl = () => {
+  return `/api/v1/time-off/requests`
+}
+
+/**
+ * @summary Make a time-off request of your own: PTO waits for a decision, sick time is recorded
+ */
+export const createTimeOffRequest = async (
+  possibleRequest: PossibleRequest,
+  options?: Parameters<typeof apiFetch>[1],
+): Promise<RequestOut> => {
+  const getHeaders = (
+    h?: NonNullable<RequestInit['headers']>,
+  ): Record<string, string | readonly string[]> => {
+    if (!h) return {}
+    if (h instanceof Headers) return Object.fromEntries(h.entries())
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(
+          h as Iterable<Iterable<string>>,
+          (entry) => Array.from(entry) as [string, string],
+        ),
+      )
+    }
+    const headers: Record<string, string | readonly string[]> = {}
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value
+    }
+    return headers
+  }
+  return apiFetch<RequestOut>(getCreateTimeOffRequestUrl(), {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(possibleRequest),
+  })
+}
+
+export const getCreateTimeOffRequestMutationKey = () => ['createTimeOffRequest'] as const
+
+export const getCreateTimeOffRequestMutationOptions = <
+  TError = ErrorType<Problem>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createTimeOffRequest>>,
+    TError,
+    CreateTimeOffRequestMutationVariables,
+    TContext
+  >
+  request?: SecondParameter<typeof apiFetch>
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof createTimeOffRequest>>,
+  TError,
+  CreateTimeOffRequestMutationVariables,
+  TContext
+> => {
+  const mutationKey = getCreateTimeOffRequestMutationKey()
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined }
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof createTimeOffRequest>>,
+    CreateTimeOffRequestMutationVariables
+  > = (props) => {
+    const { data } = props ?? {}
+
+    return createTimeOffRequest(data, requestOptions)
+  }
+
+  return { mutationFn, ...mutationOptions }
+}
+
+export type CreateTimeOffRequestMutationResult = NonNullable<
+  Awaited<ReturnType<typeof createTimeOffRequest>>
+>
+export type CreateTimeOffRequestMutationBody = PossibleRequest
+export type CreateTimeOffRequestMutationError = ErrorType<Problem>
+export type CreateTimeOffRequestMutationVariables = { data: PossibleRequest }
+
+/**
+ * @summary Make a time-off request of your own: PTO waits for a decision, sick time is recorded
+ */
+export const useCreateTimeOffRequest = <TError = ErrorType<Problem>, TContext = unknown>(
+  options?: {
+    mutation?: UseMutationOptions<
+      Awaited<ReturnType<typeof createTimeOffRequest>>,
+      TError,
+      CreateTimeOffRequestMutationVariables,
+      TContext
+    >
+    request?: SecondParameter<typeof apiFetch>
+  },
+  queryClient?: QueryClient,
+): UseMutationResult<
+  Awaited<ReturnType<typeof createTimeOffRequest>>,
+  TError,
+  CreateTimeOffRequestMutationVariables,
+  TContext
+> => {
+  return useMutation(getCreateTimeOffRequestMutationOptions(options), queryClient)
+}
+
+export const getGetTimeOffRequestUrl = (requestId: string) => {
+  return `/api/v1/time-off/requests/${requestId}`
+}
+
+/**
+ * @summary One request, for a person who may read it
+ */
+export const getTimeOffRequest = async (
+  requestId: string,
+  options?: Parameters<typeof apiFetch>[1],
+): Promise<RequestOut> => {
+  return apiFetch<RequestOut>(getGetTimeOffRequestUrl(requestId), {
+    ...options,
+    method: 'GET',
+  })
+}
+
+export const getGetTimeOffRequestQueryKey = (requestId: string) => {
+  return [`/api/v1/time-off/requests/${requestId}`] as const
+}
+
+export const getGetTimeOffRequestQueryOptions = <
+  TData = Awaited<ReturnType<typeof getTimeOffRequest>>,
+  TError = ErrorType<Problem>,
+>(
+  requestId: string,
+  options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof getTimeOffRequest>>, TError, TData>>
+    request?: SecondParameter<typeof apiFetch>
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {}
+
+  const queryKey = queryOptions?.queryKey ?? getGetTimeOffRequestQueryKey(requestId)
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getTimeOffRequest>>> = ({ signal }) =>
+    getTimeOffRequest(requestId, { signal, ...requestOptions })
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: requestId !== null && requestId !== undefined,
+    ...queryOptions,
+  } as UseQueryOptions<Awaited<ReturnType<typeof getTimeOffRequest>>, TError, TData> & {
+    queryKey: DataTag<QueryKey, TData, TError>
+  }
+}
+
+export type GetTimeOffRequestQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getTimeOffRequest>>
+>
+export type GetTimeOffRequestQueryError = ErrorType<Problem>
+
+export function useGetTimeOffRequest<
+  TData = Awaited<ReturnType<typeof getTimeOffRequest>>,
+  TError = ErrorType<Problem>,
+>(
+  requestId: string,
+  options: {
+    query: Partial<UseQueryOptions<Awaited<ReturnType<typeof getTimeOffRequest>>, TError, TData>> &
+      Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getTimeOffRequest>>,
+          TError,
+          Awaited<ReturnType<typeof getTimeOffRequest>>
+        >,
+        'initialData'
+      >
+    request?: SecondParameter<typeof apiFetch>
+  },
+  queryClient?: QueryClient,
+): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetTimeOffRequest<
+  TData = Awaited<ReturnType<typeof getTimeOffRequest>>,
+  TError = ErrorType<Problem>,
+>(
+  requestId: string,
+  options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof getTimeOffRequest>>, TError, TData>> &
+      Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getTimeOffRequest>>,
+          TError,
+          Awaited<ReturnType<typeof getTimeOffRequest>>
+        >,
+        'initialData'
+      >
+    request?: SecondParameter<typeof apiFetch>
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetTimeOffRequest<
+  TData = Awaited<ReturnType<typeof getTimeOffRequest>>,
+  TError = ErrorType<Problem>,
+>(
+  requestId: string,
+  options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof getTimeOffRequest>>, TError, TData>>
+    request?: SecondParameter<typeof apiFetch>
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary One request, for a person who may read it
+ */
+
+export function useGetTimeOffRequest<
+  TData = Awaited<ReturnType<typeof getTimeOffRequest>>,
+  TError = ErrorType<Problem>,
+>(
+  requestId: string,
+  options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof getTimeOffRequest>>, TError, TData>>
+    request?: SecondParameter<typeof apiFetch>
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+  const queryOptions = getGetTimeOffRequestQueryOptions(requestId, options)
+
+  const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
+    queryKey: DataTag<QueryKey, TData, TError>
+  }
+
+  return withQueryKey(query, queryOptions.queryKey)
+}
+
+export const getGetTimeOffCalendarUrl = (params: GetTimeOffCalendarParams) => {
+  const normalizedParams = new URLSearchParams()
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  })
+
+  const stringifiedParams = normalizedParams.toString()
+
+  return stringifiedParams.length > 0
+    ? `/api/v1/time-off/calendar?${stringifiedParams}`
+    : `/api/v1/time-off/calendar`
+}
+
+/**
+ * @summary The date picker's marks for you: your weekdays, holidays, and the earliest days
+ */
+export const getTimeOffCalendar = async (
+  params: GetTimeOffCalendarParams,
+  options?: Parameters<typeof apiFetch>[1],
+): Promise<CalendarOut> => {
+  return apiFetch<CalendarOut>(getGetTimeOffCalendarUrl(params), {
+    ...options,
+    method: 'GET',
+  })
+}
+
+export const getGetTimeOffCalendarQueryKey = (params?: GetTimeOffCalendarParams) => {
+  return [`/api/v1/time-off/calendar`, ...(params ? [params] : [])] as const
+}
+
+export const getGetTimeOffCalendarQueryOptions = <
+  TData = Awaited<ReturnType<typeof getTimeOffCalendar>>,
+  TError = ErrorType<Problem>,
+>(
+  params: GetTimeOffCalendarParams,
+  options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof getTimeOffCalendar>>, TError, TData>>
+    request?: SecondParameter<typeof apiFetch>
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {}
+
+  const queryKey = queryOptions?.queryKey ?? getGetTimeOffCalendarQueryKey(params)
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getTimeOffCalendar>>> = ({ signal }) =>
+    getTimeOffCalendar(params, { signal, ...requestOptions })
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getTimeOffCalendar>>,
+    TError,
+    TData
+  > & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type GetTimeOffCalendarQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getTimeOffCalendar>>
+>
+export type GetTimeOffCalendarQueryError = ErrorType<Problem>
+
+export function useGetTimeOffCalendar<
+  TData = Awaited<ReturnType<typeof getTimeOffCalendar>>,
+  TError = ErrorType<Problem>,
+>(
+  params: GetTimeOffCalendarParams,
+  options: {
+    query: Partial<UseQueryOptions<Awaited<ReturnType<typeof getTimeOffCalendar>>, TError, TData>> &
+      Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getTimeOffCalendar>>,
+          TError,
+          Awaited<ReturnType<typeof getTimeOffCalendar>>
+        >,
+        'initialData'
+      >
+    request?: SecondParameter<typeof apiFetch>
+  },
+  queryClient?: QueryClient,
+): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetTimeOffCalendar<
+  TData = Awaited<ReturnType<typeof getTimeOffCalendar>>,
+  TError = ErrorType<Problem>,
+>(
+  params: GetTimeOffCalendarParams,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof getTimeOffCalendar>>, TError, TData>
+    > &
+      Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getTimeOffCalendar>>,
+          TError,
+          Awaited<ReturnType<typeof getTimeOffCalendar>>
+        >,
+        'initialData'
+      >
+    request?: SecondParameter<typeof apiFetch>
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetTimeOffCalendar<
+  TData = Awaited<ReturnType<typeof getTimeOffCalendar>>,
+  TError = ErrorType<Problem>,
+>(
+  params: GetTimeOffCalendarParams,
+  options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof getTimeOffCalendar>>, TError, TData>>
+    request?: SecondParameter<typeof apiFetch>
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary The date picker's marks for you: your weekdays, holidays, and the earliest days
+ */
+
+export function useGetTimeOffCalendar<
+  TData = Awaited<ReturnType<typeof getTimeOffCalendar>>,
+  TError = ErrorType<Problem>,
+>(
+  params: GetTimeOffCalendarParams,
+  options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof getTimeOffCalendar>>, TError, TData>>
+    request?: SecondParameter<typeof apiFetch>
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+  const queryOptions = getGetTimeOffCalendarQueryOptions(params, options)
+
+  const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
+    queryKey: DataTag<QueryKey, TData, TError>
+  }
+
+  return withQueryKey(query, queryOptions.queryKey)
+}
+
+export const getCheckTimeOffRequestUrl = () => {
+  return `/api/v1/time-off/check`
+}
+
+/**
+ * @summary What a possible request of yours would count, with nothing written
+ */
+export const checkTimeOffRequest = async (
+  possibleRequest: PossibleRequest,
+  options?: Parameters<typeof apiFetch>[1],
+): Promise<CheckOut> => {
+  const getHeaders = (
+    h?: NonNullable<RequestInit['headers']>,
+  ): Record<string, string | readonly string[]> => {
+    if (!h) return {}
+    if (h instanceof Headers) return Object.fromEntries(h.entries())
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(
+          h as Iterable<Iterable<string>>,
+          (entry) => Array.from(entry) as [string, string],
+        ),
+      )
+    }
+    const headers: Record<string, string | readonly string[]> = {}
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value
+    }
+    return headers
+  }
+  return apiFetch<CheckOut>(getCheckTimeOffRequestUrl(), {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(possibleRequest),
+  })
+}
+
+export const getCheckTimeOffRequestMutationKey = () => ['checkTimeOffRequest'] as const
+
+export const getCheckTimeOffRequestMutationOptions = <
+  TError = ErrorType<Problem>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof checkTimeOffRequest>>,
+    TError,
+    CheckTimeOffRequestMutationVariables,
+    TContext
+  >
+  request?: SecondParameter<typeof apiFetch>
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof checkTimeOffRequest>>,
+  TError,
+  CheckTimeOffRequestMutationVariables,
+  TContext
+> => {
+  const mutationKey = getCheckTimeOffRequestMutationKey()
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined }
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof checkTimeOffRequest>>,
+    CheckTimeOffRequestMutationVariables
+  > = (props) => {
+    const { data } = props ?? {}
+
+    return checkTimeOffRequest(data, requestOptions)
+  }
+
+  return { mutationFn, ...mutationOptions }
+}
+
+export type CheckTimeOffRequestMutationResult = NonNullable<
+  Awaited<ReturnType<typeof checkTimeOffRequest>>
+>
+export type CheckTimeOffRequestMutationBody = PossibleRequest
+export type CheckTimeOffRequestMutationError = ErrorType<Problem>
+export type CheckTimeOffRequestMutationVariables = { data: PossibleRequest }
+
+/**
+ * @summary What a possible request of yours would count, with nothing written
+ */
+export const useCheckTimeOffRequest = <TError = ErrorType<Problem>, TContext = unknown>(
+  options?: {
+    mutation?: UseMutationOptions<
+      Awaited<ReturnType<typeof checkTimeOffRequest>>,
+      TError,
+      CheckTimeOffRequestMutationVariables,
+      TContext
+    >
+    request?: SecondParameter<typeof apiFetch>
+  },
+  queryClient?: QueryClient,
+): UseMutationResult<
+  Awaited<ReturnType<typeof checkTimeOffRequest>>,
+  TError,
+  CheckTimeOffRequestMutationVariables,
+  TContext
+> => {
+  return useMutation(getCheckTimeOffRequestMutationOptions(options), queryClient)
+}
+
+export const getDecideTimeOffRequestUrl = (requestId: string) => {
+  return `/api/v1/time-off/requests/${requestId}/decision`
+}
+
+/**
+ * @summary Approve or deny a PTO request as the person's direct manager
+ */
+export const decideTimeOffRequest = async (
+  requestId: string,
+  decisionBody: DecisionBody,
+  options?: Parameters<typeof apiFetch>[1],
+): Promise<RequestOut> => {
+  const getHeaders = (
+    h?: NonNullable<RequestInit['headers']>,
+  ): Record<string, string | readonly string[]> => {
+    if (!h) return {}
+    if (h instanceof Headers) return Object.fromEntries(h.entries())
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(
+          h as Iterable<Iterable<string>>,
+          (entry) => Array.from(entry) as [string, string],
+        ),
+      )
+    }
+    const headers: Record<string, string | readonly string[]> = {}
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value
+    }
+    return headers
+  }
+  return apiFetch<RequestOut>(getDecideTimeOffRequestUrl(requestId), {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(decisionBody),
+  })
+}
+
+export const getDecideTimeOffRequestMutationKey = () => ['decideTimeOffRequest'] as const
+
+export const getDecideTimeOffRequestMutationOptions = <
+  TError = ErrorType<Problem>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof decideTimeOffRequest>>,
+    TError,
+    DecideTimeOffRequestMutationVariables,
+    TContext
+  >
+  request?: SecondParameter<typeof apiFetch>
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof decideTimeOffRequest>>,
+  TError,
+  DecideTimeOffRequestMutationVariables,
+  TContext
+> => {
+  const mutationKey = getDecideTimeOffRequestMutationKey()
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined }
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof decideTimeOffRequest>>,
+    DecideTimeOffRequestMutationVariables
+  > = (props) => {
+    const { requestId, data } = props ?? {}
+
+    return decideTimeOffRequest(requestId, data, requestOptions)
+  }
+
+  return { mutationFn, ...mutationOptions }
+}
+
+export type DecideTimeOffRequestMutationResult = NonNullable<
+  Awaited<ReturnType<typeof decideTimeOffRequest>>
+>
+export type DecideTimeOffRequestMutationBody = DecisionBody
+export type DecideTimeOffRequestMutationError = ErrorType<Problem>
+export type DecideTimeOffRequestMutationVariables = { requestId: string; data: DecisionBody }
+
+/**
+ * @summary Approve or deny a PTO request as the person's direct manager
+ */
+export const useDecideTimeOffRequest = <TError = ErrorType<Problem>, TContext = unknown>(
+  options?: {
+    mutation?: UseMutationOptions<
+      Awaited<ReturnType<typeof decideTimeOffRequest>>,
+      TError,
+      DecideTimeOffRequestMutationVariables,
+      TContext
+    >
+    request?: SecondParameter<typeof apiFetch>
+  },
+  queryClient?: QueryClient,
+): UseMutationResult<
+  Awaited<ReturnType<typeof decideTimeOffRequest>>,
+  TError,
+  DecideTimeOffRequestMutationVariables,
+  TContext
+> => {
+  return useMutation(getDecideTimeOffRequestMutationOptions(options), queryClient)
+}
+
+export const getCancelTimeOffRequestUrl = (requestId: string) => {
+  return `/api/v1/time-off/requests/${requestId}/cancel`
+}
+
+/**
+ * @summary Cancel your own request
+ */
+export const cancelTimeOffRequest = async (
+  requestId: string,
+  options?: Parameters<typeof apiFetch>[1],
+): Promise<RequestOut> => {
+  return apiFetch<RequestOut>(getCancelTimeOffRequestUrl(requestId), {
+    ...options,
+    method: 'POST',
+  })
+}
+
+export const getCancelTimeOffRequestMutationKey = () => ['cancelTimeOffRequest'] as const
+
+export const getCancelTimeOffRequestMutationOptions = <
+  TError = ErrorType<Problem>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof cancelTimeOffRequest>>,
+    TError,
+    CancelTimeOffRequestMutationVariables,
+    TContext
+  >
+  request?: SecondParameter<typeof apiFetch>
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof cancelTimeOffRequest>>,
+  TError,
+  CancelTimeOffRequestMutationVariables,
+  TContext
+> => {
+  const mutationKey = getCancelTimeOffRequestMutationKey()
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined }
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof cancelTimeOffRequest>>,
+    CancelTimeOffRequestMutationVariables
+  > = (props) => {
+    const { requestId } = props ?? {}
+
+    return cancelTimeOffRequest(requestId, requestOptions)
+  }
+
+  return { mutationFn, ...mutationOptions }
+}
+
+export type CancelTimeOffRequestMutationResult = NonNullable<
+  Awaited<ReturnType<typeof cancelTimeOffRequest>>
+>
+
+export type CancelTimeOffRequestMutationError = ErrorType<Problem>
+export type CancelTimeOffRequestMutationVariables = { requestId: string }
+
+/**
+ * @summary Cancel your own request
+ */
+export const useCancelTimeOffRequest = <TError = ErrorType<Problem>, TContext = unknown>(
+  options?: {
+    mutation?: UseMutationOptions<
+      Awaited<ReturnType<typeof cancelTimeOffRequest>>,
+      TError,
+      CancelTimeOffRequestMutationVariables,
+      TContext
+    >
+    request?: SecondParameter<typeof apiFetch>
+  },
+  queryClient?: QueryClient,
+): UseMutationResult<
+  Awaited<ReturnType<typeof cancelTimeOffRequest>>,
+  TError,
+  CancelTimeOffRequestMutationVariables,
+  TContext
+> => {
+  return useMutation(getCancelTimeOffRequestMutationOptions(options), queryClient)
+}
+
+export const getGetTimeOffSummaryUrl = () => {
+  return `/api/v1/time-off/summary`
+}
+
+/**
+ * @summary Your PTO available, your pending requests, your approver, and what waits for you
+ */
+export const getTimeOffSummary = async (
+  options?: Parameters<typeof apiFetch>[1],
+): Promise<SummaryOut> => {
+  return apiFetch<SummaryOut>(getGetTimeOffSummaryUrl(), {
+    ...options,
+    method: 'GET',
+  })
+}
+
+export const getGetTimeOffSummaryQueryKey = () => {
+  return [`/api/v1/time-off/summary`] as const
+}
+
+export const getGetTimeOffSummaryQueryOptions = <
+  TData = Awaited<ReturnType<typeof getTimeOffSummary>>,
+  TError = ErrorType<Problem>,
+>(options?: {
+  query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof getTimeOffSummary>>, TError, TData>>
+  request?: SecondParameter<typeof apiFetch>
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {}
+
+  const queryKey = queryOptions?.queryKey ?? getGetTimeOffSummaryQueryKey()
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getTimeOffSummary>>> = ({ signal }) =>
+    getTimeOffSummary({ signal, ...requestOptions })
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getTimeOffSummary>>,
+    TError,
+    TData
+  > & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type GetTimeOffSummaryQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getTimeOffSummary>>
+>
+export type GetTimeOffSummaryQueryError = ErrorType<Problem>
+
+export function useGetTimeOffSummary<
+  TData = Awaited<ReturnType<typeof getTimeOffSummary>>,
+  TError = ErrorType<Problem>,
+>(
+  options: {
+    query: Partial<UseQueryOptions<Awaited<ReturnType<typeof getTimeOffSummary>>, TError, TData>> &
+      Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getTimeOffSummary>>,
+          TError,
+          Awaited<ReturnType<typeof getTimeOffSummary>>
+        >,
+        'initialData'
+      >
+    request?: SecondParameter<typeof apiFetch>
+  },
+  queryClient?: QueryClient,
+): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetTimeOffSummary<
+  TData = Awaited<ReturnType<typeof getTimeOffSummary>>,
+  TError = ErrorType<Problem>,
+>(
+  options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof getTimeOffSummary>>, TError, TData>> &
+      Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getTimeOffSummary>>,
+          TError,
+          Awaited<ReturnType<typeof getTimeOffSummary>>
+        >,
+        'initialData'
+      >
+    request?: SecondParameter<typeof apiFetch>
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetTimeOffSummary<
+  TData = Awaited<ReturnType<typeof getTimeOffSummary>>,
+  TError = ErrorType<Problem>,
+>(
+  options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof getTimeOffSummary>>, TError, TData>>
+    request?: SecondParameter<typeof apiFetch>
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary Your PTO available, your pending requests, your approver, and what waits for you
+ */
+
+export function useGetTimeOffSummary<
+  TData = Awaited<ReturnType<typeof getTimeOffSummary>>,
+  TError = ErrorType<Problem>,
+>(
+  options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof getTimeOffSummary>>, TError, TData>>
+    request?: SecondParameter<typeof apiFetch>
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+  const queryOptions = getGetTimeOffSummaryQueryOptions(options)
+
+  const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
+    queryKey: DataTag<QueryKey, TData, TError>
+  }
+
+  return withQueryKey(query, queryOptions.queryKey)
 }

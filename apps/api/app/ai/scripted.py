@@ -15,6 +15,7 @@ import json
 import re
 from collections.abc import AsyncIterator, Sequence
 from dataclasses import dataclass
+from datetime import date, timedelta
 from pathlib import Path
 from typing import Any, Final
 
@@ -53,6 +54,16 @@ GUARD_BEHAVIORS: Final = (
     "slow_guard",
     "guard_failure",
 )
+# The behaviors that call the time-off tools (the real engine, proposals, and cards run).
+TIME_OFF_BEHAVIORS: Final = (
+    "book_friday",
+    "sick_tomorrow",
+    "show_balance",
+    "waiting_on_me",
+    "approve_it",
+    "deny_it",
+    "cancel_mine",
+)
 MODEL_BEHAVIORS: Final = (
     "decline",
     "safety_refusal",
@@ -61,6 +72,7 @@ MODEL_BEHAVIORS: Final = (
     "silence",
     "mid_stream_error",
     "working_note",
+    *TIME_OFF_BEHAVIORS,
 )
 BEHAVIORS: Final = GUARD_BEHAVIORS + MODEL_BEHAVIORS
 
@@ -174,7 +186,27 @@ def _question(messages: Sequence[dict[str, Any]]) -> str:
 
 
 def _is_second_call(messages: Sequence[dict[str, Any]]) -> bool:
+    """The search scenarios have two steps: the search, then the answer."""
     return bool(messages) and _holds_tool_results(messages[-1])
+
+
+def _tool_rounds_this_turn(messages: Sequence[dict[str, Any]]) -> int:
+    """How many tool rounds this turn has had so far: the assistant messages that called a tool
+    after the question. The step a scenario is at. Earlier turns' rounds don't count."""
+    rounds = 0
+    for message in reversed(messages):
+        if message.get("role") == "user" and not _holds_tool_results(message):
+            break
+        if message.get("role") == "assistant" and _has_tool_use(message):
+            rounds += 1
+    return rounds
+
+
+def _has_tool_use(message: dict[str, Any]) -> bool:
+    content = message.get("content")
+    return isinstance(content, list) and any(
+        isinstance(block, dict) and block.get("type") == "tool_use" for block in content
+    )
 
 
 def _tool_calls_so_far(messages: Sequence[dict[str, Any]]) -> int:
@@ -214,6 +246,138 @@ def _chosen_search_result(
     before = sum(count_search_results(message.get("content", [])) for message in messages[:-1])
     position = next((i for i, result in enumerate(results) if _is_addendum(result)), 0)
     return results[position], before + position
+
+
+# --- Reading the per-turn context, and the time-off tools' results ------------------------------
+
+_TODAY_LINE = re.compile(r"^Today: [A-Za-z]+, (\d{4}-\d{2}-\d{2}) \(", flags=re.MULTILINE)
+_WEEKDAY_NAMES = ("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday")
+_MONTH_NAMES = (
+    "January",
+    "February",
+    "March",
+    "April",
+    "May",
+    "June",
+    "July",
+    "August",
+    "September",
+    "October",
+    "November",
+    "December",
+)
+_FRIDAY = 4
+
+
+def today_from_context(messages: Sequence[dict[str, Any]]) -> date | None:
+    """Today's date from the last `system` message (the per-turn context), never from a clock:
+    the line "Today: Thursday, 2026-10-15 (America/Los_Angeles)." Returns None if it isn't there or
+    isn't a real date."""
+    for message in reversed(messages):
+        if message.get("role") != "system":
+            continue
+        match = _TODAY_LINE.search(_text_of(message.get("content")))
+        if match is None:
+            return None
+        try:
+            return date.fromisoformat(match.group(1))
+        except ValueError:
+            return None
+    return None
+
+
+def next_friday(today: date) -> date:
+    """ "Next Friday" for the scripted model: the Friday of the following week, with weeks running
+    Monday to Sunday. So on any day of one week it is the Friday after that week's own Friday, and
+    on the coming Monday it moves a week on."""
+    next_monday = today + timedelta(days=7 - today.weekday())
+    return next_monday + timedelta(days=_FRIDAY)
+
+
+def _day_name(day: date) -> str:
+    return f"{_WEEKDAY_NAMES[day.weekday()]}, {_MONTH_NAMES[day.month - 1]} {day.day}"
+
+
+def _days_name(first: date, last: date) -> str:
+    return _day_name(first) if first == last else f"{_day_name(first)} to {_day_name(last)}"
+
+
+def _iso(value: Any) -> date | None:
+    try:
+        return date.fromisoformat(str(value))
+    except ValueError:
+        return None
+
+
+@dataclass(frozen=True)
+class _ToolResult:
+    """The latest tool result of the request: its JSON (None for an error or non-JSON text), whether
+    the tool reported an error, and its text."""
+
+    data: Any
+    is_error: bool
+    text: str
+
+
+def _last_tool_result(messages: Sequence[dict[str, Any]]) -> _ToolResult:
+    content = messages[-1].get("content") if messages else None
+    blocks = [
+        block
+        for block in (content if isinstance(content, list) else [])
+        if isinstance(block, dict) and block.get("type") == "tool_result"
+    ]
+    if not blocks:
+        return _ToolResult(None, True, "")
+    block = blocks[0]
+    text = _text_of(block.get("content"))
+    if block.get("is_error"):
+        return _ToolResult(None, True, text)
+    try:
+        return _ToolResult(json.loads(text), False, text)
+    except ValueError:
+        return _ToolResult(None, False, text)
+
+
+def _first_sentence(text: str) -> str:
+    return (_sentences(text) or ["The tool gave no reason."])[0]
+
+
+def _request_call(
+    question: str, messages: Sequence[dict[str, Any]], day: date, kind: str
+) -> ToolCall:
+    return _tool_call(
+        "propose_time_off_request",
+        {
+            "type": kind,
+            "start_date": day.isoformat(),
+            "end_date": day.isoformat(),
+            "half_day": False,
+            "hours": None,
+        },
+        question,
+        messages,
+    )
+
+
+def _tool_call(
+    name: str, arguments: dict[str, Any], question: str, messages: Sequence[dict[str, Any]]
+) -> ToolCall:
+    digest = hashlib.sha256(
+        f"{question}|{name}|{_tool_calls_so_far(messages)}".encode()
+    ).hexdigest()
+    return ToolCall(f"toolu_scripted_{digest[:12]}", name, arguments)
+
+
+def _listed(data: Any) -> list[dict[str, Any]]:
+    requests = data.get("requests") if isinstance(data, dict) else None
+    return [item for item in (requests or []) if isinstance(item, dict)]
+
+
+def _can_still_be_canceled(item: dict[str, Any], today: date | None) -> bool:
+    if item.get("status") not in ("pending", "approved"):
+        return False
+    start = _iso(item.get("startDate"))
+    return start is not None and (today is None or start >= today)
 
 
 # --- Writing the answer -----------------------------------------------------------------------
@@ -313,6 +477,127 @@ def _query_of(question: str) -> str:
     return cut.rstrip()
 
 
+_TIME_OFF_LISTS = {
+    "waiting_on_me": "waiting_for_me",
+    "approve_it": "waiting_for_me",
+    "deny_it": "waiting_for_me",
+    "cancel_mine": "mine",
+}
+_DECISIONS = {"approve_it": "approve", "deny_it": "deny"}
+
+
+def _time_off_first_call(
+    behavior: str, question: str, messages: Sequence[dict[str, Any]], today: date | None
+) -> ToolCall | None:
+    """The first tool call of a time-off scenario, or None when it needs today's date and the
+    context has none."""
+    if behavior == "show_balance":
+        return _tool_call("get_time_off_balance", {}, question, messages)
+    if behavior in _TIME_OFF_LISTS:
+        # The optional properties are left out: a strict tool can't get a null for them.
+        arguments = {"scope": _TIME_OFF_LISTS[behavior]}
+        return _tool_call("list_time_off_requests", arguments, question, messages)
+    if today is None:
+        return None
+    if behavior == "book_friday":
+        return _request_call(question, messages, next_friday(today), "pto")
+    return _request_call(question, messages, today + timedelta(days=1), "sick")
+
+
+def _time_off_next(
+    behavior: str,
+    question: str,
+    messages: Sequence[dict[str, Any]],
+    today: date | None,
+    rounds: int,
+    data: Any,
+) -> ToolCall | str:
+    """What follows a successful tool result: the next call, or the closing words."""
+    if data is None:
+        return "I couldn't read what the tool sent back."
+    if behavior in ("book_friday", "sick_tomorrow"):
+        return _request_words(behavior, today, data)
+    if behavior == "show_balance":
+        return _balance_words(data)
+    if behavior == "waiting_on_me":
+        return _waiting_words(data)
+    if behavior in _DECISIONS:
+        verb = _DECISIONS[behavior]
+        if rounds == 1:
+            waiting = _listed(data)
+            if not waiting:
+                return f"Nothing is waiting for your decision, so there is nothing to {verb}."
+            arguments = {"request_id": str(waiting[0].get("id")), "decision": verb}
+            return _tool_call("propose_time_off_decision", arguments, question, messages)
+        return _decision_words(verb, data)
+    # cancel_mine
+    if rounds == 1:
+        cancelable = [item for item in _listed(data) if _can_still_be_canceled(item, today)]
+        if not cancelable:
+            return "You have no requests that can be canceled."
+        arguments = {"request_id": str(cancelable[0].get("id"))}
+        return _tool_call("propose_cancel_time_off", arguments, question, messages)
+    return _cancel_words(data)
+
+
+def _request_words(behavior: str, today: date | None, data: Any) -> str:
+    day = None
+    if today is not None:
+        day = next_friday(today) if behavior == "book_friday" else today + timedelta(days=1)
+    amount = data.get("amount") if isinstance(data, dict) else None
+    what = "book PTO" if behavior == "book_friday" else "record sick time"
+    done = "booked" if behavior == "book_friday" else "recorded"
+    when = "" if day is None else f" for {_day_name(day)}"
+    figure = f": {amount}" if isinstance(amount, str) else ""
+    return f"I've prepared a card to {what}{when}{figure}. Nothing is {done} until you confirm."
+
+
+def _balance_words(data: Any) -> str:
+    pto = data.get("pto") if isinstance(data, dict) else None
+    available = pto.get("available") if isinstance(pto, dict) else None
+    if not isinstance(available, str):
+        return "I couldn't read your balance."
+    sick = [year for year in (data.get("sick") or []) if isinstance(year, dict)]
+    words = f"You have {available} of PTO available"
+    if sick and isinstance(sick[0].get("available"), str):
+        return f"{words}, and {sick[0]['available']} of sick time for {sick[0].get('year')}."
+    return f"{words}."
+
+
+def _listed_days(item: dict[str, Any]) -> str:
+    first, last = _iso(item.get("startDate")), _iso(item.get("endDate"))
+    return "" if first is None or last is None else _days_name(first, last)
+
+
+def _waiting_words(data: Any) -> str:
+    waiting = _listed(data)
+    if not waiting:
+        return "Nothing is waiting for your decision right now."
+    first = waiting[0]
+    amount = first.get("amount")
+    figure = f" ({amount})" if isinstance(amount, str) else ""
+    return (
+        f"The first request waiting for you is from {first.get('person')}, "
+        f"for {_listed_days(first)}{figure}."
+    )
+
+
+def _decision_words(verb: str, data: Any) -> str:
+    card = data if isinstance(data, dict) else {}
+    return (
+        f"I've prepared a card to {verb} {card.get('person')}'s request for {_listed_days(card)}. "
+        "Nothing is decided until you confirm."
+    )
+
+
+def _cancel_words(data: Any) -> str:
+    card = data if isinstance(data, dict) else {}
+    return (
+        f"I've prepared a card to cancel your request for {_listed_days(card)}. "
+        "Nothing is canceled until you confirm."
+    )
+
+
 class ScriptedTransport:
     """`silence_seconds` and `slow_guard_seconds` are what the silence and slow-guard scenarios
     wait (the slow guard waits 2 seconds past the guard's limit); tests shorten them.
@@ -337,6 +622,11 @@ class ScriptedTransport:
         scenario = _first_match(question, self._scenarios, MODEL_BEHAVIORS)
         behavior = scenario.behavior if scenario else "default"
 
+        rounds = _tool_rounds_this_turn(messages)
+        if behavior in TIME_OFF_BEHAVIORS:
+            async for event in self._time_off(behavior, question, messages, rounds):
+                yield event
+            return
         if _is_second_call(messages):
             async for event in self._second_call(messages, behavior):
                 yield event
@@ -383,6 +673,38 @@ class ScriptedTransport:
                 *content,
                 {"type": "tool_use", "id": call.id, "name": call.name, "input": call.input},
             ],
+            "tool_use",
+        )
+
+    async def _time_off(
+        self, behavior: str, question: str, messages: Sequence[dict[str, Any]], rounds: int
+    ) -> AsyncIterator[ModelEvent]:
+        """One step of a time-off scenario: `rounds` tool rounds so far this turn. Each step is a
+        tool call or the closing words, which quote the tool's labels and never calculate."""
+        today = today_from_context(messages)
+        if rounds == 0:
+            call = _time_off_first_call(behavior, question, messages, today)
+        else:
+            result = _last_tool_result(messages)
+            if result.is_error:
+                words = f"That didn't work: {_first_sentence(result.text)}"
+                async for event in self._say([(words, None)]):
+                    yield event
+                return
+            outcome = _time_off_next(behavior, question, messages, today, rounds, result.data)
+            if isinstance(outcome, str):
+                async for event in self._say([(outcome, None)]):
+                    yield event
+                return
+            call = outcome
+        if call is None:
+            words = "I can't tell today's date, so I can't work out which day you mean."
+            async for event in self._say([(words, None)]):
+                yield event
+            return
+        yield call
+        yield _finished(
+            [{"type": "tool_use", "id": call.id, "name": call.name, "input": call.input}],
             "tool_use",
         )
 

@@ -66,16 +66,25 @@ class ProblemError(Exception):
     string, such as `turn-running`. Every other route keeps using `HTTPException`.
     """
 
-    def __init__(self, status_code: int, code: str, detail: str) -> None:
+    def __init__(
+        self,
+        status_code: int,
+        code: str,
+        detail: str,
+        extra: Mapping[str, object] | None = None,
+    ) -> None:
         super().__init__(code)
         self.status_code = status_code
         self.code = code
         self.detail = detail
+        # More fields for the problem's body, such as the current status of the thing refused, under
+        # names that are not the standard members (`status` is the HTTP status).
+        self.extra = dict(extra or {})
 
 
 async def _problem_error(request: Request, exc: Exception) -> JSONResponse:
     exc = cast(ProblemError, exc)
-    return problem_response(request, exc.status_code, exc.detail, {"type": exc.code})
+    return problem_response(request, exc.status_code, exc.detail, {**exc.extra, "type": exc.code})
 
 
 async def _http_exception(request: Request, exc: Exception) -> JSONResponse:

@@ -1,3 +1,19 @@
+const formatters = new Map<string, Intl.DateTimeFormat>()
+
+/** An en-US date formatter for a time zone, made once and reused (building one is slow). */
+export function formatterFor(
+  timeZone: string,
+  options: Intl.DateTimeFormatOptions,
+): Intl.DateTimeFormat {
+  const key = `${timeZone}|${JSON.stringify(options)}`
+  let format = formatters.get(key)
+  if (format === undefined) {
+    format = new Intl.DateTimeFormat('en-US', { ...options, timeZone })
+    formatters.set(key, format)
+  }
+  return format
+}
+
 const MINUTE_MS = 60_000
 const HOUR_MS = 60 * MINUTE_MS
 
@@ -27,11 +43,7 @@ export function isExpiringSoon(msLeft: number): boolean {
 
 /** The hour (0 to 23) on the wall clock in an IANA timezone. */
 function hourIn(now: Date, timeZone: string): number {
-  const parts = new Intl.DateTimeFormat('en-US', {
-    hour: 'numeric',
-    hourCycle: 'h23',
-    timeZone,
-  }).formatToParts(now)
+  const parts = formatterFor(timeZone, { hour: 'numeric', hourCycle: 'h23' }).formatToParts(now)
   return Number(parts.find((part) => part.type === 'hour')?.value)
 }
 

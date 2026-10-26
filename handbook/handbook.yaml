@@ -1,6 +1,6 @@
 # The handbook's table of contents: its version label, title, chapter names, state addendum names,
 # and the location codes the text may name. The sections themselves live in sections/ and addenda/.
-version: "2026.10.1"
+version: "2026.11.1"
 title: Juniper Row Employee Handbook
 chapters:
   1: Welcome

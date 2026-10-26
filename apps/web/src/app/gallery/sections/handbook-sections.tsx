@@ -259,7 +259,7 @@ function PanelHost({ view, openLabel }: { view: PassageView; openLabel: string }
         <Textarea aria-label="A message outside the panel" placeholder="Type, then press Escape" />
       </div>
       {open && (
-        <div className="h-[640px] w-[420px] max-w-full overflow-hidden rounded-lg border border-border">
+        <div className="h-[640px] w-panel max-w-full overflow-hidden rounded-lg border border-border">
           <PassagePanel
             state="open"
             sectionId={view.section.id}
@@ -275,7 +275,7 @@ function PanelHost({ view, openLabel }: { view: PassageView; openLabel: string }
 
 function PanelFrame({ children }: { children: React.ReactNode }) {
   return (
-    <div className="h-[640px] w-[420px] max-w-full overflow-hidden rounded-lg border border-border">
+    <div className="h-[640px] w-panel max-w-full overflow-hidden rounded-lg border border-border">
       {children}
     </div>
   )
@@ -428,7 +428,7 @@ export function HandbookSections() {
           </div>
         </Section>
         <Section id="cited-passage-compact" title="Cited passage, compact (in the panel)">
-          <div className="w-[420px] max-w-full px-3">
+          <div className="w-panel max-w-full px-3">
             <CitedPassage compact>
               <PassageText passage={VIEW.passage} />
             </CitedPassage>

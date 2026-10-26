@@ -262,7 +262,7 @@
           </aside>
         </sc-if>
         <sc-if value="{{ f.panelOpen }}" hint-placeholder-val="{{ false }}">
-          <div style="width:420px;flex:none;height:100%;border-left:1px solid var(--border)">
+          <div style="width:var(--panel-width);flex:none;height:100%;border-left:1px solid var(--border)">
             <dc-import name="Passage Panel" state="open" eyebrow="{{ f.pp.eyebrow }}" title="{{ f.pp.title }}" applies="{{ f.pp.applies }}" marker="{{ f.pp.marker }}" updated="{{ f.pp.updated }}" before="{{ f.pp.before }}" cited="{{ f.pp.cited }}" after="{{ f.pp.after }}" href="{{ f.pp.href }}" on-close="{{ f.closePanel }}" on-open="{{ f.noop }}" hint-size="420px,100%" style="height:100%"></dc-import>
           </div>
         </sc-if>

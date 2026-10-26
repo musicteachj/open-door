@@ -136,16 +136,22 @@ def test_smoke_runs_the_smoke_lists_and_full_runs_every_item() -> None:
     qa = datasets.load_qa()
     smoke = datasets.load_smoke()
 
-    smoke_rt, smoke_qa = run.items_for_set(run.SETS["smoke"], redteam, qa, smoke)
-    full_rt, full_qa = run.items_for_set(run.SETS["full"], redteam, qa, smoke)
+    actions = datasets.load_actions()
+
+    smoke_rt, smoke_qa, smoke_ac = run.items_for_set(run.SETS["smoke"], redteam, qa, actions, smoke)
+    full_rt, full_qa, full_ac = run.items_for_set(run.SETS["full"], redteam, qa, actions, smoke)
 
     assert [i.id for i in smoke_rt] == [i.id for i in redteam if i.id in smoke.redteam]
     assert [i.id for i in smoke_qa] == [i.id for i in qa if i.id in smoke.qa]
-    assert (len(smoke_rt), len(smoke_qa)) == (11, 15)
-    assert (len(full_rt), len(full_qa)) == (len(redteam), len(qa))
-    effort_rt, effort_qa = run.items_for_set(run.SETS["effort"], redteam, qa, smoke)
+    assert [i.id for i in smoke_ac] == [i.id for i in actions if i.id in smoke.actions]
+    assert (len(smoke_rt), len(smoke_qa), len(smoke_ac)) == (13, 15, 6)
+    assert (len(full_rt), len(full_qa), len(full_ac)) == (len(redteam), len(qa), len(actions))
+    effort_rt, effort_qa, effort_ac = run.items_for_set(
+        run.SETS["effort"], redteam, qa, actions, smoke
+    )
     assert [i.id for i in effort_qa] == [i.id for i in smoke_qa]
     assert [i.id for i in effort_rt] == [i.id for i in smoke_rt]
+    assert [i.id for i in effort_ac] == [i.id for i in smoke_ac]
 
 
 # --- The spend cap ----------------------------------------------------------------------------
@@ -338,6 +344,9 @@ def test_the_scoreboard_has_every_field() -> None:
     assert set(result["metrics"]) == {
         "redteam_pass_rate",
         "redteam_pass_rate_by_group",
+        "action_pass_rate",
+        "action_pass_rate_by_group",
+        "action_numbers_match_rate",
         "qa_deterministic_pass_rate",
         "unanswerable_pass_rate",
         "judge_pass_rate",
@@ -1053,7 +1062,7 @@ async def test_live_without_yes_prints_the_estimate_and_makes_no_call(
     out = capsys.readouterr().out
     assert code == 0
     assert "smoke" in out
-    assert "26 items" in out
+    assert "34 items" in out
     assert "1 trial" in out
     assert "$1.20" in out
     assert "$2.00" in out
@@ -1064,8 +1073,8 @@ async def test_live_without_yes_prints_the_estimate_and_makes_no_call(
 @pytest.mark.parametrize(
     ("name", "items", "trials", "estimate", "cap", "effort"),
     [
-        ("smoke", 26, 1, "$1.20", "$2.00", "low"),
-        ("effort", 26, 1, "$1.50", "$2.00", "medium"),
+        ("smoke", 34, 1, "$1.20", "$2.00", "low"),
+        ("effort", 34, 1, "$1.50", "$2.00", "medium"),
     ],
 )
 async def test_each_live_set_estimates_its_own_cost_and_cap(
@@ -1099,7 +1108,7 @@ async def test_the_full_sets_estimate_names_three_trials_and_every_item(
     )
 
     out = capsys.readouterr().out
-    expected = len(datasets.load_redteam()) + len(datasets.load_qa())
+    expected = len(datasets.load_redteam()) + len(datasets.load_qa()) + len(datasets.load_actions())
     assert f"{expected} items" in out
     assert "3 trials" in out
     assert "$14.00" in out
@@ -1194,7 +1203,7 @@ async def test_the_todo_command_reports_a_missing_pair_as_exit_2(
 def test_the_dataset_hashes_cover_each_file_and_the_rubric() -> None:
     hashes = run.dataset_hashes(run.EvalPaths())
 
-    assert set(hashes) >= {"redteam.yaml", "qa.yaml", "smoke.yaml", "judge.md"}
+    assert set(hashes) >= {"redteam.yaml", "qa.yaml", "actions.yaml", "smoke.yaml", "judge.md"}
     assert hashes["judge.md"] == datasets.dataset_hash(EVAL_DIR / "judge.md")
 
 

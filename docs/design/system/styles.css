@@ -10,9 +10,12 @@
 @import "./components/core/core.css";
 @import "./components/navigation/navigation.css";
 @import "./components/assistant/assistant.css";
+@import "./components/assistant/confirm.css";
 @import "./components/status/status.css";
 @import "./components/landing/landing.css";
 @import "./components/forms/forms.css";
 @import "./components/directory/directory.css";
 @import "./components/feedback/feedback.css";
 @import "./components/handbook/handbook.css";
+@import "./components/timeoff/timeoff.css";
+@import "./components/approvals/approvals.css";

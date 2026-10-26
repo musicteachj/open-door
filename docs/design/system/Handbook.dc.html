@@ -310,7 +310,7 @@
             <div aria-hidden="true" style="width:100%;max-width:760px;height:112px;box-sizing:border-box;border:1px solid var(--input-border);border-radius:var(--radius-lg)"></div>
           </div>
           <sc-if value="{{ f.panelShown }}" hint-placeholder-val="{{ true }}">
-            <div style="width:420px;flex:none;height:100%;border-left:1px solid var(--border)">
+            <div style="width:var(--panel-width);flex:none;height:100%;border-left:1px solid var(--border)">
               <dc-import name="Passage Panel" state="{{ f.pState }}" on-close="{{ f.closePanel }}" on-open="{{ f.openInHandbook }}" on-retry="{{ f.retryPanel }}" hint-size="420px,100%" style="height:100%"></dc-import>
             </div>
           </sc-if>

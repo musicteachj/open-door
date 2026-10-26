@@ -4,7 +4,7 @@ Every piece of data Open Door stores: what it holds, why it's kept, who can see 
 stays. Update this file in the same change as any new table, column, cookie, or log field.
 
 Every person in Open Door is fictional. Each visitor gets a sandbox company, seeded with the same
-120 made-up people, and the whole sandbox is deleted 24 hours after it is created. The
+145 made-up people, and the whole sandbox is deleted 24 hours after it is created. The
 [Phase 1 spec](specs/2026-10-03-phase-1-tenancy-identity-permissions.md) has the design behind
 this, and [ADR 0007](adr/0007-session-lifetime.md) explains why sessions last as long as the
 sandbox.
@@ -38,6 +38,11 @@ automated-decision systems apply that to the data such systems use and produce.
 - **Directory fields** are visible to everyone in the same sandbox.
 - **The assistant's conversations** (messages, turns, and feedback) are visible only to the person
   they belong to, with no HR exception. A second, restrictive Postgres rule enforces it.
+- **Time-off requests and opening balances** are tenant rows: Postgres shows them to everyone in
+  the sandbox, and the policy layer (`app/policy`) decides who reads which (a manager reads their
+  reports', HR reads everyone's).
+- **The assistant's proposals** (`ai_proposals`, Phase 5) are visible only to the person they were
+  made for, with no HR exception, like the conversations: the same restrictive rule enforces it.
 - **Private details** are visible only to the person themselves and to HR. Both the policy layer
   (`app/policy`) and a second, database-level rule enforce this.
 - **The `/me` fields** (`employmentType`, `isManager`, `isHrAdmin`, `personaKey`, and
@@ -91,6 +96,7 @@ Visible to everyone in the sandbox. Deleted with the sandbox.
 | `hire_date` | A date relative to `anchor_date` | Part of a realistic employee record, for later phases. Not shown by any Phase 1 endpoint. |
 | `is_hr_admin` | Whether the person is HR | HR may read private details. Shown only at `/me`. |
 | `persona_key` | `priya`, `mateo`, `marcus`, `dana`, or null | Which people a visitor can sign in as. Shown only at `/me`. |
+| `scheduled_weekdays` | The ISO weekdays the person works, as a list of numbers from 1 (Monday) to 7 (Sunday), for example `{2,3,4,5,6}`. A check refuses an empty list and any number outside 1 to 7 | The time-off engine counts only these days against a request (Phase 5). The column defaults to Monday to Friday, so a sandbox made before it existed gets a normal week, and the seed writes every person's days explicitly. |
 
 The directory fields are visible to everyone in the sandbox. Deleted with the sandbox.
 
@@ -112,7 +118,7 @@ event that names the fields returned, never their values. Deleted with the sandb
 | Column | Holds | Why |
 |---|---|---|
 | `id`, `tenant_id`, `location_id` | IDs | Identity, the sandbox, and the location that closes. |
-| `holiday_date`, `name` | The company holiday calendar for `anchor_date`'s year and the next | The time-off engine skips these days (Phase 5). |
+| `holiday_date`, `name` | The company holiday calendar from the year before `anchor_date`'s year to two years after it (four years) | The time-off engine skips these days (Phase 5). The year before covers leave taken just before an anchor in early January. The two after reach the engine's last allowed date even when a sandbox crosses New Year. |
 
 Visible to everyone in the sandbox. Deleted with the sandbox.
 
@@ -136,9 +142,9 @@ row and creates a new one, and signing out deletes it. Deleted with the sandbox 
 | `id`, `tenant_id` | A random UUID, and the sandbox | Random rather than a sequence, so one sandbox can't estimate another's activity. |
 | `occurred_at` | When it happened (UTC) | The record. |
 | `actor_person_id`, `via` | Who acted, and how: `ui`, `assistant`, or `system` | Every action, including the assistant's from Phase 4, is attributed. |
-| `action`, `target_type`, `target_id` | What was done, and to what | Phase 1 records `sandbox.created`, `session.persona_switched`, `session.ended`, and `person_private.read`. Phase 4 adds `escalation.offered` (target `ai_turn`), written when the assistant shows the crisis, sensitive, or "can't answer right now" panel, and when a budget stop ends a turn before the safety check could run (`kind` `unavailable`, `reason` `budget`: the budget message carries 911 and 988 instead of a panel), and `person_private.read` with `via` `assistant` when `get_my_profile` runs. |
-| `before`, `after` | Non-private fields only, such as `personaKey`, the names of the private fields read, or an escalation's `kind` | Never private values, so a privacy deletion request never means editing this log. |
-| `proposal_id` | The confirmed proposal, from Phase 5 | Ties an executed action to what the person confirmed. |
+| `action`, `target_type`, `target_id` | What was done, and to what | Phase 1 records `sandbox.created`, `session.persona_switched`, `session.ended`, and `person_private.read`. Phase 4 adds `escalation.offered` (target `ai_turn`), written when the assistant shows the crisis, sensitive, or "can't answer right now" panel, and when a budget stop ends a turn before the safety check could run (`kind` `unavailable`, `reason` `budget`: the budget message carries 911 and 988 instead of a panel), and `person_private.read` with `via` `assistant` when `get_my_profile` runs. Phase 5 adds `timeoff.requested` (PTO) and `timeoff.recorded` (sick time) when a request is made, `timeoff.approved`, `timeoff.denied`, and `timeoff.canceled` (target `time_off_request`), and `proposal.created`, `proposal.confirmed`, `proposal.canceled`, and `proposal.failed` (target `ai_proposal`). |
+| `before`, `after` | Non-private fields only, such as `personaKey`, the names of the private fields read, an escalation's `kind`, or a time-off request's `status`, `type`, `startDate`, and `endDate` | Never private values, so a privacy deletion request never means editing this log. A denial's note (`decisionNote`, `note`) is refused here like a private field, so text a person wrote can't be logged by mistake. |
+| `proposal_id` | The confirmed proposal, from Phase 5. It is a foreign key to `ai_proposals`, within the same sandbox | Ties an executed action to what the person confirmed. |
 | `request_id` | The request's ID | Matches the event with that request's log lines. |
 
 Append-only: the API can add and read events but never change or delete them. Visible to the API
@@ -173,6 +179,7 @@ Every ID below is a random UUID, so one sandbox can't estimate another's activit
 | `position`, `role` | The message's place in the conversation (from 0), and `user`, `assistant`, or `system` | The model has no memory: each turn sends the history back in order. |
 | `content` | The message exactly as the model API takes it, as JSON kept byte for byte. It includes the person's question, the model's replies, and tool results such as handbook passages and the person's own directory card or private details | The history for the next turn. It is `json`, not `jsonb`, because the model's signed thinking blocks must come back unchanged. |
 | `sources` | For each handbook search result in the message, in order: the section ID, the passage IDs, the title, the group name, the audience label, the last-updated date, and the link. Null when the message has none | The conversation's list of sources, rebuilt for citations, including from turns that were stopped or failed. The result text alone can't give these back reliably. |
+| `reported_outcomes` | On a per-turn context message only: for each confirm card whose outcome that context told the model about, `<card id>:<status shown>` (a card whose time ran out shows as `expired`). Null on every other message | The next turn tells the model about each card's status once, and again if the card changes later (expired, then confirmed by a request already in flight). What was told, not a clock comparison across transactions, decides what is news. |
 | `created_at` | When it was stored (UTC) | The record. |
 
 ### `ai_turns`
@@ -185,7 +192,7 @@ Every ID below is a random UUID, so one sandbox can't estimate another's activit
 | `started_at`, `ended_at` | When the turn began and ended (UTC) | The record. |
 | `answer_text`, `citations` | The answer (a stopped turn keeps its partial text) and its citations as JSON | What the person sees after a reload. |
 | `guard_verdict` | The guard's verdict as JSON; null if the guard did not run | Phase 7's console shows why a turn was routed. The browser gets the category and kind only (`GET /assistant/conversations/current`), never `injectionSuspected`, the cost, or the cache counts. |
-| `tool_calls`, `sections_retrieved` | Each tool call (name, a short summary of its input, success, duration), and the handbook sections the search returned | What the assistant did. A search's summary holds up to 60 characters of its query (and `find_people`'s up to 40), after control characters are removed. Tool calls past the limits (5 per response, 20 per question) aren't run, and a round records them as one `skipped` entry with a `count`. The summaries never hold private values. |
+| `tool_calls`, `sections_retrieved` | Each tool call (name, a short summary of its input, success, duration), and the handbook sections the search returned | What the assistant did. A search's summary holds up to 60 characters of its query (and `find_people`'s up to 40), after control characters are removed. A time-off tool's summary holds its scope, dates, and decision, up to 40 characters of a `person_name`, and a request's ID. Tool calls past the limits (5 per response, 20 per question) aren't run, and a second card in one response isn't made; a round records each kind as one `skipped` entry with a `count`. The summaries never hold private values. |
 | `served_by_models`, `effort`, `prompt_version`, `toolset_version` | The model IDs that served the turn, and the settings in effect | Explains a result, and shows when a fallback happened. |
 | `input_tokens`, `output_tokens`, `cache_read_tokens`, `cache_write_tokens`, `cost_usd` | Token counts and the cost at list price | Measures cost and caching. |
 | `first_event_ms`, `total_ms` | Milliseconds to the first visible event, and in total | Measures latency. |
@@ -231,6 +238,70 @@ visitor playing fictional personas, so that is accepted, and no route returns th
 Phase 8's cleanup job. The API can add rows but not change or delete them, except that a turn's
 outcome and trace columns can be updated while it is `running`. Once it ends, a trigger refuses any
 further change.
+
+### Time off: `time_off_openings`, `time_off_requests`, `ai_proposals`
+
+Added in Phase 5 (migration 0009). Every ID is a random UUID. The time-off service
+(`app/modules/timeoff`) is the only writer of requests; the proposal confirm route arrives in
+stage 3.
+
+#### `time_off_openings`
+
+| Column | Holds | Why |
+|---|---|---|
+| `id`, `tenant_id`, `person_id` | IDs: the row, its sandbox, and whose balance it is | Identity. One row per person. |
+| `as_of`, `amount_minutes` | A date, and the person's PTO balance on it in minutes (never negative) | The engine counts a balance forward from here on every read. A balance is never stored (ADR 0012). |
+| `created_at` | When it was added (UTC) | The record. |
+
+#### `time_off_requests`
+
+| Column | Holds | Why |
+|---|---|---|
+| `id`, `tenant_id`, `person_id` | IDs: the request, its sandbox, and who it is for | Identity. |
+| `type` | `pto` or `sick` | A PTO request is approved by a manager. A sick day is recorded, with no approval. |
+| `start_date`, `end_date` | Calendar dates in the person's location's time zone, both inclusive, at most 31 days apart | The days asked for. |
+| `partial_minutes` | Null for whole days. Otherwise 240 (half a day of PTO) or a whole number of hours from 60 to 480 (sick leave), on a single day | A partial day. |
+| `amount_minutes` | The engine's count when the request was made | Kept for the record, so a later change to a schedule or the holidays doesn't rewrite what a person was shown. |
+| `status` | `pending`, `approved`, `denied`, `recorded` (a sick day), or `canceled` | Where the request stands. It moves one way: a trigger refuses any other change. |
+| `created_at`, `created_via` | When (UTC), and `ui` or `assistant` | How it was made. |
+| `proposal_id` | The assistant's proposal that made it, or null for a request made on the page | Ties the request to what the person confirmed. It is always the same person's proposal, and one proposal makes at most one request. |
+| `decided_by`, `decided_at` | Who approved or denied it, and when | The decision's record. They stay when an approved request is canceled. A person never decides their own request: a database check refuses it. |
+| `decision_note` | A manager's reason for a denial, up to 300 characters, or null | Shown to the employee on the page and the card. Also read back to the manager who wrote it, in the conversation read (`deniedNote` on an executed denial's card), so the card can say whether a note was sent after a reload; no other person gets it there, and the stream event and the confirm's own answer never carry it. **User-written text: it is never sent to a model**, in a tool result or anywhere else. |
+| `canceled_at` | When it was canceled, or null | The record. |
+
+Two open requests (pending, approved, or recorded) for one person can't share a day: an exclusion
+constraint refuses them in the database.
+
+#### `ai_proposals`
+
+| Column | Holds | Why |
+|---|---|---|
+| `id`, `tenant_id`, `person_id`, `conversation_id`, `turn_id` | IDs: the proposal, its sandbox, the person it was made for, and the conversation and turn that made it | Identity and ownership. The keys make the conversation and turn that person's own. |
+| `action` | `timeoff.request`, `timeoff.decide`, or `timeoff.cancel` | What confirming it would do. |
+| `payload` | The validated tool input, as JSON in camelCase: for a request its type, dates, and partial minutes; for a decision the request's ID and `approve` or `deny`; for a cancel the request's ID | The model proposes and never writes: confirming runs this stored payload, never anything the browser sends. It never holds a note. |
+| `card` | The details the server built for the confirm card, as JSON in camelCase: the type and dates, the counted and skipped days, amounts and balances (each a flat pair such as `amountMinutes` and `amountLabel`, the same as the time-off routes; a request card's balances are a `draws` list, one entry per calendar year the request draws on, with its year, amount, and balance before and after, the same shape as the request check), warning codes, the approver's name, handbook section links, and for a decision the requester's name and title and the names and days of teammates who are off | What the person sees and confirms. It is built from the engine's results and the directory, never from model text, and never holds a note or anything a person wrote. A teammate's days off are context for the person deciding and are never sent to a model. |
+| `status` | `pending`, `executed`, `failed`, `canceled`, or `expired` | A proposal ends once, from `pending` to one of the others. A trigger refuses any other change. |
+| `created_at`, `expires_at`, `ended_at` | When it was made, when it stops being confirmable, and when it ended (set exactly when it is not pending) | A proposal is refused after it expires. `created_at` and `ended_at` are the database's clock, never the caller's: a trigger stamps `created_at` on insert and `ended_at` on the move out of pending. A check holds `expires_at` to at most 15 minutes after `created_at`, and a proposal cannot be executed once it has expired. |
+| `outcome` | `{"requestId"}` when executed; `{"code", "text"}` when failed (the engine's or the service's code and its fixed sentence, plus `dates` for an overlap: the days that clash); `{"reason"}` when canceled (`dismissed`, `replaced`, or `turn-incomplete`); null when expired or pending | What happened. Never a note. The next turn's context line is made from the code or reason, never from the text. |
+
+**What the seed writes.** Every sandbox is seeded with time-off data, the same in each (apart from
+IDs), all fictional. Each person gets working weekdays (Denver Monday to Friday; the stores rotate
+through four five-day patterns, with the managers and the personas on fixed ones; the Austin night
+crew works Sunday to Thursday), and one opening balance as of January 1 of the anchor year, or the
+hire date if later (0 for a hire since January 1). It also writes a few approved PTO requests and
+the odd recorded sick day per person in the past, all counted by the engine and made through the
+page (`created_via` `ui`, no proposal). Two requests are fixed: Leo's approved PTO from Wednesday to
+Friday of the week before the anchor's week, and one pending request from Zara Bautista in Marcus's
+queue, about three weeks after the anchor. It is the only pending request. No seeded request is a
+denial, so none has a `decision_note`, and no proposal is seeded.
+
+**Who sees them.** Requests and openings are visible to everyone in the sandbox at the database
+level, and the policy layer limits each read. A proposal is visible only to the person it was made
+for, HR included. The audit event for a confirmed proposal names it in `audit_events.proposal_id`.
+
+**How long.** All three are deleted with the sandbox, 24 hours after it is created. The API can
+add rows. It can change only a request's status, decision columns, and `canceled_at`, and a
+proposal's status, `ended_at`, and `outcome`, and never delete one.
 
 ### The handbook: `handbook_versions`, `handbook_sections`, `handbook_chunks`
 
@@ -327,7 +398,9 @@ the safety check that reads each message first. Anthropic is the data processor 
     last answer
   - to the assistant: the system prompt, the tool definitions, the conversation so far, the new
     question, and a short context message (the person's first name, role, location, employment
-    type, today's date, and the handbook version)
+    type, today's date, and the handbook version; and, when one of the person's confirm cards was
+    confirmed, dismissed, replaced, canceled, failed, or expired since the last message, one line
+    saying so, made from the card's action, dates, and a directory name only if it is a plain name)
   - the tools' results, which include handbook passages, directory cards, and, when someone asks
     the assistant about themselves, their own private details (personal email, phone, home
     address, and date of birth)

@@ -1,5 +1,12 @@
 import { http, HttpResponse } from 'msw'
-import type { AssistantTextsOut, BudgetOut, ConversationOut, TurnOut } from '@/api/generated'
+import type {
+  AssistantTextsOut,
+  BudgetOut,
+  ConversationOut,
+  ProposalOut,
+  TurnOut,
+} from '@/api/generated'
+import { CARD_BOOK, EXPIRES_AT } from '@/app/gallery/fixtures/timeoff'
 import { californiaSickLeave, paragraph, passageView, sectionSummary } from './handbook-fixtures'
 import { server } from './msw'
 
@@ -40,8 +47,27 @@ export function turnOut(overrides: Partial<TurnOut> = {}): TurnOut {
     toolCalls: [],
     sections: [],
     feedback: null,
+    proposals: [],
     startedAt: '2026-10-18T10:00:00Z',
     endedAt: '2026-10-18T10:00:05Z',
+    ...overrides,
+  }
+}
+
+export const PROPOSAL_ID = 'c0ffee00-0000-4000-8000-0000000000b1'
+
+/** A pending booking card, as the API sends it, with any field overridden. */
+export function proposalOut(overrides: Partial<ProposalOut> = {}): ProposalOut {
+  return {
+    id: PROPOSAL_ID,
+    action: 'timeoff.request',
+    status: 'pending',
+    canceledReason: null,
+    expiresAt: EXPIRES_AT,
+    card: CARD_BOOK,
+    failure: null,
+    turnRunning: false,
+    deniedNote: null,
     ...overrides,
   }
 }
@@ -223,5 +249,24 @@ export function onFeedback(
       return handler(body, turnId)
     }),
   )
+  return posted
+}
+
+/** Answers Confirm and Dismiss for any proposal. Returns what was posted, in order. */
+export function onProposalAction(handler: (kind: 'confirm' | 'cancel', body: unknown) => Response) {
+  const posted: { kind: 'confirm' | 'cancel'; proposalId: string; body: unknown }[] = []
+  for (const kind of ['confirm', 'cancel'] as const) {
+    server.use(
+      http.post(
+        url(`/api/v1/assistant/proposals/:proposalId/${kind}`),
+        async ({ request, params }) => {
+          const text = await request.text()
+          const body: unknown = text === '' ? null : JSON.parse(text)
+          posted.push({ kind, proposalId: String(params.proposalId), body })
+          return handler(kind, body)
+        },
+      ),
+    )
+  }
   return posted
 }

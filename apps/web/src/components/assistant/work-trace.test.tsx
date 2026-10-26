@@ -297,3 +297,21 @@ describe('WorkTrace with a section listed twice', () => {
     errors.mockRestore()
   })
 })
+
+describe('WorkTrace: the time-off tools', () => {
+  it('words the reads and the propose tools plainly and shows no request id', async () => {
+    const id = '3f2a1b4c-5d6e-4f70-8a9b-0c1d2e3f4a5b'
+    const { container } = renderTrace({
+      toolCalls: [
+        toolCall({ name: 'check_time_off', inputSummary: 'start=2026-10-30, end=2026-10-30' }),
+        toolCall({ name: 'propose_time_off_decision', inputSummary: `approve request ${id}` }),
+        toolCall({ name: 'propose_cancel_time_off', inputSummary: `cancel request ${id}` }),
+      ],
+    })
+    const panel = await open()
+    expect(within(panel).getByText('Checked your time off')).toBeInTheDocument()
+    expect(within(panel).getAllByText('Prepared a confirm card')).toHaveLength(2)
+    expect(container.textContent).not.toContain(id)
+    expect(container.textContent).not.toMatch(/[0-9a-f]{8}-[0-9a-f]{4}-/)
+  })
+})

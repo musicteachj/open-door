@@ -37,7 +37,9 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: true
-      # Docs-only changes skip the heavy jobs. That saves private-repo Actions minutes.
+      # Docs-only changes skip the heavy jobs. That saves private-repo Actions minutes. The
+      # exceptions are docs the tests read: docs/design/ runs the Web job, and handbook/ runs the
+      # API and E2E jobs.
       - uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4.0.3
         id: filter
         with:
@@ -52,15 +54,25 @@ jobs:
               - 'handbook/**'
               - 'scripts/proxy-check/**'
               - 'compose.yaml'
+              # The eval runner's tests read the eval-live target and the fixtures' ignore rule.
+              - 'Makefile'
+              - '.gitignore'
               - '.github/workflows/ci.yml'
             web:
               - 'apps/web/**'
+              # The files outside apps/web that the unit tests (Vitest) read: the design tokens and
+              # screens, the personal-data cases shared with the evals, and the seeded personas.
+              - 'docs/design/**'
+              - 'evals/assistant/personal-data-cases.json'
+              - 'apps/api/app/modules/sandbox/seed_data.py'
               - '.nvmrc'
               - '.editorconfig'
               - '.github/workflows/ci.yml'
             e2e:
               - 'apps/web/**'
               - 'apps/api/**'
+              # The API the browser tests run against loads the handbook from here.
+              - 'handbook/**'
               - 'scripts/proxy-check/**'
               - 'Makefile'
               - '.nvmrc'
@@ -180,7 +192,9 @@ jobs:
     needs: changes
     if: needs.changes.outputs.e2e == 'true' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    # The browser tests run on one worker (playwright.config.ts) and took about 18 minutes after
+    # Phase 5 stage 5; 30 leaves room for a slow runner and Stage 6's page tests.
+    timeout-minutes: 30
     services:
       # The same service as the API job.
       postgres:

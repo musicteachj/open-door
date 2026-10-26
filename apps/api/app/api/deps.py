@@ -1,6 +1,9 @@
 """Dependencies the routes share."""
 
-from fastapi import Request
+from datetime import UTC, datetime
+from typing import Annotated
+
+from fastapi import Depends, Request
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 from app.ai.embeddings import Embedder
@@ -59,3 +62,12 @@ def get_streams(request: Request) -> StreamTracker:
         msg = "No stream tracker: build the app with create_app() and run its lifespan."
         raise RuntimeError(msg)
     return streams
+
+
+def utc_now() -> datetime:
+    """The server's clock, as a dependency so a test can hold it still. Time-off writes and the
+    assistant's confirm pass it to the time-off service as "now"."""
+    return datetime.now(UTC)
+
+
+Now = Annotated[datetime, Depends(utc_now)]

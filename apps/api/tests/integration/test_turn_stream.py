@@ -221,7 +221,13 @@ async def test_personal_data_is_refused_as_a_problem_and_never_stored_or_logged(
     for number in ("078-05-1120", "4111 1111 1111 1111"):
         assert number not in response.text
     assert await turn_rows(app_engine, tenant_id, person_id) == []
-    logged = " ".join(f"{r.getMessage()} {r.__dict__}" for r in caplog.records)
+    # The message and any extra fields a log call added, but not the record's own timing and
+    # process fields: a timestamp such as relativeCreated=411106.6 holds "4111" by chance.
+    builtin = set(logging.LogRecord("", 0, "", 0, "", (), None).__dict__) | {"message", "asctime"}
+    logged = " ".join(
+        f"{r.getMessage()} {[(k, v) for k, v in vars(r).items() if k not in builtin]}"
+        for r in caplog.records
+    )
     assert "078-05-1120" not in logged
     assert "4111" not in logged
     # Nothing of it was stored in any table the person can read.

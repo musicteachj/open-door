@@ -17,6 +17,8 @@ records are never rewritten.
 | [0009](0009-assistant-turn-and-guard.md) | Each turn is screened by a guard first, and fails closed | Accepted | 2026-10-14 |
 | [0010](0010-scripted-model-and-replay.md) | A scripted model for development and tests, and recorded replay for CI's evals | Accepted | 2026-10-14 |
 | [0011](0011-insert-only-budget-ledger.md) | AI budgets are an insert-only ledger, reserved before each call | Accepted | 2026-10-14 |
+| [0012](0012-balances-derived-by-the-engine.md) | Time-off balances are derived by the engine, not posted to a ledger | Accepted | 2026-10-20 |
+| [0013](0013-proposals-in-the-turn.md) | A proposal ends its turn normally, and its outcome reaches the next turn's context | Accepted | 2026-10-20 |
 
 New records copy this shape:
 

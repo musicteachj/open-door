@@ -15,10 +15,12 @@ An HR help desk that answers questions in plain language. It:
 - answers policy questions only from the handbook, and cites the passage every answer rests on
 - reads the asker's own profile and the company directory, always as the signed-in person
 - routes sensitive topics to the HR team and crisis messages to fixed, human-written help text
-- never writes anything in Phase 4, and from Phase 5 only proposes actions that a person confirms
+- never writes anything itself: from Phase 5 it proposes time-off actions, and a person confirms
+  each one on a card ([Proposals](#proposals-how-the-assistant-acts))
 
-It never makes or recommends an employment decision: no discipline, termination, performance
-rating, or approval (invariant 5 in [`../CLAUDE.md`](../CLAUDE.md)).
+It never makes or recommends an employment decision: no discipline, termination, or performance
+rating, and it never recommends approving or denying a request (invariant 5 in
+[`../CLAUDE.md`](../CLAUDE.md)).
 
 ## The disclosure (EU AI Act, Article 50)
 
@@ -58,9 +60,11 @@ including by not materially influencing the outcome of decision making". Open Do
 - **doesn't profile people.** Article 6(3) makes any Annex III system that profiles natural
   persons high-risk regardless. The assistant answers one person's question about policy; it
   builds no picture of that person or anyone else.
-- **only prepares and informs.** From Phase 5 it can propose a time-off request, which a person
-  confirms and which the time-off engine (not the model) validates. That is a narrow procedural
-  task in the sense of Article 6(3)(a); the decision on the request stays with the manager.
+- **only prepares and informs.** From Phase 5 it can propose a time-off request, a cancellation,
+  or, when a manager asks, a decision on one specific request. A person confirms each card, and
+  the time-off engine (not the model) validates it. That is a narrow procedural task in the sense
+  of Article 6(3)(a); the decision on a request stays with the manager, who is never told what to
+  decide.
 
 **Documenting it.** Article 6(4) requires a provider who considers an Annex III system not
 high-risk to "document its assessment before that system is placed on the market or put into
@@ -103,6 +107,36 @@ and an ADR, before it is built.
 - **Prompts are versioned** (`apps/api/app/ai/prompts/versions.py`), and a golden-hash table
   makes any change to the prompt or tool definitions visible in review. A change needs the
   offline evals green and a paid smoke run before its pull request.
+
+## Proposals: how the assistant acts
+
+From Phase 5 the assistant can start three time-off actions: a request, a manager's decision, and
+a cancellation ([ADR 0004](adr/0004-stored-proposals.md),
+[ADR 0013](adr/0013-proposals-in-the-turn.md)). It never carries one out:
+
+- **A proposal tool stores a card, nothing else.** The tool runs the time-off engine for the
+  signed-in person, and if the engine accepts, stores a pending proposal bound to that person, the
+  conversation, and the turn, with a 15-minute life. The card is built by the server from the
+  engine's result, never from the model's words. One answer makes at most one card.
+- **A person confirms.** Only the card's own person can confirm it, once, after the turn that made
+  it has finished. The server runs the stored request through the same service the pages use, with
+  today's data, so a card whose balance changed fails with the engine's reason instead of
+  overdrawing.
+- **The model never calculates or decides.** Every day, hour, and balance comes from the engine,
+  and the model quotes its labels. It proposes a decision only when a manager asks about one
+  specific request, and never recommends one; team coverage is shown on the card, never to the
+  model. It acts only for the asker: a name the model passes is matched only among people the
+  asker may already see.
+- **Nothing a person wrote reaches the model.** Requests ask for no reason, and a manager's
+  optional note on a denial is shown on the pages and the card, never in a tool result. What
+  happened to a card reaches the next turn as one line made from stored fields only.
+- **A turn that doesn't finish cancels its cards,** in the same transaction that ends it, so a
+  card the model never learned about can't be confirmed.
+- **Everything is audited:** who proposed (the assistant, for the person) and who confirmed, with
+  the time-off change's own event linked to its proposal (invariant 7).
+
+The action eval grades this by program: the right card for each request, no write by the model,
+and every figure in an answer matching the engine in every trial ([`../evals/README.md`](../evals/README.md)).
 
 ## The guard
 

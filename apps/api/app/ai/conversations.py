@@ -124,11 +124,13 @@ class SourceEntry:
 @dataclass(frozen=True)
 class StoredMessage:
     """A message to store. `content` is the API's own blocks, exactly as the model should see them
-    again. `sources` has one entry per `search_result` block in it, in block order."""
+    again. `sources` has one entry per `search_result` block in it, in block order.
+    `reported_outcomes` is for a context message: a `told_entry` for each card it reports."""
 
     role: Literal["user", "assistant", "system"]
     content: list[dict[str, Any]]
     sources: tuple[SourceEntry, ...] = ()
+    reported_outcomes: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -348,6 +350,7 @@ async def append_messages(
                 "role": message.role,
                 "content": message.content,
                 "sources": [entry.to_json() for entry in message.sources] or None,
+                "reported_outcomes": list(message.reported_outcomes) or None,
             }
             for offset, message in enumerate(messages)
         ],
@@ -406,11 +409,12 @@ async def finish_turn(db: AsyncSession, turn_id: UUID, outcome: TurnOutcome) -> 
 
 async def recover_abandoned(
     db: AsyncSession, conversation_id: UUID, *, older_than: timedelta = ABANDONED_AFTER
-) -> int:
+) -> list[UUID]:
     """Mark the conversation's `running` turns older than `older_than` as failed, so that the next
     question can start. A task that crashed or was restarted leaves its turn running for good.
 
-    Returns how many it marked.
+    Returns the IDs of the turns it marked. The caller cancels their proposals in the same
+    transaction (`proposals.recover_abandoned_turns` does both), after this update.
     """
     result = await db.execute(
         update(AiTurn)
@@ -420,9 +424,10 @@ async def recover_abandoned(
             AiTurn.started_at < func.now() - literal(older_than, Interval()),
         )
         .values(status="failed", error_code="abandoned", ended_at=func.clock_timestamp())
+        .returning(AiTurn.id)
         .execution_options(synchronize_session=False)
     )
-    return cast("CursorResult[Any]", result).rowcount
+    return list(result.scalars().all())
 
 
 async def search_sources(db: AsyncSession, conversation_id: UUID) -> list[SourceEntry]:

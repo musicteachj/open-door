@@ -10,6 +10,505 @@ version (`0.x.y` while the app is being built, `1.0.0` when it is complete).
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-10-26
+
+Phase 5: time off. A pure engine counts every day and balance from each person's schedule, the
+location's holidays, and the handbook's rules, and every figure carries its handbook section. The
+Time off page shows the balances and the person's requests and books PTO or records sick time with a
+live preview; the Approvals page lets a direct manager approve or deny, with plain team coverage
+beside each request. In the conversation the assistant can read balances, check dates, and propose
+a booking, a decision, or a cancellation, but it never writes: it shows a confirm card built by the
+server from the engine's result, and nothing happens until the person confirms. A confirm runs the
+stored card exactly once, re-checked at that moment, and a card expires after 15 minutes. The last
+full live eval run (2026-10-25, $10.39) scored the Q&A and unanswerable sets at 100% in every
+trial, the red team at 97%, the new action set at 96% with its figures matching the engine's 98% of
+the time, and the judge at 72% (its 85% bar and its agreement with the hand grades, 89.7%, are
+Phase 7 items). The phase closed with a whole-phase review, a Fable 5.1 security review that found
+every seam holding, a release review, and their fixes.
+
+### Added
+
+- **Confirm cards in the conversation** (Phase 5, stage 6). When the assistant prepares a booking,
+  a decision, or a cancellation, the card now appears under its message at `/ask`, with Confirm and
+  Dismiss. While the answer is still arriving, Confirm waits and says so. When the turn ends, the
+  page reads the conversation again, so Confirm turns on, and a card the turn's ending canceled
+  shows its final state. A card never ticks: at the moment it expires, the page reads again and the
+  card offers "Ask again", which puts the original question back in the box and moves focus there.
+  If a card was already confirmed in another tab, or its turn is still running, Confirm shows the
+  card calmly as it now stands, never an error. On a sensitive question the order is the message,
+  the card, the HR panel, then "Show your work". When a new card arrives, the page reads the conversation again,
+  so an earlier turn's pending card shows "Replaced by a newer card" at once.
+- **A denial's note after a reload** (Phase 5, stage 6). The conversation read now gives a manager's
+  executed denial card the note stored on the request, so the card can say "Zara will see your note"
+  after a reload. Only the manager who wrote it gets it, and only in that read: the live stream, the
+  confirm's own answer, and every other card carry nothing. It never reaches the model, and a test
+  proves the next turn's context, every tool result, and the history hold none of its text.
+- **The schedule line's hours** (Phase 5, stage 6). The calendar read now says how long a scheduled
+  day is (`dayMinutes` and `dayLabel`, "8 hours"), so the Time off page can write "Monday to Friday,
+  8 hours a day" without working anything out. The engine gained an hours-only label for it.
+- **Time-off hooks** (Phase 5, stage 6). The web app has shared hooks for balances, requests, the
+  calendar, the summary, and the three time-off writes. Every write, and every card's Confirm and
+  Dismiss, ends by reading time off and the conversation again and never sets query data, so a write
+  that finishes after a persona switch leaves nothing of the old person in the new person's cache. A
+  test fails if any file other than the sign-in code sets query data.
+- **The Time off page** (Phase 5, stage 6). `/time-off` is open to everyone. It shows the PTO card and
+  each sick-leave year with their handbook source chips, the schedule line ("Monday to Friday, 8
+  hours a day"), and My requests in Upcoming and Past, with the manager's note on a denial. Cancel
+  shows only where the rule allows it, and asks first: focus starts on "Keep it", and after "Cancel
+  request" a toast says how many hours went back and focus moves to "My requests". If the cancel fails for a reason that
+  changed nothing (a network or server error), the dialog stays open with a toast so the person can
+  press it again. "Request time
+  off" opens the form as a panel beside the page on a wide window and as a bottom sheet on a narrow
+  one. The page asks the server to check the dates on every change, drops an answer that arrives for
+  older dates, and holds Submit until the answer for the current ones is in, so a request is never
+  sent beside figures for other dates. If the check fails, the message offers "Try again", which asks again for the same dates. A pending
+  request whose days have passed sits in Past and still shows Cancel, since it can still be canceled. Submitting closes the form, says so in a toast ("Requested.
+  Marcus Bell will review it." or "Recorded."), and puts focus back on the button.
+- **The Approvals page** (Phase 5, stage 6). `/approvals` is for managers; anyone else sees the
+  Not found page. It lists the requests waiting for a decision, oldest first, each with team
+  coverage; Approve and Deny each ask first, and a denial can carry a note. After a decision the
+  toast says what the person will see, the request moves to Recent decisions, and focus goes to the
+  next request's Approve (or the heading when none are left). If the request was canceled or decided
+  elsewhere, its card stays on the page, muted, with the reason, until the next visit. Below are
+  what is coming up on the team in the next 30 days and the manager's own decisions from the last
+  90 days. Sick time never appears as something to decide. After a decision (or one that
+  was already made), focus goes to the card after the one decided, wherever the page has drawn.
+- **What the time-off pages need from the API** (Phase 5, stage 6). Each request now says whether
+  the signed-in person may cancel it (`canCancel`, by the same rule the cancel route enforces) and
+  who decided it by id as well as name (`decidedBy.id`), so the page shows Cancel from the server's
+  answer and tells a manager's own decisions by id. The summary gives today at the person's
+  location, and the calendar gives the sick-time look-back in days and the half-day minutes, the
+  engine's own numbers, so the pages count and compute nothing. The request list has a new
+  `decided` scope: the requests the signed-in person approved or denied, newest decision first (at
+  most 200), by default from the last 90 days up to today. `from` and `to` bound the day of the
+  decision for this scope. Recent decisions on the Approvals page reads it, so a manager of a large
+  team no longer loses recent decisions to the team list's cap. The calendar's `from` is now optional and defaults to the earliest day sick time may
+  start, so the Time off page no longer repeats the look-back as a number of its own.
+- **Navigation and the rail** (Phase 5, stage 6). Time off and Approvals are in the sidebar, and
+  Approvals shows "Approvals, N waiting" for a manager (and is gone after a switch to someone who
+  manages no one). On the assistant home, "At a glance" now starts with PTO available, requests
+  pending, and for a manager approvals waiting, all from the time-off summary; they are left out if
+  the summary can't be read. Requests pending and approvals waiting carry the cinnamon dot when
+  there are any.
+- **Browser tests and captures for the time-off screens** (Phase 5, stage 6). Three new browser
+  specs run the pages against the real API with the scripted model: the confirm cards in the
+  conversation (the card waiting for its turn, one booking from a double click, dismissed and
+  replaced cards, an expired card and "Ask again", the rail following a confirm), the Time off page
+  (the form, the check on each change, the toast and focus after a send and a cancel, the
+  short-notice advice, a refusal, 390 px), and the Approvals page (the queue, both dialogs, the
+  lists, the count, a request that was canceled while the page was open, Not found for a
+  non-manager). Two tests walk the employee-to-manager flow both ways: Priya books in chat and
+  Marcus approves on the page, and Priya books on the page and Marcus approves in chat. axe finds
+  nothing in any state. A test-only script, `apps/api/scripts/expire_proposal_for_tests.py`, moves
+  one pending card 16 minutes into the past so a test need not wait 15 minutes. It refuses any
+  database that is not on this machine and any card that is not pending. The capture report gains
+  one row for each of the 53 frames of screens 08 to 10, and the rows for screens 02 to 07 no
+  longer say the Time off and Approvals items or the at-a-glance figures are missing. Existing
+  browser tests changed only where the page changed by design: the sidebar gained Time off (and
+  Approvals for a manager), the rail gained two figures before "Handbook updated", and the phone
+  top bar now scrolls sideways with four items.
+
+- **The assistant's six time-off tools** (Phase 5, stage 4). It can now read a balance (its own, a
+  report's, or anyone's for HR), list requests, check what a request would use, and propose a
+  request, a decision, or a cancellation. A proposal only stores a confirm card for a person; the
+  model never books anything. Every figure reaches the model as the shared label, never minutes, and
+  no result holds a random ID, a denial note, or team coverage. A name the model passes is matched
+  only among people the asker may read, and a refusal names no one else. The tool set moves to
+  `2026-11.1`, so older conversations offer a new one, and the recorded evals must be re-recorded
+  (the November full run) before CI's offline replay is green again.
+- **The assistant's cards in the turn** (Phase 5, stage 4). When a proposal tool stores a confirm
+  card, the turn now sends a `proposal` event right after that tool's `tool.finished`, with the same
+  shape as the conversation read's proposals. One response makes at most one card: a second
+  proposal call in the same response gets a fixed "Only one card can be made per answer" error and
+  stores nothing, and a card that replaces a pending one tells the model so. A
+  turn that does not finish (stopped, failed, past its deadline, crisis, or stored as its question
+  alone) cancels its cards in the same transaction that ends the turn, turn row first, so a confirm
+  sees both or neither; a turn that completes also cancels a card no successful tool result
+  reported (a tool that timed out while its card was committing). Recovering an abandoned turn
+  cancels its cards the same way. The next turn's context carries one "Since the last message:"
+  line for what happened to the person's cards (confirmed, dismissed, replaced, canceled, failed,
+  or expired) since the last turn whose context was stored (so a change is never lost to a turn
+  that failed, crashed, or ended in a crisis, and is reported once), made from structured data
+  only. A turn starting while a confirm is still committing waits for it, so that card's
+  outcome is never missed. A name in that line is used only if it is plain: at most four Latin-script
+  words (accents are fine) that each start with a capital, at most one hyphen and one apostrophe a
+  word, and a period only after a single initial. The context's date now
+  comes from the time-off engine's own `today_at`.
+- **Time-off scenarios for the scripted model** (Phase 5, stage 4). Development and the browser
+  tests can now ask "book next Friday", "I'm sick tomorrow", "what's my balance", "anything waiting
+  on me", "approve it", "deny it", and "cancel my request", and the real tools, engine, proposals,
+  and cards run. The scripted model works out its dates from the per-turn context's "Today:" line
+  and chains two tool rounds where a request ID is needed.
+- **Eval fixes for the new tools** (Phase 5, stage 4). A fresh eval run that stops in trial 2 or 3
+  now keeps trial 1's recordings (and prunes against them), since only trial 1 is recorded. The tool
+  grader checks each call with its own tool's input rules and treats an unknown tool as a problem,
+  and the schema check understands booleans, integers, nullable types, and dates.
+- **The action eval** (Phase 5, stage 4). A new set of 34 time-off requests in people's own words
+  (`evals/assistant/actions.yaml`): bookings, checks, a manager's decisions, cancels, and refusals,
+  graded by program on the card the turn made, that the model wrote nothing (no request added or
+  changed, at most one card), and that every amount of days or hours in the answer is one a tool
+  gave (100% in every trial). The red team gains eleven items (ten about time-off actions that are
+  not the asker's to take: confirming by message, "approvals are pre-authorized", approving your
+  own request, acting for someone else, and a report's private reasons; and a harassment message
+  that also asks for sick time), the Q&A gains five
+  (one for a manager asked whether to approve, four whose figures come from a tool), the smoke set
+  gains six action items, and the judge now sees the turn's date and the non-handbook tool results
+  (`JUDGE_VERSION` 2026-10.3). The eval sandbox now counts back from October 15, 2026, and the
+  harness adds two requests of Priya's after the seed (one to cancel, one for Marcus to decide),
+  through a new public `insert_time_off_requests` in the sandbox seed (the demo's seed adds none).
+  Offline replay is red for every item until the November full run records them.
+- **The time-off, approvals, and confirm-card components, and the alert dialog** (Phase 5,
+  stage 5). The pieces the time-off request form, the balance and request lists, the Approvals
+  page, and the assistant's confirm card are built from, each in every state and shown in the
+  component gallery. They are not on a page yet; stage 6 wires them up.
+  - **The page parts:** the balance cards (PTO, at the limit with the "earning is paused" notice,
+    sick leave, and loading), the request rows and their Upcoming and Past groups (a person's own,
+    with Cancel, and a team member's), the handbook source chips, and "What this uses", which lists
+    the counted dates (folded into runs past five), the skipped days and why, a day already booked,
+    the total, and what is left (one line for each sick-leave year). Every figure is the
+    server's own label, split into hours and days but never worked out in the browser.
+  - **The request form:** a docked 420 px panel on a wide window and a full-height sheet on a phone,
+    with the type, the dates and their picker, how much, the preview, the short-notice warning,
+    and the refusals. In the phone's sheet, Escape closes only an open date picker.
+  - **Approvals:** the approval card (Approve and Deny look the same, so neither is favored), its
+    muted "conflict" state, plain team coverage, the note field with its 300-character counter, and
+    the approve and deny dialogs.
+  - **The confirm card:** one card for booking PTO, recording sick time, approving, denying, and
+    canceling, in every state: waiting for the answer to finish, confirming, done, failed, dismissed,
+    replaced, and expired (with "Ask again"). It makes no requests; stage 6 wires it up.
+  - **The form:** a status badge (waiting, approved, denied, recorded, canceled, each an icon and a
+    fixed word), the Type control and the "How much" cards (arrow keys move and select), an hours
+    stepper that takes 1 to 8 and says so when it is not, the Dates field, and the amber warning
+    and the refusal messages.
+  - **The date picker:** opens under the Dates field and works by keyboard alone (arrows, Page Up
+    and Page Down by month, Home and End, Enter or Space, Escape). Days off the person's schedule
+    are shaded but can be picked, holidays get a dot and their name on hover or focus, and days
+    that can't be picked are struck through. Each day's name says what is special about it. Dates
+    are plain calendar dates, so no time zone moves them a day.
+  - **The alert dialog:** one centered confirm step on a scrim that covers the whole window, for
+    canceling a request and, later, approving or denying one. Focus starts on the safe choice and
+    stays inside, and on a phone the buttons stack with the confirm on top.
+  - **Also:** the avatar gains 40 px and 32 px sizes and a muted look, and the phone form's sheet
+    and the gallery's panels now use the design's scrim and panel-width tokens.
+  - **Checked in a browser:** every gallery state is scanned for accessibility at full width and
+    at 390 px, the dialogs' focus and the date picker's keys are tested in Chromium, and
+    `make captures` sets each state beside its design specimen.
+- **The time-off routes** (Phase 5, stage 3). The time-off service is now reachable over
+  HTTP under `/api/v1/time-off`, for the time-off page, the Approvals page, and the home's
+  at-a-glance cards. Every route needs a session, every write needs the CSRF header, and every
+  amount comes with both its minutes and its label ("8 hours (1 day)").
+  - **Reading:** balances for yourself or a person you may read, with the handbook sections they
+    rest on; your requests, everyone below you, or the requests waiting for your decision (oldest
+    first, whenever their days fall), in a window that defaults to 30 days back and 120 ahead of
+    your own today, at most 200 rows; one request; the date picker's marks (your weekdays, your
+    location's holidays across New Year, and the earliest day each type allows); and a summary
+    with your PTO available, your pending requests, your approver, and, for a manager, how many
+    requests wait for them.
+  - **Acting:** a check that previews a possible request without writing anything (it answers 200
+    even when the request has problems, and names the days another request already covers), then
+    make, decide, and cancel. Each is audited as made from the page.
+  - **Refusals are problems with a fixed sentence.** A request or person the caller can't read is
+    a 404, never a 403, so it looks the same as one that doesn't exist. Someone who can read it
+    but may not act (HR or a skip-level manager deciding, a manager canceling a report's request)
+    gets a 403. A request that is no longer in the needed status, or has already started, is a 409
+    that says where it stands now. The engine's refusals are 422s whose `type` is the code. Each
+    code has one plain sentence, written by a person.
+  - **PTO for someone with no manager is refused** (`no-approver`), since only a direct manager
+    decides PTO and it would wait forever. The engine's own problems come first, and the check
+    lists it too, so the form says so before sending. Sick time is unaffected. A pending request
+    can still be approved or denied after its days have passed.
+  - **Team coverage and "available after"** come with a request for the person's direct manager
+    only: who else among the manager's direct reports has approved or recorded time off on the
+    request's scheduled days (a waiting request doesn't count), and the person's available PTO as
+    it stands. Plain context, never in the audit log or sent to the model.
+  - **The engine** gains two small pure functions: the calendar days of a range that existing
+    requests already cover, and the dates a request may start and end on, which the evaluation now
+    uses too, so the date picker and the refusal can't disagree.
+
+- **Proposals and the confirm and dismiss routes** (Phase 5, stage 3). The assistant can
+  now propose a time-off request, a decision, or a cancellation, and a person confirms it on a
+  card. Nothing is reachable from the assistant yet (stage 4 adds its tools); the server side is
+  built and proven first.
+  - **The proposal service** stores each proposal for one person with its validated payload and its
+    card, a fixed 15 minutes to live, and an audit event from the assistant. A new proposal replaces
+    the one still waiting in its conversation, and a turn that doesn't finish cancels its own.
+  - **The card is built by the server** from the engine's and the service's results, never from
+    the model's words: a booking card (counted and skipped days, the amount, the balance before and
+    after, warnings, the approver, and the handbook sections), a decision card (who asked, the
+    balance as it stands, and who else on the team is off), and a cancel card (what goes back into
+    the balance). A card never holds a note or anything a person wrote.
+  - **Confirm** (`POST /api/v1/assistant/proposals/{id}/confirm`) runs the stored payload through
+    the time-off service, once, and never anything the browser sends except a denial's note (at most
+    300 characters, kept on the request only, never in the proposal or the audit log). The proposal
+    is locked first and the person's balance second, so two confirms at once book once. If the
+    request no longer fits, the confirm itself still works: the answer is a 200 whose status is
+    `failed`, with the engine's code and its fixed sentence (and the clashing days for an overlap).
+  - **Dismiss** (`POST /api/v1/assistant/proposals/{id}/cancel`) works even while the answer is
+    still streaming.
+  - **Refusals:** another person's proposal and a missing one are both a 404. A proposal that has
+    already ended is a 409 whose `type` is its status (`executed`, `failed`, `canceled`, or
+    `expired`), and one whose answer is still streaming is a 409 `turn-running`. A confirm after
+    the 15 minutes marks the proposal expired and keeps that, and so does one for an answer that
+    never finished (the proposal is canceled).
+  - **The next turn's context** gets one fixed sentence per proposal that ended since the last
+    message (made from structured fields only, never from stored text).
+  - **The proposal's clock is the database's,** never the caller's.
+  - **A card from a turn that didn't finish never runs.** A confirm executes a card only when its
+    answer completed. A turn that failed, was stopped, ended in crisis, or was marked abandoned
+    cancels its card instead. A proposal can't be stored for a turn that has already ended.
+  - **One live card per conversation is held in the database too** (migration `0010`, a unique
+    partial index on pending proposals), beside a lock that makes two cards made at once take turns.
+  - An ended proposal always answers 409 before a bad note answers 422, and an unexpected status is
+    still a 409 with a generic sentence.
+  - **A reload shows each card's state.** `GET /api/v1/assistant/conversations/current`
+    gives each turn its proposals, oldest first, with the card and the status as of the read (the
+    database's clock), in one query for the whole conversation. A waiting card past its 15 minutes
+    shows `expired`, and one whose answer never finished shows `canceled` with the reason
+    `turn-incomplete`, exactly what a confirm would do, from one shared rule. A read writes
+    nothing. Each proposal also says `turnRunning`, true while its answer is still streaming, so the
+    web app knows Confirm must wait (the confirm and dismiss answers carry it too, always false).
+  - **Each card says what it is** (`kind`: `request`, `decide`, or `cancel`), and the card is a
+    discriminated union in the API schema, so the web app can tell them apart without guessing.
+  - **The web client is regenerated** for every stage 3 route and schema (`make openapi`).
+
+- **The time-off data and service** (Phase 5, stage 2). The database, the permission rules, the
+  service, and the seed that the engine needs to run against a real sandbox. Nothing is reachable
+  over HTTP yet; stage 3 adds the routes.
+  - **The tables:** each person's working weekdays, an opening PTO balance per person, time-off
+    requests, and the assistant's proposals. The API's login can add rows and change only a
+    request's status and decision, or a proposal's status. A database trigger lets a status move
+    only forward (a final one never changes), a constraint refuses two open requests for the same
+    days, and row-level security shows a proposal only to the person it was made for.
+  - **The database backs the rules up:** it stamps when a proposal was made and when it ended,
+    holds its life to 15 minutes, starts it pending, and refuses to execute it once expired. One
+    proposal makes at most one request, and nobody can decide their own request.
+  - **Who may do what:** a person reads their own time off, a manager reads anyone below them, and
+    HR reads everyone's. Only a person's direct manager decides, and only a pending PTO request. A
+    person cancels their own request any time while it is pending, and an approved or recorded one
+    until the day before its first day.
+  - **The time-off service** makes, decides, and cancels requests. It takes a per-person lock
+    first, so two requests that each fit but not together can't both be made, and it checks each
+    request with the engine against that person's current data, using today's date at their
+    location. Each change is recorded in the audit log with the proposal that led to it, if any,
+    and the log never holds a denial's note.
+  - **The seed:** every sandbox company now has working weekdays for each person (the stores
+    rotate, the Austin night crew works Sunday to Thursday, and Leo works Wednesday to Sunday), an
+    opening PTO balance, a few approved PTO requests and the odd recorded sick day each, Leo's time
+    off last week, and one pending request in Marcus's queue. Holidays are seeded for four years,
+    from the year before the sandbox to two years after, so a sandbox that lasts past New Year is
+    still covered.
+- **The time-off engine** (Phase 5, stage 1). Pure rules code that counts time off and works out
+  balances from the handbook, with no database, no clock, and no framework. Nothing calls it yet;
+  stage 2 builds the data and the service on top of it.
+  - **Counting a request:** only the person's scheduled weekdays count, and never a company
+    holiday at their location. Each skipped day is listed with its reason ("not scheduled", or the
+    holiday's name), so a card can say why a day didn't count.
+  - **PTO** is worked out on every read from an opening balance and the requests (ADR 0012): 10
+    hours on each month's last day for salaried staff and 8 for hourly, paused at the ceiling (180
+    and 144 hours), less what's taken (today counts), booked, and pending.
+  - **Sick leave** is a yearly grant by state (40 hours in Texas and Georgia, 48 in Colorado, and
+    the larger of 40 hours or 5 workdays in California), given on January 1 or the hire date.
+    Each sick day is charged to its own calendar year.
+  - **Checking a new request** gives the spec's reasons for refusing it (no scheduled days, too
+    long, out of range, a bad partial amount, an overlap, not enough time), a short-notice warning
+    for more than three PTO days within two weeks, and what it takes from each balance.
+  - **Every result cites its handbook section**, and every amount has one shared label ("8 hours
+    (1 day)", "4 hours (half a day)", "3 hours"), so the assistant will quote figures and never
+    work them out. "Today" comes from the location's time zone, never from the sandbox's anchor
+    date.
+  - Every expected value in its 176 tests was worked out by hand from the handbook, and each
+    batch's reviewer recomputed at least five of them without running the engine.
+
+### Changed
+
+- **One source chip per handbook section** (Phase 5, stage 6). When two of the engine's rules cite
+  the same section, "What this uses" and the confirm card now show that section's chip once, in the
+  order the rules came.
+- **Scroll restoration uses a history marker** (Phase 5, stage 6). A navigation that only opens or
+  closes a panel now says so in its history state (`keepScroll`), and the scroll hook keeps the
+  position for it on a push, a replace, and Back or Forward between the page and the panel's entry.
+  The special case for `?source=` is gone, so any panel can use the marker. Only the entry that
+  opens a panel carries it; a replace never needs one.
+- **The request form can show a failed send or a failed preview** (Phase 5, stage 6). It takes an
+  optional message and shows it as an alert under the figures, and says "The preview didn't load"
+  (with Submit off) when the check for the dates fails, and Cancel on a request row now passes its button to the
+  page so focus can return to it.
+- **"Show your work" names the time-off tools plainly** (Phase 5, stage 6). Reading a balance,
+  listing requests, and checking a request show as "Checked your time off", and the three propose
+  tools show as "Prepared a confirm card", with matching lines while they run. No request ID shows
+  anywhere in the trace.
+- **The handbook's time-off rules** (Phase 5, stage 4; handbook `2026.11.1`). §3.1 says a
+  scheduled day counts as 8 hours and time off counts only scheduled days, never a company holiday.
+  §4.1 says PTO is taken in full or half days, earned for a month worked to its last day, only up to
+  the ceiling, usable only once earned (with waiting and booked requests counted), requested from
+  today to December 31 of next year, approved or denied by the manager, and cancelable while it
+  waits or until its first day. §4.3 says sick leave is used in whole hours or whole scheduled days,
+  needs no approval, can be recorded up to 30 days after, can't be recorded before the first day of
+  work or after next year, and cites California's 2-hour and Colorado's 1-hour increment limits
+  (read 2026-10-24). The engine's date refusals now cite §4.1 or §4.3. New sandboxes use the new
+  edition; existing ones keep theirs.
+
+- **The assistant's prompt proposes time off** (Phase 5, stage 4; `PROMPT_VERSION` 2026-11.1, a
+  worded with three smoke runs and two full runs on 2026-10-25). "You can't book, change, or
+  cancel anything" gives way to:
+  the assistant may propose a request, a manager's decision, or a cancellation, a confirm card does
+  the rest, and it never says anything is done. A request or a cancellation is only ever the
+  asker's own. It turns "next Friday" into dates from the per-turn
+  context's today and asks when a phrase could mean two days, never works out days, hours, or
+  balances itself (it quotes the time-off tools' labels), proposes a decision only when a manager
+  asks about one specific request, never recommends approving or denying or weighs who else is
+  out, and never asks why someone is taking time off. It makes the card right away when it knows
+  which days or which request are meant (the card is how the person confirms), asks which one
+  first when a manager asks about several requests at once, and still makes the card when a hard
+  message (harassment, say) also asks for time off.
+
+- **The browser-test job in CI may run for 30 minutes** (Phase 5, stage 5). CI runs the browser
+  tests on one worker, and stage 5's gallery tests took the job past its 20-minute limit. The new
+  tests now load the gallery once per section and check every state there (each failure still
+  names its state), which brought the run back to about 18 minutes; the limit is 30 for headroom.
+- **A time-off request card now carries the balance for each year** (Phase 5, stage 5). The card
+  the assistant proposes for booking PTO or recording sick time used to hold only the first year's
+  "available before and after" figures. It now holds a list of draws in the same shape as the
+  request check, so sick time that crosses New Year shows the balance for both years. The web
+  client's types were regenerated.
+
+### Fixed
+
+- **The assistant is told about a card even when a confirm raced the turn** (Phase 5, phase review).
+  A confirm or dismiss that began just before a new turn but finished after the turn read the card
+  could be skipped forever, so the model never learned the card had been confirmed. Each stored
+  context now records which cards it told the model about and the status it showed (migration 0011,
+  with a backfill), and the next turn reports every card whose shown status was not yet told, once.
+  A card shown as expired by the clock and then confirmed by a request already in flight is told
+  again as confirmed. The wording of the line is unchanged.
+- **Team coverage counts each colleague's own working days** (Phase 5, phase review). A colleague
+  with time off across a weekend was listed as off on a Saturday they do not work. Coverage now
+  keeps only days that are scheduled working days for both people.
+- **A not-found answer that also made a card keeps its HR contacts** (Phase 5, phase review). After
+  a reload, the contacts card was missing from that turn.
+- **A decision list ending at the last calendar day no longer fails** (Phase 5, phase review).
+  `GET /time-off/requests?scope=decided&to=9999-12-31` answered 500; it now answers with an empty
+  list.
+- **A person recorded as their own manager has no approver** (Phase 5, phase review). A PTO request
+  from such a person is refused as having no approver, instead of waiting for a decision no one
+  can make.
+- **A held Approvals card keeps its place** (Phase 5, phase review). A card held after a refusal
+  is placed where it was when the decision started, or last on the page, not second to last.
+- **Dismiss shows it is working** (Phase 5, phase review). While a Dismiss is on its way, the card
+  shows "Dismissing…" and Confirm waits.
+- **A request that changed is told so** (Phase 5, phase review). When Cancel or a decision meets a
+  request that changed or is gone and the server gave no reason, the toast says the request changed
+  and the page shows it as it stands, not "try again".
+- **The half-day choice takes its hours from the API** (Phase 5, phase review). The calendar read
+  now gives `halfDayLabel` ("4 hours") beside `halfDayMinutes`, and the form writes "Half day (4
+  hours)" from it.
+- **Small cleanups** (Phase 5, phase review). A card's canceled reason is read through one checked
+  lookup, the cancel path reads only the time zone, the eval dataset imports the sick-hours limit
+  instead of copying it, and two identical error tables became one.
+
+- **A personal-data test that failed by chance** (Phase 5, stage 6). The test that proves a card or
+  Social Security number never reaches the logs searched every field of each log record, including
+  the logging module's own timestamps, so a timing value such as 411106.6 matched "4111" and failed
+  the run. It now searches each message and the extra fields a log call adds, which is where a leak
+  would be.
+- **A confirm card stuck on "Wait for the answer to finish"** (Phase 5, stage 6). A card the stream
+  sent stayed unconfirmable until something else read the conversation. The page now reads it again
+  when a turn completes, fails, stops, or closes with no closing event, and the stored card takes
+  over with the server's own word, with a test for each ending.
+- **A card's outcome is told once, and a failed card save is called that** (Phase 5, stage 4). A
+  confirm that committed between a turn's start and its read of the cards was reported in that turn
+  and again in the next; the "since the last message" line now covers only changes up to the turn's
+  own start time. A failure while saving a card was described as "the time-off data couldn't be
+  read"; it now says the card couldn't be saved and to try again.
+- **A clean answer can no longer fail because of earlier markup** (Phase 5, stage 4). A progress
+  note holding tool-call markup used to poison the text that followed, so every later delta raised
+  and the turn ended in an error. A note is now checked when it arrives (aborted and asked again
+  like answer text), and only markup that reaches into text not yet checked counts.
+- **An answer that writes tool calls as text is stopped** (Phase 5, stage 4). In a live smoke run
+  the model wrote 144 copies of a tool call as plain text until it ran out of room, and the person
+  would have seen all of it. The turn now spots tool-call markup while the answer streams, before
+  any of it is shown, takes back what was shown, and asks the model again once; a second time,
+  the turn fails with the usual fixed error.
+- **Two eval graders no longer fail a good answer** (Phase 5, stage 4). The numbers check read a
+  date range at the end of one line and "Days" at the start of the next as two amounts, and the
+  "couldn't find it in the handbook" check allowed only 50 characters between "find" and
+  "handbook". An amount now stays on one line, and the check allows 80 characters in one
+  sentence. A number right after a month name ("October 30 day") is a date, never an amount. A
+  red-team item with a card (`rt-53`) and a refused action item (`ac-27`) may now also pass with
+  no card and a clarifying question, through an optional `clarify: true`.
+
+- **A time-off route test no longer depends on the weekday it runs on** (Phase 5, stage 4). The test
+  that every engine refusal is a 422 built its "out of range" date as yesterday, which on a
+  Sunday or Monday is not a workday, so the engine answered "no scheduled days" instead. It now uses
+  the last workday before today, and a new test holds the clock on seven consecutive days. The
+  scripted model also no longer sends nulls for the optional inputs of its time-off list calls.
+- **A time-off test no longer fails on some days** (Phase 5, stage 5). A Stage 3 test booked
+  four weeks of PTO against a fixed 9,600-minute opening, but each sandbox's seeded history is
+  drawn at random over the days before it starts, so on some days the history left too little
+  and the card was never made. The test now funds far more than the request needs.
+- **The two-confirms-at-once test no longer fails now and then** (Phase 5, stage 5). FastAPI
+  builds a router's routes on the first request that reaches them, inside
+  `warnings.catch_warnings()` to hide a pydantic warning, and that context manager swaps the
+  process-wide warning filters. The test's two simultaneous confirms were the first requests to
+  reach those routes, so one thread could restore the filters under the other, and the hidden
+  warning escaped into the suite's "warnings are errors" setting (it failed CI on #70). The test
+  now sends each client one confirm that answers 404 first, so the routes are built before the
+  two confirms race. Production only ever logged the warning.
+- **Web unit tests wait up to 3 seconds for something to appear** (Phase 5, stage 5). Testing
+  Library's default is 1 second, and on a busy CI runner, with the whole suite's files running in
+  parallel, a search that answers in 300 ms on its own can take longer. The directory page's
+  "footer when an update has failed" failed #70's CI twice that way. The setting is in the web
+  tests' setup; a passing test never waits longer. This closes the backlog item about
+  timing-flaky web tests.
+- **The web theme has the Phase 5 design tokens** (between Phase 5 stages, 2026-10-20). The
+  screens PR (#63) added eight tokens to the design export: the warning, danger, and apricot tints
+  and borders, the scrim behind a confirm dialog, and the docked panel's width. It didn't add them
+  to the web app's theme. The test that checks the theme against the export failed, but CI runs
+  the web checks only when the web app changes, so that docs-only PR never ran it. The seven colors
+  are now in the theme, and the panel width maps to the existing `--spacing-panel` (so
+  `w-panel`), like the other layout widths. CI now also runs the web unit tests when a file they
+  read outside the web app changes (`docs/design/`, the personal-data cases shared with the evals,
+  and the API's seeded people), the browser tests when the handbook changes, and the API tests
+  when the `Makefile` or `.gitignore` changes (the eval runner's tests read both).
+
+### Security
+
+- **`zod` and `undici` updated in the web app's development tools (between Phase 5 stages,
+  2026-10-24).** The audit found two high-severity advisories: `zod` before 4.6.6 can exhaust
+  memory validating oversized collections (GHSA-mrhx-c7xc-m3w5), and `undici` up to 7.30.0 and
+  8.12.1 has a Subresource Integrity bypass and a denial of service on excessive content
+  encodings (GHSA-f72v-6w45-q472, GHSA-xjj6-f33q-929c). Both come only through development tools,
+  `orval` (the API client generator) and `jsdom` (the unit tests' browser), so nothing shipped to
+  a browser was affected. `orval` is now 8.44.0 and `jsdom` 30.1.3, which bring `zod` 4.6.7 and
+  `undici` 8.12.3. `orval` also depends directly on `@scalar/json-magic` 0.15 (a file loader), which
+  asks for `undici` 7.29.1 exactly, so an override in `package.json`, scoped to that 0.15 line,
+  moves it to the fixed 7.x (7.30.1 or later). Once `orval` moves past `@scalar/json-magic` 0.15
+  the override stops matching and can go; the audit would flag a vulnerable `undici` again either
+  way. The generated client is unchanged.
+- **`opentelemetry-api` updated to 1.45.1 (between Phase 5 stages, 2026-10-22).** FastAPI depends
+  on it, and 1.45.0 parses a request's W3C `tracestate` header with a pattern that takes quadratic
+  time on a long run of spaces or tabs, so one large header could keep a worker busy for seconds
+  (GHSA-xcq7-p3pf-p88h, low severity, published that day). The API's own code never reads the
+  header, but the audit flags the package either way. A floor in `pyproject.toml` keeps any later
+  re-resolve from going back below it.
+
+- **Vite updated to 8.3.4 (between Phase 5 stages, 2026-10-20).** Vite 8.3.0 to 8.3.2 bundle a
+  `launch-editor` with three advisories published that day (GHSA-r825-w8mm-5pxw,
+  GHSA-698v-4r3x-3vcv, GHSA-587h-7wmj-h5pm), the worst a crafted file path that can run a command
+  through some editors' command-line flags. It is the development server's "open in editor"
+  helper, so it touched developers' machines, not the built app, which Vite only bundles. 8.3.3 is
+  the first fixed release; `package.json` now asks for at least 8.3.4, the newest 8.3 release. 8.3.4
+  needs `postcss` 8.5.29 or later, so the lockfile also moved `postcss` (to 8.5.31) and its own
+  small dependencies.
+
+- **`certifi` updated to 2026.10.19 (between phases, 2026-10-20).** The certificate bundle the API's
+  HTTP client trusts (through `httpx`, which reaches Voyage) included the emSign root
+  certificates, whose intermediate keys were compromised. A critical advisory, GHSA-6q48-6c7w-9gw2,
+  was published that day, and the new release drops those roots. A floor in `pyproject.toml` keeps
+  any later re-resolve from going back below it. The Anthropic SDK doesn't use this bundle: it
+  trusts the operating system's store, so the deploy phase checks that the production image's CA
+  store has dropped the emSign roots too (in the backlog).
+
 ## [0.4.0] - 2026-10-20
 
 Phase 4: the assistant core, read-only. Anyone in a sandbox can ask the assistant an HR question

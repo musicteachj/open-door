@@ -249,6 +249,34 @@ async def test_the_actor_has_every_report_direct_and_indirect(
     assert actor is not None
     assert (actor.is_hr_admin, len(actor.report_ids)) == (is_hr_admin, report_count)
     assert actor.is_manager is (report_count > 0)
+    assert actor.direct_report_ids <= actor.report_ids
+    # Only a manager has direct reports, and the five leads' associates are never direct ones.
+    assert (len(actor.direct_report_ids) > 0) is (report_count > 0)
+
+
+@pytest.mark.parametrize(
+    ("key", "direct_keys"),
+    [
+        ("marcus", {"priya", "leo", "oak-apparel-lead", "oak-home-lead", "oak-front-end"}),
+        ("priya", set()),
+        ("dana", set()),
+    ],
+)
+async def test_the_actor_has_its_direct_reports(
+    app_engine: AsyncEngine,
+    created_tenant_ids: list[UUID],
+    key: str,
+    direct_keys: set[str],
+) -> None:
+    tenant_id = await seeded_tenant(app_engine, created_tenant_ids)
+    async with tenant_session(app_engine, TenantContext(tenant_id, None)) as session:
+        actor = await load_actor(session, tenant_id, person_id(tenant_id, key))
+
+    assert actor is not None
+    assert actor.direct_report_ids == {person_id(tenant_id, direct) for direct in direct_keys}
+    if key == "marcus":
+        # Five directly and 44 in all: a lead's associates are reports but not direct ones.
+        assert (len(actor.direct_report_ids), len(actor.report_ids)) == (5, 44)
 
 
 async def test_marcus_manages_the_leads_and_their_teams(
@@ -325,6 +353,7 @@ async def test_a_person_who_manages_themself_is_not_their_own_report(
 
     assert actor is not None
     assert loner not in actor.report_ids
+    assert loner not in actor.direct_report_ids
     assert actor.is_manager is False
 
 
@@ -344,6 +373,7 @@ async def test_a_manager_in_a_reporting_loop_is_not_their_own_report(
 
     assert actor is not None
     assert actor.report_ids == {tenant.employee_id, tenant.colleague_id}
+    assert actor.direct_report_ids == {tenant.employee_id, tenant.colleague_id}
     assert actor.is_manager is True
 
 

@@ -5,20 +5,48 @@ should pick it up. When one is done, delete it here and record it in the changel
 
 ## Any phase
 
-- **Some web unit tests are timing-flaky under full-suite load:** the directory page's "footer when
-  an update has failed" and a few handbook-page searches time out now and then when the whole
-  Vitest suite runs, on a clean `dev` too, and pass alone. Raise their waits or find the slow
-  path. (Phase 4 stage 6.)
+- **A "still answering" conflict on Confirm gives no feedback.** `use-proposal-actions.ts` treats
+  every 409 as "the card changed; the next read shows it". A 409 `turn-running` leaves the card
+  pending, so if the page's view of the turn and the server's briefly differ, Confirm does nothing
+  visible. Show the "still answering" text for a 409 whose status is still pending. (v0.5.0 release
+  review.)
+- **The decide and cancel cards read their request twice.** `proposal_cards.py` loads the stored
+  request and then the same row again through `load_request_rows` (and the cancel card loads the
+  person's facts as well); one read would do. (v0.5.0 release review.)
 
-- **Small conversation-page glitches the v0.4.0 release review left alone.** When a
-  remembered conversation turns out to be gone (a 404 on send), the page drops to "Loading…" while
-  it reloads, and the composer loses focus. And "Start a new conversation" with a source panel open
-  replaces the panel's history entry, leaving a Back step that changes nothing. The release review
-  tried fixes for both, and each brought new edge cases (a stale Forward step, a conversation id
-  missed on a send that created it), so they were reverted. Also: "Start a new conversation"
-  clicked after a send has already begun still lets that send go to the old conversation, and a
-  second Enter while a send waits for the new conversation is dropped without a word. Fix them with
-  the page's next real change, with browser tests. (v0.4.0 release review.)
+- **The approvals gallery's "deciding" dialog scan can fail under heavy local load.** In
+  `gallery-approvals.spec.ts`, the scan of `decision-dialog-deciding` nudges a held page clock while
+  axe runs, and twice in full local `make check` runs (2026-10-26) a clock step found the page
+  already closed ("clock.runFor: Target page, context or browser has been closed"). It passed on
+  each rerun and in CI. Make the nudge loop stop before the page can close, or scan with the
+  dialog's timer stubbed instead of a held clock. (Phase 5 phase review.)
+
+- **The scripted model's "next Friday" and "tomorrow" ignore holidays and days off.** The browser
+  tests that book through chat skip, with a stated reason, on the few dates a year when next Friday
+  is a company holiday or tomorrow isn't on the person's schedule (`skipUnlessScriptedDayCounts`).
+  The scripted model could pick the next day that counts instead, so those tests never skip. (Phase 5
+  stage 6.)
+- **A confirm card can forget a confirm in flight.** If the live answer gives way to its saved copy
+  while Confirm is being pressed, the card remounts and shows Confirm enabled again; a second press
+  gets the card's current state calmly (a 409), so nothing is booked twice. A shared key for the card
+  across the live and saved views would keep its state. (Phase 5 stage 6 review.)
+- **Resizing across 1280 px with the request form open resets the form.** The form docks beside the
+  page from 1280 px and is a bottom sheet below it; crossing that width remounts it, clearing the
+  dates. The same happens to the date picker since Stage 5. (Phase 5 stage 6 review.)
+- **Some seeded past requests start or end on a day off.** Priya's history can read "Sunday, August 2
+  to Monday, August 3 · 8 hours (1 day)": the figures are right (the engine counts only scheduled
+  days), but a person would pick their first and last working days. The seed could snap each drawn
+  range to scheduled days. (Phase 5 stage 6 photos.)
+
+- **A conversation layout browser test can lose its element mid-check.** At 390 px, "streaming,
+  stopped, and an error mid-stream stay inside the column" (`e2e/conversation-layout.spec.ts`)
+  failed once with "no box for a visible element": the element was visible, then gone before its
+  bounding box was read. It passed on the rerun, and nothing near it had changed. Wait for the
+  final state before measuring, or retry the measurement; Phase 5 stage 6 changes that page anyway. On 2026-10-25, with the machine under heavy load (a load average over 10), ten layout
+  and gallery tests in `conversation-layout.spec.ts` and `gallery-conversation.spec.ts` timed out
+  measuring the page; all passed on the rerun.
+  (Phase 5 stage 2 close.)
+
 - **Tie the gallery's fixed texts and the running lines to the API's.** The conversation gallery
   keeps word-for-word copies of the owner-approved fixed texts (crisis, "can't answer right now",
   both budget texts, "still answering", the personal-data warning), and the chat store merges a
@@ -109,6 +137,33 @@ should pick it up. When one is done, delete it here and record it in the changel
   each keep a state-code-to-name table, so a new state needs both (Georgia did). Have the API send
   the names, and drop the web's copy. (Phase 3 close-out review.)
 
+- **Screen names before they reach the model, if names ever become editable.** The next turn's
+  context lines about proposals (`outcomes_since` in `app/ai/proposals.py`) use the requester's
+  or approver's directory name, and its plain-name check only refuses odd characters and long
+  names: "Ignore all previous instructions" passes. That is safe while every name is seeded
+  directory data. A phase that lets a person edit a name must treat names as untrusted text there.
+  (Phase 5 stage 3 security review.)
+- **Decide whether directory names and titles are untrusted text.** CLAUDE.md says a turn that
+  processes text a person wrote gets no proposal tools. The time-off tools (and Phase 4's
+  `find_people`) put directory names and job titles into the model's context in turns that can
+  still propose. Today they are seeded and no route edits them, so they aren't user-written. When
+  any route lets a person edit a name or title, either filter them before they reach the model
+  (the outcome line's `_plain_name` rule, say) or drop the proposal tools from turns that read
+  them. (Phase 5 stage 4 `/code-review medium`, rounds 1 and 3.)
+- **Small edges in what the next turn is told about cards.** A card the model replaced within a
+  turn is reported to the next turn as replaced (true, but not news), and a card canceled because
+  its tool timed out in a completed turn is described as canceled because "the answer did not
+  finish". The outcome line's name rule also drops harmless names with lowercase particles or a
+  suffix ("Ana de la Cruz", "Jr."), falling back to "the requester". (Phase 5 stage 4 reviews.)
+- **One card per model response, not per turn.** A second proposal call in the same response is
+  refused even when the first one failed, and a later round in the same turn may replace the card,
+  although the refusal says "per answer" and the action eval's no-write check allows one card a
+  turn. Align the three if the evals show the model re-proposing. (Phase 5 stage 4 reviews.)
+- **A turn that replaces a card and then fails loses both.** `create_proposal` cancels the
+  pending card as replaced at once; if the turn then fails, its own card is canceled too, and a
+  status can't move back. The person can ask again. Deferring the replacement to the turn's end
+  would need the one-pending-card index (migration 0010) relaxed. (Phase 5 stage 4 review.)
+
 ## Handbook content
 
 - **A military leave section.** The handbook has none. A company section under the federal
@@ -121,55 +176,24 @@ should pick it up. When one is done, delete it here and record it in the changel
 
 ## Phase 5: time off
 
-- **Show team coverage beside a manager's approval.** When Marcus reviews a request, show who else
-  on his team is off on those dates. It's context only: the assistant never recommends approving
-  or denying (invariant 5). (2026-10-06 design brainstorm.)
-- **Check the nav after a switch from a manager to an employee.** `navFor` builds the nav from the
-  fresh `/me` inside a remounted shell, but in Phase 2 everyone sees only Ask and Directory, so the
-  manager's items disappearing after a switch can't be observed. When Approvals becomes available,
-  add a `navFor` test and extend the shell's switch test to prove the employee never sees it.
-  (Phase 2 stage 5 security re-check.)
-- **Keep a write from the old identity out of the new cache.** `resetIdentity` clears the query
-  cache, but a mutation already in flight still runs its callbacks when it finishes. If its
-  `onSuccess` calls `setQueryData`, the old person's data lands in the new person's cache. Phase
-  2's only writes start or end a session, so nothing does this yet. Write hooks should invalidate
-  queries rather than set their data. Where one must set data, `resetIdentity` should count
-  identities and the write should check the count first. (Phase 2 stage 2 security review.)
-- **Seed last year's holidays too.** A sandbox stores the holiday calendar for its anchor year and
-  the next. One created in early January therefore lacks the previous December's closures, so a
-  question about leave taken over the holidays just before it would miss them. If the time-off
-  engine answers past-dated questions, seed the prior year as well. (Stage 2 review.)
-- **Never treat the anchor date as today.** `create_sandbox` sets `tenants.anchor_date` to
-  today's date in UTC, not in any location's timezone. Every seeded location is in the US, so a
-  sandbox created in the US evening is anchored to the location's tomorrow. Seed dates are only
-  shifted by a day, which is harmless, but invariant 2 needs today's date in the location's
-  timezone. The time-off engine must compute today from the location's `timezone`, never from
-  `anchor_date`. A test should create a sandbox at, say, 03:00 UTC and check that a Pacific-time
-  employee's "tomorrow" is the right date. The assistant's per-turn context already does this
-  (Phase 4 stage 2). (`/code-review medium` on the `v0.1.0` release.)
-
-- **Record who confirms a proposal as an audit event of its own,** separate from the action it
-  executes, so the log shows both who proposed and who decided.
-- **Grant `UPDATE` only where requests and approvals need it.** Phase 1 grants the API no
-  `UPDATE` anywhere, and the exact-grants test fails on any grant it doesn't expect.
-
-Source for both: [the Phase 1 spec](specs/2026-10-03-phase-1-tenancy-identity-permissions.md#later-phases).
-
-- **Make the scroll-restoration exception general.** `use-scroll-restoration.ts` special-cases the
-  source panel's `?source=` parameter (an import from the chat feature into the app shell), while
-  the panel's navigations already pass `preventScrollReset`. Phase 5's first panel that lives in
-  the URL (a confirm card, say) would jump to the top until another parameter is hard-coded. Mark
-  such navigations in history state and honor that for push, replace, and back instead. (v0.4.0
-  release review.)
-- **Keep trial 1's recordings when a fresh run stops in a later trial.** With `FRESH=1` (and
-  `PRUNE=1`), `evals/assistant/run.py` saves recordings only when every item ran and was judged in
-  every trial, but only trial 1 is ever recorded. A run stopped by its cap, or a judge call with no
-  room, in trial 2 or 3 throws away trial 1's complete, already paid recordings. Gate the save (and
-  the prune) on trial 1 alone. The last full run used $8.02 of a $16 cap, so it hasn't bitten;
-  Phase 5's new tools will need a full run, so fix it first. (Phase 4 phase review.)
+All five items were closed in stage 6 (2026-10-25): the nav after a switch (a `navFor` test and the
+shell's switch test), writes from an old identity (no write sets query data; a test enforces it),
+the scroll-restoration exception (a history marker), "Show your work" for the time-off tools, and
+the conversation read after a turn ends.
 
 ## Phase 6: cases and escalation
 
+- **Small conversation-page glitches the v0.4.0 release review left alone.** When a
+  remembered conversation turns out to be gone (a 404 on send), the page drops to "Loading…" while
+  it reloads, and the composer loses focus. And "Start a new conversation" with a source panel open
+  replaces the panel's history entry, leaving a Back step that changes nothing. The release review
+  tried fixes for both, and each brought new edge cases (a stale Forward step, a conversation id
+  missed on a send that created it), so they were reverted. Also: "Start a new conversation"
+  clicked after a send has already begun still lets that send go to the old conversation, and a
+  second Enter while a send waits for the new conversation is dropped without a word. Fix them with
+  the page's next real change, with browser tests. (v0.4.0 release review. Phase 5 stage 6 added the
+  confirm card to the page without touching these paths, so they move to Phase 6, whose escalation
+  panel and confidential-case confirm change the conversation page next.)
 - **The hand-off says only what's true.** Before the person writes anything, say:
   - only HR sees it, never managers;
   - it's encrypted;
@@ -191,6 +215,12 @@ Source for both: [the Phase 1 spec](specs/2026-10-03-phase-1-tenancy-identity-pe
   (Stage 4 security review.)
 
 ## Phase 7: AI Ops console, reviewer experience, model decision
+
+- **Rename the bare `amount` key in the time-off tool results.** `timeoff_results.py` sends
+  `"amount": label(...)` (and the same key in the draw, check, and card results), against the rule
+  that units live in the field name; it holds a label, so `amountLabel` fits. Renaming it changes
+  what the model reads, so it needs a full paid eval run: do it with Phase 7's next one. (Phase 5
+  phase review.)
 
 - **The audit log stores `None` as the JSON value `null`.** `AuditEvent.before` and `after` are
   nullable `jsonb` columns without `none_as_null=True`, so an event with no before or after state
@@ -239,12 +269,6 @@ Source for both: [the Phase 1 spec](specs/2026-10-03-phase-1-tenancy-identity-pe
   sometimes contradict themselves ("sits before marker [2] ... which is fine; however ..."). Before
   Phase 7's model comparison leans on the judge, look at those 10 and decide whether the rubric's
   "at or before a marker" wording needs tightening. (Phase 4 answer-quality follow-up.)
-- **The judge can't see tool facts or today's date.** It grades a fact from the asker's own profile
-  ("your profile lists your personal email") as an uncited policy claim, and a date the assistant
-  worked out from today's date as unsupported. Pass the trace's non-handbook tool results and the
-  turn's date to the judge, or say in the rubric that profile facts are not policy claims.
-  (Phase 4 stage 6 full run, qa-09 and qa-31.)
-
 - **Two eval cost-report gaps.** The scoreboard's "reused recordings" cost is the ledger total
   minus what the live meter saw, and the meter prices only streams that finish, so a billed call
   that kept its reservation (cut by the deadline, a canary, or a transient error) is reported as
@@ -255,6 +279,60 @@ Source for both: [the Phase 1 spec](specs/2026-10-03-phase-1-tenancy-identity-pe
 
 ## Phase 8: hardening and deploy-readiness
 
+- **The per-turn check for untold card outcomes grows with the conversation.** Each turn start
+  reads every card in the conversation and checks each against every stored context's
+  `reported_outcomes` array, with no index, while it holds the cards' share locks. Fine at demo
+  scale (conversations end with the sandbox); bound it (skip contexts older than the card, or keep a
+  time pre-filter) if conversations ever last. (Phase 5 phase review.)
+- **A person recorded as their own manager is half handled.** PTO for them is now refused with
+  `no-approver`, but the summary still names them as their own manager and their requests count as
+  waiting for themselves. Exclude the person wherever manager links are resolved. The seed never
+  makes such a row; it would be a data error. (Phase 5 phase review.)
+
+- **The Approvals reads load each person's facts one at a time.** `_managed_view` loads each
+  direct report's facts and requests in turn for the waiting list and every single-request read,
+  and coverage now loads each colleague's schedule too. Batch the loads per set of people. (Phase 5
+  phase review.)
+- **The request form checks the preview on every change.** Each hours keystroke, stepper press, and
+  the first click of a range sends `POST /time-off/check`; stale answers are dropped, so it's only
+  wasted requests. A short debounce, or no check while a range is half picked, would cut them.
+  (Phase 5 phase review.)
+- **Small duplications the phase review left.** Weekday and month names and the long-date format
+  live in `proposals.py`, `scripted.py`, and `context.py`; the confirm card's executed lines repeat
+  the pages' toast texts; `balances`, `pto_available_minutes`, and `_evaluate_own` gather the same
+  inputs three times; the eval graders check ISO dates the tool's own input model already checks;
+  the eval runner builds the seed company twice. Share each when that code next changes. (Phase 5
+  phase review.)
+
+- **Recent decisions leave out two kinds of past decision.** The `decided` scope lists requests
+  the manager approved or denied that are still approved or denied, among the manager's current
+  reports. An approval the employee later canceled, and a decision about someone who has since moved
+  to another manager, drop out of "Your decisions from the last 90 days", though the request still
+  records who decided it. Showing them needs a line such as "Approved October 20, later canceled".
+  Reporting lines can't change in the demo yet. (Phase 5 stage 6 review.)
+
+- **Time-off lists stop silently at 200 rows.** `GET /time-off/requests` caps every scope at 200,
+  ordered by start date (newest decision first for `decided`). A person with very many short sick
+  entries would lose the newest rows of My requests, and a manager of a large organization the end
+  of Coming up, with nothing saying the list is incomplete. Add paging or say when a list was cut.
+  (Phase 5 stage 6 review.)
+- **Back across several panel entries can keep the wrong scroll position.** The scroll hook keeps
+  the position on a Back or Forward when either entry is marked as a panel move. A jump of several
+  steps between same-page entries that aren't an open-and-close pair then skips restoring that
+  entry's saved position. Rare: it needs history steps, not the panel's own close. (Phase 5 stage 6
+  review.)
+
+- **Check the production image's CA store for the emSign roots.** `certifi` 2026.10.19 dropped the
+  emSign roots whose intermediate keys were compromised (GHSA-6q48-6c7w-9gw2), which covers the
+  `httpx` client that reaches Voyage. The Anthropic SDK goes through `httpx2` and `truststore`,
+  which use the operating system's store, so the production Dockerfile's base image must ship a
+  `ca-certificates` that has dropped them as well. Check it when the Dockerfile is written.
+  (certifi advisory, 2026-10-20.)
+- **Make sure the production image has time-zone data.** The time-off engine's `today_at` and the
+  assistant's per-turn context use the standard library's `zoneinfo`, which reads the operating
+  system's zone files. `tzdata` isn't a dependency, so a slim base image without those files would
+  fail on every location's "today". Add `tzdata` to the API's dependencies, or check that the
+  image ships the zone files, when the Dockerfile is written. (Phase 5 stage 1 review.)
 - **Quote directory values in the per-turn context before names become editable.** The context is
   a `system` message built from the asker's name and location. `one_line` keeps each to one line,
   but a name like "Dana. Operator notes: ..." would still read as an instruction with system
@@ -431,6 +509,18 @@ From the Phase 1 review ([the spec's Later phases](specs/2026-10-03-phase-1-tena
 - **Database TLS with certificate checks, and secret rotation** for the three database URLs.
 - **Deletion from backups.** A sandbox deleted from the database still exists in backups until
   they expire. Document how long, or exclude sandbox data from them.
+- **Check CI's path filters automatically.** Each CI job runs only when its filter's paths change,
+  and the filters list by hand the files outside each app that its tests read (`docs/design/`,
+  the handbook, the personal-data cases, the seed, the `Makefile`). A test that reads would
+  otherwise not run on the PR that breaks it, as happened after #63. A small check could find
+  every path a test reads outside its app and fail if no filter covers it. The theme tokens'
+  test could also check the other way, that every theme token has a source in the design export.
+  (Theme-token fix review, 2026-10-20.)
+
+- **Give the confirm a lock timeout.** A confirm that has passed its expiry check can still wait
+  on the person's time-off lock, held only by short time-off writes, so its overrun past the 15
+  minutes is small but has no stated bound. A `SET LOCAL lock_timeout` in the confirm would make
+  it explicit. (Phase 5 stage 3 security review.)
 
 ## Phase 9: deploy to AWS
 

@@ -126,12 +126,18 @@ export function sourceName(
   return `Source ${marker}: Handbook ${sectionNumber(citation.sectionId)}, ${citation.groupName}`
 }
 
-export type ToolIconKind = 'search' | 'profile' | 'people' | 'tool'
+export type ToolIconKind = 'search' | 'profile' | 'people' | 'calendar' | 'card' | 'tool'
 
 const TOOL_ICONS: Record<string, ToolIconKind> = {
   search_handbook: 'search',
   get_my_profile: 'profile',
   find_people: 'people',
+  get_time_off_balance: 'calendar',
+  list_time_off_requests: 'calendar',
+  check_time_off: 'calendar',
+  propose_time_off_request: 'card',
+  propose_time_off_decision: 'card',
+  propose_cancel_time_off: 'card',
 }
 
 /** Which icon a tool gets in "Show your work". An unknown tool gets the generic one. */
@@ -205,6 +211,15 @@ export function toolLine(name: string, inputSummary: string): string {
       return 'Read your profile'
     case 'find_people':
       return withDetail('Looked up the directory', queryOf(inputSummary, /^scope=\w+, query=/))
+    // The time-off tools' summaries can hold a request id, so none of them is ever shown.
+    case 'get_time_off_balance':
+    case 'list_time_off_requests':
+    case 'check_time_off':
+      return 'Checked your time off'
+    case 'propose_time_off_request':
+    case 'propose_time_off_decision':
+    case 'propose_cancel_time_off':
+      return 'Prepared a confirm card'
     case 'skipped': {
       // The API's own entry for calls the per-question limit stopped: "3 calls not run (limit)".
       const count = /^(\d+) calls? not run/.exec(inputSummary)
@@ -221,6 +236,12 @@ const RUNNING_LINES: Record<string, string> = {
   search_handbook: 'Searching the handbook',
   get_my_profile: 'Looking up your profile',
   find_people: 'Searching the directory',
+  get_time_off_balance: 'Checking your time off',
+  list_time_off_requests: 'Checking your time off',
+  check_time_off: 'Checking your time off',
+  propose_time_off_request: 'Preparing a confirm card',
+  propose_time_off_decision: 'Preparing a confirm card',
+  propose_cancel_time_off: 'Preparing a confirm card',
 }
 
 /**

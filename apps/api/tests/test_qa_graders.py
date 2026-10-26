@@ -285,6 +285,8 @@ def test_a_confident_answer_with_a_citation_and_no_not_found_statement_fails() -
         "I couldn't find anything on section 4.3 in the handbook.",
         "I couldn't find a 3.5 percent rule in the handbook, e.g. for parking.",
         "I couldn't find the pto vs. vacation rule in the handbook.",
+        # The smoke run of 2026-10-25 (qa-47): 56 characters between "find" and "in the handbook".
+        "I couldn't find anything about parking validation or paying for parking in the handbook.",
     ],
 )
 def test_close_paraphrases_of_the_not_found_statement_pass(sentence: str) -> None:
@@ -590,7 +592,7 @@ def redteam() -> list[Any]:
 
 
 def test_the_set_has_about_sixty_questions(questions: list[Any]) -> None:
-    assert 56 <= len(questions) <= 64
+    assert 60 <= len(questions) <= 70
 
 
 def test_the_kinds_are_spread_as_the_spec_asks(questions: list[Any]) -> None:
@@ -635,7 +637,7 @@ def test_every_expected_section_applies_to_its_asker_or_location(questions: list
 
 def test_unanswerable_decision_and_identity_items_expect_no_section(questions: list[Any]) -> None:
     for q in questions:
-        if q.kind in ("unanswerable", "employment_decision", "ai_identity"):
+        if q.kind in ("unanswerable", "employment_decision", "ai_identity", "tool_answer"):
             assert q.expect == (), q.id
         else:
             assert q.expect, q.id
@@ -832,12 +834,14 @@ def smoke() -> Any:
     return datasets.load_smoke(SMOKE_PATH)
 
 
-def test_the_smoke_list_names_fifteen_and_eleven_real_items(
+def test_the_smoke_list_names_fifteen_thirteen_and_six_real_items(
     smoke: Any, questions: list[Any], redteam: list[Any]
 ) -> None:
-    assert (len(smoke.qa), len(smoke.redteam)) == (15, 11)
+    actions = datasets.load_actions()
 
-    datasets.check_smoke(smoke, redteam, questions)
+    assert (len(smoke.qa), len(smoke.redteam), len(smoke.actions)) == (15, 13, 6)
+
+    datasets.check_smoke(smoke, redteam, questions, actions)
 
 
 def test_the_smoke_questions_cover_what_the_plan_asks(smoke: Any, questions: list[Any]) -> None:
@@ -865,6 +869,7 @@ def test_the_smoke_red_team_items_cover_every_group_and_both_routes(
         "injection",
         "prompt_extraction",
         "routing",
+        "actions",
     }
     assert {r.route for r in chosen if r.group == "routing"} == {"crisis", "sensitive"}
 
@@ -886,7 +891,7 @@ def test_the_smoke_set_holds_both_crisis_messages_self_harm_and_violence(
     [
         (
             "qa: [qa-01]\nredteam: [rt-01]",
-            ["smoke qa: needs exactly 15", "smoke redteam: needs exactly 11"],
+            ["smoke qa: needs exactly 15", "smoke redteam: needs exactly 13"],
         ),
         ("qa: [qa-01, qa-01]\nredteam: []", ["qa-01 is listed more than once"]),
         (

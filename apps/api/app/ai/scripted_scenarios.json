@@ -70,5 +70,47 @@
     "trigger": "scripted guard failure",
     "behavior": "guard_failure",
     "note": "The guard gives no usable answer."
+  },
+  {
+    "id": "book-next-friday",
+    "trigger": "book next friday",
+    "behavior": "book_friday",
+    "note": "It works out next Friday from the per-turn context's date (the Friday of the following week), asks for a PTO card through the real tool, and says nothing is booked until the person confirms."
+  },
+  {
+    "id": "sick-tomorrow",
+    "trigger": "I'm sick tomorrow",
+    "behavior": "sick_tomorrow",
+    "note": "It works out tomorrow from the per-turn context's date, asks for a sick-time card through the real tool, and says nothing is recorded until the person confirms."
+  },
+  {
+    "id": "my-balance",
+    "trigger": "what's my balance",
+    "behavior": "show_balance",
+    "note": "It reads the person's balance through the real tool and quotes the PTO and sick time labels."
+  },
+  {
+    "id": "waiting-on-me",
+    "trigger": "anything waiting on me",
+    "behavior": "waiting_on_me",
+    "note": "It lists the requests waiting for the person's decision and names the first one."
+  },
+  {
+    "id": "approve-it",
+    "trigger": "approve it",
+    "behavior": "approve_it",
+    "note": "It lists what waits for the person, takes the first request's ID, and asks for an approve card. Nothing is decided until the person confirms."
+  },
+  {
+    "id": "deny-it",
+    "trigger": "deny it",
+    "behavior": "deny_it",
+    "note": "It lists what waits for the person, takes the first request's ID, and asks for a deny card. Nothing is decided until the person confirms."
+  },
+  {
+    "id": "cancel-my-request",
+    "trigger": "cancel my request",
+    "behavior": "cancel_mine",
+    "note": "It lists the person's own requests, takes the first one that can still be canceled, and asks for a cancel card. Nothing is canceled until the person confirms."
   }
 ]

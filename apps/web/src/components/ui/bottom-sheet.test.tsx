@@ -55,6 +55,12 @@ describe('BottomSheet', () => {
     expect(onClose).toHaveBeenCalledTimes(1)
   })
 
+  it('dims the page with the scrim token', () => {
+    setup()
+    const overlay = document.querySelector('[data-slot="bottom-sheet-overlay"]')!
+    expect(overlay).toHaveClass('bg-scrim')
+  })
+
   it('closes when the overlay is pressed', async () => {
     const onClose = setup()
     const overlay = document.querySelector('[data-slot="bottom-sheet-overlay"]')!
@@ -125,5 +131,34 @@ describe('BottomSheet', () => {
       setup()
       expect(screen.getByTestId('body').parentElement).toHaveClass('[&_header]:touch-none')
     })
+  })
+
+  it('lets the page veto an Escape, so a part inside can take it for itself', async () => {
+    const onClose = vi.fn<() => void>()
+    const user = userEvent.setup()
+    render(
+      <BottomSheet
+        onClose={onClose}
+        onEscapeKeyDown={(event) => {
+          if (event.target instanceof Element && event.target.closest('[data-keeps-escape]')) {
+            event.preventDefault()
+          }
+        }}
+      >
+        <header>
+          <SheetTitle>Sick leave</SheetTitle>
+        </header>
+        <div data-keeps-escape>
+          <button>Inside keeper</button>
+        </div>
+        <button>Inside other</button>
+      </BottomSheet>,
+    )
+    screen.getByRole('button', { name: 'Inside keeper' }).focus()
+    await user.keyboard('{Escape}')
+    expect(onClose).not.toHaveBeenCalled()
+    screen.getByRole('button', { name: 'Inside other' }).focus()
+    await user.keyboard('{Escape}')
+    expect(onClose).toHaveBeenCalledOnce()
   })
 })

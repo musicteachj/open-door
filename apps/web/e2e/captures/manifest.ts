@@ -9,7 +9,9 @@ import { GALLERY_STATE_IDS } from '../gallery-ids'
 // every row of its area.
 
 export const AREAS = [
+  'approvals',
   'assistant',
+  'confirm',
   'core',
   'directory',
   'feedback',
@@ -18,6 +20,7 @@ export const AREAS = [
   'landing',
   'navigation',
   'status',
+  'timeoff',
 ] as const
 
 export type Area = (typeof AREAS)[number]
@@ -25,7 +28,10 @@ export type GalleryStateId = (typeof GALLERY_STATE_IDS)[number]
 
 /** Where an area's specimen page is, from the repository root. */
 export const specimenPath = (area: Area) =>
-  `docs/design/system/components/${area}/${area}.card.html`
+  area === 'confirm'
+    ? // The confirm card's specimen sits in the assistant folder, beside the other assistant parts.
+      'docs/design/system/components/assistant/confirm.card.html'
+    : `docs/design/system/components/${area}/${area}.card.html`
 
 /** What to do inside the section, with Playwright's locator for it, before the photograph. */
 export type Interaction = {
@@ -46,7 +52,7 @@ export type ComponentRow = {
   /** The interaction opens a floating panel outside the section. The spec waits for an element
    * with this role to be visible before photographing, and photographs the viewport, not the
    * section alone. */
-  overlay?: 'listbox' | 'menu' | 'tooltip'
+  overlay?: 'listbox' | 'menu' | 'tooltip' | 'alertdialog' | 'dialog'
 }
 
 /** Paths the report links to, relative to captures/index.html. The spec takes every path from
@@ -209,10 +215,190 @@ export const COMPONENT_ROWS: ComponentRow[] = [
   }),
   row('handbook', 'passage-panel-loading'),
   row('handbook', 'passage-panel-error'),
+
+  // Phase 5, stage 5: the time-off form's parts, the approvals parts, and the confirm card. Hover
+  // and focus rows pick the real element, since the gallery draws neither.
+  row('timeoff', 'status-badge-waiting'),
+  row('timeoff', 'status-badge-approved'),
+  row('timeoff', 'status-badge-denied'),
+  row('timeoff', 'status-badge-recorded'),
+  row('timeoff', 'status-badge-canceled'),
+  row('timeoff', 'segmented-control-default', {
+    variant: 'hover',
+    note: 'Unselected option hovered',
+    interaction: { action: 'hover', target: '[role="radio"][data-state="unchecked"]' },
+  }),
+  row('timeoff', 'segmented-control-default', {
+    variant: 'focus',
+    note: 'Keyboard focus',
+    interaction: { action: 'focus', target: '[role="radio"]' },
+  }),
+  row('timeoff', 'segmented-control-selected'),
+  row('timeoff', 'segmented-control-disabled'),
+  row('timeoff', 'choice-group-default', {
+    variant: 'hover',
+    note: 'Unselected option hovered',
+    interaction: { action: 'hover', target: '[role="radio"][data-state="unchecked"]' },
+  }),
+  row('timeoff', 'choice-group-default', {
+    variant: 'focus',
+    note: 'Keyboard focus',
+    interaction: { action: 'focus', target: '[role="radio"]' },
+  }),
+  row('timeoff', 'choice-group-selected'),
+  row('timeoff', 'choice-group-disabled'),
+  row('timeoff', 'hours-stepper-default'),
+  row('timeoff', 'hours-stepper-at-1'),
+  row('timeoff', 'hours-stepper-at-8'),
+  row('timeoff', 'hours-stepper-error'),
+  row('timeoff', 'hours-stepper-disabled'),
+  row('timeoff', 'date-field-empty'),
+  row('timeoff', 'date-field-one-day'),
+  row('timeoff', 'date-field-range'),
+  row('timeoff', 'date-field-open'),
+  row('timeoff', 'date-field-error'),
+  row('timeoff', 'date-field-disabled'),
+  row('timeoff', 'date-picker-pto', {
+    variant: 'hover',
+    note: 'Hovered day',
+    interaction: { action: 'hover', target: 'button[data-day="2026-10-22"]' },
+  }),
+  row('timeoff', 'date-picker-pto', {
+    variant: 'focus',
+    note: 'Day with keyboard focus',
+    interaction: { action: 'focus', target: 'button[data-day="2026-10-22"]' },
+  }),
+  row('timeoff', 'date-picker-sick'),
+  row('timeoff', 'date-picker-range'),
+  row('timeoff', 'form-message-warning'),
+  row('timeoff', 'form-message-refusal'),
+  row('timeoff', 'alert-dialog-cancel-request', {
+    note: 'Opened by pressing the button',
+    interaction: { action: 'click', target: 'button' },
+    overlay: 'alertdialog',
+  }),
+  row('timeoff', 'balance-card-pto'),
+  row('timeoff', 'balance-card-ceiling'),
+  row('timeoff', 'balance-card-sick'),
+  row('timeoff', 'balance-card-empty'),
+  row('timeoff', 'balance-card-loading'),
+  row('timeoff', 'request-row-approved', {
+    variant: 'hover',
+    note: 'Row hovered',
+    interaction: { action: 'hover', target: 'li' },
+  }),
+  row('timeoff', 'request-row-approved', {
+    variant: 'focus',
+    note: 'Cancel focused by keyboard',
+    interaction: { action: 'focus', target: 'button' },
+  }),
+  row('timeoff', 'request-row-waiting'),
+  row('timeoff', 'request-row-recorded'),
+  row('timeoff', 'request-row-canceled'),
+  row('timeoff', 'request-row-denied'),
+  row('timeoff', 'request-row-team'),
+  row('timeoff', 'request-row-team-denied'),
+  row('timeoff', 'request-group-upcoming'),
+  row('timeoff', 'request-group-empty'),
+  row('timeoff', 'preview-block-one-day'),
+  row('timeoff', 'preview-block-weekend'),
+  row('timeoff', 'preview-block-holiday'),
+  row('timeoff', 'preview-block-sick-hours'),
+  row('timeoff', 'preview-block-already-booked'),
+  row('timeoff', 'preview-block-runs'),
+  row('timeoff', 'preview-block-cross-year-sick'),
+  row('timeoff', 'preview-block-nothing-picked'),
+  row('timeoff', 'preview-block-nothing-counted'),
+  row('timeoff', 'request-form-pto-one-day'),
+  row('timeoff', 'request-form-holiday-range'),
+  row('timeoff', 'request-form-sick-hours'),
+  row('timeoff', 'request-form-short-notice'),
+  row('timeoff', 'request-form-not-enough'),
+  row('timeoff', 'request-form-overlap'),
+  row('timeoff', 'request-form-submitting'),
+  row('timeoff', 'request-form-sheet', {
+    note: 'Opened by pressing the button',
+    interaction: { action: 'click', target: 'button' },
+    overlay: 'dialog',
+  }),
+
+  row('approvals', 'approval-card-default', {
+    variant: 'hover-approve',
+    note: 'Approve hovered',
+    interaction: { action: 'hover', target: 'button[aria-label^="Approve"]' },
+  }),
+  row('approvals', 'approval-card-default', {
+    variant: 'hover-deny',
+    note: 'Deny hovered',
+    interaction: { action: 'hover', target: 'button[aria-label^="Deny"]' },
+  }),
+  row('approvals', 'approval-card-default', {
+    variant: 'focus',
+    note: 'Approve focused by keyboard',
+    interaction: { action: 'focus', target: 'button[aria-label^="Approve"]' },
+  }),
+  row('approvals', 'approval-card-no-coverage'),
+  row('approvals', 'approval-card-conflict'),
+  row('approvals', 'approval-card-conflict-decided'),
+  row('approvals', 'approval-card-loading'),
+  row('approvals', 'coverage-line-one-person'),
+  row('approvals', 'coverage-line-none'),
+  row('approvals', 'coverage-line-range'),
+  row('approvals', 'coverage-line-part-of-day'),
+  row('approvals', 'note-field-empty'),
+  row('approvals', 'note-field-typed'),
+  row('approvals', 'note-field-at-limit'),
+  row('approvals', 'note-field-disabled'),
+  row('approvals', 'decision-dialog-approve', {
+    note: 'Opened by pressing the button',
+    interaction: { action: 'click', target: 'button' },
+    overlay: 'alertdialog',
+  }),
+  row('approvals', 'decision-dialog-deny', {
+    note: 'Opened by pressing the button',
+    interaction: { action: 'click', target: 'button' },
+    overlay: 'alertdialog',
+  }),
+  row('approvals', 'decision-dialog-deciding', {
+    note: 'Opened by pressing the button; it closes itself after 4 seconds',
+    interaction: { action: 'click', target: 'button' },
+    overlay: 'alertdialog',
+  }),
+
+  row('confirm', 'confirm-card-book-pending', {
+    variant: 'hover',
+    note: 'Confirm hovered',
+    interaction: { action: 'hover', target: 'button' },
+  }),
+  row('confirm', 'confirm-card-book-pending', {
+    variant: 'focus',
+    note: 'Confirm focused by keyboard',
+    interaction: { action: 'focus', target: 'button' },
+  }),
+  row('confirm', 'confirm-card-holiday-pending'),
+  row('confirm', 'confirm-card-sick-pending'),
+  row('confirm', 'confirm-card-approve-pending'),
+  row('confirm', 'confirm-card-deny-pending'),
+  row('confirm', 'confirm-card-cancel-pending'),
+  row('confirm', 'confirm-card-short-notice-pending'),
+  row('confirm', 'confirm-card-cross-year-sick-pending'),
+  row('confirm', 'confirm-card-streaming'),
+  row('confirm', 'confirm-card-confirming'),
+  row('confirm', 'confirm-card-book-executed'),
+  row('confirm', 'confirm-card-holiday-executed'),
+  row('confirm', 'confirm-card-sick-executed'),
+  row('confirm', 'confirm-card-approve-executed'),
+  row('confirm', 'confirm-card-deny-executed-with-note'),
+  row('confirm', 'confirm-card-deny-executed'),
+  row('confirm', 'confirm-card-cancel-executed'),
+  row('confirm', 'confirm-card-failed'),
+  row('confirm', 'confirm-card-dismissed'),
+  row('confirm', 'confirm-card-replaced'),
+  row('confirm', 'confirm-card-expired'),
 ]
 
 /** The screen folders the report compares, in docs/design/screens/. The other folders belong to
- * later phases (08 onward). manifest.test.ts checks that every PNG in these has a row. */
+ * later phases (11 onward). manifest.test.ts checks that every PNG in these has a row. */
 export const SCREEN_FOLDERS = [
   '01-landing',
   '02-app-shell',
@@ -221,6 +407,9 @@ export const SCREEN_FOLDERS = [
   '05-global-states',
   '06-handbook',
   '07-conversation',
+  '08-time-off',
+  '09-approvals',
+  '10-confirm-cards',
 ] as const
 
 /** How to reach each state in the build. The capture spec holds the steps for each one; they use
@@ -259,6 +448,71 @@ export type ScreenSetup =
   | 'missing-section'
   | 'panel-gallery'
   | 'conversation'
+  | 'time-off'
+  | 'approvals'
+  | 'confirm-card'
+
+/** The states of screen 08, by the design file's name (desktop-<state>.png). */
+export type TimeOffState =
+  | 'default'
+  | 'default-full'
+  | 'ceiling'
+  | 'empty'
+  | 'loading'
+  | 'error'
+  | 'form-one-day'
+  | 'form-half-day'
+  | 'form-weekend'
+  | 'form-holiday'
+  | 'form-sick-hours'
+  | 'form-short-notice'
+  | 'form-not-enough'
+  | 'form-overlap'
+  | 'form-submitting'
+  | 'submitted'
+  | 'submitted-sick'
+  | 'cancel-confirm'
+  | 'canceled'
+  | 'date-picker-open'
+  | 'date-picker-sick'
+  | 'date-picker-range'
+
+/** The states of screen 09. */
+export type ApprovalsState =
+  | 'default'
+  | 'default-full'
+  | 'approve-confirm'
+  | 'deny-confirm'
+  | 'deciding'
+  | 'approved'
+  | 'denied'
+  | 'conflict'
+  | 'empty'
+  | 'loading'
+  | 'error'
+  | 'nav-manager'
+  | 'home-manager'
+
+/** The states of screen 10. */
+export type ConfirmCardState =
+  | 'pending'
+  | 'pending-streaming'
+  | 'confirming'
+  | 'executed'
+  | 'failed'
+  | 'dismissed'
+  | 'replaced'
+  | 'expired'
+  | 'holiday'
+  | 'sick'
+  | 'approve'
+  | 'deny'
+  | 'cancel'
+  | 'executed-variants'
+  | 'conversation'
+  | 'conversation-executed'
+  | 'sensitive'
+  | 'sensitive-work'
 
 /** What the build photograph shows: the whole viewport, or one region of it. */
 export type ScreenTarget = 'viewport' | 'page' | 'sidebar' | 'main' | 'rail'
@@ -276,6 +530,9 @@ export type ScreenRow = {
   /** For `conversation`: the state of the real /ask page to reach, named by the design file
    * (desktop-<scenario>.png). capture.spec.ts holds the steps for each. */
   scenario?: ConversationFile
+  /** For `time-off`, `approvals`, and `confirm-card`: the state of the real page to reach, named
+   * by the design file (desktop-<state>.png). capture.spec.ts holds the steps for each. */
+  state?: TimeOffState | ApprovalsState | ConfirmCardState
   target?: ScreenTarget
   /** Photographed at this size. 1440 by 900 when left out, the width the designs are drawn at. */
   viewport?: { width: number; height: number }
@@ -287,12 +544,12 @@ export type ScreenRow = {
 }
 
 const SCREENS = 'docs/design/screens'
-const DIRECTORY_NAV =
-  'Phase 3 and Phase 5: the Time off and Handbook items in the sidebar, and "How it\'s built" in Phase 7'
-const HANDBOOK_NAV =
-  'Phase 5: the Time off item in the sidebar and the at-a-glance figures, and "How it\'s built" in Phase 7'
-const PHASE_5_HOME =
-  'Phase 3 and Phase 5: the Time off and Handbook items and the at-a-glance figures'
+// Phases 3 and 5 built the Handbook, Time off, and Approvals items and the at-a-glance figures, so
+// what the sidebar still lacks is the one link Phase 7 adds.
+const HOW_ITS_BUILT = 'Phase 7: the "How it\'s built" link in the sidebar, which is hidden until then'
+const DIRECTORY_NAV = HOW_ITS_BUILT
+const HANDBOOK_NAV = HOW_ITS_BUILT
+const HOME_NAV = HOW_ITS_BUILT
 
 /**
  * The conversation states of screen 07, by the design file's name (desktop-<file>.png). Each is
@@ -320,6 +577,69 @@ export const conversationRow = (
   target: 'viewport',
   ...extra,
 })
+
+/**
+ * A row for screens 08 to 10: the real page against the real API with the scripted model, brought
+ * to the state of the design file's name by the steps in capture.spec.ts. The seed's dates move
+ * with today, and its people have different history from the frames' (Priya has no request ahead,
+ * Marcus has one waiting, not two), so a row says where the figures or the dates can't match.
+ */
+/** Screen 10 states asked with "book next friday" or "I'm sick tomorrow", whose day the scripted
+ * model works out from today. */
+const DATE_DEPENDENT: readonly ConfirmCardState[] = [
+  'pending',
+  'pending-streaming',
+  'confirming',
+  'executed',
+  'failed',
+  'dismissed',
+  'replaced',
+  'expired',
+  'holiday',
+  'sick',
+  'executed-variants',
+  'conversation',
+  'conversation-executed',
+  'sensitive',
+  'sensitive-work',
+]
+const DATE_CAVEAT =
+  "Date-dependent: the scripted model's day can be a company holiday or a day off the schedule, and a capture taken on such a date shows a refusal instead of a card."
+
+const pageRow = (
+  folder: '08-time-off' | '09-approvals' | '10-confirm-cards',
+  state: TimeOffState | ApprovalsState | ConfirmCardState,
+  title: string,
+  extra: Pick<ScreenRow, 'note' | 'persona' | 'target' | 'differsUntil'> = {},
+): ScreenRow => {
+  const screen = {
+    '08-time-off': { label: '08 Time off', route: '/time-off', setup: 'time-off', who: 'Priya' },
+    '09-approvals': { label: '09 Approvals', route: '/approvals', setup: 'approvals', who: 'Marcus' },
+    '10-confirm-cards': {
+      label: '10 Confirm cards',
+      route: '/ask',
+      setup: 'confirm-card',
+      who: 'Priya',
+    },
+  } as const
+  const { label, route, setup, who } = screen[folder]
+  return {
+    title: `${label}: ${title}`,
+    designImage: `${SCREENS}/${folder}/desktop-${state}.png`,
+    route,
+    persona: who,
+    setup,
+    state,
+    target: 'viewport',
+    ...extra,
+    ...(DATE_DEPENDENT.includes(state as ConfirmCardState)
+      ? { note: [extra.note, DATE_CAVEAT].filter(Boolean).join(' ') }
+      : {}),
+  }
+}
+
+const SEED_DATES =
+  'The seed has no request ahead for Priya, so the dates and figures differ from the frame'
 
 export const SCREEN_ROWS: ScreenRow[] = [
   {
@@ -359,7 +679,7 @@ export const SCREEN_ROWS: ScreenRow[] = [
     route: '/ask',
     persona: 'Priya',
     setup: 'home',
-    differsUntil: PHASE_5_HOME,
+    differsUntil: HOME_NAV,
     note: 'The clock says 21 h 30 min are left, as the design does',
   },
   {
@@ -368,7 +688,7 @@ export const SCREEN_ROWS: ScreenRow[] = [
     route: '/ask',
     persona: 'Priya',
     setup: 'persona-menu',
-    differsUntil: PHASE_5_HOME,
+    differsUntil: HOME_NAV,
   },
   {
     title: '02 App shell: switching',
@@ -377,7 +697,7 @@ export const SCREEN_ROWS: ScreenRow[] = [
     persona: 'Priya',
     setup: 'switching',
     note: 'The switch request is held, so the switcher stays busy',
-    differsUntil: PHASE_5_HOME,
+    differsUntil: HOME_NAV,
   },
   {
     title: '02 App shell: switched, with the toast',
@@ -385,8 +705,8 @@ export const SCREEN_ROWS: ScreenRow[] = [
     route: '/ask',
     persona: 'Priya',
     setup: 'switched',
-    note: "Marcus's home. The pointer rests on the toast so it stays open",
-    differsUntil: 'Phase 5: the Approvals item and its count, and the at-a-glance figures',
+    note: "Marcus's home. The pointer rests on the toast so it stays open. The seed has 1 approval waiting for Marcus (Zara's), not the frame's 2",
+    differsUntil: HOW_ITS_BUILT,
   },
   {
     title: '02 App shell: expiry banner',
@@ -395,7 +715,7 @@ export const SCREEN_ROWS: ScreenRow[] = [
     persona: 'Priya',
     setup: 'expiry-banner',
     note: 'The clock says 2 h 50 min are left',
-    differsUntil: PHASE_5_HOME,
+    differsUntil: HOME_NAV,
   },
   {
     title: '02 App shell: employee navigation',
@@ -405,7 +725,7 @@ export const SCREEN_ROWS: ScreenRow[] = [
     setup: 'home',
     target: 'sidebar',
     note: "The sidebar, as Priya sees it (Mateo's is the same)",
-    differsUntil: 'Phase 3 and Phase 5: Handbook and Time off, and the "How it\'s built" link in Phase 7',
+    differsUntil: HOW_ITS_BUILT,
   },
   {
     title: '02 App shell: manager navigation',
@@ -414,7 +734,7 @@ export const SCREEN_ROWS: ScreenRow[] = [
     persona: 'Marcus',
     setup: 'home',
     target: 'sidebar',
-    differsUntil: 'Phase 5: the Approvals item with its count, Time off, and Handbook (Phase 3)',
+    differsUntil: HOW_ITS_BUILT,
   },
   {
     title: '02 App shell: HR navigation',
@@ -423,7 +743,7 @@ export const SCREEN_ROWS: ScreenRow[] = [
     persona: 'Dana',
     setup: 'home',
     target: 'sidebar',
-    differsUntil: 'Phase 6: the Cases and Console items, and Time off and Handbook before that',
+    differsUntil: `Phase 6: the Cases and Console items. ${HOW_ITS_BUILT}`,
   },
 
   {
@@ -432,7 +752,7 @@ export const SCREEN_ROWS: ScreenRow[] = [
     route: '/ask',
     persona: 'Priya',
     setup: 'home',
-    differsUntil: PHASE_5_HOME,
+    differsUntil: HOME_NAV,
   },
   {
     title: '03 Assistant home: composer and "Try asking" states',
@@ -450,7 +770,7 @@ export const SCREEN_ROWS: ScreenRow[] = [
     persona: 'Priya',
     setup: 'home',
     target: 'rail',
-    differsUntil: 'Phase 3 and Phase 5: the at-a-glance links. Until then the rail shows only the sandbox indicator',
+    note: "The rail only. The frame's figures (days of PTO, a pending count) differ from the seed's hours, and requests pending now carries the marker when some wait",
   },
   {
     title: '03 Assistant home: navigation states',
@@ -472,7 +792,7 @@ export const SCREEN_ROWS: ScreenRow[] = [
     target: 'page',
     viewport: { width: 390, height: 844 },
     note: 'The design is a first pass. The build fixes its two problems: the sandbox indicator is in the top bar, and the navigation fades when it scrolls',
-    differsUntil: 'Phase 3 and Phase 5: the Time off and Handbook items and the at-a-glance figures',
+    differsUntil: HOW_ITS_BUILT,
   },
 
   {
@@ -499,7 +819,7 @@ export const SCREEN_ROWS: ScreenRow[] = [
     route: '/directory',
     persona: 'Marcus',
     setup: 'directory-my-team',
-    differsUntil: `Phase 5: the Approvals item with its count. ${DIRECTORY_NAV}`,
+    differsUntil: DIRECTORY_NAV,
   },
   {
     title: '04 Directory: no results',
@@ -558,7 +878,7 @@ export const SCREEN_ROWS: ScreenRow[] = [
     route: '/no/such/page',
     persona: 'Priya',
     setup: 'not-found',
-    differsUntil: 'Phase 3 and Phase 5: the Time off and Handbook items',
+    differsUntil: HOW_ITS_BUILT,
   },
   {
     title: '05 Global states: something went wrong',
@@ -568,7 +888,7 @@ export const SCREEN_ROWS: ScreenRow[] = [
     setup: 'server-error',
     note: "The directory's list request is answered with a 500 and a request ID, so the error shows inside the shell",
     differsUntil:
-      'Phase 3 and Phase 5: the Time off and Handbook items, and "How it\'s built" in Phase 7. The build\'s reference is the full 32 characters, where the design draws 8',
+      `${HOW_ITS_BUILT}. The build's reference is the full 32 characters, where the design draws 8`,
   },
 
   {
@@ -735,6 +1055,172 @@ export const SCREEN_ROWS: ScreenRow[] = [
   }),
   conversationRow('long-conversation', 'Long conversation', {
     note: 'STUB: the conversation GET, with `longHistory` on. "Show your work" stays on every finished answer, though the mockup leaves it off',
+  }),
+  // Screen 08, the Time off page. Priya, unless a row says otherwise.
+  pageRow('08-time-off', 'default', 'default', {
+    note: "Priya has four past approved requests and nothing ahead, so Upcoming is empty and the figures are the seed's, which change with the date (the frame shows 132 hours)",
+  }),
+  pageRow('08-time-off', 'default-full', 'default, full height', {
+    target: 'page',
+    note: 'The whole page. There is no denial row or note in the seed, so Past is shorter than the frame',
+  }),
+  pageRow('08-time-off', 'ceiling', 'at the PTO limit', {
+    note: 'The seed has nobody at the 180-hour limit, so this is the default page. The notice and "Next: paused" are proved by the gallery state and the unit tests',
+  }),
+  pageRow('08-time-off', 'empty', 'no requests', {
+    persona: 'Dana',
+    note: "Dana has no requests in the seed, so My requests is empty. Her figures and schedule differ from Priya's frame",
+  }),
+  pageRow('08-time-off', 'loading', 'loading', {
+    note: 'The balances request is held, so the skeletons stay',
+  }),
+  pageRow('08-time-off', 'error', 'error', {
+    note: 'The balances request is answered with a 500 and a request ID, so the error shows inside the shell. The build shows the full 32-character reference',
+  }),
+  pageRow('08-time-off', 'form-one-day', 'form, one day', { note: SEED_DATES }),
+  pageRow('08-time-off', 'form-half-day', 'form, half day', { note: SEED_DATES }),
+  pageRow('08-time-off', 'form-weekend', 'form, across a weekend', {
+    note: `A Friday to the Monday after. ${SEED_DATES}`,
+  }),
+  pageRow('08-time-off', 'form-holiday', 'form, across a holiday', {
+    note: `The first company holiday ahead, with the day before and after. ${SEED_DATES}`,
+  }),
+  pageRow('08-time-off', 'form-sick-hours', 'form, sick time by the hour', {
+    note: 'Sick time on the last scheduled day before today, 3 hours. Priya has 40 hours of sick leave in the seed, not 32',
+  }),
+  pageRow('08-time-off', 'form-short-notice', 'form, short notice', {
+    note: `Four scheduled days starting tomorrow. ${SEED_DATES}`,
+  }),
+  pageRow('08-time-off', 'form-not-enough', 'form, not enough PTO', {
+    note: `Sixteen scheduled days from two weeks out. ${SEED_DATES}`,
+  }),
+  pageRow('08-time-off', 'form-overlap', 'form, already booked', {
+    note: 'A day is booked first through the form, then the form opens on it again. The frame overlaps the December 23 request',
+  }),
+  pageRow('08-time-off', 'form-submitting', 'form, submitting', {
+    note: 'The send is held, so the button stays in its busy state',
+  }),
+  pageRow('08-time-off', 'submitted', 'submitted', {
+    note: 'The pointer rests on the toast so it stays open. The PTO card counts the request as waiting',
+  }),
+  pageRow('08-time-off', 'submitted-sick', 'submitted, sick time', {
+    note: 'The pointer rests on the toast so it stays open',
+  }),
+  pageRow('08-time-off', 'cancel-confirm', 'cancel confirm', {
+    note: 'A request is made first, then its Cancel pressed. The frame cancels the December 23 request',
+  }),
+  pageRow('08-time-off', 'canceled', 'canceled', {
+    note: 'A request is made and canceled, so it sits in Past as Canceled. The frame cancels the December 23 request',
+  }),
+  pageRow('08-time-off', 'date-picker-open', 'date picker', {
+    note: 'Focus is on today, where the frame has it on October 30',
+  }),
+  pageRow('08-time-off', 'date-picker-sick', 'date picker, sick time', {
+    note: 'Focus is on today, where the frame has it on a day 5 days back',
+  }),
+  pageRow('08-time-off', 'date-picker-range', 'date picker, a range over a holiday', {
+    note: "The first company holiday ahead, focused so its name shows. The frame's is Thanksgiving",
+  }),
+
+  // Screen 09, the Approvals page. Marcus, with Priya's request made first so two wait, as in the
+  // frames (the seed has only Zara's).
+  pageRow('09-approvals', 'default', 'default', {
+    note: "Priya's request is made on her Time off page first, so two wait, as in the frame. Zara's is the seed's, 21 days out; the frame's dates and figures differ",
+  }),
+  pageRow('09-approvals', 'default-full', 'default, full height', {
+    target: 'page',
+    note: "The whole page. Recent decisions holds the seed's history, not the frame's August 28 denial",
+  }),
+  pageRow('09-approvals', 'approve-confirm', 'approve dialog', {
+    note: "Zara's Approve pressed, focus on Go back",
+  }),
+  pageRow('09-approvals', 'deny-confirm', 'deny dialog with a note', {
+    note: "Zara's Deny pressed and a note typed; the count is the typed note's own, not the frame's 77",
+  }),
+  pageRow('09-approvals', 'deciding', 'deciding', {
+    note: 'The decision is held, so the dialog stays on "Approving…"',
+  }),
+  pageRow('09-approvals', 'approved', 'approved', {
+    note: "Zara approved. The pointer rests on the toast; focus is on Priya's Approve",
+  }),
+  pageRow('09-approvals', 'denied', 'denied with a note', {
+    note: 'Zara denied with a note. The pointer rests on the toast',
+  }),
+  pageRow('09-approvals', 'conflict', 'conflict, canceled', {
+    note: "STUB: Priya's request is canceled for real, and Marcus's queue read keeps listing it until he presses Approve, so the real API refuses and the card is held. The frame's card is Zara's",
+  }),
+  pageRow('09-approvals', 'empty', 'nothing waiting', {
+    note: "Zara's request is approved first, then the page opened again, so the queue is empty",
+  }),
+  pageRow('09-approvals', 'loading', 'loading', {
+    note: 'The time-off requests are held, so the skeletons stay',
+  }),
+  pageRow('09-approvals', 'error', 'error', {
+    note: 'The requests are answered with a 500 and a request ID. The build shows the full 32-character reference',
+  }),
+  pageRow('09-approvals', 'nav-manager', 'navigation, manager', {
+    target: 'sidebar',
+    note: 'The sidebar as Marcus sees it on Approvals, with 2 waiting. The frame also draws hover, focus, none waiting, and Priya\'s navigation, which the gallery\'s nav states show',
+  }),
+  pageRow('09-approvals', 'home-manager', "Marcus's home", {
+    persona: 'Marcus',
+    note: "With Priya's request waiting, the rail reads 2 approvals waiting with the marker. His PTO figure is the seed's",
+  }),
+
+  // Screen 10, the confirm cards in the conversation. Priya, unless a row says otherwise.
+  pageRow('10-confirm-cards', 'pending', 'pending', {
+    note: 'Asked "book next friday". The scripted model\'s date and the seed\'s balance differ from the frame',
+  }),
+  pageRow('10-confirm-cards', 'pending-streaming', 'pending, answer still arriving', {
+    note: "STUB: the real turn runs, and only its closing event is held back, so the real card shows while the answer is still being written. The line has no typing caret",
+  }),
+  pageRow('10-confirm-cards', 'confirming', 'confirming', {
+    note: 'The confirm request is held, so the card stays on "Confirming…"',
+  }),
+  pageRow('10-confirm-cards', 'executed', 'executed', {
+    note: 'Confirmed. The rail reads one request pending, without the cinnamon marker the frame draws beside it (reported, not built)',
+  }),
+  pageRow('10-confirm-cards', 'failed', 'failed', {
+    note: 'The same day is booked through the Time off route after the card was made, so Confirm is refused for real (an overlap). The reason names the seed\'s date',
+  }),
+  pageRow('10-confirm-cards', 'dismissed', 'dismissed'),
+  pageRow('10-confirm-cards', 'replaced', 'replaced', {
+    note: 'A second "book next friday" makes the newer card. The frame\'s follow-up is a half day, which the scripted model can\'t ask for',
+  }),
+  pageRow('10-confirm-cards', 'expired', 'expired', {
+    note: 'The card is aged past its 15 minutes with the test-only script, then Confirm is pressed',
+  }),
+  pageRow('10-confirm-cards', 'holiday', 'holiday skipped', {
+    note: 'The scripted model can only book "next Friday", which is not a holiday, so this is the pending card. The skipped-holiday block is shown by the gallery state',
+  }),
+  pageRow('10-confirm-cards', 'sick', 'sick time', {
+    note: 'Asked "I\'m sick tomorrow". Priya has 40 hours of sick leave in the seed, not 32',
+  }),
+  pageRow('10-confirm-cards', 'approve', 'approve, as Marcus', {
+    persona: 'Marcus',
+    note: 'Asked "approve it", which takes the first request waiting: Zara\'s from the seed, not Priya\'s as in the frame',
+  }),
+  pageRow('10-confirm-cards', 'deny', 'deny, as Marcus', {
+    persona: 'Marcus',
+    note: 'Asked "deny it", which takes Zara\'s request, with a note typed in the card. The frame\'s card is Zara\'s too',
+  }),
+  pageRow('10-confirm-cards', 'cancel', 'cancel', {
+    note: 'A request is made on the Time off page first, then "cancel my request" asked. The frame cancels an approved request, so its balance and status differ',
+  }),
+  pageRow('10-confirm-cards', 'executed-variants', 'executed variants', {
+    note: 'The end of Priya\'s thread, with three executed cards: a booking, sick time, and a cancel (scroll up for the first two). The frame also shows the holiday, approve, and deny variants, which are the gallery\'s states',
+  }),
+  pageRow('10-confirm-cards', 'conversation', 'conversation, show your work', {
+    note: 'Asked "book next friday", with "Show your work" open. It lists the card tool only, because the scripted model does not read the balance first, where the frame also lists "Checked your time off"',
+  }),
+  pageRow('10-confirm-cards', 'conversation-executed', 'conversation, executed', {
+    note: 'After Confirm, with "Show your work" open. The rail reads one request pending, without the frame\'s marker',
+  }),
+  pageRow('10-confirm-cards', 'sensitive', 'sensitive turn with a card', {
+    note: 'STUB: the conversation GET puts a real sick-time card under a sensitive turn, because the scripted model cannot answer both in one message',
+  }),
+  pageRow('10-confirm-cards', 'sensitive-work', 'sensitive turn, show your work', {
+    note: 'STUB: as the row above, with "Show your work" open',
   }),
 ]
 

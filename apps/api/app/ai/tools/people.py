@@ -5,7 +5,6 @@ database rule that limits private details to that person and HR. `find_people` r
 cards only, each one checked by the policy layer.
 """
 
-import json
 import logging
 from dataclasses import dataclass
 from typing import Any, Literal
@@ -22,8 +21,9 @@ from app.ai.tools.base import (
     ToolOutcome,
     describe_problem,
     failure,
+    input_problems,
+    json_block,
     shortened,
-    text_block,
 )
 from app.db.models import Tenant
 from app.db.tenancy import tenant_session
@@ -90,10 +90,6 @@ FIND_DEFINITION: dict[str, Any] = {
         "additionalProperties": False,
     },
 }
-
-
-def _json_block(data: object) -> dict[str, Any]:
-    return text_block(json.dumps(data, ensure_ascii=False, separators=(",", ":")))
 
 
 def _card(card: DirectoryCard) -> dict[str, Any]:
@@ -190,7 +186,7 @@ async def run_profile(raw_input: dict[str, Any], ctx: ToolContext) -> ToolOutcom
             "dateOfBirth": details.date_of_birth.isoformat(),
         },
     }
-    return ToolOutcome([_json_block(profile)], summary=PROFILE_SUMMARY)
+    return ToolOutcome([json_block(profile)], summary=PROFILE_SUMMARY)
 
 
 def summary_of(scope: str, query: str | None) -> str:
@@ -250,7 +246,7 @@ async def run_find(raw_input: dict[str, Any], ctx: ToolContext) -> ToolOutcome:
     # someone is hidden. If the policy can hide cards, filter in SQL before the limit instead.
     truncated = page.next_cursor is not None
     return ToolOutcome(
-        [_json_block({"people": [_card(card) for card in visible], "truncated": truncated})],
+        [json_block({"people": [_card(card) for card in visible], "truncated": truncated})],
         summary=summary,
     )
 
@@ -259,5 +255,13 @@ def describe_profile(raw_input: Any) -> str:
     return PROFILE_SUMMARY
 
 
-PROFILE_TOOL = Tool(PROFILE_NAME, PROFILE_DEFINITION, run_profile, describe_profile)
-FIND_TOOL = Tool(FIND_NAME, FIND_DEFINITION, run_find, describe_find)
+def check_profile(raw_input: Any) -> list[str]:
+    return input_problems(NoInput, raw_input)
+
+
+def check_find(raw_input: Any) -> list[str]:
+    return input_problems(FindInput, raw_input)
+
+
+PROFILE_TOOL = Tool(PROFILE_NAME, PROFILE_DEFINITION, run_profile, describe_profile, check_profile)
+FIND_TOOL = Tool(FIND_NAME, FIND_DEFINITION, run_find, describe_find, check_find)

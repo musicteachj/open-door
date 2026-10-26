@@ -16,6 +16,7 @@ from app.ai.fixed_texts import (
     UNAVAILABLE_TEXT,
     HrContact,
 )
+from app.ai.proposals import ProposalOut
 from app.db.models import AiFeedback, AiTurn
 from app.modules.assistant.schemas import (
     CitationOut,
@@ -180,6 +181,7 @@ def turn_out(
     feedback: AiFeedback | None,
     hr_contact: Sequence[HrContact],
     section_names: Mapping[str, tuple[str | None, str | None]],
+    proposals: Sequence[ProposalOut] = (),
 ) -> TurnOut:
     """`shows` is what `shown` worked out for the turn. `section_names` maps a section ID to its
     (title, group name), from the conversation's stored sources. A section it doesn't hold is shown
@@ -218,6 +220,7 @@ def turn_out(
         feedback=None
         if feedback is None
         else FeedbackOut(helpful=feedback.helpful, reason=feedback.reason),
+        proposals=list(proposals),
         started_at=turn.started_at,
         ended_at=turn.ended_at,
     )
