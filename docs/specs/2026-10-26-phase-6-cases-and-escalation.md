@@ -230,13 +230,14 @@ in {My cases | Cases}." For a crisis verdict, the fixed crisis text follows it.
   it to crisis text."
 - The read-first rule: "Read {first name}'s words before changing the status."
 - HR's own case: "You opened this case, so you can't act on it or read it here."
+- The empty-words error: "Add your words before sending."
 - The personal-data refusal on the form: "That looks like a Social Security or card number. Please
   take it out before sending." A failed send: "Your case wasn't sent. Please try again." The
   length limit: "4,000 of 4,000 characters. Shorten it to send."
 - The hidden words: "{First name}'s words are hidden. Opening them is recorded in this case's
   timeline." with "Show {first name}'s words".
 - The status dialogs: "Start review of this case?" ("{First name} will see "HR is reviewing" in My
-  cases.") and "Close this case?" ("{First name} will see "HR has finished its review". A closed
+  cases.") and "Close this case?" ("{First name} will see "HR has finished its review." A closed
   case can't be reopened in Open Door."), each with its action and "Cancel".
 - Timeline times are in the viewer's location's time zone, with the zone shown.
 
@@ -599,8 +600,11 @@ The design decides the look. The build adds these rules.
 
 ### The design
 
-Screens 11 and 12 are designed after this spec, from the prompts in the planning session (step 4
-records their key points in the design brief):
+Designed and approved on 2026-10-26, in one round each in Claude Design:
+[`11-escalation-cases`](../design/screens/11-escalation-cases/notes.md) and
+[`12-hr-cases`](../design/screens/12-hr-cases/notes.md). Each screen's `notes.md` has its states,
+layout, phone behavior, keyboard and focus, copy, where its data comes from, its build decisions,
+and its acceptance criteria, which Stage 5's Task 31 turns into the plan's table. They cover:
 
 - **11, the escalation panel, the confidential-case form, and "My cases":** the sensitive and
   crisis panels with the button, the form in every state, the sent state (and with the crisis

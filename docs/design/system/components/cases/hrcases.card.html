@@ -1,0 +1,44 @@
+<!-- @dsCard group="Components" viewport="1180x3000" name="HR cases" -->
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><link rel="stylesheet" href="../../styles.css"><script src="https://unpkg.com/react@18.3.1/umd/react.production.min.js"></script><script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.production.min.js"></script><script src="https://unpkg.com/@babel/standalone@7.24.7/babel.min.js"></script><script src="../../preview/loader.js"></script></head><body style="margin:0;background:var(--surface-raised)"><div id="root"></div>
+<script type="text/babel" data-presets="react">
+loadOpenDoor("../../", OD_FILES).then(function (OD) {
+  const { CaseQueueTable, CaseSummaryBlock, CaseWordsReveal, CaseTimeline, StatusBadge } = OD;
+  const Lbl = ({ children }) => <div style={{ font: "400 11px/16px var(--font-sans)", color: "var(--ink-muted)", marginBottom: 8 }}>{children}</div>;
+  const H = ({ children }) => <h2 style={{ margin: "0 0 12px", font: "600 15px/24px var(--font-sans)", color: "var(--ink)" }}>{children}</h2>;
+  const Grid = ({ children }) => <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 540px))", gap: 24, alignItems: "start" }}>{children}</div>;
+  const Cell = ({ label, children }) => <div><Lbl>{label}</Lbl>{children}</div>;
+  const rows = [
+    { href: '#a', initials: 'CF', name: 'Chloe Foster', title: 'Shift Lead, Opening', location: 'Atlanta store', category: 'Harassment or discrimination', sent: 'Thu, Oct 22', reply: 'Reply was due Mon, Oct 26', status: 'case-new' },
+    { href: '#b', initials: 'MC', name: 'Megan Coleman', title: 'Shift Supervisor, Nights', location: 'Austin warehouse', category: 'Something else, or not sure', crisisFact: true, sent: 'Tue, Oct 27', reply: 'Reply due Thu, Oct 29', status: 'case-new', state: 'hover' },
+    { href: '#c', initials: 'AE', name: 'Aaliyah Edwards', title: 'Cashier', location: 'Oakland store', category: 'Workplace safety', sent: 'Mon, Oct 19', reply: 'In review since Tue, Oct 20', status: 'case-in-review', state: 'focus' },
+    { href: '#d', initials: 'LG', name: 'Lucia Gutierrez', title: 'Graphic Designer', location: 'Denver HQ', category: 'Medical or accommodation', sent: 'Mon, Oct 5', reply: 'Closed Fri, Oct 16', status: 'case-closed' }
+  ];
+  const SUM = 'The person says their manager keeps making comments about their age. They don’t say when the comments started, where they were made, or whether anyone else heard them.';
+  const base = [{ text: 'Sent by Priya Raman', time: 'Mon, Oct 26, 10:41 AM MDT' }, { text: 'AI summary written', time: '10:41 AM MDT' }, { text: 'Dana Whitfield read the AI summary', time: '10:52 AM MDT' }];
+  function Live() {
+    const [open, setOpen] = React.useState(false); const [ev, setEv] = React.useState(base); const [n, setN] = React.useState(0); const [ann, setAnn] = React.useState('');
+    const toggle = () => { if (!open) { const t = 'Dana Whitfield read Priya’s words'; setEv([...ev, { text: t, time: '10:5' + (3 + n) + ' AM MDT' }]); setN(n + 1); setAnn('Added to the timeline: ' + t); } setOpen(!open); };
+    return <Grid><CaseWordsReveal id="lw" firstName="Priya" words="My manager keeps making comments about my age." open={open} onToggle={toggle} /><CaseTimeline id="lt" events={ev} announce={ann} /></Grid>;
+  }
+  function Card() {
+    return (
+      <div style={{ padding: "20px 24px 40px", display: "flex", flexDirection: "column", gap: 40 }}>
+        <div><H>CaseQueueTable</H><Lbl>Rows: default, hover, focus, closed. Neutral facts only.</Lbl><CaseQueueTable rows={rows} /><div style={{ marginTop: 24 }}><Lbl>Empty (New filter)</Lbl><CaseQueueTable rows={[]} /></div></div>
+        <div><H>Case statuses (HR)</H><div style={{ display: "flex", gap: 12 }}><StatusBadge status="case-new" /><StatusBadge status="case-in-review" /><StatusBadge status="case-closed" /></div></div>
+        <div><H>CaseSummaryBlock</H><Grid>
+          <Cell label="Ready"><CaseSummaryBlock id="s1" text={SUM} writtenAt="Mon, Oct 26, 10:41 AM MDT" /></Cell>
+          <Cell label="Pending"><CaseSummaryBlock id="s2" state="pending" /></Cell>
+          <Cell label="Failed"><CaseSummaryBlock id="s3" state="failed" /></Cell>
+          <Cell label="Routed to crisis"><CaseSummaryBlock id="s4" state="crisis" /></Cell>
+        </Grid></div>
+        <div><H>CaseWordsReveal and CaseTimeline</H><Lbl>Live: Show adds a recorded read to the timeline; Hide doesn't.</Lbl><Live /></div>
+        <div><H>CaseWordsReveal states</H><Grid>
+          <Cell label="Hidden, button focused"><CaseWordsReveal id="w1" firstName="Aaliyah" words="" buttonState="focus" /></Cell>
+          <Cell label="Shown, button hovered"><CaseWordsReveal id="w2" firstName="Priya" words="My manager keeps making comments about my age." open buttonState="hover" /></Cell>
+        </Grid></div>
+      </div>);
+  }
+  ReactDOM.createRoot(document.getElementById("root")).render(<Card />);
+});
+</script></body></html>

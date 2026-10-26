@@ -167,3 +167,30 @@ button for a decision (screen 09's build decisions).
 - **The deny card's Tab order follows the screen:** the note field, then the source chips (the
   notes listed the chips first, but the frame draws them under the note).
 
+## Case components
+
+Added by the design system for the confidential-case form, "My cases", and HR's case queue and
+detail (screens 11 and 12, Phase 6). The source is in
+[`system/components/cases/`](system/components/cases/), with the form and the sent line drawn in
+[`system/Case Form.dc.html`](<system/Case Form.dc.html>), which sits beside
+[`system/Escalation Cases.dc.html`](<system/Escalation Cases.dc.html>) and
+[`system/HR Cases.dc.html`](<system/HR Cases.dc.html>).
+
+| Component | Variants | States | Designed |
+|---|---|---|---|
+| Case button (on the escalation panel) | primary (sensitive), secondary (crisis) | default, hover, focus | [x] |
+| Case form | in the panel, on My cases | editing, short-reply prompt, errors, at the limit, sending, send failed | [x] |
+| Case sent | sent, sent with the crisis text, waiting limit | default (not interactive) | [x] |
+| Case list (My cases) | | empty, with cases | [x] |
+| Status badge (case values) | Sent to HR, HR is reviewing, HR has finished its review; New, In review, Closed | default (not interactive) | [x] |
+| Case queue table | | default, filtered, empty, overdue reply, crisis fact | [x] |
+| Case summary block | | written, pending, failed, crisis | [x] |
+| Case words reveal | | hidden, shown | [x] |
+| Case timeline | | default, a read just added | [x] |
+| Status actions | new (Start review, Close case), in review (Close case), closed | locked, enabled | [x] |
+| Status dialogs | start review, close | open | [x] |
+
+New icons: `file-search` (in review), `eye-off`, `shield` (the crisis fact), and `history` (the
+read-recording line). Screens 11 and 12's notes have the build decisions that change what these
+show.
+

@@ -49,6 +49,8 @@
   --color-danger-border: #efbdb8;
   --color-apricot-tint: #fbefe5;
   --color-apricot-border: #ebc6a8;
+  --color-confidential-tint: #f7f3f9;
+  --color-confidential-border: #e4dae9;
   --color-disabled-bg: #e7ebed;
   --color-disabled-fg: #87939a;
   --color-tooltip-bg: var(--color-ink);
