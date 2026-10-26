@@ -2258,6 +2258,10 @@
           "halfDayMinutes": {
             "type": "integer",
             "title": "Halfdayminutes"
+          },
+          "halfDayLabel": {
+            "type": "string",
+            "title": "Halfdaylabel"
           }
         },
         "type": "object",
@@ -2269,7 +2273,8 @@
           "earliestStart",
           "latestEnd",
           "sickLookbackDays",
-          "halfDayMinutes"
+          "halfDayMinutes",
+          "halfDayLabel"
         ],
         "title": "CalendarOut",
         "description": "The date picker's marks for the signed-in person."

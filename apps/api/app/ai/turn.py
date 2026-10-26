@@ -41,7 +41,7 @@ from collections.abc import (
 )
 from contextlib import aclosing
 from dataclasses import dataclass, replace
-from datetime import UTC, datetime, timedelta
+from datetime import datetime, timedelta
 from decimal import Decimal
 from functools import partial
 from typing import Any, ClassVar, Literal
@@ -90,8 +90,8 @@ from app.ai.proposals import (
     cancel_turn_proposals_in,
     cancel_unreported_proposals_in,
     conversation_proposals,
-    outcomes_since,
     recover_abandoned_turns,
+    unreported_outcomes,
 )
 from app.ai.text import error_name, one_line
 from app.ai.tools.base import ToolContext, ToolOutcome, failure, text_block
@@ -110,16 +110,13 @@ from app.ai.transport import (
     Transport,
 )
 from app.ai.transport import TextDelta as ModelText
-from app.db.models import AiConversation, AiMessage, AiProposal, AiTurn
+from app.db.models import AiConversation, AiProposal, AiTurn
 from app.db.tenancy import TenantContext, tenant_session
 from app.domain.handbook.applicability import Asker
 from app.modules.audit.service import record_event
 from app.policy import Actor
 
 logger = logging.getLogger(__name__)
-
-# Before any change a card can have: the reference point when no context was ever stored.
-NEVER = datetime(1970, 1, 1, tzinfo=UTC)
 
 MAX_MODEL_CALLS = 8
 MAX_TOKENS = 8000
@@ -675,6 +672,7 @@ class TurnRun:
         sources: list[SourceEntry],
         previous_answer: str | None,
         outcomes: tuple[str, ...] = (),
+        outcome_entries: tuple[str, ...] = (),
     ) -> None:
         self.deps = deps
         self.conversation = conversation
@@ -685,6 +683,8 @@ class TurnRun:
         self.mapper = CitationMapper(sources)
         self.previous_answer = previous_answer
         self.outcomes = outcomes
+        # The cards (and statuses) those outcome lines tell about, stored with the context message.
+        self.outcome_entries = outcome_entries
         self.started_loop_s = _clock()
         self.deadline_loop_s = self.started_loop_s + TURN_DEADLINE.total_seconds()
 
@@ -772,14 +772,14 @@ class TurnRun:
                     .limit(1)
                 )
             ).first()
-            # What changed for the person's cards since the last context the model was shown: the
-            # start of the latest earlier turn whose context was stored in the history (its
-            # outcomes were computed at that same `now()`, the transaction's start). A turn that
-            # failed, crashed, or ended in a crisis stored none, so what it would have said is
-            # still news. With no such turn, every change is.
+            # What changed for the person's cards that no stored context has told the model about.
+            # What was told decides, not a timestamp: a confirm or dismiss can begin before a turn
+            # and still commit after the turn read the card as pending, with an `ended_at` earlier
+            # than the turn's start, and a comparison of times would skip it for good. Each stored
+            # context lists the cards it reported. A turn that failed, crashed, or ended in a
+            # crisis stored no context, so what it would have said is still news.
             # Wait for a confirm or dismiss still committing (it holds the card's row), so the read
-            # below sees the card's final state: its `ended_at` is its transaction's start, which
-            # can be earlier than this turn's, and a row nobody could see would never be reported.
+            # below sees the card's final state, and a card that ends just after is told next turn.
             # Lock order here: the turn rows (recovery, the new turn), then these card rows. A
             # confirm takes only a card row and the balance lock, never a turn, and a proposal
             # being made takes the conversation's advisory lock, then its turn row, then the card
@@ -791,22 +791,10 @@ class TurnRun:
                 )
                 .with_for_update(read=True)
             )
-            reference = (
-                await db.execute(
-                    select(func.max(AiTurn.started_at))
-                    .join(AiMessage, AiMessage.turn_id == AiTurn.id)
-                    .where(
-                        AiTurn.conversation_id == conversation.id,
-                        AiTurn.id != turn.id,
-                        AiMessage.role == "system",
-                    )
-                )
-            ).scalar_one()
-            since = reference or NEVER
-            outcomes = outcomes_since(
-                await conversation_proposals(db, conversation.id, relevant_since=since),
-                since,
-                (await db.execute(select(func.now()))).scalar_one(),
+            # The database's clock, and the cards whose shown status no stored context has told.
+            now_db = (await db.execute(select(func.now()))).scalar_one()
+            outcomes, outcome_entries = unreported_outcomes(
+                await conversation_proposals(db, conversation.id, untold_at=now_db), now_db
             )
         return cls(
             deps,
@@ -818,6 +806,7 @@ class TurnRun:
             sources=sources,
             previous_answer=_previous_answer(previous),
             outcomes=outcomes,
+            outcome_entries=outcome_entries,
         )
 
     # -- bookkeeping --
@@ -1112,7 +1101,9 @@ class TurnRun:
         )
         question_message = {"role": "user", "content": self.question_message.content}
         context_message: dict[str, Any] = {"role": "system", "content": [text_block(context)]}
-        self.context_message = StoredMessage("system", context_message["content"])
+        self.context_message = StoredMessage(
+            "system", context_message["content"], reported_outcomes=self.outcome_entries
+        )
         turn_messages = [question_message, context_message]
         previous_usage: Usage | None = None
         added_text = ""

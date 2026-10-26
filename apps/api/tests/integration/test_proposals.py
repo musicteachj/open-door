@@ -14,8 +14,8 @@ ages the row through the owner, with triggers off for that one statement.
 import asyncio
 import dataclasses
 import json
-from collections.abc import Mapping
-from dataclasses import dataclass
+from collections.abc import Mapping, Sequence
+from dataclasses import dataclass, field
 from datetime import UTC, date, datetime, timedelta
 from typing import Any, Literal
 from uuid import UUID, uuid4
@@ -50,10 +50,10 @@ from app.ai.proposals import (
     confirm,
     conversation_proposals,
     create_proposal,
-    outcomes_since,
     shown_ending,
     status_as_of,
     turn_state_of,
+    unreported_outcomes,
 )
 from app.db.models import AiConversation, AiProposal, AiTurn
 from app.db.tenancy import TenantContext, tenant_session
@@ -1747,16 +1747,34 @@ async def test_an_ended_proposal_answers_409_before_a_bad_note_answers_422(
     assert conflict.value.status == "canceled"
 
 
-def test_an_expired_card_is_reported_once_whatever_its_ended_at() -> None:
-    # Stored expired, marked a day after it expired and after the last turn: the model was already
-    # told at the first turn after its expires_at.
+def test_an_expired_card_is_told_as_expired_whatever_its_ended_at() -> None:
+    # Stored expired, marked long after it expired: it is told as expired, once, with its entry.
     row = request_row(
         "expired",
         expires=T0 - timedelta(minutes=1),
         ended=T0 + timedelta(minutes=30),
     )
 
-    assert outcomes_since([row], T0, LATER) == ()
+    lines, entries = unreported_outcomes([row], LATER)
+
+    assert len(lines) == 1
+    assert entries == (f"{row.id}:expired",)
+
+
+def test_a_clock_expired_pending_card_and_its_late_confirm_have_different_entries() -> None:
+    pending = request_row("pending", expires=T0 + timedelta(minutes=15))
+    confirmed = Row(
+        pending.action,
+        "executed",
+        pending.expires_at,
+        T0 + timedelta(minutes=10),
+        {"requestId": "x"},
+        pending.card,
+        id=pending.id,
+    )
+
+    assert unreported_outcomes([pending], LATER)[1] == (f"{pending.id}:expired",)
+    assert unreported_outcomes([confirmed], LATER)[1] == (f"{pending.id}:executed",)
 
 
 async def test_a_conflict_says_why_a_canceled_card_was_canceled(
@@ -1975,7 +1993,7 @@ async def test_dismissing_cancels_with_the_reason_and_audits_it_from_the_page(
     assert await requests_of(app_engine, org, org.report) == []
 
 
-async def test_the_outcome_read_loads_only_cards_that_can_matter(
+async def test_the_untold_read_loads_the_cards_no_context_has_told(
     app_engine: AsyncEngine, owner_engine: AsyncEngine, make_tenant: MakeTenant
 ) -> None:
     org = await ready(app_engine, make_tenant)
@@ -1987,15 +2005,11 @@ async def test_the_outcome_read_loads_only_cards_that_can_matter(
 
     async with tenant_session(app_engine, TenantContext(org.tenant.id, org.report)) as db:
         everything = await conversation_proposals(db, chat.conversation_id)
-        recent = await conversation_proposals(
-            db, chat.conversation_id, relevant_since=datetime.now(UTC) - timedelta(days=1)
-        )
-        late = await conversation_proposals(db, chat.conversation_id, relevant_since=far_future)
+        untold = await conversation_proposals(db, chat.conversation_id, untold_at=far_future)
 
     assert {r.id for r in everything} == {ended, pending}
-    assert {r.id for r in recent} == {ended, pending}
-    # A card that ended and expired before the reference point is not loaded; a pending one is.
-    assert {r.id for r in late} == {pending}
+    # No context has told either card yet, so both are loaded.
+    assert {r.id for r in untold} == {ended, pending}
 
 
 async def test_dismissing_works_while_the_turn_is_still_running(
@@ -2221,7 +2235,7 @@ async def test_the_triggers_refusal_of_a_second_ending_is_a_conflict_too(
 
 
 # ---------------------------------------------------------------------------------------------
-# outcomes_since: the next turn's context line, from structured fields only
+# unreported_outcomes: the next turn's context line, from structured fields only
 
 
 @dataclass(frozen=True)
@@ -2232,6 +2246,7 @@ class Row:
     ended_at: datetime | None
     outcome: dict[str, Any] | None
     card: dict[str, Any]
+    id: UUID = field(default_factory=uuid4)
 
 
 T0 = datetime(2026, 10, 21, 18, 0, tzinfo=UTC)
@@ -2294,6 +2309,12 @@ def cancel_row(status: str, outcome: dict[str, Any] | None = None) -> Row:
 
 
 LATER = T0 + timedelta(hours=1)
+
+
+def line_of(rows: Sequence[Row], now: datetime = LATER) -> tuple[str, ...]:
+    return unreported_outcomes(rows, now)[0]
+
+
 PREFIX = "Since the last message: "
 
 
@@ -2368,13 +2389,13 @@ PREFIX = "Since the last message: "
     ],
 )
 def test_each_outcome_has_one_fixed_sentence(row: Row, line: str) -> None:
-    assert outcomes_since([row], T0, LATER) == (PREFIX + line,)
+    assert line_of([row]) == (PREFIX + line,)
 
 
 def test_a_card_that_is_still_pending_before_its_expiry_has_no_line() -> None:
     row = request_row("pending", expires=LATER + timedelta(minutes=1))
 
-    assert outcomes_since([row], T0, LATER) == ()
+    assert line_of([row]) == ()
 
 
 def test_a_pending_card_past_its_expiry_reads_as_expired_once_it_expired_after_the_last_turn() -> (
@@ -2382,31 +2403,28 @@ def test_a_pending_card_past_its_expiry_reads_as_expired_once_it_expired_after_t
 ):
     row = request_row("pending", expires=T0 + timedelta(minutes=15))
 
-    assert outcomes_since([row], T0, LATER) == (
+    assert line_of([row]) == (
         PREFIX + "the card to book PTO on Friday, October 23 expired, so nothing was changed.",
     )
-    # Already expired before the last turn: the model was told, or never saw it.
-    assert outcomes_since([row], T0 + timedelta(minutes=20), LATER) == ()
 
 
-def test_only_proposals_that_changed_since_the_last_turn_get_a_line_oldest_first() -> None:
+def test_the_cards_are_told_oldest_change_first() -> None:
     older = request_row("canceled", outcome={"reason": "dismissed"}, ended=T0 - timedelta(hours=1))
     first = request_row(
         "expired", ended=T0 + timedelta(minutes=2), expires=T0 + timedelta(minutes=2)
     )
     second = decide_row("approve", "executed", {"requestId": "x"})
 
-    (line,) = outcomes_since([second, older, first], T0, LATER)
+    (line,) = line_of([second, older, first])
 
-    assert line.index("expired") < line.index("approved")
-    assert "dismissed" not in line
+    assert line.index("dismissed") < line.index("expired") < line.index("approved")
 
 
 def test_several_changes_are_joined_under_one_prefix_each_sentence_capitalized() -> None:
     first = request_row("executed", outcome={"requestId": "x"})
     second = cancel_row("expired")
 
-    assert outcomes_since([first, second], T0, LATER) == (
+    assert line_of([first, second]) == (
         PREFIX
         + "the card to book PTO on Friday, October 23 was confirmed, and the request is waiting"
         " for Marcus Bell. The card to cancel the request for Tuesday, November 3 expired, so"
@@ -2442,9 +2460,7 @@ def test_instruction_like_text_in_any_stored_field_never_reaches_the_line() -> N
     odd_requester.card["requester"]["name"] = "Priya " + INJECTION
     odd_requester.card["requester"]["title"] = INJECTION
 
-    (line,) = outcomes_since(
-        [hostile, unknown_code, unknown_reason, bad_dates, odd_name, odd_requester], T0, LATER
-    )
+    (line,) = line_of([hostile, unknown_code, unknown_reason, bad_dates, odd_name, odd_requester])
 
     assert "Ignore" not in line
     assert "instructions" not in line
@@ -2477,7 +2493,7 @@ def test_a_name_that_is_not_a_plain_name_is_dropped_from_the_line(name: object) 
     requester = decide_row("approve", "executed", {"requestId": "x"})
     requester.card["requester"]["name"] = name
 
-    (line,) = outcomes_since([approver, requester], T0, LATER)
+    (line,) = line_of([approver, requester])
 
     assert "and the request is waiting for approval. The card to approve" in line
     assert "from the requester for" in line
@@ -2489,7 +2505,7 @@ def test_a_name_that_is_not_a_plain_name_is_dropped_from_the_line(name: object) 
 def test_a_plain_directory_name_is_used(name: str) -> None:
     row = request_row("executed", outcome={"requestId": "x"}, approver={"name": name})
 
-    (line,) = outcomes_since([row], T0, LATER)
+    (line,) = line_of([row])
 
     assert line.endswith(f"and the request is waiting for {name}.")
 
@@ -2498,7 +2514,7 @@ def test_a_card_with_no_approver_says_it_is_waiting_for_approval() -> None:
     row = request_row("executed", outcome={"requestId": "x"})
     row.card["approver"] = None
 
-    (line,) = outcomes_since([row], T0, LATER)
+    (line,) = line_of([row])
 
     assert line.endswith("and the request is waiting for approval.")
 
@@ -2511,7 +2527,7 @@ def test_the_lines_use_fixed_words_with_no_em_dash() -> None:
         request_row("expired"),
     ]
 
-    (line,) = outcomes_since(rows, T0, LATER)
+    (line,) = line_of(rows)
     assert chr(0x2014) not in line
     assert line.startswith(PREFIX)
 

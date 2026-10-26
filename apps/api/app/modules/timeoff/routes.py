@@ -74,11 +74,6 @@ READ_ERRORS = problem_responses(
     status.HTTP_404_NOT_FOUND,
     status.HTTP_422_UNPROCESSABLE_CONTENT,
 )
-ONE_ERRORS = problem_responses(
-    status.HTTP_401_UNAUTHORIZED,
-    status.HTTP_404_NOT_FOUND,
-    status.HTTP_422_UNPROCESSABLE_CONTENT,
-)
 WRITE_ERRORS = problem_responses(
     status.HTTP_401_UNAUTHORIZED,
     status.HTTP_403_FORBIDDEN,
@@ -238,9 +233,11 @@ def _decision_moments(first: date, last: date, zone: str) -> tuple[datetime, dat
     """The window's first and last days as moments at the caller's location: the start of the
     first day, and the start of the day after the last."""
     here = ZoneInfo(zone)
+    # The last day the calendar has can't be stepped past; no decision is made that late anyway.
+    after_last = min(last, date.max - timedelta(days=1)) + timedelta(days=1)
     return (
         datetime.combine(first, time.min, tzinfo=here),
-        datetime.combine(last + timedelta(days=1), time.min, tzinfo=here),
+        datetime.combine(after_last, time.min, tzinfo=here),
     )
 
 
@@ -259,7 +256,7 @@ def _window(first: date | None, last: date | None, today: date) -> tuple[date, d
     operation_id="getTimeOffBalances",
     summary="PTO and sick balances for yourself or a person you may read",
     response_model=BalancesOut,
-    responses=ONE_ERRORS,
+    responses=READ_ERRORS,
 )
 async def get_balances(
     signed_in: SignedInDep,
@@ -355,7 +352,7 @@ async def list_requests(
     operation_id="getTimeOffRequest",
     summary="One request, for a person who may read it",
     response_model=RequestOut,
-    responses=ONE_ERRORS,
+    responses=READ_ERRORS,
 )
 async def get_request(request_id: UUID, signed_in: SignedInDep, now: Now) -> RequestOut:
     actor = signed_in.actor
@@ -415,6 +412,7 @@ async def get_calendar(
         latest_end=bounds.latest_end,
         sick_lookback_days=SICK_WINDOW_DAYS,
         half_day_minutes=HALF_DAY_MINUTES,
+        half_day_label=hours_label(HALF_DAY_MINUTES),
     )
 
 

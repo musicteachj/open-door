@@ -1,6 +1,6 @@
 import { act, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { HttpResponse } from 'msw'
+import { http, HttpResponse } from 'msw'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { ConversationOut, ProposalOut, TurnOut } from '@/api/generated'
 import { CARD_DENY } from '@/app/gallery/fixtures/timeoff'
@@ -16,6 +16,7 @@ import {
   proposalOut,
   turnOut,
 } from '@/test/fake-assistant'
+import { server } from '@/test/msw'
 import { renderApp } from '@/test/render-app'
 import { useChatStore } from './store'
 
@@ -100,6 +101,19 @@ describe('where the card sits', () => {
     expect(before(message, region)).toBe(true)
     expect(before(region, panel)).toBe(true)
     expect(before(panel, work)).toBe(true)
+  })
+
+  it('keeps the HR contacts under a not-found answer that also made a card', async () => {
+    open(
+      conversationOut({
+        hrContacts: [DANA],
+        turns: [bookingTurn(proposalOut(), { notFound: true })],
+      }),
+    )
+    await card()
+
+    expect(screen.getByText('HR contacts')).toBeInTheDocument()
+    expect(screen.getByText('Dana Whitfield')).toBeInTheDocument()
   })
 
   it('names the proposal tools plainly in "Show your work" and shows no request id', async () => {
@@ -482,6 +496,35 @@ describe('Dismiss', () => {
     expect(await screen.findByText('You dismissed this. Nothing was changed.')).toBeInTheDocument()
     expect(posted).toHaveLength(1)
     expect(posted[0]).toMatchObject({ kind: 'cancel' })
+  })
+})
+
+describe('Dismiss in flight', () => {
+  it('shows Dismissing… busy and holds Confirm until the server answers', async () => {
+    const { user } = open(withTurn(bookingTurn(proposalOut())))
+    let answer: () => void = () => {}
+    const gate = new Promise<void>((resolve) => {
+      answer = resolve
+    })
+    server.use(
+      http.post(
+        `${window.location.origin}/api/v1/assistant/proposals/:proposalId/cancel`,
+        async () => {
+          await gate
+          return HttpResponse.json(proposalOut({ status: 'canceled', canceledReason: 'dismissed' }))
+        },
+      ),
+    )
+    await card()
+
+    await user.click(screen.getByRole('button', { name: /^Dismiss/ }))
+
+    expect(await screen.findByRole('button', { name: 'Dismissing…' })).toHaveAttribute(
+      'aria-busy',
+      'true',
+    )
+    expect(confirmButton()).toBeDisabled()
+    answer()
   })
 })
 

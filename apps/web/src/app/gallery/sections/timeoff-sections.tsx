@@ -16,7 +16,12 @@ import { DateField } from '@/components/timeoff/date-field'
 import { DatePicker, type DatePickerSelection } from '@/components/timeoff/date-picker'
 import { FormMessage } from '@/components/timeoff/form-message'
 import { HoursStepper } from '@/components/timeoff/hours-stepper'
-import { decisionLine, pastLabelSick, timeOffCopy } from '@/components/timeoff/labels'
+import {
+  decisionLine,
+  halfDayChoice,
+  pastLabelSick,
+  timeOffCopy,
+} from '@/components/timeoff/labels'
 import { PreviewBlock } from '@/components/timeoff/preview-block'
 import { RequestForm, type HowMuch, type LeaveKind } from '@/components/timeoff/request-form'
 import { RequestGroup } from '@/components/timeoff/request-group'
@@ -76,7 +81,7 @@ const TYPE_OPTIONS = [
 ]
 const DAY_OPTIONS = [
   { value: 'full', label: timeOffCopy.fullDay },
-  { value: 'half', label: timeOffCopy.halfDay },
+  { value: 'half', label: halfDayChoice('4 hours') },
 ]
 
 function Type({ initial, disabled = false }: { initial: string; disabled?: boolean }) {
@@ -249,6 +254,7 @@ function FormFrame({
           holidays: HOLIDAYS,
           pastLabel: type === 'sick' ? pastLabelSick(30, SICK_EARLIEST) : timeOffCopy.pastLabelPto,
         }}
+        halfDayLabel="4 hours"
         howMuch={howMuch}
         onHowMuchChange={setHowMuch}
         hours={hours}
@@ -301,6 +307,7 @@ function SheetDemo() {
             pastLabel:
               type === 'sick' ? pastLabelSick(30, SICK_EARLIEST) : timeOffCopy.pastLabelPto,
           }}
+          halfDayLabel="4 hours"
           howMuch={howMuch}
           onHowMuchChange={setHowMuch}
           hours={hours}

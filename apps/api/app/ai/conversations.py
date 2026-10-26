@@ -124,11 +124,13 @@ class SourceEntry:
 @dataclass(frozen=True)
 class StoredMessage:
     """A message to store. `content` is the API's own blocks, exactly as the model should see them
-    again. `sources` has one entry per `search_result` block in it, in block order."""
+    again. `sources` has one entry per `search_result` block in it, in block order.
+    `reported_outcomes` is for a context message: a `told_entry` for each card it reports."""
 
     role: Literal["user", "assistant", "system"]
     content: list[dict[str, Any]]
     sources: tuple[SourceEntry, ...] = ()
+    reported_outcomes: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -348,6 +350,7 @@ async def append_messages(
                 "role": message.role,
                 "content": message.content,
                 "sources": [entry.to_json() for entry in message.sources] or None,
+                "reported_outcomes": list(message.reported_outcomes) or None,
             }
             for offset, message in enumerate(messages)
         ],

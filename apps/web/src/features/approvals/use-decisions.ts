@@ -28,6 +28,12 @@ function currentStatusOf(error: ApiError): RequestOutStatus | null {
   return STALE.find((known) => known === status) ?? null
 }
 
+/** A card's place among the cards: where it was, or the end when it was not among them. */
+function slotOf(id: string, order: string[]): number {
+  const at = order.indexOf(id)
+  return at === -1 ? order.length : at
+}
+
 /**
  * Approve and Deny for the Approvals page: which dialog is open, the note, the decision itself,
  * the cards held after a 409, and where focus goes afterward. `layout()` is read when a decision
@@ -61,6 +67,9 @@ export function useDecisions({
   // for even one draw.
   const current = useRef<Open | null>(null)
   const layoutNow = useRef(layout)
+  // Every card, in the order the page drew them when the decision started: a held card keeps that
+  // place, though the page may have drawn without it by the time the refusal arrives.
+  const orderAtStart = useRef<string[]>([])
   useEffect(() => {
     layoutNow.current = layout
   })
@@ -76,7 +85,7 @@ export function useDecisions({
       {
         request,
         status,
-        index: layoutNow.current().order.indexOf(request.id),
+        index: slotOf(request.id, orderAtStart.current),
       },
     ])
   })
@@ -111,7 +120,8 @@ export function useDecisions({
     if (open === null || busy.current) return
     busy.current = true
     const { kind, request } = open
-    const before = layoutNow.current().live
+    const { live: before, order } = layoutNow.current()
+    orderAtStart.current = order
     const text = kind === 'deny' ? trimLikePython(note) : ''
     const data: DecisionBody = text === '' ? { decision: kind } : { decision: kind, note: text }
     const first = firstNameOf(request.person.name)
@@ -131,7 +141,7 @@ export function useDecisions({
         // again, and the card is in it only if it still waits.
         useShellToast
           .getState()
-          .show(error.problem?.detail ?? approvalsPageCopy.decisionFailed, personId)
+          .show(error.problem?.detail || approvalsPageCopy.changedMeanwhile, personId)
         plan.current = nextAfter(request.id, before)
         setOpen(null)
       } else {

@@ -179,6 +179,7 @@ Every ID below is a random UUID, so one sandbox can't estimate another's activit
 | `position`, `role` | The message's place in the conversation (from 0), and `user`, `assistant`, or `system` | The model has no memory: each turn sends the history back in order. |
 | `content` | The message exactly as the model API takes it, as JSON kept byte for byte. It includes the person's question, the model's replies, and tool results such as handbook passages and the person's own directory card or private details | The history for the next turn. It is `json`, not `jsonb`, because the model's signed thinking blocks must come back unchanged. |
 | `sources` | For each handbook search result in the message, in order: the section ID, the passage IDs, the title, the group name, the audience label, the last-updated date, and the link. Null when the message has none | The conversation's list of sources, rebuilt for citations, including from turns that were stopped or failed. The result text alone can't give these back reliably. |
+| `reported_outcomes` | On a per-turn context message only: for each confirm card whose outcome that context told the model about, `<card id>:<status shown>` (a card whose time ran out shows as `expired`). Null on every other message | The next turn tells the model about each card's status once, and again if the card changes later (expired, then confirmed by a request already in flight). What was told, not a clock comparison across transactions, decides what is news. |
 | `created_at` | When it was stored (UTC) | The record. |
 
 ### `ai_turns`

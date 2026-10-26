@@ -66,7 +66,8 @@ def turn_context(
     outcomes: Sequence[str] = (),
 ) -> str:
     """The context text. `outcomes` is what happened to the person's cards since the last turn,
-    already worded from structured data (`proposals.outcomes_since`); each goes on its own line."""
+    already worded from structured data (`proposals.unreported_outcomes`); each goes on its own
+    line."""
     # The engine's own "today", so the model's date and the engine's can't drift apart. It also
     # refuses a naive `now`.
     local = today_at(actor_view.timezone, now)

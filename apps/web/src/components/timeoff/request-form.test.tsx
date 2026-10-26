@@ -61,6 +61,7 @@ function Harness(setup: Setup) {
       calendar={
         type === 'sick' ? { ...CALENDAR, minDate: '2026-09-20', pastLabel: 'Sick' } : CALENDAR
       }
+      halfDayLabel="4 hours"
       howMuch={howMuch}
       onHowMuchChange={setHowMuch}
       hours={hours}
@@ -107,6 +108,7 @@ describe('RequestForm, docked', () => {
     renderWithRouter(
       <RequestForm
         docked
+        halfDayLabel="4 hours"
         autoFocusTitle={false}
         type="pto"
         onTypeChange={() => {}}
@@ -478,6 +480,7 @@ describe('RequestForm, in a bottom sheet', () => {
       const { user } = renderWithRouter(
         <RequestForm
           docked
+          halfDayLabel="4 hours"
           type="pto"
           onTypeChange={() => {}}
           start="2026-10-30"

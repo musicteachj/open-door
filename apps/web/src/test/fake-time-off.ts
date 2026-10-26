@@ -162,6 +162,7 @@ export function installFakeTimeOff(options: FakeTimeOffOptions = {}) {
         latestEnd: '2027-12-31',
         sickLookbackDays: 30,
         halfDayMinutes: 240,
+        halfDayLabel: '4 hours',
         ...options.calendar,
       }
       return HttpResponse.json(calendar)

@@ -5,6 +5,13 @@ should pick it up. When one is done, delete it here and record it in the changel
 
 ## Any phase
 
+- **The approvals gallery's "deciding" dialog scan can fail under heavy local load.** In
+  `gallery-approvals.spec.ts`, the scan of `decision-dialog-deciding` nudges a held page clock while
+  axe runs, and twice in full local `make check` runs (2026-10-26) a clock step found the page
+  already closed ("clock.runFor: Target page, context or browser has been closed"). It passed on
+  each rerun and in CI. Make the nudge loop stop before the page can close, or scan with the
+  dialog's timer stubbed instead of a held clock. (Phase 5 phase review.)
+
 - **The scripted model's "next Friday" and "tomorrow" ignore holidays and days off.** The browser
   tests that book through chat skip, with a stated reason, on the few dates a year when next Friday
   is a company holiday or tomorrow isn't on the person's schedule (`skipUnlessScriptedDayCounts`).
@@ -200,6 +207,12 @@ the conversation read after a turn ends.
 
 ## Phase 7: AI Ops console, reviewer experience, model decision
 
+- **Rename the bare `amount` key in the time-off tool results.** `timeoff_results.py` sends
+  `"amount": label(...)` (and the same key in the draw, check, and card results), against the rule
+  that units live in the field name; it holds a label, so `amountLabel` fits. Renaming it changes
+  what the model reads, so it needs a full paid eval run: do it with Phase 7's next one. (Phase 5
+  phase review.)
+
 - **The audit log stores `None` as the JSON value `null`.** `AuditEvent.before` and `after` are
   nullable `jsonb` columns without `none_as_null=True`, so an event with no before or after state
   holds JSON `null`, not SQL `NULL`, and an `IS NULL` query misses it. The assistant tables were
@@ -256,6 +269,31 @@ the conversation read after a turn ends.
   database, so neither has mattered yet. (Phase 4 phase review.)
 
 ## Phase 8: hardening and deploy-readiness
+
+- **The per-turn check for untold card outcomes grows with the conversation.** Each turn start
+  reads every card in the conversation and checks each against every stored context's
+  `reported_outcomes` array, with no index, while it holds the cards' share locks. Fine at demo
+  scale (conversations end with the sandbox); bound it (skip contexts older than the card, or keep a
+  time pre-filter) if conversations ever last. (Phase 5 phase review.)
+- **A person recorded as their own manager is half handled.** PTO for them is now refused with
+  `no-approver`, but the summary still names them as their own manager and their requests count as
+  waiting for themselves. Exclude the person wherever manager links are resolved. The seed never
+  makes such a row; it would be a data error. (Phase 5 phase review.)
+
+- **The Approvals reads load each person's facts one at a time.** `_managed_view` loads each
+  direct report's facts and requests in turn for the waiting list and every single-request read,
+  and coverage now loads each colleague's schedule too. Batch the loads per set of people. (Phase 5
+  phase review.)
+- **The request form checks the preview on every change.** Each hours keystroke, stepper press, and
+  the first click of a range sends `POST /time-off/check`; stale answers are dropped, so it's only
+  wasted requests. A short debounce, or no check while a range is half picked, would cut them.
+  (Phase 5 phase review.)
+- **Small duplications the phase review left.** Weekday and month names and the long-date format
+  live in `proposals.py`, `scripted.py`, and `context.py`; the confirm card's executed lines repeat
+  the pages' toast texts; `balances`, `pto_available_minutes`, and `_evaluate_own` gather the same
+  inputs three times; the eval graders check ISO dates the tool's own input model already checks;
+  the eval runner builds the seed company twice. Share each when that code next changes. (Phase 5
+  phase review.)
 
 - **Recent decisions leave out two kinds of past decision.** The `decided` scope lists requests
   the manager approved or denied that are still approved or denied, among the manager's current

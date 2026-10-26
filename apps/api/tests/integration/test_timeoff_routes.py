@@ -575,6 +575,21 @@ async def test_decided_from_and_to_bound_the_day_of_the_decision(start: StartWor
     assert [item["id"] for item in items] == [str(older)]
 
 
+async def test_decided_with_a_window_that_ends_at_the_last_calendar_day_is_an_empty_list(
+    start: StartWorld,
+) -> None:
+    world = start("marcus", now=far())
+
+    for window in (
+        {"to": "9999-12-31"},
+        {"from": "9999-12-30", "to": "9999-12-31"},
+        {"from": "9999-12-31", "to": "9999-12-31"},
+    ):
+        response = world.get("/requests", scope="decided", **window)
+        assert response.status_code == 200, window
+        assert response.json()["items"] == [], window
+
+
 async def seeded_zara_request(world: World) -> UUID:
     async with tenant_session(world.engine, TenantContext(world.tenant_id, None)) as session:
         return (
@@ -822,6 +837,54 @@ async def test_a_colleague_with_both_kinds_of_time_off_is_one_entry_with_typed_d
         {"date": (week + timedelta(days=1)).isoformat(), "type": "pto", "partialMinutes": None},
         {"date": (week + timedelta(days=3)).isoformat(), "type": "sick", "partialMinutes": None},
     ]
+
+
+async def test_a_colleague_is_off_only_on_days_they_work(start: StartWorld) -> None:
+    world = start("marcus")
+    week = coverage_week()
+    await world.set_weekdays("oak-apparel-lead", [1, 2, 3, 4, 5, 6])
+    await world.set_weekdays("priya", MON_TO_FRI)
+    # Zara asks for Friday to the next Monday: her days are Friday, Saturday and Monday.
+    zara = await world.put("oak-apparel-lead", week + timedelta(days=4), week + timedelta(days=7))
+    # Priya works Monday to Friday and has the same four days off: Friday and Monday are days
+    # she is off, Saturday and Sunday are not days she works.
+    await world.put(
+        "priya",
+        week + timedelta(days=4),
+        week + timedelta(days=7),
+        status="approved",
+        amount_minutes=960,
+    )
+
+    [entry] = world.get(f"/requests/{zara}").json()["coverage"]
+
+    assert entry["person"]["name"] == "Priya Raman"
+    assert entry["days"] == [
+        {"date": (week + timedelta(days=4)).isoformat(), "type": "pto", "partialMinutes": None},
+        {"date": (week + timedelta(days=7)).isoformat(), "type": "pto", "partialMinutes": None},
+    ]
+
+
+async def test_a_colleague_whose_facts_cannot_be_read_is_still_in_coverage_by_date_range(
+    start: StartWorld, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    world = start("marcus")
+    week = coverage_week()
+    await world.set_weekdays("oak-apparel-lead", MON_TO_FRI)
+    zara = await world.put("oak-apparel-lead", week, week + timedelta(days=4))
+    await world.put("priya", week + timedelta(days=1), status="approved")
+    priya = world.person("priya")
+    real = queries.load_facts
+
+    async def without_priya(db: Any, tenant_id: UUID, person_id: UUID) -> Any:
+        return None if person_id == priya else await real(db, tenant_id, person_id)
+
+    monkeypatch.setattr(queries, "load_facts", without_priya)
+
+    [entry] = world.get(f"/requests/{zara}").json()["coverage"]
+
+    assert entry["person"]["name"] == "Priya Raman"
+    assert [day["date"] for day in entry["days"]] == [(week + timedelta(days=1)).isoformat()]
 
 
 async def test_people_who_are_not_the_managers_direct_reports_are_never_in_coverage(
@@ -1660,6 +1723,22 @@ async def test_pto_for_someone_with_no_manager_is_refused_as_no_approver(
     assert world.get("/summary").json()["pendingCount"] == 0
 
 
+async def test_someone_recorded_as_their_own_manager_has_no_approver(start: StartWorld) -> None:
+    world = start("priya")
+    await world.fund("priya")
+    async with world.owner.begin() as connection:
+        await connection.execute(
+            text("UPDATE people SET manager_id = id WHERE id = :id"), {"id": world.person("priya")}
+        )
+    day = world.workday(30)
+    body = {"type": "pto", "startDate": day.isoformat(), "endDate": day.isoformat()}
+
+    problem = problem_of(world.post("/requests", body), 422)
+
+    assert problem["type"] == "no-approver"
+    assert await world.timeoff_events() == []
+
+
 async def test_the_check_names_no_approver_before_the_form_is_sent(start: StartWorld) -> None:
     world = start("priya")
     await world.fund("priya")
@@ -1900,6 +1979,7 @@ def test_the_calendar_gives_the_sick_look_back_and_the_half_day_from_the_engine(
 
     assert body["sickLookbackDays"] == SICK_WINDOW_DAYS == 30
     assert body["halfDayMinutes"] == HALF_DAY_MINUTES == 240
+    assert body["halfDayLabel"] == "4 hours"
     # The earliest sick day is exactly that many days back.
     assert date.fromisoformat(body["earliestStart"]["pto"]) - date.fromisoformat(
         body["earliestStart"]["sick"]

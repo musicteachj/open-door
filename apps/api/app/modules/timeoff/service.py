@@ -563,8 +563,11 @@ async def cancel(
     # The status first: a closed request is `status-changed` whatever else is known of the person.
     if found.status not in OPEN_STATUSES:
         return Refused(_STATUS_CHANGED)
-    facts = await _facts(db, actor.tenant_id, found.person_id)
-    today = today_at(facts.timezone, now)
+    zone = await queries.timezone_of(db, actor.tenant_id, found.person_id)
+    if zone is None:
+        msg = "The person is no longer in the sandbox"
+        raise LookupError(msg)
+    today = today_at(zone, now)
     if (refused := cancel_precheck(actor, found, today)) is not None:
         return refused
 

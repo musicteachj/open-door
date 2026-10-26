@@ -113,6 +113,8 @@ export const approvalsPageCopy = {
   yourNote: 'Your note',
   loading: 'Loading approvals',
   decisionFailed: 'Couldn’t send that decision. Nothing was changed. Try again in a moment.',
+  /** A 404 or 409 that names no reason: trying again can't succeed, so say what happened. */
+  changedMeanwhile: 'This request changed in the meantime. The page now shows it as it stands.',
 } as const
 
 /** "Approved. Zara will see it on the Time off page." */

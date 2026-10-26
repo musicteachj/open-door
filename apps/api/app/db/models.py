@@ -479,6 +479,11 @@ class AiMessage(Base):
     # label, the last-updated date, and the deep link. The block's own text can't give those back
     # reliably. Null for a message with no search results.
     sources: Mapped[list[dict[str, Any]] | None] = mapped_column(JSONB(none_as_null=True))
+    # On a `system` (context) message: "<proposal id>:<status>" for each card whose outcome that
+    # context told the model, so the next turn reports each (card, status) only once and a card
+    # that changes again (expired by the clock, then confirmed) is told again (migration 0011).
+    # Null on other messages.
+    reported_outcomes: Mapped[list[str] | None] = mapped_column(ARRAY(Text))
     created_at: Mapped[datetime] = mapped_column(server_default=func.now())
 
 

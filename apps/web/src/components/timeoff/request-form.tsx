@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import {
   howMuchOptionsFor,
+  howMuchValuesFor,
   resolveChoice,
   type HowMuch,
   type LeaveKind,
@@ -36,6 +37,8 @@ type RequestFormProps = {
   onDatesChange: (selection: DatePickerSelection) => void
   /** What the date picker marks: today, the earliest day, the schedule, the holidays. */
   calendar: Omit<DatePickerProps, 'id' | 'start' | 'end' | 'onChange' | 'onDone' | 'className'>
+  /** What the API calls a PTO half day, in hours ("4 hours"), for the "Half day" choice. */
+  halfDayLabel: string
   /** "How much", for a single day: PTO is full or half, sick time is full or some hours. */
   howMuch: HowMuch
   onHowMuchChange: (howMuch: HowMuch) => void
@@ -88,6 +91,7 @@ function RequestForm({
   end,
   onDatesChange,
   calendar,
+  halfDayLabel,
   howMuch,
   onHowMuchChange,
   hours,
@@ -126,7 +130,7 @@ function RequestForm({
   // back to Full day, so the form never holds a pair the type cannot submit.
   function changeType(value: string) {
     const next = value as LeaveKind
-    if (!howMuchOptionsFor(next).some((option) => option.value === howMuch)) onHowMuchChange('full')
+    if (!howMuchValuesFor(next).includes(howMuch)) onHowMuchChange('full')
     onTypeChange(next)
   }
 
@@ -150,7 +154,7 @@ function RequestForm({
   const refused = problems.length > 0
   // What the form reports is what it shows: a range is always Full day, and a how-much the type
   // does not offer is Full day too. Hours count only for "Some hours" on one sick day.
-  const howMuchOptions = howMuchOptionsFor(type)
+  const howMuchOptions = howMuchOptionsFor(type, halfDayLabel)
   const effectiveChoice = resolveChoice(type, start, end, howMuch, hours)
   const hoursInvalid = sick && single && howMuch === 'hours' && parseHours(hours) === null
   const cannotSubmit =

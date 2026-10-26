@@ -405,6 +405,8 @@ class CalendarOut(CamelModel):
     sick_lookback_days: int
     # What a PTO half day is, in minutes: the one number the check and the request accept.
     half_day_minutes: int
+    # The same, written in hours ("4 hours"), from the engine, for the "Half day" choice.
+    half_day_label: str
 
 
 class SummaryOut(CamelModel):

@@ -165,7 +165,9 @@ export function TimeOffPage() {
       // nothing: a calm toast, and the dialog stays for another try.
       const changed = error instanceof ApiError && (error.status === 409 || error.status === 404)
       const said = error instanceof ApiError ? error.problem?.detail : null
-      useShellToast.getState().show(changed && said ? said : pageCopy.cancelFailed, personId)
+      useShellToast
+        .getState()
+        .show(changed ? said || pageCopy.changedMeanwhile : pageCopy.cancelFailed, personId)
       canceling.current = false
       if (!changed) return
       afterCancel.current = 'heading'

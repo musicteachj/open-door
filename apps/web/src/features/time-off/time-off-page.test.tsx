@@ -382,6 +382,17 @@ describe('Time off: canceling a request', () => {
     expect(fake.calls.requests.filter((item) => item.scope === 'mine').length).toBeGreaterThan(1)
   })
 
+  it('says the request changed when a 409 or 404 names no reason, and still closes and refreshes', async () => {
+    const { user, fake } = await openPage()
+    fake.state.cancelFailure = { status: 404, type: 'not-found', detail: '' }
+    await user.click(cancelButton())
+    await user.click(await screen.findByRole('button', { name: 'Cancel request' }))
+    await waitFor(() => expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument())
+    await waitFor(() => expect(toast()).toHaveTextContent('This request changed in the meantime.'))
+    expect(toast()).not.toHaveTextContent('Try again')
+    expect(fake.calls.requests.filter((item) => item.scope === 'mine').length).toBeGreaterThan(1)
+  })
+
   it('keeps the dialog open after a server error, so the person can press Cancel request again', async () => {
     const { user, fake } = await openPage()
     fake.state.cancelFailure = { status: 500, type: 'about:blank', detail: 'Boom' }

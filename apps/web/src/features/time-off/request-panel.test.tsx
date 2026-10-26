@@ -26,6 +26,7 @@ const CALENDAR: CalendarOut = {
   latestEnd: '2027-12-31',
   sickLookbackDays: 30,
   halfDayMinutes: 240,
+  halfDayLabel: '4 hours',
 }
 
 function setup({
@@ -309,9 +310,11 @@ describe('RequestPanel', () => {
   })
 
   it('sends the calendar’s half-day minutes, not a number of its own', async () => {
-    const { fake, user, onSubmitted } = setup({ calendar: { halfDayMinutes: 300 } })
+    const { fake, user, onSubmitted } = setup({
+      calendar: { halfDayMinutes: 300, halfDayLabel: '5 hours' },
+    })
     await pick(user, 'Friday, October 30')
-    await user.click(screen.getByRole('radio', { name: 'Half day (4 hours)' }))
+    await user.click(screen.getByRole('radio', { name: 'Half day (5 hours)' }))
     await waitFor(() => expect(fake.calls.checks).toHaveLength(2))
     expect(fake.calls.checks[1]).toMatchObject({ partialMinutes: 300 })
     await waitFor(() => expect(submit()).toBeEnabled())

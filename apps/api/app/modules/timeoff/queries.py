@@ -60,8 +60,8 @@ class PersonFacts:
     # The handbook version the person's sandbox answers from; None only for a sandbox made before
     # migration 0004.
     handbook_version_id: UUID | None
-    # Whether the person has a manager. Only a direct manager decides PTO, so without one a PTO
-    # request could never be decided.
+    # Whether the person has a manager other than themselves. Only a direct manager decides PTO, and
+    # nobody decides their own request, so without one a PTO request could never be decided.
     has_manager: bool
 
 
@@ -128,7 +128,7 @@ async def load_facts(db: AsyncSession, tenant_id: UUID, person_id: UUID) -> Pers
         holidays,
         row.timezone,
         row.handbook_version_id,
-        has_manager=row.manager_id is not None,
+        has_manager=row.manager_id is not None and row.manager_id != person_id,
     )
 
 
