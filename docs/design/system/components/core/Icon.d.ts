@@ -1,4 +1,4 @@
-export type IconName = 'message-circle' | 'calendar' | 'users' | 'book-open' | 'code' | 'clock' | 'info' | 'circle-alert' | 'rotate-ccw' | 'chevrons-up-down' | 'chevron-right' | 'arrow-right' | 'arrow-up' | 'trash-2' | 'map-pin' | 'loader-circle' | 'circle-play' | 'search' | 'x' | 'chevron-down' | 'check' | 'lock' | 'arrow-left' | 'eye' | 'clipboard-check' | 'folder-lock' | 'layout-dashboard' | 'log-out' | 'triangle-alert' | 'circle-check';
+export type IconName = 'message-circle' | 'calendar' | 'users' | 'book-open' | 'code' | 'clock' | 'info' | 'circle-alert' | 'rotate-ccw' | 'chevrons-up-down' | 'chevron-right' | 'arrow-right' | 'arrow-up' | 'trash-2' | 'map-pin' | 'loader-circle' | 'circle-play' | 'search' | 'x' | 'chevron-down' | 'check' | 'lock' | 'file-search' | 'eye-off' | 'shield' | 'history' | 'arrow-left' | 'eye' | 'clipboard-check' | 'folder-lock' | 'layout-dashboard' | 'log-out' | 'triangle-alert' | 'circle-check';
 
 /** Lucide icon at Open Door's stroke weight (1.75). Decorative unless a label is given. */
 export interface IconProps {

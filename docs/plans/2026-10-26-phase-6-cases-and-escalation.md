@@ -224,8 +224,8 @@ only for a stubborn bug, then back.
 - **In Stage 4's PR:** the owner approves the fixed texts (the panel, the form's texts, the sent
   line), the handbook changes, the labeling rule and the escalation set's labels, and OKs each
   paid run.
-- **Before Stage 5:** screens 11 and 12 designed and approved in Claude Design, and synced into
-  `docs/design/screens/` in their own docs PR.
+- **Before Stage 5:** done. Screens 11 and 12 were designed and approved on 2026-10-26, and
+  synced into `docs/design/screens/` in their own PR, with the web theme's two new color tokens.
 - **Docker Desktop is running,** and `make setup` and `make db` have run.
 
 ## File map

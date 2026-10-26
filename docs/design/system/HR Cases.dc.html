@@ -1,0 +1,423 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="design_doc_mode" content="canvas">
+<link rel="stylesheet" href="styles.css">
+<template id="__bundler_thumbnail"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><rect width="100" height="100" fill="#59256A"></rect><g fill="none" stroke="#F5F7F8" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"><path d="M44 74H24a6 6 0 0 1-6-6V30a6 6 0 0 1 6-6h12l6 7h34a6 6 0 0 1 6 6v8"></path><rect x="56" y="62" width="26" height="16" rx="3"></rect><path d="M62 62v-5a7 7 0 0 1 14 0v5"></path></g></svg></template>
+<style>body{margin:0;background:#ECEEEF;font-family:'Instrument Sans',system-ui,sans-serif;-webkit-font-smoothing:antialiased}a{color:#59256A}a:hover{color:#461B54}textarea::placeholder{color:#66737B}.dv-turn{padding:40px 44px 32px;border-bottom:1px solid rgba(0,0,0,.08);scroll-margin-top:16px}.dv-thd{display:flex;align-items:baseline;gap:10px;margin:0 0 8px}.dv-tid{font:600 10px ui-monospace,Menlo,monospace;padding:3px 7px;background:#1a1a1a;color:#fff;border-radius:4px;text-decoration:none}.dv-tname{font:600 13px/1.2 system-ui,sans-serif;color:#1a1a1a}.dv-note{font:12px/1.55 system-ui,sans-serif;color:rgba(0,0,0,.6);max-width:1100px;margin:0 0 24px}.dv-opts{display:flex;flex-wrap:wrap;gap:56px;align-items:flex-start;max-width:2936px}.dv-opt{flex:none;display:flex;flex-direction:column;gap:12px;scroll-margin-top:16px}.dv-oid{font:600 10.5px ui-monospace,Menlo,monospace;padding:3px 7px;background:rgba(0,0,0,.08);color:#1a1a1a;border-radius:5px;text-decoration:none}.dv-olabel{display:flex;align-items:baseline;gap:8px;font:400 12px/1.3 system-ui,sans-serif;color:rgba(0,0,0,.6);max-width:1440px}.dv-card{max-width:100%;background:#fff;border:1px solid rgba(0,0,0,.08);border-radius:8px;box-shadow:0 1px 3px rgba(0,0,0,.06);overflow:hidden}.dv-opt:target .dv-oid{background:#2a78d6;color:#fff}</style>
+</helmet>
+<section class="dv-turn" id="t1" data-screen-label="12 HR cases">
+<div class="dv-thd"><a class="dv-tid" href="#t1">1</a><span class="dv-tname">Screen 12: The HR case queue and the case detail (as Dana Whitfield)</span></div>
+<p class="dv-note">HR's work screens. The queue lists people, categories, dates, and status, never what anyone wrote, sorted only by reply date. The detail shows the AI's summary, labeled as the AI's, and keeps the person's words behind a recorded reveal; the status can't change until the words have been read. Screen 11's lock and quiet tint mark everything confidential. Frames are live: filter the queue, open a row, reveal and hide the words, start a review, close a case. Every time is Mountain time. The component library is in <a class="dv-oid" href="#components">components</a>.</p>
+<div class="dv-opts">
+<sc-for list="{{ frames }}" as="f" hint-placeholder-count="2">
+<div class="dv-opt" id="{{ f.id }}">
+<div class="dv-olabel"><a class="dv-oid" href="{{ f.href }}">{{ f.id }}</a>{{ f.label }}</div>
+<div class="dv-card" data-frame="{{ f.id }}" ref="{{ f.rootRef }}" style="width:{{ f.cardW }};max-width:none">
+<div style="position:relative;display:flex;min-height:900px;box-sizing:border-box;background:var(--surface);font-family:var(--font-sans);color:var(--ink)">
+  <aside style="width:248px;flex:none;display:flex;flex-direction:column;padding:28px 16px 20px 20px;box-sizing:border-box">
+    <div style="display:flex;align-items:center;gap:12px;padding:0 8px 32px"><img src="assets/logo-mark.svg" width="32" height="32" alt=""><div style="display:flex;flex-direction:column;gap:2px"><span style="font-size:16px;line-height:20px;font-weight:600;letter-spacing:-0.01em">Open Door</span><span style="font-size:12px;line-height:16px;color:var(--ink-muted)">Juniper Row</span></div></div>
+    <nav aria-label="Main" style="display:flex;flex-direction:column;gap:2px">
+      <sc-for list="{{ f.nav }}" as="n" hint-placeholder-count="6">
+        <a href="{{ n.href }}" aria-current="{{ n.ac }}" style="display:flex;align-items:center;gap:12px;height:40px;padding:0 12px;border-radius:var(--radius-md);background:{{ n.bg }};color:{{ n.fg }};font-size:14px;line-height:20px;font-weight:{{ n.w }};text-decoration:none" style-hover="background:var(--neutral-hover);color:var(--ink)" style-focus="outline:2px solid var(--focus-ring);outline-offset:2px">
+          <sc-if value="{{ n.icAsk }}" hint-placeholder-val="{{ false }}"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z"></path></svg></sc-if>
+          <sc-if value="{{ n.icTime }}" hint-placeholder-val="{{ false }}"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="4" rx="2"></rect><path d="M16 2v4M8 2v4M3 10h18"></path></svg></sc-if>
+          <sc-if value="{{ n.icDir }}" hint-placeholder-val="{{ false }}"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"></path></svg></sc-if>
+          <sc-if value="{{ n.icBook }}" hint-placeholder-val="{{ false }}"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"></path><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"></path></svg></sc-if>
+          <sc-if value="{{ n.icCases }}" hint-placeholder-val="{{ false }}"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect width="8" height="5" x="14" y="17" rx="1"></rect><path d="M10 20H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h3.9a2 2 0 0 1 1.69.9l.81 1.2a2 2 0 0 0 1.67.9H20a2 2 0 0 1 2 2v2.5"></path><path d="M20 17v-2a2 2 0 1 0-4 0v2"></path></svg></sc-if>
+          <sc-if value="{{ n.icCon }}" hint-placeholder-val="{{ false }}"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect width="7" height="9" x="3" y="3" rx="1"></rect><rect width="7" height="5" x="14" y="3" rx="1"></rect><rect width="7" height="9" x="14" y="12" rx="1"></rect><rect width="7" height="5" x="3" y="16" rx="1"></rect></svg></sc-if>
+          <span style="flex:1">{{ n.label }}</span>
+          <sc-if value="{{ n.hasCount }}" hint-placeholder-val="{{ false }}"><span style="height:20px;padding:0 8px;box-sizing:border-box;border-radius:9999px;background:var(--primary);color:var(--on-primary);display:inline-flex;align-items:center;font-size:12px;line-height:16px;font-weight:600;font-variant-numeric:tabular-nums;white-space:nowrap"><span aria-hidden="true">{{ n.count }}</span><span style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)">, {{ n.count }} cases</span></span></sc-if>
+        </a>
+      </sc-for>
+    </nav>
+    <div style="flex:1"></div>
+    <a href="/how-its-built" style="display:flex;align-items:center;gap:12px;height:40px;padding:0 12px;margin-bottom:12px;border-radius:var(--radius-md);color:var(--ink-nav);font-size:14px;line-height:20px;font-weight:500;text-decoration:none" style-hover="background:var(--neutral-hover);color:var(--ink)" style-focus="outline:2px solid var(--focus-ring);outline-offset:2px"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="m16 18 6-6-6-6M8 6l-6 6 6 6"></path></svg>How it's built</a>
+    <button type="button" aria-haspopup="menu" aria-expanded="false" style="display:flex;align-items:center;gap:12px;width:100%;min-height:61px;padding:12px 8px;border:0;border-top:1px solid var(--border);background:transparent;font-family:inherit;text-align:left;cursor:pointer;color:var(--ink)" style-hover="background:var(--neutral-hover)" style-focus="outline:2px solid var(--focus-ring);outline-offset:2px">
+      <span style="width:36px;height:36px;flex:none;border-radius:9999px;background:var(--primary-tint);display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:600">DW</span>
+      <span style="flex:1;min-width:0;display:flex;flex-direction:column;gap:2px"><span style="font-size:14px;line-height:18px;font-weight:600">Dana Whitfield</span><span style="font-size:12px;line-height:16px;color:var(--ink-muted)">HR Business Partner</span></span>
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="flex:none;color:var(--ink-muted)"><path d="m7 15 5 5 5-5M7 9l5-5 5 5"></path></svg>
+    </button>
+  </aside>
+
+  <sc-if value="{{ f.hasMain }}" hint-placeholder-val="{{ true }}">
+  <main style="flex:1;min-width:0;display:flex;padding:12px 12px 12px 0;box-sizing:border-box">
+    <div style="flex:1;min-width:0;display:flex;background:var(--surface-raised);border:1px solid var(--border);border-radius:var(--radius-xl);overflow:hidden">
+
+      <sc-if value="{{ f.isQueue }}" hint-placeholder-val="{{ true }}">
+        <div style="flex:1;min-width:0;padding:40px 48px 72px;box-sizing:border-box">
+          <div style="max-width:1080px">
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:24px">
+              <h1 style="display:flex;align-items:center;gap:12px;margin:0;font-size:var(--text-h1);line-height:var(--leading-h1);font-weight:600;letter-spacing:var(--tracking-h1)"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex:none;color:var(--primary)"><rect width="18" height="11" x="3" y="11" rx="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>Cases</h1>
+              <span style="display:inline-flex;align-items:center;gap:8px;height:28px;padding:0 12px;border:1px solid var(--border);border-radius:9999px;font-size:12px;line-height:16px;color:var(--ink-muted);font-variant-numeric:tabular-nums;white-space:nowrap"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><path d="M12 6v6l4 2"></path></svg>Sandbox resets in 21 h</span>
+            </div>
+            <p style="margin:8px 0 0;max-width:680px;font-size:16px;line-height:26px;color:var(--ink-muted);text-wrap:pretty">Confidential. Only the HR team can open these cases, and every read of a case's text is recorded.</p>
+            <div style="display:flex;align-items:center;gap:12px;margin-top:28px">
+              <span id="{{ f.id }}-fl" style="font-size:14px;line-height:20px;color:var(--ink-muted)">Show</span>
+              <div role="radiogroup" aria-labelledby="{{ f.id }}-fl" onKeyDown="{{ f.q.onKey }}" style="display:inline-flex;gap:4px;padding:3px;border:1px solid var(--border-strong);border-radius:var(--radius-md);background:var(--surface-sunken)">
+                <sc-for list="{{ f.q.filters }}" as="o" hint-placeholder-count="5">
+                  <button type="button" role="radio" aria-checked="{{ o.on }}" tabIndex="{{ o.ti }}" data-fl="{{ o.v }}" onClick="{{ o.pick }}" style="height:34px;padding:0 14px;display:inline-flex;align-items:center;gap:6px;border:0;border-radius:var(--radius-sm);background:{{ o.bg }};color:{{ o.fg }};font-family:var(--font-sans);font-size:14px;line-height:20px;font-weight:{{ o.w }};cursor:pointer;white-space:nowrap" style-hover="color:var(--ink)" style-focus="outline:2px solid var(--focus-ring);outline-offset:1px"><sc-if value="{{ o.on }}" hint-placeholder-val="{{ false }}"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round" style="color:var(--primary)"><path d="M20 6 9 17l-5-5"></path></svg></sc-if>{{ o.label }}</button>
+                </sc-for>
+              </div>
+            </div>
+            <div style="margin-top:24px">
+              <div aria-hidden="true" style="display:grid;grid-template-columns:minmax(0,2.5fr) minmax(0,2fr) minmax(0,1fr) minmax(0,1.6fr) 120px 16px;column-gap:24px;align-items:center;height:40px;padding:0 12px;border-bottom:1px solid var(--border);font-size:var(--text-small);line-height:20px;color:var(--ink-muted)"><span>Person</span><span>Category</span><span>Sent</span><span>Reply</span><span>Status</span><span></span></div>
+              <sc-if value="{{ f.q.empty }}" hint-placeholder-val="{{ false }}">
+                <p role="status" style="margin:0;padding:40px 12px;font-size:15px;line-height:24px;color:var(--ink-muted);text-wrap:pretty">{{ f.q.emptyText }}</p>
+              </sc-if>
+              <div role="list" aria-label="Cases">
+                <sc-for list="{{ f.q.rows }}" as="r" hint-placeholder-count="4">
+                  <a role="listitem" href="{{ r.href }}" aria-label="{{ r.aria }}" style="display:grid;grid-template-columns:minmax(0,2.5fr) minmax(0,2fr) minmax(0,1fr) minmax(0,1.6fr) 120px 16px;column-gap:24px;align-items:center;min-height:64px;padding:10px 12px;box-sizing:border-box;border-bottom:1px solid var(--border-subtle);color:var(--ink);text-decoration:none" style-hover="background:var(--primary-tint);color:var(--ink)" style-focus="outline:2px solid var(--focus-ring);outline-offset:-2px">
+                    <span style="display:flex;align-items:center;gap:12px;min-width:0"><span style="width:32px;height:32px;flex:none;border-radius:9999px;background:var(--primary-tint);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:600">{{ r.ini }}</span><span style="display:flex;flex-direction:column;min-width:0"><span style="font-size:15px;line-height:22px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ r.name }}</span><span style="font-size:13px;line-height:18px;color:var(--ink-muted);text-wrap:pretty">{{ r.sub }}</span></span></span>
+                    <span style="display:flex;flex-direction:column;gap:2px;min-width:0"><span style="font-size:var(--text-ui);line-height:20px">{{ r.cat }}</span><sc-if value="{{ r.fact }}" hint-placeholder-val="{{ false }}"><span style="display:flex;align-items:flex-start;gap:6px;font-size:13px;line-height:18px;color:var(--ink-muted);text-wrap:pretty"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex:none;margin-top:2px"><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"></path></svg>The safety check routed this message to crisis text.</span></sc-if></span>
+                    <span style="font-size:var(--text-ui);line-height:20px;color:var(--ink-muted);font-variant-numeric:tabular-nums;white-space:nowrap">{{ r.sent }}</span>
+                    <span style="font-size:var(--text-ui);line-height:20px;color:var(--ink);font-variant-numeric:tabular-nums">{{ r.reply }}</span>
+                    <span><span style="display:inline-flex;align-items:center;gap:6px;height:24px;padding:0 8px;border:1px solid var(--border-strong);border-radius:var(--radius-xs);background:var(--surface-raised);font-size:13px;line-height:20px;font-weight:500;color:var(--ink);white-space:nowrap">
+                      <sc-if value="{{ r.isNew }}" hint-placeholder-val="{{ false }}"><svg width="14" height="14" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="5" fill="var(--marker)"></circle></svg></sc-if>
+                      <sc-if value="{{ r.isRev }}" hint-placeholder-val="{{ false }}"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:var(--primary)"><path d="M14 2v4a2 2 0 0 0 2 2h4"></path><path d="M4.268 21a2 2 0 0 0 1.727 1H18a2 2 0 0 0 2-2V7l-5-5H6a2 2 0 0 0-2 2v3"></path><path d="m9 18-1.5-1.5"></path><circle cx="5" cy="14" r="3"></circle></svg></sc-if>
+                      <sc-if value="{{ r.isClosed }}" hint-placeholder-val="{{ false }}"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"></circle><path d="m9 12 2 2 4-4"></path></svg></sc-if>
+                      {{ r.badge }}</span></span>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:var(--ink-muted)"><path d="m9 18 6-6-6-6"></path></svg>
+                  </a>
+                </sc-for>
+              </div>
+            </div>
+          </div>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{ f.isDetail }}" hint-placeholder-val="{{ false }}">
+        <div style="flex:1;min-width:0;padding:28px 48px 72px;box-sizing:border-box">
+          <div style="max-width:1120px">
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:24px">
+              <a href="#desktop-queue" style="display:inline-flex;align-items:center;gap:4px;height:32px;padding:0 10px 0 6px;margin-left:-6px;border-radius:var(--radius-sm);font-size:14px;line-height:20px;font-weight:600;color:var(--primary);text-decoration:none" style-hover="background:var(--primary-tint);color:var(--primary-hover)" style-focus="outline:2px solid var(--focus-ring);outline-offset:2px"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 18-6-6 6-6"></path></svg>Cases</a>
+              <span style="display:inline-flex;align-items:center;gap:8px;height:28px;padding:0 12px;border:1px solid var(--border);border-radius:9999px;font-size:12px;line-height:16px;color:var(--ink-muted);font-variant-numeric:tabular-nums;white-space:nowrap"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><path d="M12 6v6l4 2"></path></svg>Sandbox resets in 21 h</span>
+            </div>
+            <header style="display:flex;flex-direction:column;gap:6px;margin-top:20px">
+              <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+                <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex:none;color:var(--primary)"><rect width="18" height="11" x="3" y="11" rx="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
+                <h1 tabIndex="-1" data-h1="true" style="margin:0;font-size:var(--text-h1);line-height:var(--leading-h1);font-weight:600;letter-spacing:var(--tracking-h1);outline:0">{{ f.d.cat }}</h1>
+                <span style="display:inline-flex;align-items:center;gap:6px;height:24px;padding:0 8px;border:1px solid var(--border-strong);border-radius:var(--radius-xs);background:var(--surface-raised);font-size:13px;line-height:20px;font-weight:500;color:var(--ink);white-space:nowrap">
+                  <sc-if value="{{ f.d.isNew }}" hint-placeholder-val="{{ true }}"><svg width="14" height="14" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="5" fill="var(--marker)"></circle></svg></sc-if>
+                  <sc-if value="{{ f.d.isRev }}" hint-placeholder-val="{{ false }}"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:var(--primary)"><path d="M14 2v4a2 2 0 0 0 2 2h4"></path><path d="M4.268 21a2 2 0 0 0 1.727 1H18a2 2 0 0 0 2-2V7l-5-5H6a2 2 0 0 0-2 2v3"></path><path d="m9 18-1.5-1.5"></path><circle cx="5" cy="14" r="3"></circle></svg></sc-if>
+                  <sc-if value="{{ f.d.isClosed }}" hint-placeholder-val="{{ false }}"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"></circle><path d="m9 12 2 2 4-4"></path></svg></sc-if>
+                  {{ f.d.badge }}</span>
+              </div>
+              <p style="margin:0;font-size:15px;line-height:24px;color:var(--ink);font-variant-numeric:tabular-nums">{{ f.d.meta }}</p>
+              <sc-if value="{{ f.d.fact }}" hint-placeholder-val="{{ false }}"><p style="display:flex;align-items:center;gap:8px;margin:0;font-size:14px;line-height:20px;color:var(--ink-muted)"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex:none"><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"></path></svg>The safety check routed this message to crisis text.</p></sc-if>
+              <sc-if value="{{ f.d.notOwn }}" hint-placeholder-val="{{ true }}"><p style="display:flex;align-items:center;gap:8px;margin:0;font-size:13px;line-height:20px;color:var(--ink-muted)"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex:none"><path d="M12 8v4l2 2"></path><path d="M3.05 11a9 9 0 1 1 .5 4m-.5 5v-5h5"></path></svg>Your reads of this case are recorded in its timeline.</p></sc-if>
+            </header>
+
+            <sc-if value="{{ f.d.own }}" hint-placeholder-val="{{ false }}">
+              <div style="display:flex;align-items:flex-start;gap:12px;max-width:720px;margin-top:32px;padding:20px 24px;border:1px solid var(--confidential-border);border-radius:var(--radius-lg);background:var(--confidential-tint)"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex:none;margin-top:2px;color:var(--primary)"><rect width="18" height="11" x="3" y="11" rx="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg><p style="margin:0;font-size:15px;line-height:24px;text-wrap:pretty">You opened this case, so you can't act on it or read it here.</p></div>
+            </sc-if>
+
+            <sc-if value="{{ f.d.notOwn }}" hint-placeholder-val="{{ true }}">
+            <div style="display:grid;grid-template-columns:minmax(0,1fr) 360px;gap:40px;align-items:start;margin-top:32px">
+              <div style="display:flex;flex-direction:column;gap:24px;min-width:0">
+                <section aria-labelledby="{{ f.id }}-ph" style="border:1px solid var(--border);border-radius:var(--radius-lg);padding:18px 24px 16px">
+                  <div style="display:flex;align-items:center;gap:14px"><span aria-hidden="true" style="width:40px;height:40px;flex:none;border-radius:9999px;background:var(--primary-tint);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600">{{ f.d.ini }}</span><span style="display:flex;flex-direction:column"><h2 id="{{ f.id }}-ph" style="margin:0;font-size:17px;line-height:24px;font-weight:600">{{ f.d.name }}</h2><span style="font-size:14px;line-height:20px;color:var(--ink-muted)">{{ f.d.title }}</span></span></div>
+                  <dl style="margin:14px 0 0;padding:0">
+                    <div style="display:grid;grid-template-columns:120px minmax(0,1fr);gap:16px;align-items:baseline;padding:10px 0;border-top:1px solid var(--border-subtle)"><dt style="font-size:var(--text-ui);line-height:20px;color:var(--ink-muted)">Department</dt><dd style="margin:0;font-size:15px;line-height:22px">{{ f.d.dept }}</dd></div>
+                    <div style="display:grid;grid-template-columns:120px minmax(0,1fr);gap:16px;align-items:baseline;padding:10px 0;border-top:1px solid var(--border-subtle)"><dt style="font-size:var(--text-ui);line-height:20px;color:var(--ink-muted)">Location</dt><dd style="margin:0;font-size:15px;line-height:22px">{{ f.d.loc }}</dd></div>
+                    <div style="display:grid;grid-template-columns:120px minmax(0,1fr);gap:16px;align-items:baseline;padding:10px 0;border-top:1px solid var(--border-subtle)"><dt style="font-size:var(--text-ui);line-height:20px;color:var(--ink-muted)">Email</dt><dd style="margin:0;font-size:15px;line-height:22px;overflow-wrap:anywhere"><a href="{{ f.d.mailto }}" style="font-weight:600;color:var(--primary);text-decoration:underline;text-decoration-thickness:1px;text-underline-offset:3px;border-radius:2px" style-hover="color:var(--primary-hover)" style-focus="outline:2px solid var(--focus-ring);outline-offset:2px">{{ f.d.email }}</a></dd></div>
+                  </dl>
+                  <p style="margin:6px 0 0;padding-top:12px;border-top:1px solid var(--border-subtle);font-size:13px;line-height:20px;color:var(--ink-muted)">Reply by email or in person. Open Door doesn't send messages.</p>
+                </section>
+
+                <section aria-labelledby="{{ f.id }}-sh" aria-busy="{{ f.d.sumBusy }}" style="border:1px solid var(--border);border-radius:var(--radius-lg);overflow:hidden">
+                  <div style="display:flex;flex-direction:column;gap:2px;padding:12px 20px;background:var(--surface-sunken);border-bottom:1px solid var(--border-subtle)">
+                    <div style="display:flex;align-items:center;gap:8px"><span aria-hidden="true" style="display:inline-flex;align-items:center;height:20px;padding:0 6px;box-sizing:border-box;border:1px solid var(--border-strong);border-radius:var(--radius-xs);background:var(--surface-raised);font-size:11px;line-height:16px;font-weight:600;letter-spacing:.03em">AI</span><h2 id="{{ f.id }}-sh" style="margin:0;font-size:15px;line-height:22px;font-weight:600">AI summary</h2></div>
+                    <sc-if value="{{ f.d.sumOk }}" hint-placeholder-val="{{ true }}"><p style="margin:0;font-size:13px;line-height:20px;color:var(--ink-muted);font-variant-numeric:tabular-nums;text-wrap:pretty">Written by Open Door's AI to be neutral, with no recommendation · {{ f.d.sumTime }} · <span style="white-space:nowrap">Claude Opus 5.5</span></p></sc-if>
+                  </div>
+                  <div style="padding:16px 20px 18px">
+                    <sc-if value="{{ f.d.sumOk }}" hint-placeholder-val="{{ true }}"><p style="margin:0;font-size:16px;line-height:26px;text-wrap:pretty">{{ f.d.summary }}</p></sc-if>
+                    <sc-if value="{{ f.d.sumPending }}" hint-placeholder-val="{{ false }}">
+                      <div role="status" style="display:flex;flex-direction:column;gap:12px"><p style="margin:0;font-size:15px;line-height:24px;color:var(--ink-muted)">Writing the summary…</p><div aria-hidden="true" style="display:flex;flex-direction:column;gap:10px"><span style="height:12px;width:92%;border-radius:6px;background:var(--surface-hover)"></span><span style="height:12px;width:78%;border-radius:6px;background:var(--surface-hover)"></span><span style="height:12px;width:54%;border-radius:6px;background:var(--surface-hover)"></span></div></div>
+                    </sc-if>
+                    <sc-if value="{{ f.d.sumFailed }}" hint-placeholder-val="{{ false }}">
+                      <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap"><p style="flex:1;min-width:240px;margin:0;font-size:15px;line-height:24px;text-wrap:pretty">No AI summary. Read the person's words below.</p><button type="button" style="display:inline-flex;align-items:center;gap:6px;height:32px;padding:0 12px;border:1px solid var(--border-strong);border-radius:var(--radius-sm);background:var(--surface-raised);color:var(--ink);font-family:var(--font-sans);font-size:13px;line-height:20px;font-weight:600;cursor:pointer" style-hover="background:var(--surface-hover);border-color:var(--border-strong-hover)" style-focus="outline:2px solid var(--focus-ring);outline-offset:2px"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"></path><path d="M3 3v5h5"></path></svg>Try again</button></div>
+                    </sc-if>
+                    <sc-if value="{{ f.d.sumCrisis }}" hint-placeholder-val="{{ false }}"><p style="margin:0;font-size:15px;line-height:24px;text-wrap:pretty">No AI summary for this case. The safety check routed it to crisis text.</p></sc-if>
+                  </div>
+                </section>
+
+                <section aria-labelledby="{{ f.id }}-wh" style="display:flex;flex-direction:column;gap:14px;padding:20px 24px 22px;border:1px solid var(--confidential-border);border-radius:var(--radius-lg);background:var(--confidential-tint)">
+                  <h2 id="{{ f.id }}-wh" style="display:flex;align-items:center;gap:10px;margin:0;font-size:15px;line-height:22px;font-weight:600"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex:none;color:var(--primary)"><rect width="18" height="11" x="3" y="11" rx="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>{{ f.d.wordsTitle }}</h2>
+                  <sc-if value="{{ f.d.hidden }}" hint-placeholder-val="{{ true }}"><p style="margin:0;font-size:15px;line-height:24px;text-wrap:pretty">{{ f.d.hiddenText }}</p></sc-if>
+                  <div id="{{ f.id }}-wb">
+                    <sc-if value="{{ f.d.shown }}" hint-placeholder-val="{{ false }}"><p style="margin:0;font-size:16px;line-height:26px;white-space:pre-wrap;text-wrap:pretty">{{ f.d.words }}</p></sc-if>
+                  </div>
+                  <div><button type="button" data-reveal="true" aria-expanded="{{ f.d.expAttr }}" aria-controls="{{ f.id }}-wb" onClick="{{ f.d.toggle }}" style="display:inline-flex;align-items:center;gap:8px;height:40px;padding:0 16px 0 14px;border:1px solid var(--border-strong);border-radius:var(--radius-md);background:var(--surface-raised);color:var(--ink);font-family:var(--font-sans);font-size:14px;line-height:20px;font-weight:600;cursor:pointer" style-hover="background:var(--surface-hover);border-color:var(--border-strong-hover)" style-focus="outline:2px solid var(--focus-ring);outline-offset:2px">
+                    <sc-if value="{{ f.d.hidden }}" hint-placeholder-val="{{ true }}"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0"></path><circle cx="12" cy="12" r="3"></circle></svg></sc-if>
+                    <sc-if value="{{ f.d.shown }}" hint-placeholder-val="{{ false }}"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10.733 5.076a10.744 10.744 0 0 1 11.205 6.575 1 1 0 0 1 0 .696 10.747 10.747 0 0 1-1.444 2.49"></path><path d="M14.084 14.158a3 3 0 0 1-4.242-4.242"></path><path d="M17.479 17.499a10.75 10.75 0 0 1-15.417-5.151 1 1 0 0 1 0-.696 10.75 10.75 0 0 1 4.446-5.143"></path><path d="m2 2 20 20"></path></svg></sc-if>
+                    {{ f.d.toggleLabel }}</button></div>
+                </section>
+
+                <sc-if value="{{ f.d.hasActions }}" hint-placeholder-val="{{ true }}">
+                  <div role="group" aria-label="Change the status" style="display:flex;flex-direction:column;gap:10px">
+                    <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+                      <sc-if value="{{ f.d.canStart }}" hint-placeholder-val="{{ true }}"><button type="button" data-act="review" aria-disabled="{{ f.d.lockedAttr }}" aria-describedby="{{ f.d.lockDesc }}" onClick="{{ f.d.startReview }}" style="height:40px;padding:0 18px;border:0;border-radius:var(--radius-md);background:{{ f.d.pBg }};color:{{ f.d.pFg }};font-family:var(--font-sans);font-size:14px;line-height:20px;font-weight:600;cursor:{{ f.d.cur }}" style-focus="outline:2px solid var(--focus-ring);outline-offset:2px">Start review</button></sc-if>
+                      <button type="button" data-act="close" aria-disabled="{{ f.d.lockedAttr }}" aria-describedby="{{ f.d.lockDesc }}" onClick="{{ f.d.closeCase }}" style="height:40px;padding:0 18px;border:1px solid {{ f.d.sBd }};border-radius:var(--radius-md);background:var(--surface-raised);color:{{ f.d.sFg }};font-family:var(--font-sans);font-size:14px;line-height:20px;font-weight:600;cursor:{{ f.d.cur }}" style-focus="outline:2px solid var(--focus-ring);outline-offset:2px">Close case</button>
+                    </div>
+                    <sc-if value="{{ f.d.locked }}" hint-placeholder-val="{{ true }}"><p id="{{ f.id }}-lk" style="display:flex;align-items:center;gap:8px;margin:0;font-size:14px;line-height:20px;color:var(--ink-muted)"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex:none"><circle cx="12" cy="12" r="10"></circle><path d="M12 16v-4M12 8h.01"></path></svg>{{ f.d.lockText }}</p></sc-if>
+                  </div>
+                </sc-if>
+                <sc-if value="{{ f.d.isClosed }}" hint-placeholder-val="{{ false }}"><p role="status" style="margin:0;font-size:14px;line-height:20px;color:var(--ink-muted)">This case is closed.</p></sc-if>
+              </div>
+
+              <section aria-labelledby="{{ f.id }}-th" style="padding:18px 24px 8px;border:1px solid var(--border);border-radius:var(--radius-lg);background:var(--surface-sunken)">
+                <h2 id="{{ f.id }}-th" style="margin:0 0 14px;font-size:15px;line-height:22px;font-weight:600">Timeline</h2>
+                <ol style="margin:0;padding:0 0 0 22px;list-style:none;position:relative">
+                  <sc-for list="{{ f.d.timeline }}" as="t" hint-placeholder-count="3">
+                    <li style="position:relative;display:flex;flex-direction:column;gap:1px;padding:0 0 16px">
+                      <span aria-hidden="true" style="position:absolute;left:-18px;top:6px;width:8px;height:8px;box-sizing:border-box;border-radius:50%;border:2px solid {{ t.dot }};background:var(--surface-raised)"></span>
+                      <sc-if value="{{ t.line }}" hint-placeholder-val="{{ true }}"><span aria-hidden="true" style="position:absolute;left:-15px;top:18px;bottom:2px;width:2px;border-radius:1px;background:var(--border)"></span></sc-if>
+                      <span style="font-size:14px;line-height:20px;color:var(--ink);text-wrap:pretty">{{ t.text }}</span>
+                      <span style="font-size:13px;line-height:20px;color:var(--ink-muted);font-variant-numeric:tabular-nums">{{ t.time }}</span>
+                    </li>
+                  </sc-for>
+                </ol>
+                <span aria-live="polite" style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)">{{ f.d.live }}</span>
+              </section>
+            </div>
+            </sc-if>
+          </div>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{ f.isHome }}" hint-placeholder-val="{{ false }}">
+        <div style="flex:1;min-width:0;display:grid;grid-template-columns:minmax(0,1fr) 340px">
+          <section style="padding:120px 72px 48px 80px;display:flex;flex-direction:column;min-width:0">
+            <h1 style="margin:0 0 36px;font-size:48px;line-height:56px;font-weight:600;letter-spacing:-0.025em">Good morning, Dana.</h1>
+            <div style="max-width:760px;border:1px solid var(--input-border);border-radius:var(--radius-lg);background:var(--surface-raised);box-shadow:0 1px 2px rgba(20,33,42,.04)" style-hover="border-color:var(--input-border-hover)">
+              <textarea aria-label="Ask Open Door" rows="3" placeholder="Ask about time off, pay, benefits, or policy…" style="display:block;width:100%;box-sizing:border-box;border:0;outline:0;resize:none;font-family:var(--font-sans);font-size:18px;line-height:28px;color:var(--ink);background:transparent;padding:20px 24px 8px"></textarea>
+              <div style="display:flex;align-items:center;gap:16px;padding:12px 12px 12px 24px;border-top:1px solid var(--border-subtle)"><p style="flex:1;display:flex;align-items:center;gap:8px;margin:0;font-size:13px;line-height:20px;color:var(--ink-muted)"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="flex:none"><circle cx="12" cy="12" r="10"></circle><path d="M12 16v-4M12 8h.01"></path></svg>Open Door is an AI assistant. It can make mistakes, and it always shows its sources.</p><button type="button" style="flex:none;height:40px;padding:0 14px 0 16px;border:0;border-radius:var(--radius-md);background:var(--primary);color:var(--on-primary);display:flex;align-items:center;gap:8px;font-family:var(--font-sans);font-size:14px;font-weight:600;cursor:pointer" style-hover="background:var(--primary-hover)" style-focus="outline:2px solid var(--focus-ring);outline-offset:2px">Ask<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M12 5l7 7-7 7"></path></svg></button></div>
+            </div>
+            <div style="max-width:760px;margin-top:48px;display:flex;flex-direction:column;gap:8px">
+              <div style="font-size:13px;line-height:20px;color:var(--ink-muted)">Try asking</div>
+              <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));column-gap:32px">
+                <sc-for list="{{ tryAsk }}" as="c" hint-placeholder-count="4">
+                  <button type="button" style="display:flex;align-items:center;justify-content:space-between;gap:12px;height:52px;padding:0 12px;border:0;border-bottom:1px solid var(--border-subtle);background:transparent;font-family:var(--font-sans);font-size:15px;color:var(--ink);text-align:left;cursor:pointer" style-hover="background:var(--primary-tint)" style-focus="outline:2px solid var(--focus-ring);outline-offset:2px;position:relative;z-index:1">{{ c }}<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="flex:none"><path d="M5 12h14M12 5l7 7-7 7"></path></svg></button>
+                </sc-for>
+              </div>
+            </div>
+          </section>
+          <aside aria-label="Your summary" style="border-left:1px solid var(--border-subtle);background:var(--surface-sunken);padding:28px 32px 32px;display:flex;flex-direction:column">
+            <div style="display:flex;justify-content:flex-end"><span style="display:inline-flex;align-items:center;gap:8px;height:28px;padding:0 12px;border:1px solid var(--border);border-radius:9999px;background:var(--surface-raised);font-size:12px;line-height:16px;color:var(--ink-muted);font-variant-numeric:tabular-nums"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><path d="M12 6v6l4 2"></path></svg>Sandbox resets in 21 h</span></div>
+            <div style="margin-top:64px;font-size:13px;line-height:20px;color:var(--ink-muted);padding-bottom:12px;border-bottom:1px solid var(--border)">At a glance</div>
+            <div style="display:flex;flex-direction:column">
+              <sc-for list="{{ glance }}" as="g" hint-placeholder-count="5">
+                <a href="{{ g.href }}" aria-label="{{ g.aria }}" style="display:flex;align-items:center;gap:12px;padding:20px 12px;margin:0 -12px;border-bottom:1px solid var(--border-subtle);border-radius:var(--radius-md);color:var(--ink);text-decoration:none" style-hover="background:var(--primary-tint);color:var(--ink)" style-focus="outline:2px solid var(--focus-ring);outline-offset:2px;position:relative;z-index:1">
+                  <span style="flex:1;min-width:0;display:flex;flex-direction:column;gap:2px"><span style="display:flex;align-items:center;gap:10px"><span style="font-size:32px;line-height:40px;font-weight:600;letter-spacing:-0.01em;font-variant-numeric:tabular-nums;white-space:nowrap">{{ g.v }}</span><sc-if value="{{ g.mk }}" hint-placeholder-val="{{ false }}"><span style="width:8px;height:8px;border-radius:50%;background:var(--marker)"></span></sc-if></span><span style="font-size:14px;line-height:20px;color:var(--ink-muted)">{{ g.cap }}</span></span>
+                  <span style="display:flex;align-items:center;gap:4px;font-size:13px;line-height:20px;font-weight:600;color:var(--primary)">{{ g.dest }}<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"></path></svg></span>
+                </a>
+              </sc-for>
+            </div>
+          </aside>
+        </div>
+      </sc-if>
+    </div>
+  </main>
+  </sc-if>
+
+  <sc-if value="{{ f.hasDlg }}" hint-placeholder-val="{{ false }}">
+    <div style="position:absolute;inset:0;z-index:20;display:flex;align-items:center;justify-content:center;padding:24px;background:var(--scrim)">
+      <div role="alertdialog" aria-modal="true" aria-labelledby="{{ f.id }}-dt" aria-describedby="{{ f.id }}-db" onKeyDown="{{ f.dlg.onKey }}" style="width:480px;max-width:100%;box-sizing:border-box;padding:24px;background:var(--surface-raised);border-radius:var(--radius-xl);box-shadow:var(--shadow-md);display:flex;flex-direction:column;gap:8px">
+        <h2 id="{{ f.id }}-dt" style="margin:0;font-size:var(--text-h2);line-height:var(--leading-h2);font-weight:600;text-wrap:pretty">{{ f.dlg.title }}</h2>
+        <p id="{{ f.id }}-db" style="margin:0;font-size:15px;line-height:24px;color:var(--ink-muted);text-wrap:pretty">{{ f.dlg.body }}</p>
+        <div style="display:flex;justify-content:flex-end;flex-wrap:wrap;gap:12px;margin-top:16px">
+          <button type="button" data-dlg-cancel="true" onClick="{{ f.dlg.cancel }}" style="height:40px;padding:0 16px;border:1px solid var(--border-strong);border-radius:var(--radius-md);background:var(--surface-raised);color:var(--ink);outline:{{ f.dlg.ring }};outline-offset:2px;font-family:var(--font-sans);font-size:14px;line-height:20px;font-weight:600;cursor:pointer" style-hover="background:var(--surface-hover);border-color:var(--border-strong-hover)" style-focus="outline:2px solid var(--focus-ring);outline-offset:2px">Cancel</button>
+          <button type="button" data-dlg-ok="true" onClick="{{ f.dlg.ok }}" style="height:40px;padding:0 16px;border:0;border-radius:var(--radius-md);background:var(--primary);color:var(--on-primary);font-family:var(--font-sans);font-size:14px;line-height:20px;font-weight:600;cursor:pointer" style-hover="background:var(--primary-hover)" style-focus="outline:2px solid var(--focus-ring);outline-offset:2px">{{ f.dlg.okLabel }}</button>
+        </div>
+      </div>
+    </div>
+  </sc-if>
+</div>
+</div>
+</div>
+</sc-for>
+</div>
+</section>
+<section class="dv-turn" id="components" data-screen-label="12 HR case components">
+<div class="dv-thd"><a class="dv-tid" href="#components">C</a><span class="dv-tname">HR case components</span></div>
+<p class="dv-note">The component library card, rendered from components/cases/ (CaseQueueTable, CaseSummaryBlock, CaseWordsReveal, CaseTimeline). Every state shown is a real prop or data-state on the component.</p>
+<iframe src="components/cases/hrcases.card.html" title="HR case components" ref="{{ cardRef }}" style="width:1180px;height:3000px;border:1px solid rgba(0,0,0,.08);border-radius:8px;background:#fff"></iframe>
+</section>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  state = { fs: {} };
+  roots = {};
+  componentWillUnmount() { clearInterval(this.fitTimer); }
+  cardRef = el => {
+    if (!el || el === this.cardEl) return;
+    this.cardEl = el;
+    const fit = () => { try { const doc = el.contentDocument; if (!doc || !doc.body) return; const h = doc.body.scrollHeight; if (h > 200 && Math.abs(el.offsetHeight - h - 24) > 4) el.style.height = (h + 24) + 'px'; } catch (err) {} };
+    el.addEventListener('load', fit);
+    let n = 0; clearInterval(this.fitTimer);
+    this.fitTimer = setInterval(() => { fit(); if (++n > 40) clearInterval(this.fitTimer); }, 250);
+  };
+  data() {
+    if (this._d) return this._d;
+    const DAY = { 5: 'Mon, Oct 5', 16: 'Fri, Oct 16', 19: 'Mon, Oct 19', 20: 'Tue, Oct 20', 22: 'Thu, Oct 22', 23: 'Fri, Oct 23', 26: 'Mon, Oct 26', 27: 'Tue, Oct 27', 28: 'Wed, Oct 28', 29: 'Thu, Oct 29' };
+    const Q = {
+      chloe: { name: 'Chloe Foster', ini: 'CF', title: 'Shift Lead, Opening', loc: 'Atlanta store', cat: 'Harassment or discrimination', sent: 22, due: 26, st: 'new', href: '/cases/chloe-foster' },
+      keisha: { name: 'Keisha Zhang', ini: 'KZ', title: 'Warehouse Associate', loc: 'Austin warehouse', cat: 'Pay concern', sent: 23, due: 27, st: 'new', href: '/cases/keisha-zhang' },
+      priya: { name: 'Priya Raman', ini: 'PR', title: 'Visual Merchandiser', loc: 'Oakland store', cat: 'Harassment or discrimination', sent: 26, due: 28, st: 'new', href: '#desktop-detail' },
+      megan: { name: 'Megan Coleman', ini: 'MC', title: 'Shift Supervisor, Nights', loc: 'Austin warehouse', cat: 'Something else, or not sure', sent: 27, due: 29, st: 'new', fact: true, href: '#desktop-summary-crisis' },
+      aaliyah: { name: 'Aaliyah Edwards', ini: 'AE', title: 'Cashier', loc: 'Oakland store', cat: 'Workplace safety', sent: 19, since: 20, st: 'review', href: '#desktop-detail-in-review' },
+      lucia: { name: 'Lucia Gutierrez', ini: 'LG', title: 'Graphic Designer', loc: 'Denver HQ', cat: 'Medical or accommodation', sent: 5, closed: 16, st: 'closed', href: '/cases/lucia-gutierrez' }
+    };
+    const C = {
+      priya: { first: 'Priya', name: 'Priya Raman', ini: 'PR', title: 'Visual Merchandiser', dept: 'Store Operations', loc: 'Oakland store', email: 'priya.raman@juniperrow.example', cat: 'Harassment or discrimination',
+        sentFull: 'Mon, Oct 26, 10:41 AM MDT', due: 'Wed, Oct 28', today: 'Mon, Oct 26', clock: [10, 53], words: 'My manager keeps making comments about my age.',
+        summary: 'The person says their manager keeps making comments about their age. They don’t say when the comments started, where they were made, or whether anyone else heard them.', sumTime: 'Mon, Oct 26, 10:41 AM MDT',
+        tl: [['Sent by Priya Raman', 'Mon, Oct 26, 10:41 AM MDT'], ['AI summary written', '10:41 AM MDT'], ['Dana Whitfield read the AI summary', '10:52 AM MDT']] },
+      aaliyah: { first: 'Aaliyah', name: 'Aaliyah Edwards', ini: 'AE', title: 'Cashier', dept: 'Store Operations', loc: 'Oakland store', email: 'aaliyah.edwards@juniperrow.example', cat: 'Workplace safety',
+        sentFull: 'Mon, Oct 19, 10:12 AM MDT', since: 'Tue, Oct 20', today: 'Mon, Oct 26', clock: [11, 3], words: 'The top step of the stockroom ladder is cracked. I was told to keep using it until the new ladder arrives.',
+        summary: 'The person says the top step of the stockroom ladder is cracked, and that they were told to keep using the ladder until a new one arrives. They don’t say who told them or when.', sumTime: 'Mon, Oct 19, 10:12 AM MDT',
+        tl: [['Sent by Aaliyah Edwards', 'Mon, Oct 19, 10:12 AM MDT'], ['AI summary written', 'Mon, Oct 19, 10:12 AM MDT'], ['Dana Whitfield read the AI summary', 'Tue, Oct 20, 8:40 AM MDT'], ['Dana Whitfield read Aaliyah’s words', 'Tue, Oct 20, 8:41 AM MDT'], ['Dana Whitfield started the review', 'Tue, Oct 20, 8:45 AM MDT'], ['Dana Whitfield read the AI summary', 'Mon, Oct 26, 11:02 AM MDT']] },
+      megan: { first: 'Megan', name: 'Megan Coleman', ini: 'MC', title: 'Shift Supervisor, Nights', dept: 'Warehouse Operations', loc: 'Austin warehouse', email: 'megan.coleman@juniperrow.example', cat: 'Something else, or not sure',
+        sentFull: 'Tue, Oct 27, 6:12 AM MDT', due: 'Thu, Oct 29', today: 'Tue, Oct 27', clock: [8, 5], fact: true, words: 'Nights have been really hard lately and I don’t know who else to tell. I’m not sure I can keep doing this.',
+        tl: [['Sent by Megan Coleman', 'Tue, Oct 27, 6:12 AM MDT'], ['The safety check routed it to crisis text', '6:12 AM MDT']] }
+    };
+    return this._d = { DAY, Q, C };
+  }
+  nav(cur, count) {
+    const items = [['ask', 'Ask', '/ask'], ['time', 'Time off', '/time-off'], ['dir', 'Directory', '/directory'], ['book', 'Handbook', '/handbook'], ['cases', 'Cases', '/cases'], ['con', 'Console', '/console']];
+    return items.map(([k, label, href]) => {
+      const on = k === cur;
+      return { label, href, ac: on ? 'page' : 'false', bg: on ? 'var(--primary-tint)' : 'transparent', fg: on ? 'var(--ink)' : 'var(--ink-nav)', w: on ? 600 : 500,
+        icAsk: k === 'ask', icTime: k === 'time', icDir: k === 'dir', icBook: k === 'book', icCases: k === 'cases', icCon: k === 'con',
+        hasCount: k === 'cases' && count > 0, count: count + ' new' };
+    });
+  }
+  frame(cfg) {
+    const D = this.data(), k = cfg.id;
+    const cur = s => Object.assign({ filter: 'open', shown: false, read: false, status: 'new', extra: [], dlg: null, ring: false, tick: 0, live: '' }, cfg.init || {}, s.fs[k] || {});
+    const st = cur(this.state);
+    const upd = fn => this.setState(s => ({ fs: { ...s.fs, [k]: { ...(s.fs[k] || {}), ...fn(cur(s)) } } }));
+    const focusSel = sel => setTimeout(() => { const r = this.roots[k]; const el = r && r.querySelector(sel); if (el) el.focus(); }, 50);
+    const base = { id: k, href: '#' + k, label: cfg.label, rootRef: el => { if (el) this.roots[k] = el; }, cardW: '1442px', hasMain: true, isQueue: false, isDetail: false, isHome: false, hasDlg: false, q: {}, d: {}, dlg: {} };
+    const keys = cfg.cases || [];
+    const newCount = cfg.newCount != null ? cfg.newCount : keys.filter(x => D.Q[x].st === 'new').length;
+    if (cfg.kind === 'nav') return { ...base, cardW: '250px', hasMain: false, nav: this.nav('ask', 3) };
+    if (cfg.kind === 'home') {
+      return { ...base, isHome: true, nav: this.nav('ask', 3) };
+    }
+    if (cfg.kind === 'queue') {
+      const today = cfg.today || 26;
+      const all = keys.map(x => D.Q[x]);
+      const news = all.filter(r => r.st === 'new').sort((a, b) => a.due - b.due);
+      const rest = all.filter(r => r.st !== 'new').sort((a, b) => a.sent - b.sent);
+      const F = { open: r => r.st !== 'closed', new: r => r.st === 'new', review: r => r.st === 'review', closed: r => r.st === 'closed', all: () => true };
+      const rows = [...news, ...rest].filter(F[st.filter]).map(r => {
+        const reply = r.st === 'new' ? (r.due === today ? 'Reply due today' : r.due < today ? 'Reply was due ' + D.DAY[r.due] : 'Reply due ' + D.DAY[r.due]) : r.st === 'review' ? 'In review since ' + D.DAY[r.since] : 'Closed ' + D.DAY[r.closed];
+        const badge = r.st === 'new' ? 'New' : r.st === 'review' ? 'In review' : 'Closed';
+        return { ...r, sub: r.title + ' · ' + r.loc, sent: D.DAY[r.sent], reply, badge, isNew: r.st === 'new', isRev: r.st === 'review', isClosed: r.st === 'closed', fact: !!r.fact,
+          aria: [r.name + ', ' + r.title + ', ' + r.loc, r.cat + (r.fact ? '. The safety check routed this message to crisis text' : ''), 'Sent ' + D.DAY[r.sent], reply, badge].join('. ') };
+      });
+      const FL = [['open', 'Open'], ['new', 'New'], ['review', 'In review'], ['closed', 'Closed'], ['all', 'All']];
+      const pick = v => upd(() => ({ filter: v }));
+      const EMPTY = { open: 'No open cases.', new: 'No new cases. A case appears here as soon as someone sends one.', review: 'No cases in review.', closed: 'No closed cases.', all: 'No cases yet.' };
+      return { ...base, isQueue: true, nav: this.nav('cases', newCount),
+        q: { rows, empty: rows.length === 0, emptyText: EMPTY[st.filter],
+          filters: FL.map(([v, label]) => { const on = st.filter === v; return { v, label, on, ti: on ? 0 : -1, pick: () => pick(v), bg: on ? 'var(--primary-tint)' : 'transparent', fg: on ? 'var(--ink)' : 'var(--ink-nav)', w: on ? 600 : 500 }; }),
+          onKey: e => { const step = e.key === 'ArrowRight' || e.key === 'ArrowDown' ? 1 : e.key === 'ArrowLeft' || e.key === 'ArrowUp' ? -1 : 0; if (!step) return; e.preventDefault(); const i = FL.findIndex(x => x[0] === cur(this.state).filter); const n = FL[(i + step + FL.length) % FL.length][0]; pick(n); focusSel('[data-fl="' + n + '"]'); } } };
+    }
+    // detail
+    if (cfg.own) {
+      return { ...base, isDetail: true, nav: this.nav('cases', 3),
+        d: { own: true, notOwn: false, cat: 'Pay concern', badge: 'New', isNew: true, isRev: false, isClosed: false, meta: 'Sent Fri, Oct 23, 2:15 PM MDT · Reply due Tue, Oct 27', fact: false, timeline: [] } };
+    }
+    const c = D.C[cfg.case];
+    const fmt = n => { const [h0, m0] = c.clock; const t = h0 * 60 + m0 + n; const h = Math.floor(t / 60), m = t % 60; return (h > 12 ? h - 12 : h) + ':' + String(m).padStart(2, '0') + (h >= 12 ? ' PM' : ' AM') + ' MDT'; };
+    const push = (c0, text) => ({ extra: [...c0.extra, [text, fmt(c0.tick)]], tick: c0.tick + 1, live: 'Added to the timeline: ' + text });
+    const status = st.status;
+    const locked = !st.read;
+    const sumState = cfg.summary || 'ok';
+    const baseTl = sumState === 'pending' || sumState === 'failed' ? c.tl.slice(0, 1) : c.tl;
+    const all = [...baseTl, ...st.extra];
+    const timeline = all.map(([text, time], i) => ({ text, time, line: i < all.length - 1, dot: i === all.length - 1 ? 'var(--primary)' : 'var(--border-strong)' }));
+    const toggle = () => {
+      const was = cur(this.state).shown;
+      upd(c0 => was ? { shown: false, live: '' } : { shown: true, read: true, ...push(c0, 'Dana Whitfield read ' + c.first + '’s words') });
+    };
+    const openDlg = kind => () => { if (!cur(this.state).read) return; upd(() => ({ dlg: kind, ring: false })); focusSel('[data-dlg-cancel]'); };
+    const dlgKind = st.dlg;
+    const closeDlg = () => { upd(() => ({ dlg: null, ring: false })); focusSel('[data-act="' + dlgKind + '"]'); };
+    const okDlg = () => {
+      if (dlgKind === 'review') { upd(c0 => ({ dlg: null, ring: false, status: 'review', ...push(c0, 'Dana Whitfield started the review') })); focusSel('[data-act="close"]'); }
+      else { upd(c0 => ({ dlg: null, ring: false, status: 'closed', shown: false, ...push(c0, 'Dana Whitfield closed the case') })); focusSel('[data-h1]'); }
+    };
+    const meta = status === 'new' ? 'Sent ' + c.sentFull + ' · Reply due ' + c.due : status === 'review' ? 'Sent ' + c.sentFull + ' · In review since ' + (c.since || c.today) : 'Sent ' + c.sentFull + ' · Closed ' + c.today;
+    const dlgs = {
+      review: { title: 'Start review of this case?', body: c.first + ' will see “HR is reviewing” in My cases.', okLabel: 'Start review' },
+      close: { title: 'Close this case?', body: c.first + ' will see “HR has finished its review”. A closed case can’t be reopened in Open Door.', okLabel: 'Close case' }
+    };
+    return {
+      ...base, isDetail: true, nav: this.nav('cases', cfg.newCount != null ? cfg.newCount : 3),
+      hasDlg: !!dlgKind,
+      dlg: dlgKind ? { ...dlgs[dlgKind], cancel: closeDlg, ok: okDlg, ring: st.ring ? '2px solid var(--focus-ring)' : 'none',
+        onKey: e => {
+          if (e.key === 'Escape') { e.preventDefault(); closeDlg(); return; }
+          if (e.key !== 'Tab') return;
+          const r = this.roots[k]; const a = r && r.querySelector('[data-dlg-cancel]'), b = r && r.querySelector('[data-dlg-ok]');
+          if (!a || !b) return;
+          if (e.shiftKey && document.activeElement === a) { e.preventDefault(); b.focus(); }
+          else if (!e.shiftKey && document.activeElement === b) { e.preventDefault(); a.focus(); }
+        } } : {},
+      d: {
+        own: false, notOwn: true, cat: c.cat, badge: status === 'new' ? 'New' : status === 'review' ? 'In review' : 'Closed', isNew: status === 'new', isRev: status === 'review', isClosed: status === 'closed',
+        meta, fact: !!c.fact, ini: c.ini, name: c.name, title: c.title, dept: c.dept, loc: c.loc, email: c.email, mailto: 'mailto:' + c.email,
+        sumOk: sumState === 'ok' && !!c.summary, sumPending: sumState === 'pending', sumFailed: sumState === 'failed', sumCrisis: sumState === 'crisis', sumBusy: sumState === 'pending' ? 'true' : 'false',
+        summary: c.summary || '', sumTime: c.sumTime || '',
+        wordsTitle: c.first + '’s words', hidden: !st.shown, shown: st.shown, expAttr: st.shown ? 'true' : 'false', words: c.words,
+        hiddenText: c.first + '’s words are hidden. Opening them is recorded in this case’s timeline.',
+        toggle, toggleLabel: (st.shown ? 'Hide ' : 'Show ') + c.first + '’s words',
+        hasActions: status !== 'closed', canStart: status === 'new', locked, lockedAttr: locked ? 'true' : 'false', lockDesc: locked ? k + '-lk' : '',
+        lockText: 'Read ' + c.first + '’s words before changing the status.',
+        pBg: locked ? 'var(--disabled-bg)' : 'var(--primary)', pFg: locked ? 'var(--disabled-fg)' : 'var(--on-primary)',
+        sBd: locked ? 'var(--disabled-bg)' : 'var(--border-strong)', sFg: locked ? 'var(--disabled-fg)' : 'var(--ink)', cur: locked ? 'not-allowed' : 'pointer',
+        startReview: openDlg('review'), closeCase: openDlg('close'),
+        timeline, live: st.live
+      }
+    };
+  }
+  renderVals() {
+    const OPEN = ['chloe', 'keisha', 'priya', 'aaliyah', 'lucia'];
+    const REV = { shown: true, read: true, extra: [['Dana Whitfield read Priya’s words', '10:53 AM MDT']], tick: 1 };
+    const frames = [
+      { id: 'desktop-queue', kind: 'queue', cases: OPEN, label: 'The queue on Open: new cases first by reply date, then the rest oldest first. Facts only, never anyone’s words. Rows link to the detail.' },
+      { id: 'desktop-queue-closed', kind: 'queue', cases: OPEN, init: { filter: 'closed' }, label: 'The Closed filter.' },
+      { id: 'desktop-queue-empty', kind: 'queue', cases: ['aaliyah', 'lucia'], init: { filter: 'new' }, label: 'The New filter with nothing in it. The nav badge goes away at zero.' },
+      { id: 'desktop-queue-facts', kind: 'queue', cases: ['chloe', 'keisha', 'priya', 'megan', 'aaliyah', 'lucia'], today: 27, label: 'Sample state, Tuesday, October 27: an overdue reply and a crisis-routed case, both stated as plain facts in neutral type. "4 new".' },
+      { id: 'desktop-detail', kind: 'detail', case: 'priya', label: 'Priya’s case minutes after it was sent. The AI summary is labeled as the AI’s; the words are hidden; the status actions wait for the words to be read.' },
+      { id: 'desktop-detail-revealed', kind: 'detail', case: 'priya', init: REV, label: 'After "Show Priya’s words": the words as plain text on the tint, the read recorded in the timeline, the status actions enabled.' },
+      { id: 'desktop-dialog-review', kind: 'detail', case: 'priya', init: { ...REV, dlg: 'review', ring: true }, label: 'Start review: a 480 px alert dialog, focus starting on Cancel.' },
+      { id: 'desktop-dialog-close', kind: 'detail', case: 'priya', init: { ...REV, dlg: 'close', ring: true }, label: 'Close case: the standard primary button, never red.' },
+      { id: 'desktop-detail-in-review', kind: 'detail', case: 'aaliyah', init: { read: true, status: 'review' }, label: 'Aaliyah’s case, in review. The words start hidden on every view; "Close case" is enabled because they were read on Oct 20.' },
+      { id: 'desktop-summary-pending', kind: 'detail', case: 'priya', summary: 'pending', label: 'Seconds after sending: "Writing the summary…" with a quiet skeleton; the timeline has only the send.' },
+      { id: 'desktop-summary-failed', kind: 'detail', case: 'priya', summary: 'failed', label: 'The summary failed: a plain line pointing to the words, and "Try again".' },
+      { id: 'desktop-summary-crisis', kind: 'detail', case: 'megan', summary: 'crisis', newCount: 4, label: 'Megan’s case: no summary because the safety check routed it to crisis text, stated in the block and as a neutral fact in the header.' },
+      { id: 'desktop-own-case', kind: 'detail', own: true, label: 'Sample state: a case Dana sent herself. Header and dates only.' },
+      { id: 'desktop-home-hr', kind: 'home', label: 'Dana’s home: "At a glance" gains new cases and replies due today, both linking to Cases, above the handbook line.' },
+      { id: 'desktop-nav-hr', kind: 'nav', label: 'Dana’s sidebar: Ask, Time off, Directory, Handbook, Cases with "3 new", Console.' }
+    ];
+    const glance = [['104 hours', 'PTO available', 'Time off', '/time-off', false], ['0', 'requests pending', 'Time off', '/time-off', false], ['3', 'new cases', 'Cases', '/cases', true], ['1', 'reply due today', 'Cases', '/cases', false], ['Sep 12', 'Handbook updated', 'Handbook', '/handbook', false]]
+      .map(([v, cap, dest, href, mk]) => ({ v, cap, dest, href, mk, aria: v + ' ' + cap + '. Open ' + dest }));
+    const tryAsk = ['How much PTO do I have?', 'What holidays are left this year?', 'How do confidential HR cases work?', 'When is the next company holiday?'];
+    return { frames: frames.map(f => this.frame(f)), glance, tryAsk, cardRef: this.cardRef };
+  }
+}
+</script>
+</body>
+</html>

@@ -19,3 +19,5 @@
 @import "./components/handbook/handbook.css";
 @import "./components/timeoff/timeoff.css";
 @import "./components/approvals/approvals.css";
+@import "./components/cases/cases.css";
+@import "./components/cases/hrcases.css";

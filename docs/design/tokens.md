@@ -43,6 +43,7 @@ at `primary-tint`, so the brand's cinnamon accent is called `marker`.
 | `danger-tint`, `danger-border` | `#FDEFEE`, `#EFBDB8` | A refusal or error message's fill and edge; added for Phase 5 |
 | `apricot-tint`, `apricot-border` | `#FBEFE5`, `#EBC6A8` | The confirmed moment on a confirm card only, a wash from the cinnamon family; added for Phase 5 |
 | `scrim` | `rgba(20, 33, 42, 0.32)` | Behind an alert dialog, over the whole window; added for Phase 5 |
+| `confidential-tint`, `confidential-border` | `#F7F3F9`, `#E4DAE9` | Behind the confidential-case form, the sent line, a case's hidden words, and HR's own-case notice: a quiet aubergine wash, never an alert; added for Phase 6 |
 | `disabled-bg`, `disabled-fg` | `#E7EBED`, `#87939A` | Disabled controls (exempt from contrast minimums) |
 | `tooltip-bg`, `tooltip-fg` | = `ink`, `#FFFFFF` | Tooltips |
 
@@ -65,8 +66,9 @@ at `primary-tint`, so the brand's cinnamon accent is called `marker`.
 | `ink` on `warning-tint` / `warning` icon on it | 15.0:1 / 5.8:1 | 4.5:1 / 3:1 |
 | `ink` on `danger-tint` / `danger` icon on it | 14.7:1 / 5.9:1 | 4.5:1 / 3:1 |
 | `ink` on `apricot-tint` / `success` icon / `primary` link on it | 14.5:1 / 5.6:1 / 9.8:1 | 4.5:1 |
+| `ink` / `ink-muted` / `primary` / `danger` on `confidential-tint` | 14.9:1 / 5.6:1 / 10.1:1 / 6.0:1 | 4.5:1 |
 | `marker` clock on white ("Waiting for approval") | 3.6:1 | 3:1 (an icon beside its word) |
-| The `-border` tokens on white | 1.6:1 to 1.7:1 | decorative: the icon and the words carry the meaning |
+| The `-border` tokens on white | 1.35:1 to 1.7:1 | decorative: the icon and the words carry the meaning |
 
 `border`, `border-subtle`, and `border-strong` are below 3:1 on purpose. They are decorative, or
 the control they edge is identified by its label, so they never carry meaning alone.

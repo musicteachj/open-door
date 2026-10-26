@@ -10,6 +10,15 @@ version (`0.x.y` while the app is being built, `1.0.0` when it is complete).
 
 ## [Unreleased]
 
+### Added
+
+- **The Phase 6 screens** (Phase 6, design). Screen 11 (the HR panel's "Open a confidential
+  case" button, the case form in every state, and "My cases") and screen 12 (HR's case queue and
+  case detail) are designed in Claude Design and approved, with each screen's build decisions and
+  acceptance criteria in its notes. The web theme gains the two colors they use for confidential
+  surfaces, `confidential-tint` and `confidential-border`, so the theme still carries every design
+  token.
+
 ## [0.5.0] - 2026-10-26
 
 Phase 5: time off. A pure engine counts every day and balance from each person's schedule, the

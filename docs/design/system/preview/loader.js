@@ -52,7 +52,14 @@ window.OD_FILES = [
   'components/approvals/ApprovalCard.jsx',
   'components/approvals/NoteField.jsx',
   'components/approvals/DecisionDialog.jsx',
-  'components/assistant/ConfirmCard.jsx'
+  'components/assistant/ConfirmCard.jsx',
+  'components/cases/CaseForm.jsx',
+  'components/cases/CaseSent.jsx',
+  'components/cases/CaseList.jsx',
+  'components/cases/CaseQueueTable.jsx',
+  'components/cases/CaseSummaryBlock.jsx',
+  'components/cases/CaseWordsReveal.jsx',
+  'components/cases/CaseTimeline.jsx'
 ];
 window.loadOpenDoor = async function (root, files) {
   var mods = {};
