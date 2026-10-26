@@ -171,9 +171,14 @@ avatar, skeleton loader, empty state, and page header.
   - failed, with a reason
 
   Variants: a time-off request (dates, weekday, days, balance after), an approve or deny decision,
-  cancel a request, and open a confidential case (with a consent line).
+  and cancel a request. A confidential case is not a confirm card: the person sends it from the
+  confidential-case form below (decided on 2026-10-26).
 - **Escalation panel:** shown for a sensitive topic. It explains confidentiality in plain words and
-  offers to open a confidential case. It must feel supportive and serious, **never cute**.
+  offers "Open a confidential case". It must feel supportive and serious, **never cute**.
+- **Confidential-case form:** opens in the thread under the escalation or crisis panel, and on the
+  "My cases" page. A category, the person's own words (prefilled from the message that raised the
+  panel, editable), what is true about a case, and "Send to HR". The person sends it; the AI
+  never opens a case.
 - **Crisis panel:** fixed text with the 988 Suicide & Crisis Lifeline and the Employee Assistance
   Program. Clear, calm, and prominent.
 - **Refusal message:** when the assistant can't share something ("I can't share Leo's home
@@ -226,9 +231,10 @@ the design never needs a temporary version.
 10. **Confirm cards** in every variant and state (see above).
 
 **Phase 6:**
-11. **Escalation panel and confidential-case confirm.**
-12. **HR case queue and case detail.** Confidential styling, with redacted content where
-    appropriate.
+11. **Escalation panel, confidential-case form, and "My cases".** The panel's case button, the form
+    in every state, the sent state, and the person's own list of cases with their status.
+12. **HR case queue and case detail.** Confidential styling: the queue shows no text, and the
+    detail shows the AI summary with the person's own words hidden until HR reveals them.
 
 **Phase 7:**
 13. **AI Ops console.** A turn list, trace detail (guard verdict, tools, passages, citations,
@@ -289,6 +295,34 @@ Claude Design proposed enhancements after the Phase 2 screens. These are settled
 
 ---
 
+## Decisions from the Phase 6 planning (2026-10-26)
+
+The [Phase 6 spec](../specs/2026-10-26-phase-6-cases-and-escalation.md) has the detail. For the
+design of screens 11 and 12:
+
+- **The person opens a case, not the AI.** The escalation panel's "Open a confidential case"
+  button opens a form in the thread. The person picks a category, reviews their own words
+  (prefilled from the message that raised the panel), reads what's true about a case, and presses
+  "Send to HR". The crisis panel offers the same button below its fixed text. Nothing says "I can
+  open a case for you".
+- **The form says only what's true,** in fixed, owner-approved text: HR sees your name and your
+  words; managers never see a case; it's stored encrypted; when HR replies; that Open Door's AI
+  writes HR a short summary meant to be neutral, which Anthropic processes; that a person in HR
+  reads your words before deciding anything; and 911, 988, and the EAP.
+- **"My cases"** is a new nav item for everyone but HR: the person's cases with their status
+  ("Sent to HR", "HR is reviewing", "HR has finished its review") and when HR replies, never the
+  words. The same form opens from it.
+- **HR's queue shows no text:** category, the person, location, sent date, reply-by, and status,
+  with neutral labels for a reply that's due and for a case the safety check routed to crisis
+  text. The Cases nav item counts new cases, and HR's home gains a cases card.
+- **HR's case detail** shows the AI summary, labeled as the AI's, and hides the person's words
+  behind "Show {first name}'s words". Each read is recorded and listed in the case's timeline.
+  The status actions stay disabled until HR has read the words.
+- **Confidential without being scary,** as above: a lock and a quiet tint, never an alert style.
+  An overdue reply and the crisis fact are facts in neutral styling, not warnings.
+
+---
+
 ## Voice and tone
 
 Calm, plain, and specific. American English. No exclamation points, and no jokes about sensitive
@@ -304,8 +338,10 @@ figures are written and verified against official sources in Phase 3.
   the buttons **Confirm** and **Cancel**.
 - **Refusal:** "I can't share another employee's home address. If you need to reach Leo, his work
   email is in the directory."
-- **Escalation:** "This sounds serious, and you deserve a person's attention, not an AI's. I can
-  open a confidential case with HR. Only the HR team will see it."
+- **Escalation:** "This sounds like something a person on the HR team should help with. You can
+  open a confidential case below. Only the HR team can open it in Open Door, never your manager,
+  and it's stored encrypted. HR replies within 2 business days." (The owner approves the final
+  text in Phase 6.)
 - **Not found:** "I couldn't find that in the handbook. Want me to send the question to HR?"
 - **Disclosure:** "Open Door is an AI assistant. It can make mistakes, and it always shows its
   sources."
