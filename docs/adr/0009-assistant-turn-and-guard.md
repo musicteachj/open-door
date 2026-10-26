@@ -74,3 +74,11 @@ and a slowest call of 2,931 ms. So the 800 ms p95 target is not met: the guard's
 limit leaves about five times the p95. A call that times out is counted as unavailable, never in
 these figures. The 800 ms target stays as the aim, and Phase 8's cost and load test checks the
 guard's latency again under load.
+
+Amended 2026-10-26: the HR panel follows the guard's `category` alone. Until now a `kind` on an
+ordinary message also showed the panel, which was harmless while the panel only listed contacts.
+From Phase 6 the panel offers a confidential case ([ADR 0014](0014-cases-opened-by-the-person.md)),
+so a plain policy question on a sensitive subject ("How many days do I get when a relative
+dies?") must not get one. An ordinary message with a `kind` keeps the note not to counsel. The
+words of a case are screened by the same guard when they're sent. Phase 6's escalation eval
+measures the guard's precision and recall on a held-out half of its labeled set.

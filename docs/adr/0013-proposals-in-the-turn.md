@@ -47,3 +47,7 @@ A confirm happens outside any turn, so a message added then would break the last
 The model always knows what happened to its proposals before it answers again, at the cost of a
 line in the per-turn context. A card can be confirmed while another turn runs. Phase 6's
 `propose_open_case` reuses all of this.
+
+Amended 2026-10-26: Phase 6 doesn't add `propose_open_case`. A case is opened by the person from
+the HR panel ([ADR 0014](0014-cases-opened-by-the-person.md)), so the proposal flow stays time off
+only. The next turn's context reports an opened case the same way it reports a proposal's outcome.
