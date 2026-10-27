@@ -285,6 +285,20 @@ the conversation read after a turn ends.
 
 ## Phase 8: hardening and deploy-readiness
 
+- **Encrypt the time-off denial note.** `time_off_requests.decision_note` is a manager's own
+  words and stays readable in Phase 6, which encrypts only conversation and case text (ADR 0015).
+  Seal it with a data key for the request, as the conversation store does. (Phase 6 spec.)
+- **One stored value that won't decrypt breaks the conversation for good.** Its owner's
+  `GET /conversations/current` and `GET /budget` return a 500 from then on, since "current" is the
+  newest conversation. Only a damaged row or a lost key causes it. Let the person start a new
+  conversation from that state, or mark the conversation unreadable. (Phase 6 stage 1 security
+  review.)
+- **Encryption binds each message to its row, not to its order.** Someone who can write to the
+  database could reorder a conversation's messages, or cut tool-call entries off the end of a
+  turn's list, and they would still decrypt. That access is outside the threat model. If it ever
+  isn't, bind `position` and the list's length into the associated data. And if a second
+  ciphertext format is added, bind the version byte too. (Phase 6 stage 1 security review.)
+
 - **The per-turn check for untold card outcomes grows with the conversation.** Each turn start
   reads every card in the conversation and checks each against every stored context's
   `reported_outcomes` array, with no index, while it holds the cards' share locks. Fine at demo

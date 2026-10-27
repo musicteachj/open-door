@@ -12,7 +12,7 @@ from collections import Counter
 from collections.abc import AsyncIterator, Callable
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, NamedTuple
 from uuid import UUID
 
 import anyio
@@ -20,15 +20,17 @@ import httpx2 as httpx
 import pytest
 from fastapi import FastAPI
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncEngine
+from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 
+from app.ai.conversations import conversation_cipher, open_turn
 from app.ai.scripted import ScriptedTransport
 from app.core.config import Settings
-from app.db.models import AiSpend, AiTurn
+from app.db.models import AiConversation, AiSpend, AiTurn
 from app.db.tenancy import TenantContext, tenant_session
 from app.main import create_app
 from app.modules.assistant import sse
 from app.modules.identity.cookies import CSRF_COOKIE, CSRF_HEADER, SESSION_COOKIE
+from tests.integration.conftest import TEST_KEYS, OpenTurn, open_turns
 
 pytestmark = [
     pytest.mark.integration,
@@ -157,10 +159,11 @@ async def wait_for(condition: Callable[[], bool], seconds: float = 5.0) -> None:
             await asyncio.sleep(0.02)
 
 
-async def turns(engine: AsyncEngine, session: Session) -> list[AiTurn]:
+async def turns(engine: AsyncEngine, session: Session) -> list[OpenTurn]:
     ctx = TenantContext(session.tenant_id, session.person_id)
     async with tenant_session(engine, ctx) as db:
-        return list((await db.scalars(select(AiTurn).order_by(AiTurn.started_at))).all())
+        rows = list((await db.scalars(select(AiTurn).order_by(AiTurn.started_at))).all())
+        return await open_turns(db, rows)
 
 
 async def spend_kinds(engine: AsyncEngine, session: Session) -> Counter[str]:
@@ -327,11 +330,20 @@ async def test_a_stream_canceled_at_shutdown_saves_its_turn_before_the_engine_is
     assert rows[0].answer_text
 
 
-async def turns_as_owner(engine: AsyncEngine, session: Session) -> list[AiTurn]:
-    async with engine.connect() as connection:
-        result = await connection.execute(
-            select(AiTurn.status, AiTurn.answer_text).where(
-                AiTurn.conversation_id == UUID(session.conversation_id)
-            )
+class OwnerRow(NamedTuple):
+    status: str
+    answer_text: str
+
+
+async def turns_as_owner(engine: AsyncEngine, session: Session) -> list[OwnerRow]:
+    """The conversation's turns as the database owner sees them, answers opened."""
+    async with AsyncSession(engine) as db:
+        conversation = await db.get(AiConversation, UUID(session.conversation_id))
+        assert conversation is not None
+        cipher = conversation_cipher(TEST_KEYS, conversation)
+        rows = await db.scalars(
+            select(AiTurn)
+            .where(AiTurn.conversation_id == conversation.id)
+            .order_by(AiTurn.started_at)
         )
-        return [AiTurn(status=status, answer_text=answer) for status, answer in result]
+        return [OwnerRow(row.status, open_turn(cipher, row).answer) for row in rows]

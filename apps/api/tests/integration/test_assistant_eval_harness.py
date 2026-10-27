@@ -52,6 +52,7 @@ from app.modules.handbook.search import pinned_version_id
 from app.modules.handbook.source import read_handbook
 from app.modules.sandbox.seed import build_company, insert_time_off_requests
 from tests.assistant_eval import load_datasets, load_eval_module, load_runner
+from tests.integration.conftest import TEST_KEYS
 from tests.integration.test_budget import daily_ids, delete_daily_rows_except
 
 pytestmark = pytest.mark.integration
@@ -119,6 +120,7 @@ async def live_run(
         effort="low",
         app_engine=app_engine,
         owner_engine=owner_engine,
+        keys=TEST_KEYS,
         **kwargs,
     )
     return traces
@@ -200,6 +202,7 @@ async def test_two_runs_give_the_same_seeded_ids_and_the_same_request_fingerprin
         effort="low",
         app_engine=app_engine,
         owner_engine=owner_engine,
+        keys=TEST_KEYS,
     )
     assert replay.misses == []
     # The whole trace, not only the answer: citations, tool results, usage, cost, and the rest.
@@ -624,6 +627,7 @@ async def test_a_replay_miss_names_the_item_even_through_run_turn(
             effort="low",
             app_engine=app_engine,
             owner_engine=owner_engine,
+            keys=TEST_KEYS,
         )
 
     assert "qa-777" in str(raised.value)
@@ -647,6 +651,7 @@ async def test_a_replay_with_a_missing_query_embedding_fails_naming_the_item(
             effort="low",
             app_engine=app_engine,
             owner_engine=owner_engine,
+            keys=TEST_KEYS,
         )
 
     assert "qa-001" in str(raised.value)
@@ -683,6 +688,7 @@ async def test_a_warm_embedding_cache_lets_a_replay_run(
         effort="low",
         app_engine=app_engine,
         owner_engine=owner_engine,
+        keys=TEST_KEYS,
     )
 
     assert len(replayed) == 2
@@ -703,6 +709,7 @@ async def test_a_mode_must_match_its_transport(
             effort="low",
             app_engine=app_engine,
             owner_engine=owner_engine,
+            keys=TEST_KEYS,
         )
     assert await count_rows(owner_engine, "tenants") == 0
 
@@ -797,6 +804,7 @@ async def test_a_reissued_request_replays_as_the_error_and_then_the_answer(
         effort="low",
         app_engine=app_engine,
         owner_engine=owner_engine,
+        keys=TEST_KEYS,
     )
     assert live[0].model_call_count == 3  # the failed call, its re-issue, and the answer
     assert live[0].answer_text
@@ -811,6 +819,7 @@ async def test_a_reissued_request_replays_as_the_error_and_then_the_answer(
         effort="low",
         app_engine=app_engine,
         owner_engine=owner_engine,
+        keys=TEST_KEYS,
     )
 
     assert replay.misses == []
@@ -868,6 +877,7 @@ async def test_a_transient_failure_in_a_live_run_is_a_recording_gap(
         effort="low",
         app_engine=app_engine,
         owner_engine=owner_engine,
+        keys=TEST_KEYS,
     )
 
     [first, second] = traces
@@ -906,6 +916,7 @@ async def test_a_stream_the_loop_closed_on_a_canary_is_recorded_and_replays_the_
         effort="low",
         app_engine=app_engine,
         owner_engine=owner_engine,
+        keys=TEST_KEYS,
     )
 
     assert trace.error_codes == ("internal",)  # all the person is shown
@@ -922,6 +933,7 @@ async def test_a_stream_the_loop_closed_on_a_canary_is_recorded_and_replays_the_
         effort="low",
         app_engine=app_engine,
         owner_engine=owner_engine,
+        keys=TEST_KEYS,
     )
     assert replayed.turn_error_code == "prompt-leak"
     assert replayed.error_codes == ("internal",)
@@ -940,6 +952,7 @@ async def test_a_replay_run_has_no_recording_gaps_to_report(
         effort="low",
         app_engine=app_engine,
         owner_engine=owner_engine,
+        keys=TEST_KEYS,
     )
 
     assert [t.recording_gaps for t in traces] == [(), ()]

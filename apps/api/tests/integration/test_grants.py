@@ -58,14 +58,15 @@ EXPECTED_TABLE_GRANTS = {
     ("od_cleanup", "tenants", "DELETE"),
 }
 # The tables with column grants. A turn's columns change when it ends: its identity (id, tenant_id,
-# person_id, conversation_id), its question, and started_at are never updatable. A request changes
-# only by a decision or a cancel, and a proposal only when it ends: their identity, dates, amounts,
-# payload, card, and expiry are never updatable. Nothing else in the schema has a column grant.
+# person_id, conversation_id), its question_ciphertext, and started_at are never updatable. A
+# request changes only by a decision or a cancel, and a proposal only when it ends: their identity,
+# dates, amounts, payload, card, and expiry are never updatable. Nothing else in the schema has a
+# column grant.
 UPDATABLE_TURN_COLUMNS = {
     "status",
     "error_code",
     "ended_at",
-    "answer_text",
+    "answer_ciphertext",
     "citations",
     "guard_verdict",
     "tool_calls",

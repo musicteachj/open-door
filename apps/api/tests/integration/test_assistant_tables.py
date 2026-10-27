@@ -10,14 +10,17 @@ from decimal import Decimal
 from uuid import UUID, uuid4
 
 import pytest
-from sqlalchemy import text
+from sqlalchemy import ScalarResult, text
 from sqlalchemy.exc import DBAPIError, IntegrityError
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 
+from app.core.encryption import TEST_KEY_ID, Place, open_, seal, wrap_aad
 from app.db.models import AiConversation, AiFeedback, AiMessage, AiTurn
 from app.db.tenancy import TenantContext, set_is_hr, tenant_session
 from app.modules.sandbox.seed import SeedCompany
 from tests.integration.conftest import (
+    OPAQUE,
+    TEST_KEYS,
     AssistantRows,
     MakeTenant,
     SampleTenant,
@@ -121,6 +124,8 @@ async def test_a_person_cannot_write_a_row_that_belongs_to_someone_else(
             effort="medium",
             prompt_version="1",
             toolset_version="1",
+            key_id=TEST_KEY_ID,
+            wrapped_key=OPAQUE,
         )
 
     def turn() -> object:
@@ -128,7 +133,7 @@ async def test_a_person_cannot_write_a_row_that_belongs_to_someone_else(
             tenant_id=tenant_id,
             person_id=priya,
             conversation_id=rows.conversation_id,
-            question="q",
+            question_ciphertext=OPAQUE,
             status="completed",
         )
 
@@ -140,7 +145,7 @@ async def test_a_person_cannot_write_a_row_that_belongs_to_someone_else(
             turn_id=rows.turn_id,
             position=9,
             role="user",
-            content=[],
+            content_ciphertext=OPAQUE,
         )
 
     def feedback() -> object:
@@ -169,7 +174,7 @@ async def test_a_person_cannot_add_to_someone_elses_conversation(
                 tenant_id=tenant_id,
                 person_id=priya,
                 conversation_id=rows.conversation_id,
-                question="q",
+                question_ciphertext=OPAQUE,
                 status="completed",
             )
         )
@@ -179,7 +184,7 @@ async def test_a_person_cannot_add_to_someone_elses_conversation(
             tenant_id=tenant_id,
             person_id=marcus,
             conversation_id=rows.conversation_id,
-            question="q",
+            question_ciphertext=OPAQUE,
             status="completed",
         )
 
@@ -191,7 +196,7 @@ async def test_a_person_cannot_add_to_someone_elses_conversation(
             turn_id=rows.turn_id,
             position=9,
             role="user",
-            content=[],
+            content_ciphertext=OPAQUE,
         )
 
     def feedback_on_her_turn() -> object:
@@ -242,7 +247,8 @@ async def test_the_api_cannot_change_or_delete_what_it_has_added(
 
 
 @pytest.mark.parametrize(
-    "column", ["id", "tenant_id", "person_id", "conversation_id", "question", "started_at"]
+    "column",
+    ["id", "tenant_id", "person_id", "conversation_id", "question_ciphertext", "started_at"],
 )
 async def test_a_turns_identity_question_and_start_can_never_be_updated(
     app_engine: AsyncEngine, make_tenant: MakeTenant, column: str
@@ -269,26 +275,28 @@ async def test_a_running_turn_can_be_finished_once(
     async with tenant_session(app_engine, context) as session:
         # The answer so far, then the end: a running turn can be updated more than once.
         await session.execute(
-            text("UPDATE ai_turns SET answer_text = 'Partly' WHERE id = :id"), {"id": turn_id}
+            text("UPDATE ai_turns SET answer_ciphertext = :answer WHERE id = :id"),
+            {"id": turn_id, "answer": b"partly"},
         )
         finished = await session.scalars(
             text(
                 "UPDATE ai_turns SET status = 'completed', ended_at = now(),"
-                " answer_text = 'Done', cost_usd = 0.12, tool_calls = '[]'::jsonb"
+                " answer_ciphertext = :answer, cost_usd = 0.12, tool_calls = '[]'::jsonb"
                 " WHERE id = :id RETURNING id"
             ),
-            {"id": turn_id},
+            {"id": turn_id, "answer": b"done"},
         )
         assert list(finished) == [turn_id]
 
     for statement in (
-        "UPDATE ai_turns SET answer_text = 'Changed' WHERE id = :id",
+        "UPDATE ai_turns SET answer_ciphertext = :answer WHERE id = :id",
+        "UPDATE ai_turns SET tool_calls = '[]'::jsonb WHERE id = :id",
         "UPDATE ai_turns SET status = 'running' WHERE id = :id",
         "UPDATE ai_turns SET cost_usd = 0 WHERE id = :id",
     ):
         with pytest.raises(DBAPIError, match="a finished turn cannot be changed") as raised:
             async with tenant_session(app_engine, context) as session:
-                await session.execute(text(statement), {"id": turn_id})
+                await session.execute(text(statement), {"id": turn_id, "answer": b"changed"})
         # A code of its own (class OD is ours, like 0005's OD001), so code can tell this refusal
         # from any other without reading the message.
         assert getattr(raised.value.orig, "sqlstate", None) == "OD002"
@@ -544,7 +552,7 @@ async def test_a_message_can_carry_its_search_sources(
                 turn_id=rows.turn_id,
                 position=2,
                 role="user",
-                content=[],
+                content_ciphertext=OPAQUE,
                 sources=sources,
             )
         )
@@ -638,8 +646,9 @@ async def test_the_person_rule_is_a_restrictive_policy_on_exactly_the_four_perso
     )
 
 
-# Postgres `json` keeps the text it was given. Task 5's history must go back to the API with its
-# keys in the order the API sent them, because a thinking block is signed over its exact bytes.
+# The history must go back to the API with its keys in the order the API sent them, because a
+# thinking block is signed over its exact bytes. The store seals the JSON text as it was serialized
+# (Task 4), so the column must hand back the sealed bytes unchanged.
 EXACT_JSON = '[{"type":"thinking",  "signature": "abc", "thinking": "b a",  "z": 1, "a": 2}]'
 
 
@@ -649,27 +658,59 @@ async def test_message_content_comes_back_byte_for_byte(
     rows = await priyas_rows(app_engine, seeded_sandbox)
     priya = persona(seeded_sandbox, "priya")
     tenant_id = seeded_sandbox.tenant_id
+    message_id = uuid4()
 
     async with tenant_session(app_engine, TenantContext(tenant_id, priya)) as session:
+        data_key = await conversation_data_key(session, tenant_id, rows.conversation_id)
+        sealed = seal(
+            data_key,
+            EXACT_JSON.encode(),
+            place=Place("ai_messages", "content_ciphertext", tenant_id, message_id),
+        )
         await session.execute(
             text(
-                "INSERT INTO ai_messages (tenant_id, person_id, conversation_id, turn_id,"
-                " position, role, content) VALUES (:tenant_id, :person_id, :conversation_id,"
-                " :turn_id, 2, 'assistant', CAST(:content AS json))"
+                "INSERT INTO ai_messages (id, tenant_id, person_id, conversation_id, turn_id,"
+                " position, role, content_ciphertext) VALUES (:id, :tenant_id, :person_id,"
+                " :conversation_id, :turn_id, 2, 'assistant', :content)"
             ),
             {
+                "id": message_id,
                 "tenant_id": tenant_id,
                 "person_id": priya,
                 "conversation_id": rows.conversation_id,
                 "turn_id": rows.turn_id,
-                "content": EXACT_JSON,
+                "content": sealed,
             },
         )
-        stored: str = (
-            await session.execute(text("SELECT content::text FROM ai_messages WHERE position = 2"))
+        stored: bytes = (
+            await session.execute(
+                text("SELECT content_ciphertext FROM ai_messages WHERE position = 2")
+            )
         ).scalar_one()
 
-    assert stored == EXACT_JSON
+    assert stored == sealed
+    assert (
+        open_(
+            data_key,
+            stored,
+            place=Place("ai_messages", "content_ciphertext", tenant_id, message_id),
+        ).decode()
+        == EXACT_JSON
+    )
+
+
+async def conversation_data_key(
+    session: AsyncSession, tenant_id: UUID, conversation_id: UUID
+) -> bytes:
+    key_id, wrapped = (
+        await session.execute(
+            text("SELECT key_id, wrapped_key FROM ai_conversations WHERE id = :id"),
+            {"id": conversation_id},
+        )
+    ).one()
+    return TEST_KEYS.unwrap(
+        key_id, bytes(wrapped), aad=wrap_aad(tenant_id, "ai_conversations", conversation_id)
+    )
 
 
 async def test_a_message_position_is_used_once_per_conversation(
@@ -689,7 +730,7 @@ async def test_a_message_position_is_used_once_per_conversation(
                     turn_id=rows.turn_id,
                     position=1,  # write_assistant_rows already used 0 and 1.
                     role="user",
-                    content=[],
+                    content_ciphertext=OPAQUE,
                 )
             )
 
@@ -710,33 +751,23 @@ async def test_a_turn_gets_one_feedback_row(
             )
 
 
-@pytest.mark.parametrize(("length", "allowed"), [(500, True), (501, False)])
-async def test_feedback_reasons_are_at_most_500_characters(
-    app_engine: AsyncEngine, make_tenant: MakeTenant, length: int, allowed: bool
+async def test_a_feedback_reason_has_no_length_check_in_the_database(
+    app_engine: AsyncEngine, make_tenant: MakeTenant
 ) -> None:
+    # The 500-character limit is a schema 422 before sealing; a ciphertext is longer than its text.
     tenant = await make_tenant()
     context = TenantContext(tenant.id, tenant.employee_id)
-    # The fixture's own turn already has its feedback, so the feedback goes on a new turn.
     async with tenant_session(app_engine, context) as session:
         turn_id = await new_turn(session, tenant, await a_conversation(session), "completed")
-
-    async def add_feedback() -> None:
-        async with tenant_session(app_engine, context) as session:
-            session.add(
-                AiFeedback(
-                    tenant_id=tenant.id,
-                    person_id=tenant.employee_id,
-                    turn_id=turn_id,
-                    helpful=False,
-                    reason="x" * length,
-                )
+        session.add(
+            AiFeedback(
+                tenant_id=tenant.id,
+                person_id=tenant.employee_id,
+                turn_id=turn_id,
+                helpful=False,
+                reason_ciphertext=b"x" * 5_000,
             )
-
-    if allowed:
-        await add_feedback()
-    else:
-        with pytest.raises(IntegrityError, match="ck_ai_feedback_reason_length"):
-            await add_feedback()
+        )
 
 
 async def new_turn(
@@ -749,7 +780,7 @@ async def new_turn(
             tenant_id=tenant.id,
             person_id=tenant.employee_id,
             conversation_id=conversation_id,
-            question="q",
+            question_ciphertext=OPAQUE,
             status=status,
         )
     )
@@ -810,6 +841,8 @@ async def test_a_second_conversation_can_run_beside_the_first(
             effort="medium",
             prompt_version="1",
             toolset_version="1",
+            key_id=TEST_KEY_ID,
+            wrapped_key=OPAQUE,
         )
         session.add(other)
         await session.flush()
@@ -821,14 +854,15 @@ async def test_a_second_conversation_can_run_beside_the_first(
     [
         (
             "ck_ai_turns_status",
-            "INSERT INTO ai_turns (tenant_id, person_id, conversation_id, question, status)"
-            " SELECT tenant_id, person_id, id, 'q', 'done' FROM ai_conversations",
+            "INSERT INTO ai_turns (tenant_id, person_id, conversation_id, question_ciphertext,"
+            " status) SELECT tenant_id, person_id, id, '\\x01'::bytea, 'done'"
+            " FROM ai_conversations",
         ),
         (
             "ck_ai_messages_role",
             "INSERT INTO ai_messages (tenant_id, person_id, conversation_id, turn_id, position,"
-            " role, content) SELECT tenant_id, person_id, conversation_id, id, 7, 'tool', '[]'"
-            " FROM ai_turns",
+            " role, content_ciphertext) SELECT tenant_id, person_id, conversation_id, id, 7,"
+            " 'tool', '\\x01'::bytea FROM ai_turns",
         ),
         (
             "ck_ai_spend_kind",
@@ -861,3 +895,117 @@ async def test_deleting_an_expired_sandbox_removes_every_assistant_row(
     assert deleted == 1
     assert {table: before[table] for table in TENANT_TABLES} == ROWS_WRITTEN
     assert {table: after[table] for table in TENANT_TABLES} == dict.fromkeys(TENANT_TABLES, 0)
+
+
+async def columns_of(owner_engine: AsyncEngine, table: str) -> dict[str, tuple[str, str]]:
+    """Column name -> (data type, is_nullable), from the catalog."""
+    async with owner_engine.connect() as connection:
+        rows = await connection.execute(
+            text(
+                "SELECT column_name, data_type, is_nullable FROM information_schema.columns"
+                " WHERE table_schema = 'public' AND table_name = :table"
+            ),
+            {"table": table},
+        )
+    return {name: (kind, nullable) for name, kind, nullable in rows}
+
+
+async def test_the_conversation_text_columns_are_ciphertext(owner_engine: AsyncEngine) -> None:
+    conversations = await columns_of(owner_engine, "ai_conversations")
+    messages = await columns_of(owner_engine, "ai_messages")
+    turns = await columns_of(owner_engine, "ai_turns")
+    feedback = await columns_of(owner_engine, "ai_feedback")
+
+    assert conversations["key_id"] == ("text", "NO")
+    assert conversations["wrapped_key"] == ("bytea", "NO")
+    assert messages["content_ciphertext"] == ("bytea", "NO")
+    assert turns["question_ciphertext"] == ("bytea", "NO")
+    assert turns["answer_ciphertext"] == ("bytea", "YES")
+    assert feedback["reason_ciphertext"] == ("bytea", "YES")
+    # The trace stays readable for the console.
+    assert turns["tool_calls"][0] == "jsonb"
+    assert turns["guard_verdict"][0] == "jsonb"
+    assert turns["citations"][0] == "jsonb"
+
+
+async def test_no_plaintext_conversation_column_remains(owner_engine: AsyncEngine) -> None:
+    assert "content" not in await columns_of(owner_engine, "ai_messages")
+    turns = await columns_of(owner_engine, "ai_turns")
+    assert "question" not in turns
+    assert "answer_text" not in turns
+    assert "reason" not in await columns_of(owner_engine, "ai_feedback")
+
+
+async def test_the_feedback_reason_length_check_is_gone(owner_engine: AsyncEngine) -> None:
+    async with owner_engine.connect() as connection:
+        checks: ScalarResult[str] = (
+            await connection.execute(
+                text(
+                    "SELECT conname FROM pg_constraint WHERE conrelid = 'ai_feedback'::regclass"
+                    " AND contype = 'c'"
+                )
+            )
+        ).scalars()
+        assert list(checks) == []
+
+
+@pytest.mark.parametrize(
+    ("table", "column"),
+    [
+        ("ai_conversations", "key_id"),
+        ("ai_conversations", "wrapped_key"),
+        ("ai_messages", "content_ciphertext"),
+        ("ai_turns", "question_ciphertext"),
+    ],
+)
+async def test_a_row_without_its_ciphertext_or_key_is_refused(
+    app_engine: AsyncEngine, make_tenant: MakeTenant, table: str, column: str
+) -> None:
+    tenant = await make_tenant()
+    async with tenant_session(app_engine, TenantContext(tenant.id, tenant.employee_id)) as session:
+        # Copy a row the fixture wrote, with the one column null.
+        columns = [
+            name
+            for name in await session_columns(session, table)
+            if name not in ("id", column, "created_at", "started_at")
+        ]
+        names = ", ".join(columns)
+        statement = f"INSERT INTO {table} ({names}, {column}) SELECT {names}, NULL FROM {table}"  # noqa: S608
+        with pytest.raises(IntegrityError, match="not-null constraint"):
+            await session.execute(text(statement))
+
+
+async def session_columns(session: AsyncSession, table: str) -> list[str]:
+    rows = await session.execute(
+        text(
+            "SELECT column_name FROM information_schema.columns"
+            " WHERE table_schema = 'public' AND table_name = :table ORDER BY ordinal_position"
+        ),
+        {"table": table},
+    )
+    return list(rows.scalars())
+
+
+async def test_the_fixture_text_is_sealed_and_opens_in_its_place(
+    app_engine: AsyncEngine, seeded_sandbox: SeedCompany
+) -> None:
+    rows = await priyas_rows(app_engine, seeded_sandbox)
+    priya = persona(seeded_sandbox, "priya")
+    tenant_id = seeded_sandbox.tenant_id
+
+    async with tenant_session(app_engine, TenantContext(tenant_id, priya)) as session:
+        data_key = await conversation_data_key(session, tenant_id, rows.conversation_id)
+        question, answer = (
+            await session.execute(
+                text("SELECT question_ciphertext, answer_ciphertext FROM ai_turns")
+            )
+        ).one()
+
+    def place(column: str) -> Place:
+        return Place("ai_turns", column, tenant_id, rows.turn_id)
+
+    assert b"sick leave" not in bytes(question)
+    assert open_(data_key, bytes(question), place=place("question_ciphertext")) == (
+        b"How much sick leave do I get?"
+    )
+    assert open_(data_key, bytes(answer), place=place("answer_ciphertext")) == b"You get 40 hours."

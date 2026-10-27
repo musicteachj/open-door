@@ -55,7 +55,7 @@ from app.ai.proposals import (
     turn_state_of,
     unreported_outcomes,
 )
-from app.db.models import AiConversation, AiProposal, AiTurn
+from app.db.models import AiConversation, AiProposal
 from app.db.tenancy import TenantContext, tenant_session
 from app.domain.timeoff.evaluate import NewRequest
 from app.domain.timeoff.labels import label
@@ -63,7 +63,7 @@ from app.modules.timeoff import queries, service
 from app.modules.timeoff.schemas import DrawOut
 from app.modules.timeoff.service import Preview, Refused
 from app.modules.timeoff.texts import refusal_text
-from tests.integration.conftest import MakeTenant, audit_events
+from tests.integration.conftest import MakeTenant, audit_events, conversation_key, turn_row
 from tests.integration.test_timeoff_service import (
     NOW,
     Org,
@@ -124,6 +124,7 @@ async def make_chat(
         msg = "Backdating a turn needs the owner login"
         raise ValueError(msg)
     chat = Chat(uuid4(), uuid4(), tenant_id, person_id, turn_status, started_ago, owner)
+    key_id, wrapped_key, _ = conversation_key(tenant_id, chat.conversation_id)
     async with tenant_session(engine, TenantContext(tenant_id, person_id)) as session:
         session.add(
             AiConversation(
@@ -135,16 +136,13 @@ async def make_chat(
                 effort="medium",
                 prompt_version="test",
                 toolset_version="test",
+                key_id=key_id,
+                wrapped_key=wrapped_key,
             )
         )
         await session.flush()
-        turn = AiTurn(
-            id=chat.turn_id,
-            tenant_id=tenant_id,
-            person_id=person_id,
-            conversation_id=chat.conversation_id,
-            question="Can I take Monday off?",
-            status="running",
+        turn = await turn_row(
+            session, chat.conversation_id, chat.turn_id, "Can I take Monday off?", status="running"
         )
         session.add(turn)
         await session.flush()
@@ -1920,12 +1918,11 @@ async def test_a_dead_turns_late_tool_cannot_store_a_card_or_replace_a_valid_one
     dead_turn = uuid4()
     async with tenant_session(app_engine, ctx_of(org, org.report)) as session:
         session.add(
-            AiTurn(
-                id=dead_turn,
-                tenant_id=org.tenant.id,
-                person_id=org.report,
-                conversation_id=chat.conversation_id,
-                question="Another?",
+            await turn_row(
+                session,
+                chat.conversation_id,
+                dead_turn,
+                "Another?",
                 status="running",
                 started_at=datetime.now(UTC) - timedelta(minutes=11),
             )

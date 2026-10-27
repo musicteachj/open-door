@@ -1,14 +1,21 @@
+import base64
 from collections.abc import Iterator
 
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+from pydantic import SecretStr
 
 from app.core.config import Settings
+from app.core.encryption import TEST_KEY, TEST_KEY_ID
 from app.main import create_app
 
 # Unit tests never reach a database: port 1 refuses instantly.
 UNREACHABLE_DATABASE_URL = "postgresql+asyncpg://opendoor:opendoor@127.0.0.1:1/opendoor"
+
+
+# The fixed, obviously fake keyring the tests and CI use. The API refuses it unless APP_ENV=test.
+TEST_KEYRING = SecretStr(f"{TEST_KEY_ID}:{base64.b64encode(TEST_KEY).decode()}")
 
 
 @pytest.fixture
@@ -22,6 +29,8 @@ def settings() -> Settings:
         cleanup_database_url=None,
         app_origin="http://localhost:5173",
         log_level="INFO",
+        encryption_keyring_file=None,
+        encryption_keyring=TEST_KEYRING,
     )
 
 

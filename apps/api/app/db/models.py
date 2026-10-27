@@ -22,12 +22,12 @@ from typing import Any
 
 from pgvector.sqlalchemy import Vector
 from sqlalchemy import (
-    JSON,
     CheckConstraint,
     Computed,
     ForeignKey,
     ForeignKeyConstraint,
     Index,
+    LargeBinary,
     Numeric,
     SmallInteger,
     Text,
@@ -352,6 +352,10 @@ class AiConversation(Base):
     effort: Mapped[str]
     prompt_version: Mapped[str]
     toolset_version: Mapped[str]
+    # This conversation's data key, wrapped by the key-encryption key named by key_id (ADR 0015,
+    # migration 0012). Every sealed value in the conversation's rows opens with it.
+    key_id: Mapped[str]
+    wrapped_key: Mapped[bytes] = mapped_column(LargeBinary)
 
 
 class AiTurn(Base):
@@ -397,14 +401,16 @@ class AiTurn(Base):
     tenant_id: Mapped[uuid.UUID] = mapped_column(ForeignKey(TENANT_FK, ondelete="CASCADE"))
     person_id: Mapped[uuid.UUID]
     conversation_id: Mapped[uuid.UUID]
-    question: Mapped[str]
+    # Sealed with the conversation's data key (migration 0012); so is the answer below.
+    question_ciphertext: Mapped[bytes] = mapped_column(LargeBinary)
     status: Mapped[str]
     # Set when status is `failed`: the stream's error code, such as `model-unavailable`.
     error_code: Mapped[str | None]
     started_at: Mapped[datetime] = mapped_column(server_default=func.now())
     ended_at: Mapped[datetime | None]
-    # What the person sees after a reload. A stopped turn keeps its partial answer here.
-    answer_text: Mapped[str] = mapped_column(server_default=text("''"))
+    # What the person sees after a reload. A stopped turn keeps its partial answer here. Null until
+    # the turn first saves an answer, and read as "".
+    answer_ciphertext: Mapped[bytes | None] = mapped_column(LargeBinary)
     citations: Mapped[list[dict[str, Any]]] = mapped_column(JSONB, server_default=text("'[]'"))
 
     # The trace, filled in when the turn ends (docs/specs/2026-10-14-phase-4-assistant-core.md,
@@ -412,7 +418,8 @@ class AiTurn(Base):
     # The guard's verdict, or null if the guard didn't run (a budget refusal, say).
     # none_as_null: Python None is SQL NULL, not the JSON value null, so `IS NULL` finds it.
     guard_verdict: Mapped[dict[str, Any] | None] = mapped_column(JSONB(none_as_null=True))
-    # [{name, inputSummary, ok, durationMs}], in call order.
+    # [{name, inputSummary, ok, durationMs}], in call order. Each inputSummary is the base64 of a
+    # sealed value (migration 0012); the names, results, and durations stay readable.
     tool_calls: Mapped[list[dict[str, Any]]] = mapped_column(JSONB, server_default=text("'[]'"))
     # The handbook sections the search tool returned, as [{sectionId, passageIds}].
     sections_retrieved: Mapped[list[dict[str, Any]]] = mapped_column(
@@ -442,9 +449,9 @@ class AiTurn(Base):
 class AiMessage(Base):
     """One message of the conversation's history, stored exactly as the Messages API takes it.
 
-    Insert-only. `content` is `json`, not `jsonb`: Postgres keeps `json` as the exact text it was
-    given, while `jsonb` reorders keys and drops whitespace. The model's thinking blocks are signed
-    over their exact bytes, so the history must go back to the API unchanged.
+    Insert-only. `content_ciphertext` seals the content's JSON text exactly as it was serialized, so
+    it opens to the same bytes: the model's thinking blocks are signed over their exact bytes, and
+    the history must go back to the API unchanged (ADR 0015, migration 0012).
     """
 
     __tablename__ = "ai_messages"
@@ -473,7 +480,7 @@ class AiMessage(Base):
     # The message's place in the conversation, from 0.
     position: Mapped[int]
     role: Mapped[str]
-    content: Mapped[list[dict[str, Any]]] = mapped_column(JSON)
+    content_ciphertext: Mapped[bytes] = mapped_column(LargeBinary)
     # One entry per `search_result` block in `content`, in block order, written with the message:
     # the section ID, the passage IDs of each text block, the title, the group name, the audience
     # label, the last-updated date, and the deep link. The block's own text can't give those back
@@ -498,7 +505,6 @@ class AiFeedback(Base):
             name="fk_ai_feedback_turn_owner",
         ),
         UniqueConstraint("tenant_id", "turn_id"),
-        CheckConstraint("char_length(reason) <= 500", name="reason_length"),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, server_default=func.gen_random_uuid())
@@ -506,7 +512,7 @@ class AiFeedback(Base):
     person_id: Mapped[uuid.UUID]
     turn_id: Mapped[uuid.UUID]
     helpful: Mapped[bool]
-    reason: Mapped[str | None]
+    reason_ciphertext: Mapped[bytes | None] = mapped_column(LargeBinary)
     created_at: Mapped[datetime] = mapped_column(server_default=func.now())
 
 

@@ -3,7 +3,7 @@
 import re
 from decimal import Decimal
 from functools import lru_cache
-from typing import Any, Literal
+from typing import Any, Literal, Self
 
 from pydantic import (
     Field,
@@ -11,6 +11,7 @@ from pydantic import (
     SecretStr,
     ValidationInfo,
     field_validator,
+    model_validator,
 )
 from pydantic.fields import FieldInfo
 from pydantic_settings import (
@@ -18,6 +19,8 @@ from pydantic_settings import (
     PydanticBaseSettingsSource,
     SettingsConfigDict,
 )
+
+from app.core.encryption import DEFAULT_KEYRING_PATH
 
 # What a browser sends in its Origin header: a lowercase scheme and host, an optional port, and
 # nothing after them. The same-origin check compares that header with APP_ORIGIN character for
@@ -33,7 +36,12 @@ DEFAULT_PORTS = {"http": 80, "https": 443}
 # ANTHROPIC_API_KEY that way), and that would otherwise shadow .env for every entry point: alembic,
 # the scripts, pytest, and uvicorn by hand. No other setting gets this: an empty APP_ENV or
 # AI_TRANSPORT must still fail validation, not quietly become the default.
-KEY_SETTINGS = ("anthropic_api_key", "voyage_api_key")
+KEY_SETTINGS = (
+    "anthropic_api_key",
+    "voyage_api_key",
+    "encryption_keyring",
+    "encryption_keyring_file",
+)
 
 
 class EnvWithoutBlankKeys(PydanticBaseSettingsSource):
@@ -96,6 +104,17 @@ class Settings(BaseSettings):
     # proxy check uses as its control run.
     ai_heartbeat_seconds: int = Field(default=15, ge=0)
 
+    # The key-encryption keys for case and conversation text (ADR 0015): lines of `id:base64`,
+    # newest first, either in a file or in ENCRYPTION_KEYRING. Both are secret values and never
+    # print. Optional here, like the API keys, because alembic, the scripts, and the tests build
+    # Settings and never encrypt; `create_app` refuses to start without a keyring. The file path is
+    # relative to apps/api whatever the working directory, and `make setup` writes the file. An
+    # empty ENCRYPTION_KEYRING or ENCRYPTION_KEYRING_FILE counts as unset.
+    encryption_keyring_file: SecretStr | None = Field(
+        default=SecretStr(DEFAULT_KEYRING_PATH), repr=False
+    )
+    encryption_keyring: SecretStr | None = Field(default=None, repr=False)
+
     @classmethod
     def settings_customise_sources(
         cls,
@@ -112,7 +131,13 @@ class Settings(BaseSettings):
             file_secret_settings,
         )
 
-    @field_validator("voyage_api_key", "anthropic_api_key", mode="before")
+    @field_validator(
+        "voyage_api_key",
+        "anthropic_api_key",
+        "encryption_keyring",
+        "encryption_keyring_file",
+        mode="before",
+    )
     @classmethod
     def empty_key_is_none(cls, value: object) -> object:
         # An empty value written in .env itself means no key. (An empty one in the environment never
@@ -120,6 +145,18 @@ class Settings(BaseSettings):
         if isinstance(value, str) and not value.strip():
             return None
         return value
+
+    @model_validator(mode="after")
+    def refuse_two_keyrings(self) -> Self:
+        # The file has a default, so only a file someone set counts as set.
+        file_is_set = (
+            "encryption_keyring_file" in self.model_fields_set
+            and self.encryption_keyring_file is not None
+        )
+        if self.encryption_keyring is not None and file_is_set:
+            msg = "Set ENCRYPTION_KEYRING or ENCRYPTION_KEYRING_FILE, not both."
+            raise ValueError(msg)
+        return self
 
     @field_validator("database_url", "migration_database_url", "cleanup_database_url")
     @classmethod

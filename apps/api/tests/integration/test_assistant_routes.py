@@ -5,6 +5,7 @@ own functions, so these tests do not depend on the stream.
 """
 
 import json
+from collections.abc import Sequence
 from decimal import Decimal
 from typing import Any
 from uuid import UUID, uuid4
@@ -16,9 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncEngine
 from app.ai.conversations import (
     CURRENT_PINS,
     TurnOutcome,
-    finish_turn,
     section_names,
-    start_turn,
 )
 from app.ai.fixed_texts import (
     BUDGET_DAILY_TEXT,
@@ -29,9 +28,16 @@ from app.ai.fixed_texts import (
     STILL_ANSWERING_TEXT,
     UNAVAILABLE_TEXT,
 )
-from app.db.models import AiConversation, AiMessage, AiSpend
+from app.db.models import AiConversation, AiSpend
 from app.db.tenancy import TenantContext, tenant_session
-from tests.integration.conftest import Browser, OpenBrowser, OpenBrowserWith
+from tests.integration.conftest import (
+    Browser,
+    OpenBrowser,
+    OpenBrowserWith,
+    begin_turn,
+    end_turn,
+    message_row,
+)
 
 pytestmark = [
     pytest.mark.integration,
@@ -79,9 +85,9 @@ async def seed_turn(
     async with tenant_session(engine, TenantContext(tenant_id, person_id)) as db:
         conversation = await db.get(AiConversation, conversation_id)
         assert conversation is not None
-        turn = await start_turn(db, conversation, question)
+        turn = await begin_turn(db, conversation, question)
         if outcome is not None:
-            await finish_turn(db, turn.id, outcome)
+            await end_turn(db, conversation, turn.id, outcome)
         return turn.id
 
 
@@ -594,12 +600,12 @@ async def add_history(
     characters: int,
 ) -> None:
     async with tenant_session(engine, TenantContext(tenant_id, person_id)) as db:
+        conversation = await db.get(AiConversation, conversation_id)
+        assert conversation is not None
         db.add(
-            AiMessage(
-                tenant_id=tenant_id,
-                person_id=person_id,
-                conversation_id=conversation_id,
-                turn_id=turn_id,
+            message_row(
+                conversation,
+                turn_id,
                 position=0,
                 role="user",
                 content=[{"type": "text", "text": "y" * characters}],
@@ -889,12 +895,12 @@ async def seed_sources(
 ) -> None:
     """The `search_result` blocks the model was sent for a turn, as the store keeps them."""
     async with tenant_session(engine, TenantContext(tenant_id, person_id)) as db:
+        conversation = await db.get(AiConversation, conversation_id)
+        assert conversation is not None
         db.add(
-            AiMessage(
-                tenant_id=tenant_id,
-                person_id=person_id,
-                conversation_id=conversation_id,
-                turn_id=turn_id,
+            message_row(
+                conversation,
+                turn_id,
                 position=0,
                 role="user",
                 content=[{"type": "text", "text": "results"}],
@@ -980,13 +986,13 @@ async def seed_source_messages(
 ) -> None:
     """One stored message per entry, each with the given `search_result` sources (or none)."""
     async with tenant_session(engine, TenantContext(tenant_id, person_id)) as db:
+        conversation = await db.get(AiConversation, conversation_id)
+        assert conversation is not None
         for position, sources in enumerate(messages):
             db.add(
-                AiMessage(
-                    tenant_id=tenant_id,
-                    person_id=person_id,
-                    conversation_id=conversation_id,
-                    turn_id=turn_id,
+                message_row(
+                    conversation,
+                    turn_id,
                     position=position,
                     role="user",
                     content=[{"type": "text", "text": "results"}],
@@ -1310,3 +1316,77 @@ def test_the_texts_are_the_words_the_two_problems_use(browser: Browser) -> None:
 
     assert (personal.status_code, personal.json()["type"]) == (422, "personal-data")
     assert personal.json()["detail"] == PERSONAL_DATA_TEXT
+
+
+# --- Encrypted text (Phase 6, stage 1) --------------------------------------------------------
+
+
+async def test_the_page_shows_decrypted_turns_and_a_turn_with_no_answer_as_empty(
+    browser: Browser, app_engine: AsyncEngine, owner_engine: AsyncEngine
+) -> None:
+    tenant_id, person_id = sign_in(browser)
+    cid = UUID(new_conversation(browser)["id"])
+    await seed_turn(
+        app_engine, tenant_id, person_id, cid, question="Ended turn?", outcome=completed()
+    )
+    # The second turn is still running, so it has no answer yet.
+    await seed_turn(app_engine, tenant_id, person_id, cid, question="Running turn?")
+
+    ended, running = browser.client.get(f"{BASE}/conversations/current").json()["turns"]
+
+    assert (ended["question"], ended["answerText"]) == (
+        "Ended turn?",
+        "You get 40 hours of paid sick leave.",
+    )
+    assert ended["toolCalls"][0]["inputSummary"] == "sick leave"
+    assert (running["question"], running["answerText"]) == ("Running turn?", "")
+    async with owner_engine.connect() as connection:
+        raw: Sequence[Any] = (
+            (
+                await connection.execute(
+                    text("SELECT row_to_json(t)::text FROM ai_turns t WHERE conversation_id = :c"),
+                    {"c": cid},
+                )
+            )
+            .scalars()
+            .all()
+        )
+    for plaintext in (
+        "Ended turn?",
+        "Running turn?",
+        "You get 40 hours",
+        'inputSummary": "sick leave',
+    ):
+        assert not any(plaintext in row for row in raw)
+
+
+async def test_a_feedback_reason_is_sealed_at_rest_and_shown_back_to_its_owner(
+    browser: Browser, app_engine: AsyncEngine, owner_engine: AsyncEngine
+) -> None:
+    tenant_id, person_id = sign_in(browser)
+    cid = UUID(new_conversation(browser)["id"])
+    turn_id = await seed_turn(app_engine, tenant_id, person_id, cid, outcome=completed())
+    reason = "It missed the part about my state"
+
+    posted = browser.client.post(
+        f"{BASE}/turns/{turn_id}/feedback",
+        json={"helpful": False, "reason": reason},
+        headers=browser.csrf,
+    )
+
+    assert posted.status_code == 201
+    assert posted.json()["reason"] == reason
+    async with owner_engine.connect() as connection:
+        [(ciphertext, whole_row)] = (
+            await connection.execute(
+                text(
+                    "SELECT reason_ciphertext, row_to_json(f)::text FROM ai_feedback f"
+                    " WHERE turn_id = :t"
+                ),
+                {"t": turn_id},
+            )
+        ).all()
+    assert reason.encode() not in bytes(ciphertext)
+    assert reason not in whole_row
+    [turn] = browser.client.get(f"{BASE}/conversations/current").json()["turns"]
+    assert turn["feedback"] == {"helpful": False, "reason": reason}

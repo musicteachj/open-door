@@ -8,7 +8,7 @@ from collections.abc import Mapping, Sequence
 from datetime import datetime
 from typing import Any, Literal, NamedTuple
 
-from app.ai.conversations import is_abandoned
+from app.ai.conversations import TurnText, is_abandoned
 from app.ai.fixed_texts import (
     CRISIS_TEXT,
     ERROR_TEXTS,
@@ -177,22 +177,25 @@ def sections_out(
 
 def turn_out(
     turn: AiTurn,
+    text: TurnText,
     shows: Shown,
     feedback: AiFeedback | None,
+    reason: str | None,
     hr_contact: Sequence[HrContact],
     section_names: Mapping[str, tuple[str | None, str | None]],
     proposals: Sequence[ProposalOut] = (),
 ) -> TurnOut:
-    """`shows` is what `shown` worked out for the turn. `section_names` maps a section ID to its
-    (title, group name), from the conversation's stored sources. A section it doesn't hold is shown
-    without them."""
+    """`text` is the turn's encrypted text, opened (`open_turn`), and `reason` the feedback's
+    (`open_reason`). `shows` is what `shown` worked out for the turn. `section_names` maps a
+    section ID to its (title, group name), from the conversation's stored sources. A section it
+    doesn't hold is shown without them."""
     status, error_code, kind = shows.status, shows.error_code, shows.kind
     verdict = turn.guard_verdict
     return TurnOut(
         id=turn.id,
-        question=turn.question,
+        question=text.question,
         status=status,
-        answer_text=turn.answer_text,
+        answer_text=text.answer,
         citations=[CitationOut.model_validate(c) for c in turn.citations],
         incomplete=status == "completed" and error_code == MAX_TOKENS_CODE,
         error=error_for(status, error_code),
@@ -214,12 +217,10 @@ def turn_out(
                 ok=t["ok"],
                 duration_ms=t["durationMs"],
             )
-            for t in turn.tool_calls
+            for t in text.tool_calls
         ],
         sections=sections_out(turn.sections_retrieved, section_names),
-        feedback=None
-        if feedback is None
-        else FeedbackOut(helpful=feedback.helpful, reason=feedback.reason),
+        feedback=None if feedback is None else FeedbackOut(helpful=feedback.helpful, reason=reason),
         proposals=list(proposals),
         started_at=turn.started_at,
         ended_at=turn.ended_at,

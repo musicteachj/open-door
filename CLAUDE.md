@@ -234,7 +234,8 @@ only: the app refuses it everywhere. Production refuses anything but `anthropic`
 Prerequisites: Node 24, uv, and Docker Desktop running.
 
 ```
-make setup      install dependencies; create apps/api/.env from .env.example
+make setup      install dependencies; create apps/api/.env from .env.example and the encryption keyring
+make keyring    write apps/api/.keys/keyring (mode 600) if missing; the API won't start without a keyring
 make db         start Postgres (127.0.0.1:5433), migrate, then create the login users
 make ingest     load and publish the handbook from handbook/ and its committed embeddings
 make embed      fetch missing embeddings from Voyage (needs VOYAGE_API_KEY); commit the cache

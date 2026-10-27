@@ -14,16 +14,21 @@ ZIZMOR := zizmor@1.30.1
 GITLEAKS := ghcr.io/gitleaks/gitleaks:v8.30.1
 
 .DEFAULT_GOAL := help
-.PHONY: help setup db db-stop migrate bootstrap-db ingest embed eval-retrieval eval-offline eval-live migrations-roundtrip dev dev-api dev-web openapi check check-api check-web e2e proxy-check captures check-docs check-workflows audit
+.PHONY: help setup keyring db db-stop migrate bootstrap-db ingest embed eval-retrieval eval-offline eval-live migrations-roundtrip dev dev-api dev-web openapi check check-api check-web e2e proxy-check captures check-docs check-workflows audit
 
 help: ## List the available commands
 	@grep -E '^[a-zA-Z_-]+:.*## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*## "}; {printf "  %-22s %s\n", $$1, $$2}'
 
-setup: ## Install dependencies and git hooks; create apps/api/.env if it's missing
+setup: ## Install dependencies and git hooks; create apps/api/.env and the encryption keyring if missing
 	cd $(API) && uv sync
 	cd $(WEB) && npm ci
 	uvx pre-commit install
 	@test -f $(API)/.env || (cp $(API)/.env.example $(API)/.env && echo "Created $(API)/.env")
+	$(MAKE) keyring
+
+# Never overwrites: replacing the keyring would make every encrypted row unreadable.
+keyring: ## Write apps/api/.keys/keyring (mode 600) if it is missing; the API won't start without one
+	cd $(API) && uv run python scripts/make_keyring.py
 
 db: ## Start the development Postgres, apply migrations, create the login users, then load the handbook
 	docker compose up --detach --wait db

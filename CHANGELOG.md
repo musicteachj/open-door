@@ -19,6 +19,20 @@ version (`0.x.y` while the app is being built, `1.0.0` when it is complete).
   surfaces, `confidential-tint` and `confidential-border`, so the theme still carries every design
   token.
 
+### Security
+
+- **Conversation text is encrypted at rest** (Phase 6, stage 1: the envelope, the keyring, and
+  migration 0012). Every question, answer, stored message, tool-call input summary, and feedback
+  reason is stored only as ciphertext: AES-256-GCM with a fresh nonce for each value, and a data
+  key for each conversation, stored wrapped by a key from a keyring. Each ciphertext is bound to its
+  table, column, sandbox, and row, so a value copied elsewhere fails to open, and a value that
+  doesn't open is a plain 500 problem with no turn written. The API refuses to start without a
+  keyring, with a keyring file that group or others can read, or with the fake test key outside
+  `APP_ENV=test`. `make setup` (or `make keyring`) writes a random development keyring to
+  `apps/api/.keys/`, which is git-ignored; CI uses the fake test key. The migration deletes every
+  existing sandbox (they expire within 24 hours) and drops the plaintext columns. What the model is
+  sent is unchanged, and every recorded eval fixture still replays.
+
 ## [0.5.0] - 2026-10-26
 
 Phase 5: time off. A pure engine counts every day and balance from each person's schedule, the

@@ -106,6 +106,8 @@ jobs:
     # login, which the bootstrap step creates; migrations and the bootstrap run as the owner.
     env:
       APP_ENV: test
+      # The fixed, obviously fake test key (32 zero bytes). The API refuses it unless APP_ENV=test.
+      ENCRYPTION_KEYRING: test:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=
       DATABASE_URL: postgresql+asyncpg://od_app_login:od_app_dev@127.0.0.1:5433/opendoor
       MIGRATION_DATABASE_URL: postgresql+asyncpg://opendoor:opendoor@127.0.0.1:5433/opendoor
       CLEANUP_DATABASE_URL: postgresql+asyncpg://od_cleanup_login:od_cleanup_dev@127.0.0.1:5433/opendoor
@@ -214,6 +216,8 @@ jobs:
     # APP_ORIGIN to the preview server's, so none is set here.
     env:
       APP_ENV: test
+      # The fixed, obviously fake test key (32 zero bytes). The API refuses it unless APP_ENV=test.
+      ENCRYPTION_KEYRING: test:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=
       DATABASE_URL: postgresql+asyncpg://od_app_login:od_app_dev@127.0.0.1:5433/opendoor
       MIGRATION_DATABASE_URL: postgresql+asyncpg://opendoor:opendoor@127.0.0.1:5433/opendoor
       CLEANUP_DATABASE_URL: postgresql+asyncpg://od_cleanup_login:od_cleanup_dev@127.0.0.1:5433/opendoor
