@@ -6,8 +6,8 @@ import { readSse } from './sse'
 // turn is a stream. It shares `apiFetch`'s CSRF rule and its error type, so a refusal before the
 // stream (a 409, a 422, a 429) is the same `ApiError` as anywhere else.
 
-/** The `escalation` event: `EscalationOut` plus whether the page may offer to open a case. */
-export type EscalationEvent = EscalationOut & { offerCase: boolean }
+/** The `escalation` event: the same shape as the reload's `EscalationOut`, `offerCase` included. */
+export type EscalationEvent = EscalationOut
 
 /** The `error` event. `code` is one of the API's codes, or one this version does not know. */
 export type TurnErrorEvent = {
@@ -91,7 +91,7 @@ export async function streamTurn(
   if (signal?.aborted) return
   const url = turnsUrl(conversationId)
   const headers = new Headers({ 'Content-Type': 'application/json', Accept: 'text/event-stream' })
-  applyCsrfHeader(headers, 'POST', url)
+  const ownApi = applyCsrfHeader(headers, url)
 
   let response: Response
   try {
@@ -101,6 +101,8 @@ export async function streamTurn(
       body: JSON.stringify({ question }),
       credentials: 'same-origin',
       signal,
+      // A redirect would carry the token wherever it points, so it fails instead.
+      ...(ownApi ? { redirect: 'error' as const } : {}),
     })
   } catch (error) {
     if (signal?.aborted) return

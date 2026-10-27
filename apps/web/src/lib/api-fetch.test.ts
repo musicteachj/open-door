@@ -42,11 +42,26 @@ describe('apiFetch CSRF header', () => {
     },
   )
 
-  it.each(['GET', 'HEAD'])('never sends X-CSRF-Token on %s', async (method) => {
+  // An audited read (a case's words, a person's private details) needs the header too.
+  it.each(['GET', 'HEAD'])('sends X-CSRF-Token on %s to its own /api/ paths', async (method) => {
     setCsrf('token-1')
     const seen = recordHeaders()
     await apiFetch(url('/api/echo'), { method })
-    expect(seen.headers?.has('X-CSRF-Token')).toBe(false)
+    expect(seen.headers?.get('X-CSRF-Token')).toBe('token-1')
+  })
+
+  it.each(['/health', '/apiary/echo', '/other/api/echo', '/assets/app.js'])(
+    'never sends the token to the same origin outside /api/: %s',
+    async (target) => {
+      expect(await tokenSentTo(target, 'GET')).toBeNull()
+    },
+  )
+
+  it('refuses redirects on its own /api/ requests', async () => {
+    const stub = vi.fn<typeof fetch>(async () => new Response('{}'))
+    vi.stubGlobal('fetch', stub)
+    await apiFetch('/api/echo')
+    expect(stub.mock.calls[0]?.[1]?.redirect).toBe('error')
   })
 
   it('sends nothing when there is no cookie', async () => {
@@ -83,11 +98,11 @@ describe('apiFetch CSRF header', () => {
 
 // A stubbed fetch lets the test pass the URLs a browser accepts but Node's fetch does not, such as
 // a bare path or "//host".
-async function tokenSentTo(target: string) {
+async function tokenSentTo(target: string, method = 'POST') {
   setCsrf('token-1')
   const stub = vi.fn<typeof fetch>(async () => new Response('{}'))
   vi.stubGlobal('fetch', stub)
-  await apiFetch(target, { method: 'POST' })
+  await apiFetch(target, { method })
   return new Headers(stub.mock.calls[0]?.[1]?.headers).get('X-CSRF-Token')
 }
 
@@ -105,6 +120,16 @@ describe('apiFetch origin check', () => {
       expect(await tokenSentTo(target)).toBe('token-1')
     },
   )
+
+  it('judges a bare relative path against the page URL, as fetch resolves it', async () => {
+    window.history.pushState({}, '', '/ask/abc')
+    try {
+      expect(await tokenSentTo('api/x')).toBeNull()
+      expect(await tokenSentTo('/api/x')).toBe('token-1')
+    } finally {
+      window.history.pushState({}, '', '/')
+    }
+  })
 
   it('keeps credentials same-origin even when the caller asks for include', async () => {
     let credentials: string | null = null

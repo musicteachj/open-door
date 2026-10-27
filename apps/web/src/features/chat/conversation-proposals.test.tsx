@@ -89,6 +89,7 @@ describe('where the card sits', () => {
             kind: 'sensitive',
             message: 'A person should help with this.',
             hrContact: [DANA],
+            offerCase: false,
           },
         }),
       ),

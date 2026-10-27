@@ -205,15 +205,6 @@ the conversation read after a turn ends.
 - **Encrypt case narratives.** They are the most sensitive text the app will hold.
   Source: [the Phase 1 spec](specs/2026-10-03-phase-1-tenancy-identity-permissions.md#later-phases).
 
-- **Require a header no navigation can send on audited reads.** A read of `/api/` whose
-  `Sec-Fetch-Site` says it came from another site is refused, so another site can't make an HR
-  partner's browser perform an audited read. Two cases still pass: a browser too old to send the
-  header (Safari before 16.4, for example), and a navigation the user starts themselves, which
-  sends `none`. Before case reads are audited, require the `X-CSRF-Token` header on audited reads
-  too, since no navigation can send it. Today an attacker would also need a person's ID. Seeded
-  IDs are derived from the sandbox's random tenant ID, which is shown only inside that sandbox.
-  (Stage 4 security review.)
-
 - **The class-merging list misses `panel`.** `apps/web/src/lib/utils.ts` tells tailwind-merge
   which spacing names the theme defines, and its comment says to keep the list in step with
   `theme.css`, but `--spacing-panel` (Phase 5) isn't in it. So `cn('w-rail', 'w-panel')` keeps
@@ -284,6 +275,13 @@ the conversation read after a turn ends.
   database, so neither has mattered yet. (Phase 4 phase review.)
 
 ## Phase 8: hardening and deploy-readiness
+
+- **Tie the CSRF header to the audited read itself.** Audited reads require `X-CSRF-Token` through
+  a dependency each route opts into (`AuditedReadDep`), so a future audited route that forgets it
+  could be started by a plain navigation from an HR partner's browser, and no test would fail.
+  Since the web client now sends the header on every `/api/` request, either require it on every
+  signed-in `/api/` request, or have the audited-read services check that the request carried it.
+  (Phase 6 stage 3, `/code-review medium` round 4.)
 
 - **Encrypt the time-off denial note.** `time_off_requests.decision_note` is a manager's own
   words and stays readable in Phase 6, which encrypts only conversation and case text (ADR 0015).

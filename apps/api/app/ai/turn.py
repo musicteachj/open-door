@@ -76,7 +76,13 @@ from app.ai.fixed_texts import (
     HrContact,
     hr_contact,
 )
-from app.ai.guard import GuardOutcome, build_guard_request, guard_reservation_usd, screen
+from app.ai.guard import (
+    GuardOutcome,
+    build_guard_request,
+    guard_reservation_usd,
+    offers_case,
+    screen,
+)
 from app.ai.pricing import (
     IterationUsage,
     Usage,
@@ -1089,7 +1095,8 @@ class TurnRun:
         self.injection = outcome.injection_suspected
         if outcome.route == "crisis":
             self.status = "crisis"
-            return None, [Escalation("crisis", CRISIS_TEXT, await self._contacts())]
+            offer = offers_case("crisis", self.guard_verdict)
+            return None, [Escalation("crisis", CRISIS_TEXT, await self._contacts(), offer)]
         if outcome.route == "unavailable":
             self.status = "guard_unavailable"
             return None, [Escalation("unavailable", UNAVAILABLE_TEXT, await self._contacts())]
@@ -1605,6 +1612,7 @@ class TurnRun:
                 kind,
                 SENSITIVE_TEXT if kind == "sensitive" else UNAVAILABLE_TEXT,
                 await self._contacts(),
+                offers_case(kind, self.guard_verdict),
             )
             # After an error; before the completion, so the HR contact follows the answer.
             if isinstance(events[0], TurnCompleted):

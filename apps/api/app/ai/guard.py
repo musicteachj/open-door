@@ -10,7 +10,6 @@ guard's cost live in the loop; the outcome carries what settling needs.
 import asyncio
 import json
 import logging
-import re
 from collections.abc import Mapping
 from dataclasses import dataclass
 from decimal import Decimal
@@ -29,7 +28,7 @@ from app.ai.pricing import (
     turn_call_cost,
 )
 from app.ai.prompts.versions import GUARD_PREVIOUS_ANSWER_TAG, guard_prompt
-from app.ai.text import error_name
+from app.ai.text import error_name, neutralize
 from app.ai.transport import (
     GUARD_MAX_TOKENS,
     GUARD_NEW_MESSAGE_TAG,
@@ -60,11 +59,7 @@ INJECTION_NOTE = (
 )
 
 _CRISIS_KINDS = ("self_harm", "threat_of_violence")
-# An opening or closing tag of either kind, in any case and with stray spaces.
-_OUR_TAGS = re.compile(
-    rf"<(?=\s*/?\s*(?:{re.escape(GUARD_NEW_MESSAGE_TAG)}|{re.escape(GUARD_PREVIOUS_ANSWER_TAG)})\b)",
-    re.IGNORECASE,
-)
+GUARD_TAGS: Final = (GUARD_NEW_MESSAGE_TAG, GUARD_PREVIOUS_ANSWER_TAG)
 
 Route = Literal["answer", "crisis", "unavailable"]
 
@@ -95,22 +90,16 @@ class GuardOutcome:
         }
 
 
-def _neutralize(text: str) -> str:
-    """Stop untrusted text from closing or forging one of the guard's tags."""
-    return _OUR_TAGS.sub("&lt;", text)
-
-
 def build_guard_request(
     message: str, previous_answer: str | None, model: str = HAIKU
 ) -> GuardRequest:
     parts: list[str] = []
     if previous_answer is not None:
         tag = GUARD_PREVIOUS_ANSWER_TAG
-        parts.append(
-            f"<{tag}>{_neutralize(previous_answer[-PREVIOUS_ANSWER_MAX_CHARACTERS:])}</{tag}>"
-        )
+        recent = previous_answer[-PREVIOUS_ANSWER_MAX_CHARACTERS:]
+        parts.append(f"<{tag}>{neutralize(recent, GUARD_TAGS)}</{tag}>")
     tag = GUARD_NEW_MESSAGE_TAG
-    parts.append(f"<{tag}>{_neutralize(message)}</{tag}>")
+    parts.append(f"<{tag}>{neutralize(message, GUARD_TAGS)}</{tag}>")
     return GuardRequest(
         model=model,
         system=guard_prompt(),
@@ -191,6 +180,15 @@ FLAGGED_CATEGORIES: Final = ("sensitive", "crisis")
 def verdict_is_flagged(guard_verdict: Mapping[str, object] | None) -> bool:
     """Whether a turn's stored `guard_verdict` is sensitive or crisis, at any status."""
     return guard_verdict is not None and guard_verdict.get("category") in FLAGGED_CATEGORIES
+
+
+def offers_case(escalation_kind: str, guard_verdict: Mapping[str, object] | None) -> bool:
+    """Whether an escalation of this kind offers to open a case: a sensitive or crisis panel for a
+    turn the guard called sensitive or crisis. The case service checks the same turn by
+    `verdict_is_flagged`, so a panel never offers a case the service would refuse. False for
+    `unavailable`, for a turn with no verdict (a budget stop before the guard), and for a panel a
+    `kind` alone raised under an ordinary category."""
+    return escalation_kind in ("sensitive", "crisis") and verdict_is_flagged(guard_verdict)
 
 
 @dataclass(frozen=True)

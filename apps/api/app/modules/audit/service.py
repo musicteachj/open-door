@@ -37,6 +37,7 @@ type AuditAction = Literal[
     "case.opened",
     "case.summary.written",
     "case.summary.failed",
+    "case.summary.retried",
     "case.viewed",
     "case.text.read",
     "case.status_changed",

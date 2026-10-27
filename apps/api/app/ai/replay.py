@@ -61,6 +61,13 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Literal, NamedTuple, Self, get_args
 
+from app.ai.case_summary import (
+    SummaryAnswer,
+    SummaryRefused,
+    SummaryRequest,
+    SummaryUnavailable,
+    summary_api_kwargs,
+)
 from app.ai.pricing import IterationUsage, Usage
 from app.ai.transport import (
     Finished,
@@ -84,7 +91,7 @@ from app.ai.transport import (
 RE_RECORD_HINT = "re-record with `make eval-live`"
 UNNAMED_ITEM = "(no eval item)"
 
-Kind = Literal["model", "guard", "judge"]
+Kind = Literal["model", "guard", "judge", "summary"]
 _KINDS: tuple[str, ...] = get_args(Kind)
 
 # --- Fingerprints -----------------------------------------------------------------------------
@@ -109,6 +116,10 @@ def model_fingerprint(request: ModelRequest) -> str:
 
 def guard_fingerprint(request: GuardRequest) -> str:
     return fingerprint("guard", guard_api_kwargs(request))
+
+
+def summary_fingerprint(request: SummaryRequest) -> str:
+    return fingerprint("summary", summary_api_kwargs(request))
 
 
 # --- Serialization ----------------------------------------------------------------------------
@@ -241,6 +252,24 @@ def decode_guard_result(data: Mapping[str, Any]) -> GuardResult:
     )
 
 
+def encode_summary_answer(answer: SummaryAnswer) -> dict[str, Any]:
+    return {
+        "text": answer.text,
+        "model": answer.model,
+        "prompt_version": answer.prompt_version,
+        "usage": encode_usage(answer.usage),
+    }
+
+
+def decode_summary_answer(data: Mapping[str, Any]) -> SummaryAnswer:
+    return SummaryAnswer(
+        text=data["text"],
+        model=data["model"],
+        prompt_version=data["prompt_version"],
+        usage=decode_usage(data["usage"]),
+    )
+
+
 # The errors a stream or the guard can raise that the loop handles by type. Anything else is a bug
 # and is never recorded.
 RECORDED_ERRORS = (ModelUnavailable, SpendLimitReached, InvalidToolInput, GuardUnavailable)
@@ -274,6 +303,15 @@ def encode_error(error: Exception) -> dict[str, Any]:
             "message": message,
             "usage": None if error.usage is None else encode_usage(error.usage),
         }
+    if isinstance(error, SummaryUnavailable | SummaryRefused):
+        usage = error.usage
+        return {
+            "type": "summary_unavailable"
+            if isinstance(error, SummaryUnavailable)
+            else "summary_refused",
+            "message": message,
+            "usage": None if usage is None else encode_usage(usage),
+        }
     raise TypeError(f"cannot record an error of type {type(error).__name__}")
 
 
@@ -292,6 +330,11 @@ def decode_error(data: Mapping[str, Any]) -> Exception:
         return GuardUnavailable(
             data["message"], usage=None if usage is None else decode_usage(usage)
         )
+    if kind in {"summary_unavailable", "summary_refused"}:
+        usage = data["usage"]
+        decoded = None if usage is None else decode_usage(usage)
+        summary_error = SummaryUnavailable if kind == "summary_unavailable" else SummaryRefused
+        return summary_error(data["message"], usage=decoded)
     raise ValueError(f"unknown error type {kind!r} in a recording")
 
 
@@ -570,6 +613,19 @@ class _MissLog(_PerItem):
             raise self._unreadable("guard", key, cause) from None
         raise error
 
+    def _serve_summary(self, record: Record, key: str) -> SummaryAnswer:
+        """A recorded summary call's answer, or its recorded error. See `_serve_model`."""
+        try:
+            if record.error is not None:
+                error = decode_error(record.error)
+            elif record.result is None:
+                raise ValueError("no summary answer")
+            else:
+                return decode_summary_answer(record.result)
+        except (ValueError, KeyError, TypeError) as cause:
+            raise self._unreadable("summary", key, cause) from None
+        raise error
+
     def clear_misses(self) -> None:
         self.misses.clear()
 
@@ -798,3 +854,20 @@ class ReplayTransport(_MissLog):
                 f" ({recorded} recorded)"
             )
         raise self._miss(kind, key, reason)
+
+
+class ReplaySummarizer(_MissLog):
+    """Answers the case summary from a `FixtureStore` and never calls a model, like
+    `ReplayTransport`. A request with no recording is a `ReplayMiss`."""
+
+    def __init__(self, store: FixtureStore) -> None:
+        super().__init__()
+        self.store = store
+
+    async def summarize(self, request: SummaryRequest) -> SummaryAnswer:
+        key = summary_fingerprint(request)
+        occurrence = self._next_occurrence(key)
+        record = self.store.get(key, occurrence)
+        if record is None or record.kind != "summary":
+            raise self._miss("summary", key, "no recording for this summary request")
+        return self._serve_summary(record, key)

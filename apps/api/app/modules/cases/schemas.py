@@ -159,3 +159,14 @@ class SummaryFailed:
 
 
 type SummaryResult = SummaryWritten | SummaryFailed
+
+
+@dataclass(frozen=True, slots=True)
+class SummaryRetry:
+    """What HR's retry works with: the case and its words (opened as a system read)."""
+
+    case_id: UUID
+    category: str
+    words: str = field(repr=False)
+    # The case was never screened (the guard was down or the budget spent), so screen it first.
+    unscreened: bool

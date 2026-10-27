@@ -14,6 +14,7 @@ flag set from the actor, as the session dependency does).
 """
 
 import logging
+from datetime import timedelta
 from typing import Final, NamedTuple
 from uuid import UUID, uuid4
 
@@ -50,8 +51,10 @@ from app.modules.cases.schemas import (
     OpenCase,
     QueueItem,
     QueuePage,
+    SummaryFailed,
     SummaryRead,
     SummaryResult,
+    SummaryRetry,
     SummaryState,
     SummaryWritten,
     TimelineEntry,
@@ -74,6 +77,9 @@ TURN_CONSTRAINTS: Final = frozenset({"fk_cases_turn_owner", "fk_cases_conversati
 
 NOT_FOUND_CODE: Final = "case-not-found"
 TURN_NOT_FOUND_CODE: Final = "case-turn-not-found"
+# A case with no summary at all can be retried once it is this old (the first one is the person's
+# background task, which takes at most 30 seconds).
+RETRY_AFTER: Final = timedelta(minutes=2)
 
 
 def _not_found() -> ProblemError:
@@ -261,7 +267,11 @@ async def _insert_case(
         after={"screening": screening, "category": new.category},
         via="ui",
     )
+    # No call is made for these two, so HR's detail shows "No AI summary" at once, with the reason.
+    # Written in this transaction, so the case never exists without it.
     crisis = screening == "crisis"
+    if crisis or screening == "unscreened":
+        await record_summary(db, keys, case_id, SummaryFailed("crisis" if crisis else "unscreened"))
     return CaseOpened(
         case=_status_view(row),
         created=True,
@@ -403,15 +413,7 @@ async def case_detail(db: AsyncSession, actor: Actor, case_id: UUID) -> CaseDeta
     if not own:
         card = await queries.person_card(db, actor.tenant_id, row.person_id)
         latest = await queries.newest_summary(db, actor.tenant_id, row.id)
-        summary = (
-            SummaryState("none")
-            if latest is None
-            else SummaryState(
-                "written" if latest.status == "written" else "failed",
-                latest.reason,
-                latest.created_at,
-            )
-        )
+        summary = _summary_state(latest)
         entries = tuple(
             TimelineEntry(
                 kind=event.kind,
@@ -442,6 +444,14 @@ async def case_detail(db: AsyncSession, actor: Actor, case_id: UUID) -> CaseDeta
         work_email=card.work_email if card else None,
         summary=summary,
         timeline=entries,
+    )
+
+
+def _summary_state(latest: CaseSummary | None) -> SummaryState:
+    if latest is None:
+        return SummaryState("none")
+    return SummaryState(
+        "written" if latest.status == "written" else "failed", latest.reason, latest.created_at
     )
 
 
@@ -686,6 +696,45 @@ async def record_summary(
     return True
 
 
+async def plan_summary_retry(
+    db: AsyncSession, keys: KeyProvider, actor: Actor, case_id: UUID
+) -> SummaryRetry:
+    """HR's retry of the summary, checked: HR only, never their own case, and only when the newest
+    summary failed (not for a crisis) or none exists 2 minutes after opening. Else a 409.
+
+    The words are opened as a system read for the background task: no `text_read` and no
+    `case.text.read`, since HR has not read them. The retry is audited as `case.summary.retried`
+    here, and the job's summary event, with HR as the actor, records its result.
+    """
+    case = await _readable(db, actor, case_id, Action.CASE_READ_SUMMARY)
+    latest = await queries.newest_summary(db, case.tenant_id, case.id)
+    if latest is None:
+        # The database's clock, the one that stamped the case.
+        allowed = await database_now(db) - case.created_at >= RETRY_AFTER
+    else:
+        allowed = latest.status == "failed" and latest.reason != "crisis"
+    if case.screening == "crisis" or not allowed:
+        raise ProblemError(409, "summary-retry-refused", texts.SUMMARY_RETRY_REFUSED_TEXT)
+    # Recorded here, in the request's own transaction: the background job can be canceled by a
+    # shutdown before it records its summary event.
+    await record_event(
+        db,
+        tenant_id=case.tenant_id,
+        actor_id=actor.person_id,
+        action="case.summary.retried",
+        target_type="case",
+        target_id=case.id,
+        after={"screenFirst": case.screening == "unscreened"},
+        via="ui",
+    )
+    return SummaryRetry(
+        case_id=case.id,
+        category=case.category,
+        words=_open_words(keys, case),
+        unscreened=case.screening == "unscreened",
+    )
+
+
 __all__ = [
     "SealedWords",
     "case_detail",
@@ -695,6 +744,7 @@ __all__ = [
     "counts",
     "my_cases",
     "open_case",
+    "plan_summary_retry",
     "queue",
     "record_summary",
     "seal_case_words",

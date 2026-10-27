@@ -4,6 +4,7 @@ from fastapi import APIRouter
 
 from app.api.v1 import health
 from app.modules.assistant import routes as assistant
+from app.modules.cases import routes as cases
 from app.modules.handbook import routes as handbook
 from app.modules.identity import routes as identity
 from app.modules.people import routes as people
@@ -18,3 +19,4 @@ api_router.include_router(people.router)
 api_router.include_router(handbook.router)
 api_router.include_router(assistant.router)
 api_router.include_router(timeoff.router)
+api_router.include_router(cases.router)
