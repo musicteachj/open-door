@@ -24,7 +24,7 @@ from app.modules.identity.sessions import (
 )
 from app.modules.identity.tokens import SessionTokens
 from app.modules.sandbox.seed import build_company, insert_company
-from tests.integration.conftest import MakeTenant, sha256_of_random_token
+from tests.integration.conftest import TEST_KEYS, MakeTenant, sha256_of_random_token
 
 pytestmark = pytest.mark.integration
 
@@ -38,7 +38,7 @@ async def seeded_tenant(engine: AsyncEngine, created_tenant_ids: list[UUID]) -> 
     async with tenant_session(engine, TenantContext(tenant_id, None)) as session:
         tenant = {"id": tenant_id, "expires_at": now + timedelta(hours=24)}
         await session.execute(insert(Tenant).values(**tenant, anchor_date=company.anchor_date))
-        await insert_company(session, company)
+        await insert_company(session, company, TEST_KEYS)
     return tenant_id
 
 

@@ -59,6 +59,12 @@ class Action(StrEnum):
     TIMEOFF_REQUEST = "timeoff.request"
     TIMEOFF_DECIDE = "timeoff.decide"
     TIMEOFF_CANCEL = "timeoff.cancel"
+    CASE_OPEN = "case.open"
+    CASE_READ_STATUS = "case.read_status"
+    CASE_LIST = "case.list"
+    CASE_READ_SUMMARY = "case.read_summary"
+    CASE_READ_TEXT = "case.read_text"
+    CASE_UPDATE_STATUS = "case.update_status"
 
 
 @dataclass(frozen=True, slots=True)
@@ -88,13 +94,28 @@ class TimeOffRequestResource:
         _require_date(self.start_date, "start_date")
 
 
+@dataclass(frozen=True, slots=True)
+class CaseResource:
+    """A case, as far as a permission needs it: who opened it, where it stands, and whether this
+    actor has read its words (the caller looks up the actor's own `text_read` event)."""
+
+    person_id: UUID
+    status: str
+    words_read_by_actor: bool
+
+    def __post_init__(self) -> None:
+        _require(self.person_id, UUID, "person_id")
+        _require(self.status, str, "status")
+        _require(self.words_read_by_actor, bool, "words_read_by_actor")
+
+
 def _require_date(value: object, name: str) -> None:
     """A calendar date. A datetime is a date too, but comparing the two raises, so it is refused."""
     if isinstance(value, datetime) or not isinstance(value, date):
         raise TypeError(f"{name} must be a date, not {type(value).__name__}")
 
 
-type Resource = PersonResource | TimeOffRequestResource
+type Resource = PersonResource | TimeOffRequestResource | CaseResource
 # A rule gets the actor, the resource, and today's date at the person's location (None when the
 # caller has none). It must return exactly True to grant.
 type Rule = Callable[[Actor, Resource, date | None], bool]
@@ -151,6 +172,41 @@ def _timeoff_cancel(actor: Actor, target: Resource, today: date | None) -> bool:
     return target.status in {"approved", "recorded"} and today < target.start_date
 
 
+def _case_open(actor: Actor, target: Resource, today: date | None) -> bool:
+    # Anyone opens a case, for themselves. HR is no exception, and no one opens one for another.
+    return isinstance(target, PersonResource) and target.person_id == actor.person_id
+
+
+def _case_read_status(actor: Actor, target: Resource, today: date | None) -> bool:
+    # The person who opened it, or HR. A manager gets nothing: a report's case is not theirs.
+    return isinstance(target, CaseResource) and (
+        target.person_id == actor.person_id or actor.is_hr_admin
+    )
+
+
+def _case_list(actor: Actor, target: Resource, today: date | None) -> bool:
+    # The queue is HR's. It has no case of its own to name, so it takes the actor as a person.
+    return isinstance(target, PersonResource) and actor.is_hr_admin
+
+
+def _case_hr_not_own(actor: Actor, target: Resource, today: date | None) -> bool:
+    # HR reads the summary and the words of anyone's case but their own.
+    return (
+        isinstance(target, CaseResource)
+        and actor.is_hr_admin
+        and target.person_id != actor.person_id
+    )
+
+
+def _case_update_status(actor: Actor, target: Resource, today: date | None) -> bool:
+    # HR, never on their own case, and only after reading its words: a status never moves on the
+    # AI's summary alone.
+    # The isinstance is for mypy's narrowing: `_case_hr_not_own` has already refused any other type.
+    return _case_hr_not_own(actor, target, today) and (
+        isinstance(target, CaseResource) and target.words_read_by_actor
+    )
+
+
 RULES: Mapping[Action, Rule] = MappingProxyType(
     {
         Action.DIRECTORY_READ: _anyone_in_the_company,
@@ -159,6 +215,12 @@ RULES: Mapping[Action, Rule] = MappingProxyType(
         Action.TIMEOFF_REQUEST: _timeoff_request,
         Action.TIMEOFF_DECIDE: _timeoff_decide,
         Action.TIMEOFF_CANCEL: _timeoff_cancel,
+        Action.CASE_OPEN: _case_open,
+        Action.CASE_READ_STATUS: _case_read_status,
+        Action.CASE_LIST: _case_list,
+        Action.CASE_READ_SUMMARY: _case_hr_not_own,
+        Action.CASE_READ_TEXT: _case_hr_not_own,
+        Action.CASE_UPDATE_STATUS: _case_update_status,
     }
 )
 

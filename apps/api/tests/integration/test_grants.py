@@ -54,6 +54,13 @@ EXPECTED_TABLE_GRANTS = {
         for table in ("time_off_openings", "time_off_requests", "ai_proposals")
         for privilege in ("SELECT", "INSERT")
     ),
+    # Cases (Phase 6): added and then, for a case, only its status columns change. No DELETE: the
+    # rows go with their sandbox, and the cleanup login needs no grant.
+    *(
+        ("od_app", table, privilege)
+        for table in ("cases", "case_summaries", "case_events")
+        for privilege in ("SELECT", "INSERT")
+    ),
     ("od_cleanup", "tenants", "SELECT"),
     ("od_cleanup", "tenants", "DELETE"),
 }
@@ -88,10 +95,14 @@ UPDATABLE_TURN_COLUMNS = {
 }
 UPDATABLE_REQUEST_COLUMNS = {"status", "decided_by", "decided_at", "decision_note", "canceled_at"}
 UPDATABLE_PROPOSAL_COLUMNS = {"status", "ended_at", "outcome"}
+# A case's status moves one way, by trigger, and HR alone can change it. Its words, category, dates,
+# and owner are never updatable, and a summary and a timeline event never change at all.
+UPDATABLE_CASE_COLUMNS = {"status", "status_changed_at"}
 EXPECTED_COLUMN_GRANTS = {
     *(("od_app", "ai_turns", column, "UPDATE") for column in UPDATABLE_TURN_COLUMNS),
     *(("od_app", "time_off_requests", column, "UPDATE") for column in UPDATABLE_REQUEST_COLUMNS),
     *(("od_app", "ai_proposals", column, "UPDATE") for column in UPDATABLE_PROPOSAL_COLUMNS),
+    *(("od_app", "cases", column, "UPDATE") for column in UPDATABLE_CASE_COLUMNS),
 }
 EXPECTED_SCHEMA_GRANTS = {
     # Postgres's own default: everyone may use the public schema.
@@ -162,7 +173,7 @@ async def test_the_roles_have_exactly_the_planned_table_privileges(
     assert await grants(app_engine, TABLE_GRANTS) == EXPECTED_TABLE_GRANTS
 
 
-async def test_the_only_column_grants_are_the_updatable_columns_of_turns_requests_and_proposals(
+async def test_the_only_column_grants_are_the_updatable_columns_of_turns_requests_proposals_cases(
     app_engine: AsyncEngine,
 ) -> None:
     assert await grants(app_engine, COLUMN_GRANTS) == EXPECTED_COLUMN_GRANTS

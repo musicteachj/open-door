@@ -16,8 +16,6 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 from app.ai.budget import (
-    BUDGET_DAY_NS,
-    BUDGET_TENANT_NS,
     MAX_RESERVATION_USD,
     TAKE_DAY_LOCK,
     TAKE_TENANT_LOCK,
@@ -31,6 +29,7 @@ from app.ai.budget import (
 from app.ai.pricing import IterationUsage, Usage, reservation_usd, turn_call_cost
 from app.core.config import Settings
 from app.db.engine import create_engine
+from app.db.locks import BUDGET_DAY_NS, BUDGET_TENANT_NS
 from app.db.models import AiConversation
 from app.db.tenancy import TenantContext, tenant_session
 from tests.integration.conftest import MakeTenant, SampleTenant, conversation_key, turn_row
@@ -734,3 +733,64 @@ async def test_the_largest_amount_the_ledger_holds_is_accepted(
     )
 
     assert reservation.amount_usd == Decimal(10)
+
+
+async def test_a_case_reservation_has_no_turn_and_settles_with_its_purpose(
+    app_engine: AsyncEngine,
+    owner_engine: AsyncEngine,
+    make_tenant: MakeTenant,
+    daily_baseline: Decimal,
+) -> None:
+    tenant = await make_tenant()
+    caps = await caps_with_room(owner_engine, tenant.id)
+
+    reservation = await reserve(
+        app_engine,
+        context_of(tenant),
+        turn_id=None,
+        amount_usd=Decimal("0.02"),
+        caps=caps,
+        purpose="case_screen",
+    )
+    await settle(app_engine, context_of(tenant), reservation, actual_usd=Decimal("0.005"))
+
+    assert (reservation.turn_id, reservation.purpose) == (None, "case_screen")
+    async with owner_engine.connect() as connection:
+        rows = (
+            await connection.execute(
+                text(
+                    "SELECT purpose, turn_id, kind, amount_usd FROM ai_spend"
+                    " WHERE tenant_id = :t AND purpose = 'case_screen' ORDER BY kind DESC"
+                ),
+                {"t": tenant.id},
+            )
+        ).all()
+    assert [(r.purpose, r.turn_id, r.kind, r.amount_usd) for r in rows] == [
+        ("case_screen", None, "settle", Decimal("-0.015000")),
+        ("case_screen", None, "reserve", Decimal("0.020000")),
+    ]
+    assert await daily_sum(owner_engine) == daily_baseline + Decimal("0.005")
+
+
+@pytest.mark.parametrize(
+    ("with_turn", "purpose"), [(True, "case_screen"), (False, "turn"), (True, "case_summary")]
+)
+async def test_only_a_turns_reservation_has_a_turn(
+    app_engine: AsyncEngine,
+    owner_engine: AsyncEngine,
+    make_tenant: MakeTenant,
+    with_turn: bool,
+    purpose: str,
+) -> None:
+    tenant = await make_tenant()
+    caps = await caps_with_room(owner_engine, tenant.id)
+
+    with pytest.raises(ValueError, match="only a turn"):
+        await reserve(
+            app_engine,
+            context_of(tenant),
+            turn_id=uuid4() if with_turn else None,
+            amount_usd=Decimal("0.01"),
+            caps=caps,
+            purpose=purpose,  # type: ignore[arg-type]
+        )

@@ -22,16 +22,11 @@ from sqlalchemy import insert, text
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 
 from app.core.config import Settings
+from app.db.locks import BUDGET_DAY_NS, BUDGET_TENANT_NS
 from app.db.models import AiSpend, AiSpendDaily
 from app.db.tenancy import TenantContext, tenant_session
 
-# The two-integer form of pg_advisory_xact_lock takes a namespace and a key. These namespaces keep
-# the budget's locks apart from any other use of advisory locks. 4403 is the time-off service's,
-# one per person (app/modules/timeoff/queries.py), and 4404 is a conversation's proposals
-# (app/ai/proposals.py); pick the next free number for a new use.
-BUDGET_TENANT_NS = 4401
-BUDGET_DAY_NS = 4402
-
+# The locks' namespaces are listed in one place, app/db/locks.py.
 # Both are computed in SQL, from the same clock as the daily table's default and its check, so the
 # lock's key, the sum, and the row all name the same UTC day. `now()` is the transaction's start,
 # so it can't change between them.
@@ -75,13 +70,19 @@ class BudgetExceeded(Exception):  # noqa: N818
         self.scope = scope
 
 
+# What a ledger row paid for. Only a turn's row has a turn_id (migration 0013).
+type SpendPurpose = Literal["turn", "case_screen", "case_summary"]
+
+
 @dataclass(frozen=True)
 class Reservation:
-    turn_id: UUID
+    # None for a case's screening or summary: the ledger tells no one which case it was for.
+    turn_id: UUID | None
     tenant_id: UUID
     amount_usd: Decimal
     # The UTC day the reservation was dated. Its settle goes on the same day, even past midnight.
     day: date
+    purpose: SpendPurpose = "turn"
 
 
 @dataclass(frozen=True)
@@ -105,16 +106,20 @@ async def reserve(
     engine: AsyncEngine,
     ctx: TenantContext,
     *,
-    turn_id: UUID,
+    turn_id: UUID | None,
     amount_usd: Decimal,
     caps: Caps,
+    purpose: SpendPurpose = "turn",
 ) -> Reservation:
     """Reserve `amount_usd` in both ledgers, or raise BudgetExceeded and write nothing.
 
-    The turn must already be committed: the spend rows point at it.
+    A turn's reservation needs its turn, which must already be committed: the spend rows point at
+    it. A case's (`case_screen`, `case_summary`) has no turn and no case ID.
     """
     if ctx.tenant_id is None:
         raise ValueError("a reservation needs a tenant")
+    if (purpose == "turn") != (turn_id is not None):
+        raise ValueError("only a turn's reservation has a turn")
     if amount_usd <= 0:
         raise ValueError("a reservation must be positive")
     if amount_usd > MAX_RESERVATION_USD:
@@ -136,7 +141,11 @@ async def reserve(
             raise BudgetExceeded("daily")
         await session.execute(
             insert(AiSpend).values(
-                tenant_id=tenant_id, turn_id=turn_id, kind="reserve", amount_usd=amount_usd
+                tenant_id=tenant_id,
+                turn_id=turn_id,
+                purpose=purpose,
+                kind="reserve",
+                amount_usd=amount_usd,
             )
         )
         day = (
@@ -146,7 +155,9 @@ async def reserve(
                 .returning(AiSpendDaily.day)
             )
         ).scalar_one()
-    return Reservation(turn_id=turn_id, tenant_id=tenant_id, amount_usd=amount_usd, day=day)
+    return Reservation(
+        turn_id=turn_id, tenant_id=tenant_id, amount_usd=amount_usd, day=day, purpose=purpose
+    )
 
 
 async def settle(
@@ -169,6 +180,7 @@ async def settle(
             insert(AiSpend).values(
                 tenant_id=reservation.tenant_id,
                 turn_id=reservation.turn_id,
+                purpose=reservation.purpose,
                 kind="settle",
                 amount_usd=difference_usd,
             )

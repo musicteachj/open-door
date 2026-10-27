@@ -26,6 +26,12 @@ PRIVATE_PAYLOADS = {
     "a decision note, snake_case": {"decision_note": "Coverage is thin that week"},
     "a note": {"note": "Coverage is thin that week"},
     "a note, nested": {"x": [{"Note": "Coverage is thin that week"}]},
+    "case text": {"text": "my manager did something"},
+    "case summary": {"summary": "The person reports"},
+    "case words": {"Words": "my manager did something"},
+    "narrative": {"narrative": "On Tuesday"},
+    "case text, nested in a list": {"a": [{"b": {"TEXT": "x"}}]},
+    "case summary, nested after a tuple": {"a": ({"Summary": "x"},)},
     "list of pairs": [("phone", "555-0100")],
     "list of pairs, camelCase": [("personalEmail", "priya@example.com")],
 }
@@ -72,6 +78,20 @@ async def test_the_real_payloads_are_recorded(payload: dict[str, object]) -> Non
     await record(session, before=payload, after=payload)
 
     session.execute.assert_awaited_once()
+
+
+def test_the_case_actions_exist() -> None:
+    actions = set(get_args(AuditAction.__value__))
+
+    assert {
+        "case.opened",
+        "case.summary.written",
+        "case.summary.failed",
+        "case.viewed",
+        "case.text.read",
+        "case.status_changed",
+        "case.listed",
+    } <= actions
 
 
 def test_the_time_off_and_proposal_actions_exist() -> None:

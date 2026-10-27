@@ -12,6 +12,31 @@ version (`0.x.y` while the app is being built, `1.0.0` when it is complete).
 
 ### Added
 
+- **Cases: the data, the service, and four seeded cases** (Phase 6, stage 2; no routes yet). A
+  case is a concern a person sends to HR in their own words.
+  - Three new tables (migration 0013) hold the case (`cases`), the AI's summary of it
+    (`case_summaries`), and its timeline (`case_events`), with the words and the summary stored
+    only as ciphertext under a data key per case. AI spending rows gain a purpose, so a case's
+    screening and summary calls are counted without a case ID.
+  - Six new permissions (`case.open`, `case.read_status`, `case.list`, `case.read_summary`,
+    `case.read_text`, `case.update_status`): only the person and HR see a case's status, only HR
+    reads the words and the summary, and HR changes a status only after reading the words, and
+    never on their own case. A manager never sees a report's case.
+  - The case service opens a case: the words are checked for a Social Security or card number
+    first, then screened by the safety check with no database connection held, then stored with a
+    timeline entry and an audit event in one transaction. A crisis verdict saves the case and
+    returns the fixed crisis text; a failed check or a spent budget saves it as unscreened. A
+    repeated send, or a second tab for the same turn, returns the same case, and a person can have
+    5 cases waiting at once.
+  - HR gets the queue (new cases by reply date, then the rest oldest first), the counts, a case's
+    details, and audited reads of the words and the summary.
+  - HR replies by the second business day after a case is sent, by Denver HQ's calendar and time
+    zone: a pure function, with every date in its tests worked out by hand.
+  - Every sandbox starts with four cases from employees who aren't personas, so HR's queue is never
+    empty: a pay concern and a harassment concern (new, the second with its reply due today), a
+    safety concern (in review, after HR read the words), and a medical accommodation request
+    (closed), each with a placeholder summary until real ones are recorded.
+
 - **The Phase 6 screens** (Phase 6, design). Screen 11 (the HR panel's "Open a confidential
   case" button, the case form in every state, and "My cases") and screen 12 (HR's case queue and
   case detail) are designed in Claude Design and approved, with each screen's build decisions and
@@ -21,6 +46,16 @@ version (`0.x.y` while the app is being built, `1.0.0` when it is complete).
 
 ### Security
 
+- **Cases are visible only to the person and HR, in the database** (Phase 6, stage 2).
+  Restrictive row-level rules show a case to the person who opened it and to HR, let a person open
+  only their own case and only as new, let only HR change one and never their own, and show
+  summaries and timelines to HR alone. The database sets its own clock on every case, summary, and
+  timeline row a person writes, so code running as the person can't choose a time. Triggers move a
+  status one way (`new`, `in_review`, `closed`) and stop code running as the person from forging a
+  summary or a timeline entry such as HR's reading of the words. Audit rows about a case are now
+  HR's alone to read, and `escalation.offered` rows are their actor's and HR's; before, any
+  transaction in the sandbox could read every audit row. The audit log also refuses fields named
+  `text`, `summary`, `words`, or `narrative`.
 - **Conversation text is encrypted at rest** (Phase 6, stage 1: the envelope, the keyring, and
   migration 0012). Every question, answer, stored message, tool-call input summary, and feedback
   reason is stored only as ciphertext: AES-256-GCM with a fresh nonce for each value, and a data

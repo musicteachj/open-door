@@ -27,6 +27,7 @@ from app.modules.identity.actor import load_actor
 from app.modules.sandbox.seed import ROW_TYPES, SeedCompany, build_company, insert_company
 from app.modules.timeoff import service
 from app.modules.timeoff.service import Balances
+from tests.integration.conftest import TEST_KEYS
 
 pytestmark = pytest.mark.integration
 
@@ -52,7 +53,7 @@ async def create_sandbox(
         session.add(Tenant(id=tenant_id, expires_at=expires_at, anchor_date=anchor))
         # The tenant row goes first: every seeded row refers to it.
         await session.flush()
-        await insert_company(session, company)
+        await insert_company(session, company, TEST_KEYS)
     return company
 
 

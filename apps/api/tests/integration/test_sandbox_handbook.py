@@ -137,7 +137,7 @@ class RecordingInsert:
         return self._statement.values(**values)
 
 
-async def fail_like_the_trigger(db: AsyncSession, _company: Any) -> None:
+async def fail_like_the_trigger(db: AsyncSession, _company: Any, _keys: Any) -> None:
     """Stands in for `insert_company`, which runs after the tenant insert in the same transaction.
     It raises the trigger's exact error (SQLSTATE OD001) from a real statement."""
     await db.execute(

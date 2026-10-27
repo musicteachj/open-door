@@ -43,6 +43,10 @@ automated-decision systems apply that to the data such systems use and produce.
   reports', HR reads everyone's).
 - **The assistant's proposals** (`ai_proposals`, Phase 5) are visible only to the person they were
   made for, with no HR exception, like the conversations: the same restrictive rule enforces it.
+- **Cases** (`cases`, Phase 6) are visible only to the person who opened one and to HR. A manager
+  sees nothing, not even a report's. Their summaries (`case_summaries`) and timelines
+  (`case_events`) are HR's alone. Restrictive Postgres rules enforce it, and the policy layer
+  (`app/policy`) agrees. Audit rows about a case are HR's alone too (see `audit_events`).
 - **Private details** are visible only to the person themselves and to HR. Both the policy layer
   (`app/policy`) and a second, database-level rule enforce this.
 - **The `/me` fields** (`employmentType`, `isManager`, `isHrAdmin`, `personaKey`, and
@@ -142,13 +146,17 @@ row and creates a new one, and signing out deletes it. Deleted with the sandbox 
 | `id`, `tenant_id` | A random UUID, and the sandbox | Random rather than a sequence, so one sandbox can't estimate another's activity. |
 | `occurred_at` | When it happened (UTC) | The record. |
 | `actor_person_id`, `via` | Who acted, and how: `ui`, `assistant`, or `system` | Every action, including the assistant's from Phase 4, is attributed. |
-| `action`, `target_type`, `target_id` | What was done, and to what | Phase 1 records `sandbox.created`, `session.persona_switched`, `session.ended`, and `person_private.read`. Phase 4 adds `escalation.offered` (target `ai_turn`), written when the assistant shows the crisis, sensitive, or "can't answer right now" panel, and when a budget stop ends a turn before the safety check could run (`kind` `unavailable`, `reason` `budget`: the budget message carries 911 and 988 instead of a panel), and `person_private.read` with `via` `assistant` when `get_my_profile` runs. Phase 5 adds `timeoff.requested` (PTO) and `timeoff.recorded` (sick time) when a request is made, `timeoff.approved`, `timeoff.denied`, and `timeoff.canceled` (target `time_off_request`), and `proposal.created`, `proposal.confirmed`, `proposal.canceled`, and `proposal.failed` (target `ai_proposal`). |
-| `before`, `after` | Non-private fields only, such as `personaKey`, the names of the private fields read, an escalation's `kind`, or a time-off request's `status`, `type`, `startDate`, and `endDate` | Never private values, so a privacy deletion request never means editing this log. A denial's note (`decisionNote`, `note`) is refused here like a private field, so text a person wrote can't be logged by mistake. |
+| `action`, `target_type`, `target_id` | What was done, and to what | Phase 1 records `sandbox.created`, `session.persona_switched`, `session.ended`, and `person_private.read`. Phase 4 adds `escalation.offered` (target `ai_turn`), written when the assistant shows the crisis, sensitive, or "can't answer right now" panel, and when a budget stop ends a turn before the safety check could run (`kind` `unavailable`, `reason` `budget`: the budget message carries 911 and 988 instead of a panel), and `person_private.read` with `via` `assistant` when `get_my_profile` runs. Phase 5 adds `timeoff.requested` (PTO) and `timeoff.recorded` (sick time) when a request is made, `timeoff.approved`, `timeoff.denied`, and `timeoff.canceled` (target `time_off_request`), and `proposal.created`, `proposal.confirmed`, `proposal.canceled`, and `proposal.failed` (target `ai_proposal`). Phase 6 adds the case events, each with target `case`: `case.opened` (`via` `ui`), `case.summary.written` and `case.summary.failed` (`via` `assistant`, no actor when the system wrote it), `case.viewed` (HR read a summary), `case.text.read` (HR read the words), `case.status_changed`, and `case.listed` (`via` `assistant`, for the assistant's case count, Stage 4). |
+| `before`, `after` | Non-private fields only, such as `personaKey`, the names of the private fields read, an escalation's `kind`, or a time-off request's `status`, `type`, `startDate`, and `endDate` | Never private values, so a privacy deletion request never means editing this log. A denial's note (`decisionNote`, `note`) and a case's `text`, `summary`, `words`, or `narrative` are refused here like a private field, at any depth, so text a person wrote can't be logged by mistake. A case event holds only labels: `screening` and `category` (`case.opened`), `model` and `promptVersion` or a failure's `reason` (the summary events), and the status before and after (`case.status_changed`). |
 | `proposal_id` | The confirmed proposal, from Phase 5. It is a foreign key to `ai_proposals`, within the same sandbox | Ties an executed action to what the person confirmed. |
 | `request_id` | The request's ID | Matches the event with that request's log lines. |
 
 Append-only: the API can add and read events but never change or delete them. Visible to the API
-within its own sandbox. No endpoint shows them yet. Deleted with the sandbox, which is the demo
+within its own sandbox, with two exceptions from Phase 6 (migration 0013), enforced by a
+restrictive Postgres rule: a row whose `target_type` is `case` is visible to HR only, and an
+`escalation.offered` row is visible to its actor and HR only. Before that, any transaction in the
+sandbox could read every row. Anyone can still add such a row, since an insert reads nothing back.
+No endpoint shows them yet. Deleted with the sandbox, which is the demo
 choice described above.
 
 ### The assistant: `ai_conversations`, `ai_messages`, `ai_turns`, `ai_feedback`, `ai_spend`, `ai_spend_daily`
@@ -232,7 +240,8 @@ Every ID below is a random UUID, so one sandbox can't estimate another's activit
 
 | Column | Holds | Why |
 |---|---|---|
-| `id`, `tenant_id`, `turn_id` | IDs: the row, its sandbox, and the turn it belongs to | Identity. There is no person: the budget is the whole sandbox's. |
+| `id`, `tenant_id`, `turn_id` | IDs: the row, its sandbox, and the turn it belongs to. `turn_id` is null for a case's spending (Phase 6) | Identity. There is no person: the budget is the whole sandbox's. |
+| `purpose` | `turn` (the default), `case_screen` (the guard reading a case's words, written since Phase 6 stage 2), or `case_summary` (the summary call); a `turn` row must have its turn | Lets the budget count a case's AI calls without a case ID, so the sandbox-wide ledger tells no one which case was screened or summarized. |
 | `kind`, `amount_usd` | `reserve` (the most a call could cost, never negative) or `settle` (the actual cost minus the reservation, so it can be negative); and the dollar amount, between -10 and 10 | The sandbox's AI budget (`AI_SANDBOX_BUDGET_USD`) is the sum. |
 | `created_at` | When it was added (UTC) | The record. |
 
@@ -324,6 +333,72 @@ for, HR included. The audit event for a confirmed proposal names it in `audit_ev
 **How long.** All three are deleted with the sandbox, 24 hours after it is created. The API can
 add rows. It can change only a request's status, decision columns, and `canceled_at`, and a
 proposal's status, `ended_at`, and `outcome`, and never delete one.
+
+### Cases: `cases`, `case_summaries`, `case_events`
+
+Added in Phase 6 (migration 0013). A case is a matter a person sends to HR in their own words,
+from the HR panel in the assistant or from "My cases". The assistant never opens, reads, or ranks
+one. The case service (`app/modules/cases/`) is the only writer, and the only code that decrypts the words or a summary, after the policy layer agrees and in the same transaction as the event that records the read. Its routes arrive in the next stage.
+
+#### `cases`
+
+| Column | Holds | Why |
+|---|---|---|
+| `id`, `tenant_id`, `person_id` | IDs: the case, its sandbox, and the person who opened it | Identity and ownership. HR sees the person's name: a case is not anonymous. |
+| `submission_id` | The form's ID for this send (a UUID), unique per person | A double click or a second tab makes one case. |
+| `category` | One of `harassment_discrimination`, `safety`, `medical_accommodation`, `pay`, `other`, chosen by the person | HR's triage, and the person's "My cases" list. |
+| `status`, `status_changed_at` | `new`, `in_review`, or `closed`; and when it last changed (the database's clock) | A status moves one way, by trigger, and only HR changes it. |
+| `created_at`, `reply_by` | When it was sent (UTC), and the date HR replies by (2 business days later, Denver HQ's calendar) | What "My cases" and the queue show. |
+| `screening` | The guard's category for the words: `ordinary`, `sensitive`, `crisis`, or `unscreened` | HR sees that the safety check routed a message to crisis text. |
+| `conversation_id`, `turn_id` | The conversation and turn whose panel opened the case, or null from "My cases"; keys on the person too, so they are always the person's own | One case per turn. |
+| `key_id`, `wrapped_key` | The key-encryption key's ID, and this case's data key, wrapped | The envelope: one data key per case. |
+| `text_ciphertext` | The person's words, encrypted | Never stored as plaintext. Only HR's audited read decrypts them. |
+
+#### `case_summaries`
+
+| Column | Holds | Why |
+|---|---|---|
+| `id`, `tenant_id`, `case_id` | IDs: the summary, its sandbox, and its case | Identity. |
+| `status`, `reason` | `written` or `failed`, and a failure's code (`transport`, `refusal`, `timeout`, `budget`, `checks`, `crisis`, `unscreened`) | HR is told when there is no summary, and why. |
+| `ciphertext` | The AI's summary, encrypted with the case's data key; null when failed | Never stored as plaintext. |
+| `model`, `prompt_version`, `created_at` | What wrote it, and when | The record. A retry adds a row, and the newest one counts. |
+| `written_by_hr` | Whether HR wrote the row on someone else's case, stamped by a trigger (HR on their own case counts as the person) | How the database allows the person's own first summary but no second one. |
+
+#### `case_events`
+
+| Column | Holds | Why |
+|---|---|---|
+| `id`, `tenant_id`, `case_id`, `actor_person_id`, `occurred_at` | IDs: the event, its sandbox and case, and who did it (null for the system, such as a background summary); and when | The case's timeline. |
+| `kind` | `opened`, `summary_written`, `summary_failed`, `viewed`, `text_read`, or `status_changed` | HR's reading of the words is recorded as `text_read`, and HR may change a status only after it. |
+| `from_status`, `to_status` | Set only for a status change | The timeline. |
+
+A case event holds no text.
+
+**Who sees them.** The person who opened a case and HR read the case. Nobody else does: not a
+manager, not a coworker, not another sandbox. Only HR changes it, never on their own case. HR's own
+cases appear in the queue with no actions and no text. `case_summaries` and `case_events` are HR's
+alone to read, and no one updates or deletes them. Triggers stop code running as the person from
+forging a summary (only their own case, only in its first 10 minutes, only one) or a timeline event
+(only `opened`, `summary_written`, and `summary_failed`, on their own case). A person can open
+only their own case, and only as `new`. Whenever a person is set (the person, or HR), the database
+writes its own clock over `created_at`, `status_changed_at`, and `occurred_at`, so no one chooses
+when a row was written. The sandbox seed writes cases from people who aren't the visitor with no
+person set, which the insert rule and the triggers allow, and keeps its supplied (backdated)
+times. Because the person cannot read a summary or event they insert, those inserts return
+nothing back.
+
+**What the seed writes.** Every sandbox is seeded with four fictional cases from employees who
+aren't personas, so HR's queue is never empty: a pay concern and a harassment concern (both new),
+a safety concern (in review, with HR's reads and status change in its timeline), and a medical
+accommodation request (closed). Each is dated in business days before the anchor, on Denver HQ's
+calendar, so the dates are stable. The words are short, first-person, and made up, and are sealed
+like any case's words. Each case has one `written` summary that is a fixed placeholder (model
+`seeded-placeholder`) until the recorded ones replace it. The seed writes no audit events for them,
+as it writes none for the seeded time-off history. The eval sandbox has no cases.
+
+**How long.** All three are deleted with the sandbox, 24 hours after it is created, and
+no earlier. The API can add rows, and change only a case's `status` and `status_changed_at`.
+Dropped plaintext, if any, lingers as for the conversations (see above).
 
 ### The handbook: `handbook_versions`, `handbook_sections`, `handbook_chunks`
 
