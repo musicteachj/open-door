@@ -9,13 +9,27 @@ guard's cost live in the loop; the outcome carries what settling needs.
 
 import asyncio
 import json
+import logging
 import re
+from collections.abc import Mapping
 from dataclasses import dataclass
 from decimal import Decimal
-from typing import Literal
+from typing import Final, Literal
 
-from app.ai.pricing import HAIKU, Usage, estimate_request_tokens, reservation_usd
+from sqlalchemy.ext.asyncio import AsyncEngine
+
+from app.ai.budget import BudgetExceeded, Caps, Reservation, SpendPurpose, reserve, settle
+from app.ai.pricing import (
+    HAIKU,
+    IterationUsage,
+    Usage,
+    estimate_request_tokens,
+    is_priced,
+    reservation_usd,
+    turn_call_cost,
+)
 from app.ai.prompts.versions import GUARD_PREVIOUS_ANSWER_TAG, guard_prompt
+from app.ai.text import error_name
 from app.ai.transport import (
     GUARD_MAX_TOKENS,
     GUARD_NEW_MESSAGE_TAG,
@@ -28,6 +42,9 @@ from app.ai.transport import (
     SpendLimitReached,
     Transport,
 )
+from app.db.tenancy import TenantContext
+
+logger = logging.getLogger(__name__)
 
 PREVIOUS_ANSWER_MAX_CHARACTERS = 1000
 
@@ -164,3 +181,77 @@ async def screen(transport: Transport, request: GuardRequest) -> GuardOutcome:
         usage=result.usage,
         served_by=result.served_by,
     )
+
+
+# A turn the guard called sensitive or crisis is "flagged": a case may be opened from it. The
+# assistant's display (Stage 4) reads the same rule, so the offer and the check can't drift apart.
+FLAGGED_CATEGORIES: Final = ("sensitive", "crisis")
+
+
+def verdict_is_flagged(guard_verdict: Mapping[str, object] | None) -> bool:
+    """Whether a turn's stored `guard_verdict` is sensitive or crisis, at any status."""
+    return guard_verdict is not None and guard_verdict.get("category") in FLAGGED_CATEGORIES
+
+
+@dataclass(frozen=True)
+class CaseGuard:
+    """What screening a case's words needs: the transport, and the budget's engine and caps. The
+    model is the pinned guard model."""
+
+    transport: Transport
+    engine: AsyncEngine
+    caps: Caps
+    model: str = HAIKU
+
+
+async def screen_text(
+    guard: CaseGuard, ctx: TenantContext, text: str, *, purpose: SpendPurpose = "case_screen"
+) -> GuardOutcome | None:
+    """Screen free text that is not a chat turn, through the sandbox's budget.
+
+    The words are the new message, with no previous answer. Returns the guard's outcome, or None
+    when the words were not screened: no budget, no guard answer, or a failure. The caller never
+    reads None as a pass. Nothing is logged but error names, since the text may be a person's words.
+    """
+    request = build_guard_request(text, None, guard.model)
+    try:
+        reservation = await reserve(
+            guard.engine,
+            ctx,
+            turn_id=None,
+            amount_usd=guard_reservation_usd(request),
+            caps=guard.caps,
+            purpose=purpose,
+        )
+    except BudgetExceeded:
+        return None
+    except Exception as error:
+        logger.error("Reserving for the screening failed (%s)", error_name(error))
+        return None
+    try:
+        outcome = await screen(guard.transport, request)
+    except SpendLimitReached:
+        # The API refused the request, so nothing was billed.
+        await _settle(guard, ctx, reservation, Decimal(0))
+        return None
+    usage = outcome.usage
+    if usage is not None:
+        # Priced at the model that served it when that has a pinned price, else the pinned guard
+        # model (an unpriced name would be charged at the dearest rates).
+        served = outcome.served_by
+        model = served if served is not None and is_priced(served) else guard.model
+        await _settle(guard, ctx, reservation, turn_call_cost([IterationUsage(model, usage)]))
+    # With no usage the cost is unknown, so the reservation stays counted.
+    return None if outcome.route == "unavailable" else outcome
+
+
+async def _settle(
+    guard: CaseGuard, ctx: TenantContext, reservation: Reservation, actual_usd: Decimal
+) -> None:
+    try:
+        await settle(guard.engine, ctx, reservation, actual_usd=actual_usd)
+    except Exception as error:
+        # A settle row has no tie to its reservation, so it is not retried. The reservation stays.
+        logger.warning(
+            "Settling a screening failed (%s); keeping its reservation", error_name(error)
+        )

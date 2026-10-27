@@ -204,7 +204,9 @@ class EvalItem:
 async def create_fixed_sandbox(app_engine: AsyncEngine) -> SeedCompany:
     """Create the fixed tenant with the full seed company and the eval's own requests (see
     eval_sandbox.py), as the API's own login. Returns the company with those requests in it."""
-    seeded = build_company(TENANT_ID, ANCHOR_DATE)
+    # No cases: nothing in the eval reads one (the model never sees a case), and without them the
+    # eval needs no encryption keys.
+    seeded = replace(build_company(TENANT_ID, ANCHOR_DATE), cases=())
     company = eval_sandbox.with_eval_requests(seeded)
     extra = company.time_off_requests[len(seeded.time_off_requests) :]
     expires_at = datetime.now(UTC) + SANDBOX_LIFETIME

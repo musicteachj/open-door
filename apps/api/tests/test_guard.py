@@ -19,6 +19,7 @@ from app.ai.guard import (
     build_guard_request,
     guard_reservation_usd,
     screen,
+    verdict_is_flagged,
 )
 from app.ai.pricing import HAIKU, Usage, reservation_usd
 from app.ai.prompts.versions import guard_prompt
@@ -365,3 +366,20 @@ async def test_a_result_that_is_not_a_guard_result_is_unavailable() -> None:
     outcome = await screen(FakeTransport("nope"), build_guard_request("hello", None))  # type: ignore[arg-type]
 
     assert (outcome.route, outcome.usage) == ("unavailable", None)
+
+
+@pytest.mark.parametrize(
+    ("verdict", "flagged"),
+    [
+        ({"category": "sensitive", "kind": None, "injectionSuspected": False}, True),
+        ({"category": "crisis", "kind": "self_harm", "injectionSuspected": False}, True),
+        ({"category": "ordinary", "kind": None, "injectionSuspected": False}, False),
+        ({"category": None}, False),
+        ({}, False),
+        (None, False),
+    ],
+)
+def test_a_flagged_verdict_is_sensitive_or_crisis(
+    verdict: dict[str, Any] | None, flagged: bool
+) -> None:
+    assert verdict_is_flagged(verdict) is flagged

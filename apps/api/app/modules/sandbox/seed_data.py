@@ -6,6 +6,7 @@ made up. seed.py turns this data into rows.
 """
 
 from dataclasses import dataclass
+from datetime import time
 
 # Every other choice (who gets which name, phone number, and address, and the dates of everyone
 # not named below) comes from this seed, so every sandbox gets exactly the same company.
@@ -290,3 +291,137 @@ Alder Aspen Birch Bluebell Cedar Clover Foxglove Hawthorn
 Juniper Larkspur Linden Magnolia Marigold Sycamore Thistle Willow
 """.split()  # noqa: SIM905
 STREET_TYPES = ("Street", "Avenue", "Lane", "Court", "Drive", "Way", "Place")
+
+
+# --- The seeded cases (Phase 6) ---
+#
+# Four people who aren't personas have each written to HR. The cases come from these fixed entries,
+# with no draws from any random stream, so no other seeded row moves. Dates count in business days
+# on Denver HQ's calendar (weekends and HQ holidays), the calendar HR's reply-by date uses.
+# The words are the owner's to approve: each is the person's own, first person, short and plain.
+
+# The summary every seeded case carries until Stage 4's Task 28 records real ones. It says plainly
+# that it is a stand-in, and it is not model output.
+SEEDED_SUMMARY_PLACEHOLDER = (
+    "Placeholder summary for the demo. A real summary of what the person wrote appears here"
+    " once Open Door's AI has written one."
+)
+# Values that make a placeholder obvious in the timeline and the summary's footer.
+SEEDED_SUMMARY_MODEL = "seeded-placeholder"
+SEEDED_SUMMARY_PROMPT_VERSION = "seeded-placeholder-1"
+
+
+@dataclass(frozen=True, slots=True)
+class CaseStep:
+    """One step in a seeded case's timeline, after the `opened` and `summary_written` events that
+    every case has. `business_days_later` counts from the day the case was sent."""
+
+    kind: str  # viewed, text_read, or status_changed
+    business_days_later: int
+    at: time  # local time in Denver
+    to_status: str | None = None  # only for a status_changed step
+
+
+@dataclass(frozen=True, slots=True)
+class CaseSpec:
+    """One seeded case. The person is named, with their title and location code, so a change to
+    the company that moves them is caught instead of silently writing the wrong case."""
+
+    key: str
+    given_name: str
+    family_name: str
+    title: str
+    location_code: str
+    category: str
+    status: str
+    screening: str
+    business_days_before_anchor: int
+    sent_at: time  # local time in Denver
+    text: str
+    steps: tuple[CaseStep, ...] = ()
+
+
+# How long after a case is sent the summary is written (and its event is stamped).
+SUMMARY_DELAY_MINUTES = 1
+
+CASES: tuple[CaseSpec, ...] = (
+    CaseSpec(
+        key="keisha-zhang",
+        given_name="Keisha",
+        family_name="Zhang",
+        title="Warehouse Associate",
+        location_code="aus",
+        category="pay",
+        status="new",
+        screening="ordinary",
+        business_days_before_anchor=1,
+        sent_at=time(16, 20),
+        text=(
+            "My last two paychecks were each about four hours short. My shift lead had me finish"
+            " loading a truck after I clocked out, and I think that is where the hours went. I"
+            " would like someone to check my time and tell me if I am owed the pay."
+        ),
+    ),
+    CaseSpec(
+        key="chloe-foster",
+        given_name="Chloe",
+        family_name="Foster",
+        title="Shift Lead, Opening",
+        location_code="atl",
+        category="harassment_discrimination",
+        status="new",
+        screening="sensitive",
+        business_days_before_anchor=2,
+        sent_at=time(9, 10),
+        text=(
+            "A regional visitor keeps commenting on my accent in front of customers. He also calls"
+            " me by a nickname I have asked him not to use, and he keeps doing it. I don't want to"
+            " make a scene at the store, but I want it to stop."
+        ),
+    ),
+    CaseSpec(
+        key="aaliyah-edwards",
+        given_name="Aaliyah",
+        family_name="Edwards",
+        title="Cashier",
+        location_code="oak",
+        category="safety",
+        status="in_review",
+        screening="ordinary",
+        business_days_before_anchor=6,
+        sent_at=time(11, 30),
+        text=(
+            "The top step of the ladder in the stockroom is cracked. I told my supervisor and was"
+            " told to keep using it until a new one arrives. I'm worried someone is going to fall,"
+            " so can someone look at it before then?"
+        ),
+        steps=(
+            CaseStep("viewed", 1, time(9, 12)),
+            CaseStep("text_read", 1, time(9, 15)),
+            CaseStep("status_changed", 1, time(9, 20), "in_review"),
+        ),
+    ),
+    CaseSpec(
+        key="lucia-gutierrez",
+        given_name="Lucia",
+        family_name="Gutierrez",
+        title="Graphic Designer",
+        location_code="den",
+        category="medical_accommodation",
+        status="closed",
+        screening="sensitive",
+        business_days_before_anchor=15,
+        sent_at=time(13, 45),
+        text=(
+            "I was diagnosed with migraines last month. My doctor suggested a screen filter for my"
+            " monitor and a few more short breaks during the day. I asked for both a while ago and"
+            " haven't heard back, so where does my request stand?"
+        ),
+        steps=(
+            CaseStep("viewed", 1, time(10, 0)),
+            CaseStep("text_read", 1, time(10, 3)),
+            CaseStep("status_changed", 1, time(10, 10), "in_review"),
+            CaseStep("status_changed", 8, time(15, 30), "closed"),
+        ),
+    ),
+)

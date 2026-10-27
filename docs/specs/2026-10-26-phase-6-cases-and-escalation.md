@@ -293,8 +293,10 @@ needs it.
   `turn_id` is set (one case per turn; `person_id` is in it so the check can't tell anyone that
   someone else's turn has a case).
 - **Row-level security:** restrictive rules for `SELECT` (the person who opened it, or HR) and
-  `UPDATE` (HR, never on their own case), like `person_private`. Inserts are left to the service,
-  which allows only the asker's own case, with status new, so the seed can insert other people's.
+  `UPDATE` (HR, never on their own case), like `person_private`, and for `INSERT` (only your own
+  case, with status new). Only a transaction with no person set (the seed) inserts other people's
+  cases, backdated; with a person set, the database stamps the times. (Stage 2 added the insert
+  rule and the clock after its security review.)
 - **Grants:** `SELECT`, `INSERT`, and `UPDATE (status, status_changed_at)`. No `DELETE`.
 - **Trigger:** status moves `new → in_review → closed` or `new → closed`, never back, and stamps
   `status_changed_at`.

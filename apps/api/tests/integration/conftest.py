@@ -30,7 +30,7 @@ import pytest
 import pytest_asyncio
 from fastapi.testclient import TestClient
 from pydantic import PostgresDsn
-from sqlalchemy import delete, select, text
+from sqlalchemy import delete, insert, select, text
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 
 from app.ai.conversations import (
@@ -61,6 +61,9 @@ from app.db.models import (
     AiSpend,
     AiTurn,
     AuditEvent,
+    Case,
+    CaseEvent,
+    CaseSummary,
     Department,
     Holiday,
     Location,
@@ -69,7 +72,7 @@ from app.db.models import (
     Tenant,
     UserSession,
 )
-from app.db.tenancy import TenantContext, tenant_session
+from app.db.tenancy import TenantContext, set_is_hr, tenant_session
 from app.main import create_app
 from app.modules.identity.cookies import CSRF_COOKIE, CSRF_HEADER, SESSION_COOKIE
 from app.modules.sandbox.seed import SeedCompany, build_company, insert_company
@@ -182,6 +185,8 @@ class SampleTenant:
     colleague_id: UUID
     # The HR partner (is_hr_admin), and the other two people's manager.
     hr_id: UUID
+    # The case the employee opened, from the turn in their conversation.
+    case_id: UUID
 
 
 @dataclass(frozen=True)
@@ -298,6 +303,57 @@ async def write_assistant_rows(
     )
     await session.flush()
     return rows
+
+
+async def write_case_rows(
+    session: AsyncSession, tenant_id: UUID, person_id: UUID, assistant: AssistantRows
+) -> UUID:
+    """Write a case from the person's turn, its `opened` event, and a written summary, and return
+    the case's ID. The ciphertext columns hold opaque bytes.
+
+    The session must be scoped to `person_id`, as the API's own request is. The summary and the
+    event are Core inserts with no RETURNING, as the service writes them: the person can't read
+    them back, and Postgres checks RETURNING against the SELECT rule.
+    """
+    case_id = uuid4()
+    session.add(
+        Case(
+            id=case_id,
+            tenant_id=tenant_id,
+            person_id=person_id,
+            submission_id=uuid4(),
+            category="pay",
+            reply_by=datetime.now(UTC).date() + timedelta(days=2),
+            screening="ordinary",
+            conversation_id=assistant.conversation_id,
+            turn_id=assistant.turn_id,
+            key_id=TEST_KEY_ID,
+            wrapped_key=OPAQUE,
+            text_ciphertext=OPAQUE,
+        )
+    )
+    await session.flush()
+    await session.execute(
+        insert(CaseEvent).values(
+            id=uuid4(),
+            tenant_id=tenant_id,
+            case_id=case_id,
+            actor_person_id=person_id,
+            kind="opened",
+        )
+    )
+    await session.execute(
+        insert(CaseSummary).values(
+            id=uuid4(),
+            tenant_id=tenant_id,
+            case_id=case_id,
+            status="written",
+            ciphertext=OPAQUE,
+            model="claude-haiku-5-5",
+            prompt_version="test",
+        )
+    )
+    return case_id
 
 
 @dataclass(frozen=True)
@@ -555,7 +611,8 @@ def make_tenant(app_engine: AsyncEngine, created_tenant_ids: list[UUID]) -> Make
         async with tenant_session(app_engine, TenantContext(tenant_id, employee.id)) as session:
             assistant = await write_assistant_rows(session, tenant_id, employee.id)
             await write_time_off_rows(session, tenant_id, employee.id, assistant)
-        return SampleTenant(tenant_id, employee.id, colleague.id, hr.id)
+            case_id = await write_case_rows(session, tenant_id, employee.id, assistant)
+        return SampleTenant(tenant_id, employee.id, colleague.id, hr.id, case_id)
 
     return make
 
@@ -576,7 +633,7 @@ async def seeded_sandbox(app_engine: AsyncEngine, created_tenant_ids: list[UUID]
         session.add(Tenant(id=tenant_id, expires_at=expires_at, anchor_date=anchor))
         # The tenant row goes first: every seeded row refers to it.
         await session.flush()
-        await insert_company(session, company)
+        await insert_company(session, company, TEST_KEYS)
     return company
 
 
@@ -704,8 +761,10 @@ def open_browser_with(
 
 
 async def audit_events(engine: AsyncEngine, tenant_id: UUID) -> list[AuditEvent]:
-    """Every audit event in the tenant, oldest first, read as the API's login."""
+    """Every audit event in the tenant, oldest first, read as the API's login. The read is flagged
+    HR, since a case's rows and an `escalation.offered` row are visible to HR and to no one else."""
     async with tenant_session(engine, TenantContext(tenant_id, None)) as session:
+        await set_is_hr(session, True)
         query = select(AuditEvent).order_by(AuditEvent.occurred_at)
         return list((await session.execute(query)).scalars())
 

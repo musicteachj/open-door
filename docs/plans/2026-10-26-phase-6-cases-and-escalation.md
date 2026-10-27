@@ -1014,6 +1014,140 @@ No paid calls. Every recorded eval fixture still replays.
   redacted `repr`. Repeats of recorded items (the conversation that won't decrypt, the message
   order, the double decrypt) didn't count.
 
+### Stage 2: the case data and service (`feat/phase-6-cases-data`, 2026-10-27)
+
+Branched off `dev` at `820e52c`. No paid calls. Every recorded eval fixture still replays. About
+2,800 lines of counted code (migration 0013 is about 550 of them, mostly SQL and its docstring,
+and the seed's narratives and fixed entries about 140), over the 1,500 guideline and the plan's
+estimate of 1,300; the owner chose one PR with a reading guide over a split.
+
+**Gap calls and deviations:**
+- **The seed runs as the visitor's persona,** not with no person, so the Known note in Task 7
+  needed a step: `insert_company` clears `app.person_id` around the case inserts only and restores
+  it in a `finally`, in the same transaction. The insert rule and both insert triggers let a
+  transaction with no person through; nothing else does. Only the eval harnesses and tests run with
+  a sandbox and no person; no request can (every request's context comes from its session row).
+- **`cases` has a restrictive `INSERT` rule after all** (only your own case, as new, or no person
+  set), and **the database owns the clock:** with a person set, a trigger stamps `created_at` and
+  `status_changed_at` on a case, `created_at` on a summary, and `occurred_at` on an event. Both
+  came from the Opus review (below); the spec is updated.
+- **`record_event` makes its row's ID itself,** because SQLAlchemy asked for the ID back
+  (`RETURNING`), which the new audit rule refuses for a non-HR actor writing a `case` row.
+- **`case_summaries.written_by_hr`,** stamped by the trigger from the HR flag, with a partial unique
+  index allowing one summary per case from anyone but HR. A trigger running as the person can't see
+  HR-only summaries, so "the case has no summary yet" is enforced by the index instead.
+- **`case_events.actor_person_id` is nullable,** for the background summary's events.
+- **A second key ties a case's conversation to the person** (`(tenant_id, conversation_id,
+  person_id)`), with a check that the turn and the conversation are both set or both null.
+- **Insert-trigger refusals use `OD003`;** the status trigger uses `OD004`.
+- **`ai_spend_daily` needed no change:** it sums amounts, so it counts every purpose.
+- **`conftest.audit_events()` reads with the HR flag set,** since `escalation.offered` rows are now
+  their actor's and HR's.
+- **The guard for a case** is `CaseGuard` and `screen_text` in `app/ai/guard.py`; `None` means
+  unscreened and is never read as a pass. The flagged-turn rule is `verdict_is_flagged`, with an SQL
+  form in `queries.flagged_turn_clause()` for Stage 4's display.
+- **Denver HQ** is the location with code `den` (any case); its time zone and holiday rows drive
+  the reply-by date, with `America/Denver` and the holiday rules as a fallback. The reply-by date
+  is computed from the transaction's `now()`, the instant the database stamps as `created_at`.
+- **"Waiting" is `new` and `in_review`** (the 5-case limit and the queue's `open` filter).
+  **`replyDue`** in the counts is new cases with a reply-by date of today or earlier in Denver. The
+  counts leave out HR's own cases, though the queue lists them (spec over screen 12's notes), since
+  HR can't act on them.
+- **HR's own case** gets `403 case-own` on the reads and a status change: HR already sees it in the
+  queue, so a 404 would hide nothing. Everything else that can't see a case gets one
+  `404 case-not-found`; an unknown, foreign, or unflagged turn, and a turn key failure, get one
+  `404 case-turn-not-found`.
+- **A second send for a turn that already has a case** returns that case when the words match
+  (409 otherwise), so the one-case-per-turn index is a backstop.
+- **`record_summary` returns whether it recorded,** in a savepoint, so a second summary from the
+  person or a late one leaves the caller's transaction usable. It takes `actor_id` for HR's retry.
+- **The form's texts** are in `app/modules/cases/texts.py`, not hashed or approved yet (Stage 4).
+- **The seeded cases:** sent at fixed Denver times, counted back in business days on HQ's calendar
+  from the last business day on or before the anchor, so Chloe's reply is due on a business-day
+  anchor and already due on a weekend or holiday one. Screening labels: pay and safety `ordinary`,
+  harassment and medical `sensitive`. One placeholder summary each (`seeded-placeholder`). No audit
+  rows, as for seeded time off. Lucia's case went new, in review, closed.
+- **The eval sandbox seeds no cases,** so `insert_company` takes the keys as optional and refuses a
+  company with cases and no keys. Stage 4's case tools may want the eval sandbox to have them.
+- **Tests after code in batch B:** the Task 9 and 10 tests were written after the code, not first;
+  the implementer's and the reviewer's mutation proofs show the key ones fail without their rule.
+
+**Reviews:**
+- **Batch A (Tasks 7 and 8), Opus 5.5 security and Sonnet compliance:** nothing high. Two mediums
+  from Opus, fixed test first and mutation-proved, then re-checked by the same reviewer: code
+  running as the person could choose its own timestamps (a summary dated 2100 would stay HR's
+  "newest" for good, and a forged case date stretched the 10-minute window), and `cases` had no
+  insert rule (the person's transaction could write a closed case in someone else's name). One low
+  fixed: the update rule let "HR flag, no person" change any case. Compliance lows fixed (a
+  docstring, a comment, the accepted check values tested). Recorded: the database lets HR read
+  their own case's summary and events (`can()` refuses, and the service enforces it); within the
+  10-minute window a person's first summary could land after an HR retry (both are server-written
+  summaries of the same words); `reply_by` is whatever the insert sends (only the service writes
+  it). A pytest ordering quirk (a fixture "not found" when a unit test file sits between two
+  integration files in one command) happens on `dev` too, so it predates this stage.
+- **Batch B (Tasks 9 and 10):** the hand-worked reviewer worked out eleven dates without running
+  code (Mon to Sun sends, Thanksgiving week, 11 PM Thursday in Oakland, the daylight-saving weekend,
+  both New Year's crossings) and all agree. The combined Sonnet review found nothing high or medium;
+  its mutation spot-checks (the lock, the words-read check, the personal-data check, `can()` before
+  decrypt) each failed a test. Lows fixed: the queue's bad-filter text, a tie test for the cursor,
+  an alias, typed returns, the counts' docstring, and two more reply-by tests. Recorded: the audit
+  log's blanket refusal of `summary` and `text` keys rules them out for any future field. (The
+  reviewer's note that the person's lock was held across the guard call became a round 1 fix.)
+- **Batch C (Task 11), combined Sonnet review:** nothing high or medium. Lows fixed test first: a
+  failed case insert hid its own error behind the restore's (the restore now runs on success only;
+  a failed insert aborts the transaction, so nothing runs as no person afterward), and the seed
+  repeated the business-day rule (now `is_business_day` from `app/domain/cases`). Recorded: Dana's
+  seeded reads are in the case timeline but have no audit rows, as seeded time off has none.
+- **`/code-review medium`, round 1:** fixed, test first: `open_case` ran the guard's call inside
+  the request's transaction, holding the person's lock and a pooled connection while the budget
+  took a second one, so many sends at once with the real guard could stall on the pool (it now
+  checks, screens with nothing held, then locks, checks again, and writes, so a double click may
+  screen twice; round 4 settled how); a crafted queue
+  cursor gave a 500 instead of a 422; the summary trigger counted HR writing on their own case as
+  HR, skipping the one-summary and 10-minute limits (migration 0013 changed in place: a local
+  database that ran an earlier copy needs `make migrations-roundtrip`); and a reused submission ID from a different
+  turn returned the old case instead of a conflict. Lows fixed: an unused holiday query, two count
+  queries where one would do, the seed's own business-day stepping (now in `app/domain/cases`), and
+  a query without its sandbox filter. Dismissed: the case service counts a turn as flagged, and
+  labels the screening, by the guard's category alone, while Phase 4's panel also fires on a
+  `kind` under another category. Task 19 (Stage 4) makes the panel follow the category alone, as
+  the plan says; until then, a panel shown for a `kind` alone has no case to open, which Stage 3's
+  `offerCase` must follow the same rule for.
+- **Round 2:** fixed, test first: `change_status` wrote its timeline and audit events without
+  checking that the update changed a row, so a transaction without the HR flag would record a
+  change that never happened; and after round 1's mid-block commit, a transaction lost the HR flag
+  unless its caller set it again (fixed then by keeping the flag for the session; undone in round
+  4). Lows fixed: `record_summary` asks `can()` before HR's retry; the seed
+  shares HQ's code and time zone with the service; `counts` is one query. Recorded: the queue's
+  cursor can skip or repeat a case whose status changes between pages (any keyset over a changing
+  sort key does); the seed's anchor is the sandbox's UTC date, so in Denver's evening the "due
+  today" case is due tomorrow (the seed is pure and can't read Denver's clock). Repeats of round
+  1's dismissed category point didn't count.
+- **Round 3:** fixed, test first: HR saw their own case's screening (and the crisis fact) in the
+  queue and the detail, which a person never sees about their own case. Lows fixed: a stale comment
+  and an unused function, a second copy of the database-clock helper, the words' decryption written
+  twice, and the per-person advisory lock now one helper (`app/db/locks.py`) for time off and
+  cases. Repeats (the category point, the seed's UTC anchor) didn't count.
+- **Round 4:** fixed: rounds 1 and 2 had changed `tenant_session` for every caller (a block could
+  commit and carry on, and the HR flag lasted the whole session) so that `open_case` could give its
+  connection back before the guard's call. `tenancy.py` and Phase 1's test of the HR flag are back
+  as they were on `dev`, and `open_case` now opens its own short sessions (a look, the screening
+  with no session open, then the locked look and the insert), so Stage 3's route calls it with no
+  session open, as `signed_in_caller` routes do. The changelog no longer says the whole send is one
+  transaction. Lows fixed: named constants for the summary's trigger code and index, and one
+  helper for HR's own-case refusal. Recorded: `screen_text` repeats the turn's reserve, screen, and
+  settle steps (one shared helper waits for Stage 4, which changes the guard); the migration's
+  downgrade leaves the daily spending totals of the case calls it deletes (development only).
+- **Round 5:** nothing new above low; the review loop stopped here. Fixed: an unused constant.
+  Dismissed: a full live eval run for the guard change (the guard's prompt, routing, and `screen()`
+  are unchanged; `screen_text` is a new entry point the turn doesn't use, and the offline replay
+  passes, as the plan's live-eval rule for Stages 1 to 3 says); the queue writing no audit row (the
+  spec audits `case.listed` for Stage 4's `list_cases` tool only). Recorded lows: the queue's cursor
+  rebuilds the SQL sort key in Python, so the two could drift; `change_status` loads the case and
+  then locks its status in a second query; the category and filter values are written twice
+  (`Literal` and a runtime set); the own-case condition is still written in three places around one
+  refusal helper. Repeats of the category point didn't count.
+
 ## Backlog
 
 Findings and ideas left for later go to [`../BACKLOG.md`](../BACKLOG.md), with the reason.
