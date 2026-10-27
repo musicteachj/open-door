@@ -62,7 +62,14 @@ export async function leosPrivateValues(browser: Browser, baseURL: string): Prom
       const people = (await (await fetch('/api/v1/people?q=Nakamura')).json()) as {
         items: { id: string }[]
       }
-      const response = await fetch(`/api/v1/people/${people.items[0]!.id}/private`)
+      // An audited read needs the CSRF header, like a write.
+      const token = document.cookie
+        .split('; ')
+        .find((part) => part.startsWith('__Host-od_csrf='))
+        ?.slice('__Host-od_csrf='.length)
+      const response = await fetch(`/api/v1/people/${people.items[0]!.id}/private`, {
+        headers: { 'X-CSRF-Token': token ?? '' },
+      })
       return (await response.json()) as LeoPrivate
     })
     for (const value of Object.values(values)) expect(value.length).toBeGreaterThan(3)

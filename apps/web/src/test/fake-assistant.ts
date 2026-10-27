@@ -42,6 +42,7 @@ export function turnOut(overrides: Partial<TurnOut> = {}): TurnOut {
     incomplete: false,
     error: null,
     escalation: null,
+    caseOpened: null,
     notFound: false,
     guard: { category: 'ordinary' },
     toolCalls: [],

@@ -78,7 +78,7 @@ def test_the_permission_matrix(
     sandbox = browser.start_sandbox(persona)
     target_id = person_id(sandbox, target)
 
-    response = browser.client.get(path(target_id, kind))
+    response = browser.client.get(path(target_id, kind), headers=browser.csrf)
 
     assert response.status_code == status_code, response.text
     if status_code == 200:
@@ -92,7 +92,7 @@ async def test_hr_reading_private_details_is_audited_by_field_name_only(
     sandbox = browser.start_sandbox("dana")
     leo = person_id(sandbox, "leo")
 
-    response = browser.client.get(path(leo, "private"))
+    response = browser.client.get(path(leo, "private"), headers=browser.csrf)
 
     assert response.status_code == 200
     [read] = [
@@ -118,7 +118,7 @@ async def test_a_denied_read_is_logged_and_never_audited(
     sandbox = browser.start_sandbox("marcus")
     leo = person_id(sandbox, "leo")
 
-    response = browser.client.get(path(leo, "private"))
+    response = browser.client.get(path(leo, "private"), headers=browser.csrf)
 
     assert response.status_code == 403
     assert response.headers["content-type"] == "application/problem+json"
@@ -149,7 +149,7 @@ def test_a_person_from_another_sandbox_is_not_found(
     other = theirs.start_sandbox("dana")
 
     for target_id in (person_id(other, "leo"), person_id(other, "self"), uuid4()):
-        response = mine.client.get(path(target_id, kind))
+        response = mine.client.get(path(target_id, kind), headers=mine.csrf)
         assert response.status_code == 404, response.text
         assert response.json()["detail"] == "No such person in this company."
 
@@ -158,7 +158,7 @@ def test_without_permission_a_colleague_and_a_missing_id_look_the_same(browser: 
     sandbox = browser.start_sandbox("priya")
 
     responses = [
-        browser.client.get(path(target_id, "private"))
+        browser.client.get(path(target_id, "private"), headers=browser.csrf)
         for target_id in (person_id(sandbox, "leo"), uuid4())
     ]
 
@@ -292,7 +292,7 @@ async def test_another_site_cannot_make_hr_read_private_details(
     sandbox = browser.start_sandbox("dana")
 
     response = browser.client.get(
-        path(person_id(sandbox, "leo"), "private"), headers=fetch_metadata
+        path(person_id(sandbox, "leo"), "private"), headers={**fetch_metadata, **browser.csrf}
     )
 
     assert response.status_code == 403
@@ -309,7 +309,7 @@ def test_the_app_a_typed_url_and_a_script_can_still_read_private_details(
     sandbox = signed_in.start_sandbox("dana")
     # This browser sends no Sec-Fetch-Site of its own, so `None` means the header is absent.
     reader = open_browser(same_origin_header=False)
-    headers = session_cookie(signed_in.session_token)
+    headers = {**session_cookie(signed_in.session_token), **signed_in.csrf}
     if site is not None:
         headers["Sec-Fetch-Site"] = site
 
@@ -335,7 +335,9 @@ async def test_private_details_are_never_sent_unless_their_audit_row_commits(
 
     event.listen(Session, "before_commit", fail_the_requests_commit)
     try:
-        response = browser.client.get(path(person_id(sandbox, "leo"), "private"))
+        response = browser.client.get(
+            path(person_id(sandbox, "leo"), "private"), headers=browser.csrf
+        )
     finally:
         event.remove(Session, "before_commit", fail_the_requests_commit)
 
@@ -574,3 +576,32 @@ def test_the_facets_need_a_session(browser: Browser) -> None:
     assert (
         browser.client.get("/api/v1/people", params={"q": "a", "team": "mine"}).status_code == 401
     )
+
+
+@pytest.mark.parametrize("header", [None, "wrong-token"])
+async def test_an_audited_read_without_the_csrf_header_is_refused_and_writes_no_audit_event(
+    browser: Browser,
+    app_engine: AsyncEngine,
+    caplog: pytest.LogCaptureFixture,
+    header: str | None,
+) -> None:
+    sandbox = browser.start_sandbox("dana")
+    headers = {} if header is None else {"X-CSRF-Token": header}
+
+    response = browser.client.get(path(person_id(sandbox, "leo"), "private"), headers=headers)
+
+    assert response.status_code == 403
+    assert response.headers["content-type"] == "application/problem+json"
+    assert response.json()["detail"] == "The CSRF token is missing or wrong."
+    assert not any(name in response.text for name in PRIVATE_FIELDS)
+    events = await audit_events(app_engine, UUID(sandbox["tenant"]["id"]))
+    assert [event.action for event in events] == ["sandbox.created"]
+    assert [r.getMessage() for r in caplog.records if r.name == "app.security"] == [
+        "security.csrf_rejected"
+    ]
+
+
+def test_an_ordinary_read_still_needs_no_csrf_header(browser: Browser) -> None:
+    browser.start_sandbox("priya")
+
+    assert browser.client.get("/api/v1/people").status_code == 200

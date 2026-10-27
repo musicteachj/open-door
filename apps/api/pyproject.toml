@@ -133,6 +133,7 @@ source_modules = [
     "app.ai.scripted",
     "app.ai.replay",
     "app.ai.pricing",
+    "app.ai.case_summary",
     "app.ai.budget",
     "app.ai.conversations",
     "app.ai.turn",

@@ -16,9 +16,11 @@ from app.ai.fixed_texts import (
     UNAVAILABLE_TEXT,
     HrContact,
 )
+from app.ai.guard import offers_case
 from app.ai.proposals import ProposalOut
 from app.db.models import AiFeedback, AiTurn
 from app.modules.assistant.schemas import (
+    CaseOpenedOut,
     CitationOut,
     EscalationOut,
     FeedbackOut,
@@ -184,6 +186,7 @@ def turn_out(
     hr_contact: Sequence[HrContact],
     section_names: Mapping[str, tuple[str | None, str | None]],
     proposals: Sequence[ProposalOut] = (),
+    case_opened: CaseOpenedOut | None = None,
 ) -> TurnOut:
     """`text` is the turn's encrypted text, opened (`open_turn`), and `reason` the feedback's
     (`open_reason`). `shows` is what `shown` worked out for the turn. `section_names` maps a
@@ -205,7 +208,9 @@ def turn_out(
             kind=kind,
             message=_ESCALATION_TEXTS[kind],
             hr_contact=hr_contact_out(hr_contact),
+            offer_case=offers_case(kind, verdict),
         ),
+        case_opened=case_opened,
         not_found=shows.not_found,
         guard=None
         if verdict is None

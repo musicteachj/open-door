@@ -5,7 +5,7 @@ import type { Problem } from '@/api/generated'
 
 const CSRF_COOKIE = '__Host-od_csrf'
 const CSRF_HEADER = 'X-CSRF-Token'
-const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS'])
+const API_PREFIX = '/api/'
 
 /** An error response, or a success response whose body could not be read. */
 export class ApiError extends Error {
@@ -46,24 +46,29 @@ function readCsrfToken(): string | null {
   return null
 }
 
-function isSameOrigin(url: string): boolean {
+/** Whether `url` lands on this page's own origin under /api/. `new URL` resolves a relative path,
+ * and a protocol-relative "//host", against the page's full URL, as `fetch` does, so the
+ * comparison sees where it lands. */
+function isOwnApiUrl(url: string): boolean {
   try {
-    return new URL(url, window.location.origin).origin === window.location.origin
+    const target = new URL(url, window.location.href)
+    return target.origin === window.location.origin && target.pathname.startsWith(API_PREFIX)
   } catch {
     return false
   }
 }
 
 /**
- * Adds the CSRF token to `headers` for an unsafe method sent to this page's own origin. The token
- * goes only there: `new URL` resolves a relative path, and a protocol-relative "//host", against
- * the page, so the comparison sees where the request lands. Shared with the turn stream's own
- * `fetch` (`stream-turn.ts`), so the rule exists once.
+ * Adds the CSRF token to `headers` for a request to this page's own origin under /api/, on any
+ * method: an audited read needs it too, because no navigation or cross-site form can send it. The
+ * token goes nowhere else. Returns whether `url` is such a request, so the caller can also refuse
+ * redirects. Shared with the turn stream's own `fetch` (`stream-turn.ts`), so the rule exists once.
  */
-export function applyCsrfHeader(headers: Headers, method: string, url: string): void {
-  if (SAFE_METHODS.has(method.toUpperCase()) || !isSameOrigin(url)) return
+export function applyCsrfHeader(headers: Headers, url: string): boolean {
+  if (!isOwnApiUrl(url)) return false
   const token = readCsrfToken()
   if (token !== null) headers.set(CSRF_HEADER, token)
+  return true
 }
 
 function parseBody(text: string): { body: unknown; parsed: boolean } {
@@ -89,13 +94,20 @@ export async function apiFetch<T>(url: string, init: RequestInit = {}): Promise<
   const method = (init.method ?? 'GET').toUpperCase()
   const headers = new Headers(init.headers)
 
-  applyCsrfHeader(headers, method, url)
+  const ownApi = applyCsrfHeader(headers, url)
   if (init.body != null && !headers.has('Content-Type')) {
     headers.set('Content-Type', 'application/json')
   }
 
   // Credentials are pinned after the spread, so a caller cannot widen them.
-  const response = await fetch(url, { ...init, method, headers, credentials: 'same-origin' })
+  // A redirect on one of our own requests would carry the token wherever it points, so it fails.
+  const response = await fetch(url, {
+    ...init,
+    method,
+    headers,
+    credentials: 'same-origin',
+    ...(ownApi ? { redirect: 'error' as const } : {}),
+  })
   const text = await response.text()
 
   if (!response.ok) throw apiErrorFrom(response, text)

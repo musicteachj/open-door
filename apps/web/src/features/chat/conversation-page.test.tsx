@@ -70,6 +70,7 @@ const SENSITIVE: EscalationOut = {
   kind: 'sensitive',
   message: 'This sounds like something a person should help with.',
   hrContact: [DANA],
+  offerCase: false,
 }
 const SENSITIVE_HEADER = 'A person in HR handles this, not the AI'
 
@@ -301,7 +302,12 @@ describe('sensitive and crisis turns', () => {
             status: 'crisis',
             answerText: '',
             guard: { category: 'crisis' },
-            escalation: { kind: 'crisis', message: 'Call or text 988.', hrContact: [DANA] },
+            escalation: {
+              kind: 'crisis',
+              message: 'Call or text 988.',
+              hrContact: [DANA],
+              offerCase: false,
+            },
           }),
         ],
       }),
@@ -331,6 +337,7 @@ describe('sensitive and crisis turns', () => {
               kind: 'unavailable',
               message: 'We can’t answer right now.',
               hrContact: [DANA],
+              offerCase: false,
             },
           }),
         ],
@@ -495,7 +502,7 @@ describe('a panel’s arrival is announced only when it came down the stream', (
             status,
             answerText: '',
             guard: null,
-            escalation: { kind, message, hrContact: [DANA] },
+            escalation: { kind, message, hrContact: [DANA], offerCase: false },
           }),
         ],
       }),
@@ -748,6 +755,7 @@ describe('a turn that is streaming, stopped, or has failed', () => {
               kind: 'unavailable',
               message: 'We can’t answer right now.',
               hrContact: [DANA],
+              offerCase: false,
             },
           }),
         ],

@@ -665,6 +665,13 @@ Batches: **A** Tasks 19–21 (the guard), **B** Tasks 22–25 (texts, handbook, 
 security reviewer on the tools), **C** Tasks 26–28 (the summary and the evals; the same Opus
 reviewer on the summary), **D** Tasks 29–30 (the runs and the close).
 
+**Carried in from Stage 3 (the owner's decision, 2026-10-27):** HR's summary retry screens a
+case the safety check couldn't screen, but the app's login may update only a case's status, so a
+crisis found then lives on the summary row and HR's queue doesn't show the crisis line. Batch C
+adds a small migration that lets HR change `cases.screening` once, from `unscreened` only, with
+its trigger and grants test, and the retry writes the verdict back; the same Opus reviewer checks
+it.
+
 ### Task 19: The panel follows the category
 
 **Files:** `app/ai/guard.py`, `app/modules/assistant/display.py`, `tests/test_guard.py`,
@@ -1147,6 +1154,100 @@ estimate of 1,300; the owner chose one PR with a reading guide over a split.
   then locks its status in a second query; the category and filter values are written twice
   (`Literal` and a runtime set); the own-case condition is still written in three places around one
   refusal helper. Repeats of the category point didn't count.
+
+### Stage 3: the case routes and the summary's plumbing (`feat/phase-6-cases-routes`, 2026-10-27)
+
+Branched off `dev` at `8f2879b`. No paid calls. Every recorded eval fixture still replays
+(`make eval-offline` unchanged). About 1,180 lines of counted code, under the 1,500 guideline and
+near the plan's estimate of 1,100, plus the generated client and schema.
+
+**Gap calls and deviations:**
+- **The audited-read header** is a route-level dependency (`AuditedReadDep` in
+  `identity/deps.py`), so a refused read never opens the route's transaction or writes an audit
+  row. It shares one constant-time check with the session's CSRF check. The web helper is now
+  `applyCsrfHeader(headers, url)`: it sends the header to this page's own `/api/` paths on any
+  method, resolving the address as `fetch` does (against the page's full URL), and returns whether
+  it did, so both `apiFetch` and the answer stream set `redirect: 'error'`.
+- **The route models** are in `app/modules/cases/api_schemas.py`. `category`, the status `to`,
+  and the queue's filter are typed enums, so a bad value is the app's standard validation 422
+  (the value isn't echoed), not the service's `case-invalid`; the service keeps its checks for
+  Stage 4's tools. A first send is 201 and a repeated one 200.
+- **The summary** is `app/ai/case_summary.py` (the request, the `Summarizer` protocol, the program
+  checks) and `app/modules/cases/summary_task.py` (the job). The scripted summarizer's model is
+  `scripted` and its version `scripted-1`. `SUMMARY_MODEL` is a literal, held equal to the pinned
+  conversation model by a test, since importing the pins pulled the database layer into the
+  scripted transport. `_neutralize` moved to `app/ai/text.py` as `neutralize(text, tags)`; the
+  guard's request bytes are unchanged.
+- **Under `AI_TRANSPORT=anthropic`** no summarizer is built until Stage 4, so the API still starts
+  and each new case records `failed` `transport`.
+- **A crisis case and an unscreened one** get their fixed `failed` row (`crisis`, `unscreened`)
+  in the case's own transaction, so HR's detail can offer "Try again" at once for an unscreened
+  case (the spec said only "no summary until a retry screens it").
+- **HR's retry** answers 202 and runs in the background with HR's flag set in its own session. Its
+  reading of the words is a system read, recorded by the summary's own event with HR as the actor,
+  not as `text_read`. Refusals share one 409 (`summary-retry-refused`). The app's login can't
+  update `cases.screening`, so a retry's verdict lives on the summary row; the owner moved the fix
+  to Stage 4 (above).
+- **`offerCase`** is `offers_case(kind, verdict)` in `guard.py`, built on `verdict_is_flagged`:
+  true only for a sensitive or crisis escalation whose verdict's category is flagged, at any
+  status, so the panel never offers a case the service would refuse. **`caseOpened`** comes from
+  one query per conversation, filtered by sandbox and person.
+- **Tests after code:** most of Task 15's tests were written after the code; 25 mutants, each
+  killed by a test, stand in for watching them fail first.
+
+**Reviews:**
+- **Batch A (Tasks 13 and 14), Opus 5.5 security and Sonnet compliance:** nothing high. Opus
+  proved each seam with small experiments: a manager, a coworker, another sandbox, and a random ID
+  get one 404; submission IDs are per person, so no 409 tells anyone about another's case; HEAD,
+  OPTIONS, and a method override can't skip the header; a navigation or cross-site request is
+  refused with no audit row; no words in any response, problem, or log. Fixed test first: the
+  answer stream followed redirects with the token (both reviewers); the same-origin check resolved
+  a bare relative path differently from `fetch`; route tests now pin the 422 for a bad category,
+  status, or filter.
+- **Batch B (Tasks 15 to 17), one combined Sonnet review:** nothing high. One medium fixed: a word
+  fragment in the checks' pattern failed the spelling check. Lows fixed: a test that `caseOpened`
+  never shows another person's case (the person filter had none), and a warning, with the case ID
+  only, when a summary can't be recorded. Recorded: a summary that times out or fails with an
+  unknown cost keeps its reservation (about $0.02), as the guard does; two quick clicks on "Try
+  again" spend twice; a retry screens an unscreened case again each time until Stage 4's fix; the
+  checks' word lists are blunt ("fire", "should") until Stage 4 tunes them; there is no summary
+  recorder yet.
+- **`/code-review medium`, round 1** (against `origin/dev`): fixed, test first: the checks'
+  recommendation list refused neutral words ("a fire in the warehouse", "must work unpaid
+  overtime", "their complaint was dismissed"); the name check read the capital inside "iPhone" or
+  "McDonald" as an invented name; HR's retry wrote no audit row in its own request, so a job lost
+  to a shutdown left no record of the AI action (it now writes `case.summary.retried`); the
+  reservation read a constant, not the request's own token limit; the timeout was set in two
+  places. Not counted: the screening write-back (moved to Stage 4), a double retry's spend, no
+  summarizer under the real transport until Stage 4, the guard's shared reserve and settle helper
+  (Stage 4).
+- **Round 2:** fixed, test first: the summary's request never showed the model the category (it
+  now leads the one message, outside the words' tag) and carried a key the Messages API doesn't
+  take; the list still refused neutral reports ("told they would be terminated", "a serious
+  leak"); a capital after a colon, a quote, or a line break read as a name; settling priced an
+  unpriced served model name at the dearest row instead of the pinned model, as the guard does.
+  Lows fixed: one `no-store` constant, one place that schedules a summary job. Recorded: a retry
+  after 2 minutes can race a slow first job (Stage 2's accepted late-summary gap, and both are
+  server summaries of the same words); the replay recorder's error list lacks the summary errors
+  until Stage 4 records summaries; `redirect: 'error'` turns a server redirect into a network
+  error rather than an `ApiError` (the generated client builds no redirecting paths).
+- **Round 3:** fixed, test first: HR's retry answered with the summary's old failed state rather
+  than `writing`; an unexpected database error while reserving was recorded as a spent budget
+  (now `transport`); the audited reads' schema left out their 422; the inventory and the job's
+  docstring missed the retry's `crisis` and `unscreened` rows; the conversation read queried
+  cases even with no flagged turn; the words had no size cap at validation (now 20,000, so the
+  service's own 4,000-character problem still answers). Recorded: a crisis escalation offers a
+  case as soon as the guard answers, a few milliseconds before the turn's row stores its verdict
+  (a sensitive one waits for that write), so a send can't realistically win the race, but a turn
+  whose final write fails offers a case the service refuses; Stage 6 shows the button only once
+  the turn ended without an internal error. The two summary error classes repeat one body.
+- **Round 4:** nothing high or medium; the review loop stopped here. Lows fixed: the conversation
+  read loaded whole case rows (the words' ciphertext and the wrapped key) where it needs only the
+  status and reply-by date; an unused field on the retry plan; the retry's schema text promised a
+  retry in every state; a dead type check in the job; the name check rescanned the summary for
+  each capital; the changelog left out HR's own-case 403. Recorded in the backlog (Phase 8): the
+  audited-read header is a dependency each route opts into, so a future audited route could forget
+  it.
 
 ## Backlog
 

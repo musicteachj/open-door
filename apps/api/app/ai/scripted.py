@@ -19,6 +19,12 @@ from datetime import date, timedelta
 from pathlib import Path
 from typing import Any, Final
 
+from app.ai.case_summary import (
+    CATEGORY_LABELS,
+    SCRIPTED_PROMPT_VERSION,
+    SummaryAnswer,
+    SummaryRequest,
+)
 from app.ai.pricing import SCRIPTED_MODEL, IterationUsage, Usage
 from app.ai.text import one_line
 from app.ai.transport import (
@@ -777,3 +783,26 @@ def _guard_text(messages: Sequence[dict[str, Any]]) -> str:
             match = re.search(rf"<{tag}>(.*)</{tag}>", text, flags=re.DOTALL)
             return match.group(1) if match else text
     return ""
+
+
+SUMMARY_USAGE: Final = Usage(
+    input_tokens=400, output_tokens=60, cache_read_tokens=0, cache_write_tokens=0
+)
+
+
+class ScriptedSummarizer:
+    """The development and browser-test stand-in for the case summary: a fixed template that names
+    the category's label and never echoes, quotes, or reads the person's words."""
+
+    async def summarize(self, request: SummaryRequest) -> SummaryAnswer:
+        label = CATEGORY_LABELS.get(request.category, CATEGORY_LABELS["other"])
+        text = (
+            f"The person described {label}. This is a scripted placeholder, not a reading of what"
+            " happened. Their own words have the details."
+        )
+        return SummaryAnswer(
+            text=text,
+            model=SCRIPTED_MODEL,
+            prompt_version=SCRIPTED_PROMPT_VERSION,
+            usage=SUMMARY_USAGE,
+        )

@@ -150,6 +150,34 @@ async def own_flagged_turn_conversation(
     ).scalar_one_or_none()
 
 
+class OpenedCase(NamedTuple):
+    """What a conversation's reload shows of a case: never its words or keys."""
+
+    turn_id: UUID
+    status: str
+    reply_by: date
+
+
+async def cases_by_turn(
+    db: AsyncSession, tenant_id: UUID, person_id: UUID, conversation_id: UUID
+) -> dict[UUID, OpenedCase]:
+    """The person's own cases opened from a conversation's turns, by turn: one query for the whole
+    conversation. Filtered by the person, though HR's session could read more."""
+    rows = await db.execute(
+        select(Case.turn_id, Case.status, Case.reply_by).where(
+            Case.tenant_id == tenant_id,
+            Case.person_id == person_id,
+            Case.conversation_id == conversation_id,
+            Case.turn_id.is_not(None),
+        )
+    )
+    return {
+        row.turn_id: OpenedCase(row.turn_id, row.status, row.reply_by)
+        for row in rows
+        if row.turn_id is not None
+    }
+
+
 async def load_case(db: AsyncSession, tenant_id: UUID, case_id: UUID) -> Case | None:
     """The case, if this transaction's person may read the row (its opener, or HR)."""
     return (

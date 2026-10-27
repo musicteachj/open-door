@@ -68,6 +68,7 @@ from app.ai.fixed_texts import (
     STILL_ANSWERING_TEXT,
     hr_contact,
 )
+from app.ai.guard import verdict_is_flagged
 from app.ai.personal_data import kind_of_personal_data
 from app.ai.proposals import (
     TURN_RUNNING,
@@ -111,6 +112,7 @@ from app.modules.assistant.schemas import (
     AssistantTextsOut,
     BudgetBannerOut,
     BudgetOut,
+    CaseOpenedOut,
     ConfirmIn,
     ConversationOut,
     FeedbackGivenOut,
@@ -119,6 +121,7 @@ from app.modules.assistant.schemas import (
     is_storable,
 )
 from app.modules.assistant.sse import StreamTracker, TurnResponse, TurnStream
+from app.modules.cases.queries import cases_by_turn
 from app.modules.handbook.asker import load_asker
 from app.modules.handbook.search import pinned_version_id
 from app.modules.identity.deps import (
@@ -302,6 +305,15 @@ async def conversation_out(
             )
         )
     contacts = await hr_contact(db) if needs_hr_contact(shows) else []
+    # One query for the whole conversation's cases, not one per turn.
+    # Skipped when no turn was flagged: only a flagged turn can have a case.
+    opened = (
+        await cases_by_turn(
+            db, signed_in.actor.tenant_id, signed_in.actor.person_id, conversation.id
+        )
+        if any(verdict_is_flagged(t.guard_verdict) for t in turns)
+        else {}
+    )
     history = await model_history(db, conversation.id, cipher)
     tokens = history_tokens(history)
     budget = await budget_out(
@@ -329,6 +341,9 @@ async def conversation_out(
                 contacts,
                 names,
                 by_turn.get(t.id, ()),
+                None
+                if t.id not in opened
+                else CaseOpenedOut(status=opened[t.id].status, reply_by=opened[t.id].reply_by),
             )
             for t, s in zip(turns, shows, strict=True)
         ],

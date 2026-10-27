@@ -8,8 +8,9 @@ from fastapi import FastAPI
 
 from app import __version__
 from app.ai import anthropic_transport
+from app.ai.case_summary import Summarizer
 from app.ai.embeddings import Embedder, QueryEmbeddingLru, VoyageEmbedder
-from app.ai.scripted import ScriptedTransport
+from app.ai.scripted import ScriptedSummarizer, ScriptedTransport
 from app.ai.transport import Transport, require_a_transport_fit_for
 from app.api.problems import document_problems_as_problem_json
 from app.api.v1.router import api_router
@@ -35,6 +36,15 @@ def _build_transport(settings: Settings) -> Transport:
     if settings.ai_transport == "anthropic":
         return anthropic_transport.from_settings(settings)
     return ScriptedTransport()
+
+
+def _build_summarizer(settings: Settings) -> Summarizer | None:
+    """The case summarizer. Every transport but `anthropic` gets the scripted one. Under
+    `anthropic` there is none until Stage 4 adds the real one: the API still starts, and each
+    summary is recorded as failed with `transport`."""
+    if settings.ai_transport == "anthropic":
+        return None
+    return ScriptedSummarizer()
 
 
 def _build_embedder(settings: Settings) -> Embedder | None:
@@ -87,6 +97,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         app.state.engine = create_engine(str(settings.database_url))
         app.state.transport = transport
         app.state.embedder = _build_embedder(settings)
+        app.state.summarizer = _build_summarizer(settings)
         streams = StreamTracker()
         app.state.streams = streams
         try:

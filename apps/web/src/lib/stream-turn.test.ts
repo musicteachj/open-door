@@ -93,6 +93,14 @@ describe('streamTurn: the request', () => {
     await run()
     expect(csrf).toBeNull()
   })
+
+  it('refuses redirects, so a redirect cannot carry the token elsewhere', async () => {
+    setCsrf('token-9')
+    const stub = vi.fn<typeof fetch>(async () => streamResponse())
+    vi.stubGlobal('fetch', stub)
+    await run()
+    expect(stub.mock.calls[0]?.[1]?.redirect).toBe('error')
+  })
 })
 
 describe('streamTurn: the events', () => {

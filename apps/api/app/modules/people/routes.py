@@ -13,7 +13,7 @@ from pydantic import AfterValidator, StringConstraints
 
 from app.api.problems import problem_responses
 from app.modules.audit.service import record_event
-from app.modules.identity.deps import SignedInDep, authorize
+from app.modules.identity.deps import AuditedReadDep, SignedInDep, authorize
 from app.modules.people.queries import (
     DirectoryCursor,
     DirectoryFilters,
@@ -156,6 +156,7 @@ async def get_person(person_id: UUID, signed_in: SignedInDep, request: Request) 
     summary="One person's private details, for that person and for HR. Each read is audited.",
     response_model=PrivateDetails,
     responses=PERSON_ERRORS,
+    dependencies=[AuditedReadDep],
 )
 async def get_person_private(
     person_id: UUID, signed_in: SignedInDep, request: Request

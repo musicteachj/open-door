@@ -12,6 +12,28 @@ version (`0.x.y` while the app is being built, `1.0.0` when it is complete).
 
 ### Added
 
+- **The case routes and the AI summary's plumbing** (Phase 6, stage 3; no pages yet, and no paid
+  AI calls).
+  - `/api/v1/cases`: a person opens a case and lists their own; the form's fixed texts come with
+    today's reply-by date; HR gets the counts, the queue (filtered by status, a page at a time),
+    a case's details, audited reads of the summary and the person's words (never cached), and the
+    status change, refused until that HR person has read the words. A case someone can't see is a
+    404 from every route, never a 403; HR's own case is listed in the queue, and its reads and
+    status change answer `403 case-own`.
+  - When a case opens, a background job asks a summarizer with no tools for HR's neutral summary.
+    It sees only the category and the person's words, inside a tag the words can't close. Every
+    summary passes program checks before HR sees it (its length, recommendation words, names not
+    in the words, links, phone numbers, email addresses, Markdown), and one that fails, times out,
+    errors, or finds the budget spent is stored as failed with its reason; the case is unchanged.
+    A crisis case, or one the safety check couldn't screen, gets a fixed "no summary" row and no
+    call. HR can try again (`POST /cases/{id}/summary`), which screens unscreened words first.
+    Only the scripted summarizer exists so far; the real one arrives with its prompt in stage 4.
+  - The chat's HR panel event (`escalation`) now says whether the panel may offer a case
+    (`offerCase`), by the same rule the case service uses to accept one: the safety check called
+    the message sensitive or crisis. Each turn in a reloaded conversation says whether a case was
+    opened from it (`caseOpened`, with its status and reply-by date).
+  - The regenerated API schema and web client.
+
 - **Cases: the data, the service, and four seeded cases** (Phase 6, stage 2; no routes yet). A
   case is a concern a person sends to HR in their own words.
   - Three new tables (migration 0013) hold the case (`cases`), the AI's summary of it
@@ -45,6 +67,13 @@ version (`0.x.y` while the app is being built, `1.0.0` when it is complete).
   token.
 
 ### Security
+
+- **Audited reads need the CSRF header** (Phase 6, stage 3). Reading a person's private details,
+  a case's summary, or a person's words now requires the `X-CSRF-Token` header, which no link,
+  navigation, or form on another site can send, so another site can't make an HR partner's browser
+  perform an audited read. A refused read writes no audit row. The web app sends the header on
+  every request to its own `/api/` paths, whatever the method, never anywhere else, and refuses
+  redirects on those requests, the answer stream included.
 
 - **Cases are visible only to the person and HR, in the database** (Phase 6, stage 2).
   Restrictive row-level rules show a case to the person who opened it and to HR, let a person open

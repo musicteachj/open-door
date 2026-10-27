@@ -495,7 +495,7 @@ async def test_a_crisis_ends_the_turn_with_fixed_text_and_never_calls_the_model(
 
     escalation = of_type(events, Escalation)
     assert [(e.kind, e.message, e.offer_case) for e in escalation] == [
-        ("crisis", CRISIS_TEXT, False)
+        ("crisis", CRISIS_TEXT, True)
     ]
     assert [c.name for c in escalation[0].hr_contact] == ["Dana Whitfield"]
     assert not of_type(events, TurnCompleted)
@@ -520,6 +520,8 @@ async def test_a_sensitive_message_is_answered_then_escalated_and_audited(
     sensitive = events[escalation_at]
     assert isinstance(sensitive, Escalation)
     assert (sensitive.kind, sensitive.message) == ("sensitive", SENSITIVE_TEXT)
+    # The guard's category is sensitive, so a case may be opened from this turn.
+    assert sensitive.offer_case is True
     turn = await env.last_turn()
     assert turn.status == "completed"
     # The operator note reaches the model in the context message.
@@ -543,6 +545,8 @@ async def test_a_guard_that_is_down_says_so_and_never_calls_the_model(
 
     escalation = of_type(events, Escalation)
     assert [(e.kind, e.message) for e in escalation] == [("unavailable", UNAVAILABLE_TEXT)]
+    # The message was never screened, so there is nothing to open a case from.
+    assert [e.offer_case for e in escalation] == [False]
     assert env.transport.requests == []
     assert await env.messages() == []
     assert (await env.last_turn()).status == "guard_unavailable"
@@ -583,6 +587,8 @@ async def test_contradictory_guard_verdicts_route_safer(
     )
     events = await crisis.ask("hello")
     assert [e.kind for e in of_type(events, Escalation)] == ["crisis"]
+    # A crisis kind under an ordinary category is not a flagged turn: no case is offered.
+    assert [e.offer_case for e in of_type(events, Escalation)] == [False]
     assert crisis.transport.requests == []
     assert (await crisis.last_turn()).status == "crisis"
 
@@ -594,6 +600,8 @@ async def test_contradictory_guard_verdicts_route_safer(
     )
     events = await sensitive.ask("hello")
     assert [e.kind for e in of_type(events, Escalation)] == ["sensitive"]
+    # The panel still shows for a kind alone (Phase 4's rule), but there is no case to open.
+    assert [e.offer_case for e in of_type(events, Escalation)] == [False]
     assert isinstance(events[-1], TurnCompleted)
     assert len(sensitive.transport.requests) == 1
 
@@ -1734,6 +1742,8 @@ async def test_a_sensitive_turn_that_fails_still_routes_to_hr(
     escalation = events[-1]
     assert isinstance(escalation, Escalation)
     assert (escalation.kind, escalation.message) == ("sensitive", SENSITIVE_TEXT)
+    # Whatever the ending, a sensitive verdict offers a case.
+    assert escalation.offer_case is True
     audit = [
         e
         for e in await audit_events(app_engine, seeded_sandbox.tenant_id)

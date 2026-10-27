@@ -58,3 +58,4 @@ SUBMISSION_CONFLICT_TEXT: Final = "That form was already sent with different wor
 INVALID_CATEGORY_TEXT: Final = "Choose what the case is about."
 INVALID_FILTER_TEXT: Final = "That filter isn't available."
 INVALID_CURSOR_TEXT: Final = "That page of the list isn't available."
+SUMMARY_RETRY_REFUSED_TEXT: Final = "A summary can't be tried again for this case right now."

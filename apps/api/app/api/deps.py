@@ -6,6 +6,7 @@ from typing import Annotated
 from fastapi import Depends, Request
 from sqlalchemy.ext.asyncio import AsyncEngine
 
+from app.ai.case_summary import Summarizer
 from app.ai.embeddings import Embedder
 from app.ai.transport import Transport
 from app.core.config import Settings
@@ -45,6 +46,17 @@ def get_embedder(request: Request) -> Embedder | None:
         msg = "No embedder slot: build the app with create_app() and run its lifespan."
         raise RuntimeError(msg)
     return request.app.state.embedder  # type: ignore[no-any-return]
+
+
+def get_summarizer(request: Request) -> Summarizer | None:
+    """The case summarizer, or None when there is none (a real transport, until Stage 4).
+
+    None is a real answer, so only a missing lifespan is an error.
+    """
+    if not hasattr(request.app.state, "summarizer"):
+        msg = "No summarizer slot: build the app with create_app() and run its lifespan."
+        raise RuntimeError(msg)
+    return request.app.state.summarizer  # type: ignore[no-any-return]
 
 
 def get_app_settings(request: Request) -> Settings:
