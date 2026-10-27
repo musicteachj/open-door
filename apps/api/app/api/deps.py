@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncEngine
 from app.ai.embeddings import Embedder
 from app.ai.transport import Transport
 from app.core.config import Settings
+from app.core.encryption import KeyProvider
 from app.modules.assistant.sse import StreamTracker
 
 
@@ -62,6 +63,18 @@ def get_streams(request: Request) -> StreamTracker:
         msg = "No stream tracker: build the app with create_app() and run its lifespan."
         raise RuntimeError(msg)
     return streams
+
+
+def get_keys(request: Request) -> KeyProvider:
+    """The key provider the app built at boot, for sealing and opening encrypted text."""
+    keys = getattr(request.app.state, "keys", None)
+    if keys is None:
+        msg = "No keyring: build the app with create_app(), which refuses to start without one."
+        raise RuntimeError(msg)
+    if not isinstance(keys, KeyProvider):
+        msg = "app.state.keys is not a key provider."
+        raise RuntimeError(msg)
+    return keys
 
 
 def utc_now() -> datetime:

@@ -1146,8 +1146,8 @@ async def test_a_proposal_cannot_name_a_turn_from_another_conversation(
         second = await scalar(
             session,
             "INSERT INTO ai_conversations (tenant_id, person_id, model, guard_model, effort,"
-            " prompt_version, toolset_version) VALUES (:tenant_id, :person_id, 'm', 'g', 'medium',"
-            " '1', '1') RETURNING id",
+            " prompt_version, toolset_version, key_id, wrapped_key) VALUES (:tenant_id, :person_id,"
+            " 'm', 'g', 'medium', '1', '1', 'test', '\\x01'::bytea) RETURNING id",
             tenant_id=tenant.id,
             person_id=tenant.employee_id,
         )

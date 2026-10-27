@@ -4,6 +4,8 @@
 .env
 .env.*
 !.env.example
+# The development encryption keyring that `make keyring` writes.
+apps/api/.keys/
 
 # --- Python (apps/api) -----------------------------------------------------
 __pycache__/

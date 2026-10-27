@@ -110,6 +110,7 @@ from app.ai.turn import (
 )
 from app.ai.turn import TextDelta as AnswerText
 from app.core.config import Settings, get_settings
+from app.core.encryption import KeyProvider
 from app.db.engine import create_engine
 from app.db.models import (
     AiProposal,
@@ -123,6 +124,7 @@ from app.db.models import (
 from app.db.spend_cleanup import SpendRow, remove_sandboxes, spend_rows_of
 from app.db.tenancy import TenantContext, tenant_session
 from app.domain.handbook.models import Audience
+from app.main import build_key_provider
 from app.modules.handbook.asker import load_asker
 from app.modules.handbook.search import pinned_version_id
 from app.modules.identity.actor import load_actor
@@ -621,12 +623,14 @@ async def run_items(
     effort: Effort,
     app_engine: AsyncEngine,
     owner_engine: AsyncEngine,
+    keys: KeyProvider,
     caps: Caps | Callable[[], Caps] = EVAL_CAPS,
     on_item: ItemHook | None = None,
     on_finish: Callable[[], None] | None = None,
 ) -> list[ItemTrace]:
     """Run each item as a new conversation in the fixed sandbox and return what each one did.
 
+    `keys` seals each conversation's text, as the API's does.
     `mode` says what `transport` must be: a `ReplayTransport` for replay, a `RecordingTransport`
     for live, and anything else for scripted (a `ValueError` otherwise). `on_item` runs after each
     item (the runner checks its spend cap there). `caps` can be a function, called before each item,
@@ -649,6 +653,7 @@ async def run_items(
                     effort=effort,
                     caps=caps() if callable(caps) else caps,
                     app_engine=app_engine,
+                    keys=keys,
                 )
                 watched.check(item.id)
                 if isinstance(transport, ReplayTransport | RecordingTransport):
@@ -694,6 +699,7 @@ async def _run_item(
     effort: Effort,
     caps: Caps,
     app_engine: AsyncEngine,
+    keys: KeyProvider,
 ) -> ItemTrace:
     person_id = _person_id(company, item)
     ctx = TenantContext(company.tenant_id, person_id)
@@ -716,7 +722,7 @@ async def _run_item(
         label = (
             await db.scalars(select(HandbookVersion.label).where(HandbookVersion.id == version_id))
         ).one()
-        conversation = await create_conversation(db, actor, pins)
+        conversation = await create_conversation(db, actor, pins, keys)
 
     observer = ObservingTransport(transport)
     deps = TurnDeps(
@@ -730,6 +736,7 @@ async def _run_item(
         asker=asker,
         version_id=version_id,
         handbook_label=label,
+        keys=keys,
     )
     requests_before = await request_snapshot(app_engine)
     events = [
@@ -1130,6 +1137,9 @@ class RunEnv:
     # Where the committed fixtures are. A run into another folder (the effort comparison's) starts
     # its query embeddings as a copy of the committed ones.
     committed_fixtures_dir: Path = FIXTURES_DIR
+    # The key provider that seals the runs' conversations. None means the one the API builds from
+    # the settings (the dev keyring, or the fixed test key under APP_ENV=test, as in CI).
+    keys: KeyProvider | None = None
     # Where the effort set records and replays when no folder is named.
     effort_fixtures_dir: Path = EFFORT_FIXTURES_DIR
     sets: Mapping[str, SetConfig] = field(default_factory=lambda: dict(SETS))
@@ -1384,6 +1394,7 @@ class EvalRun:
         app_engine: AsyncEngine,
         owner_engine: AsyncEngine,
         company: SeedCompany,
+        keys: KeyProvider,
         grader: graders.Grader,
         embeddings: QueryEmbeddings,
         inner: Transport | None,
@@ -1401,6 +1412,7 @@ class EvalRun:
         self.app_engine = app_engine
         self.owner_engine = owner_engine
         self.company = company
+        self.keys = keys
         self.grader = grader
         self.embeddings = embeddings
         # The real transport and judge caller: set for a live run, None for an offline one.
@@ -1591,6 +1603,7 @@ class EvalRun:
             effort=self.config.effort,
             app_engine=self.app_engine,
             owner_engine=self.owner_engine,
+            keys=self.keys,
             caps=self._caps,
             on_item=after_item,
         )
@@ -2095,6 +2108,7 @@ async def eval_command(args: argparse.Namespace, env: RunEnv) -> int:
         inner=env.query_embedder_inner,
         settings=settings,
     )
+    keys = env.keys or build_key_provider(settings)
     async with _engines(env, settings) as (app_engine, owner_engine):
         try:
             company, audiences = await _preflight(app_engine, owner_engine, qa_items)
@@ -2117,6 +2131,7 @@ async def eval_command(args: argparse.Namespace, env: RunEnv) -> int:
             app_engine=app_engine,
             owner_engine=owner_engine,
             company=company,
+            keys=keys,
             grader=grader,
             embeddings=embeddings,
             inner=inner,

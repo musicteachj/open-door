@@ -26,6 +26,8 @@ def clean_environment(monkeypatch: pytest.MonkeyPatch) -> None:
         "AI_SANDBOX_BUDGET_USD",
         "AI_DAILY_BUDGET_USD",
         "AI_HEARTBEAT_SECONDS",
+        "ENCRYPTION_KEYRING",
+        "ENCRYPTION_KEYRING_FILE",
     ):
         monkeypatch.delenv(name, raising=False)
 
@@ -271,3 +273,93 @@ def test_a_blank_shell_key_does_not_override_the_env_file(
 
     assert key is not None
     assert key.get_secret_value() == "sk-from-the-file"
+
+
+def test_the_keyring_file_defaults_to_the_development_path_and_no_keyring_is_set() -> None:
+    settings = Settings(_env_file=None, database_url=APP_URL)
+    assert settings.encryption_keyring is None
+    assert settings.encryption_keyring_file is not None
+    assert settings.encryption_keyring_file.get_secret_value() == ".keys/keyring"
+
+
+def test_the_keyring_settings_read_the_environment(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("DATABASE_URL", APP_URL)
+    monkeypatch.setenv("ENCRYPTION_KEYRING", "k1:abc")
+    settings = Settings(_env_file=None)
+    assert settings.encryption_keyring is not None
+    assert settings.encryption_keyring.get_secret_value() == "k1:abc"
+
+    monkeypatch.delenv("ENCRYPTION_KEYRING")
+    monkeypatch.setenv("ENCRYPTION_KEYRING_FILE", "/tmp/ring")  # noqa: S108
+    settings = Settings(_env_file=None)
+    assert settings.encryption_keyring_file is not None
+    assert settings.encryption_keyring_file.get_secret_value() == "/tmp/ring"  # noqa: S108
+
+
+def test_neither_keyring_setting_ever_prints() -> None:
+    settings = Settings(
+        _env_file=None, database_url=APP_URL, encryption_keyring="topsecretid:c2VjcmV0"
+    )
+    assert "topsecretid" not in repr(settings)
+    assert "topsecretid" not in str(settings)
+    assert ".keys/keyring" not in repr(settings)
+    assert "topsecretid" not in repr(settings.encryption_keyring)
+
+
+def test_setting_both_the_keyring_and_the_keyring_file_is_refused() -> None:
+    with pytest.raises(ValidationError, match="not both") as excinfo:
+        Settings(
+            _env_file=None,
+            database_url=APP_URL,
+            encryption_keyring="topsecretid:c2VjcmV0",
+            encryption_keyring_file="/tmp/ring",  # noqa: S108
+        )
+    assert "topsecretid" not in str(excinfo.value)
+
+
+def test_both_set_in_the_environment_is_refused(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("DATABASE_URL", APP_URL)
+    monkeypatch.setenv("ENCRYPTION_KEYRING", "k1:abc")
+    monkeypatch.setenv("ENCRYPTION_KEYRING_FILE", "/tmp/ring")  # noqa: S108
+    with pytest.raises(ValidationError, match="not both"):
+        Settings(_env_file=None)
+
+
+def test_a_blank_keyring_in_the_environment_is_ignored(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    # A shell can export it empty; the value in .env must still win.
+    env_file = tmp_path / ".env"
+    env_file.write_text(f"DATABASE_URL={APP_URL}\nENCRYPTION_KEYRING=k1:fromdotenv\n")
+    monkeypatch.setenv("ENCRYPTION_KEYRING", "   ")
+    settings = Settings(_env_file=env_file)
+    assert settings.encryption_keyring is not None
+    assert settings.encryption_keyring.get_secret_value() == "k1:fromdotenv"
+
+
+def test_a_blank_keyring_counts_as_unset() -> None:
+    settings = Settings(_env_file=None, database_url=APP_URL, encryption_keyring="  ")
+    assert settings.encryption_keyring is None
+
+
+@pytest.mark.parametrize("value", ["", "   "])
+def test_a_blank_keyring_file_in_the_environment_is_ignored(
+    value: str, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    env_file = tmp_path / ".env"
+    env_file.write_text(f"DATABASE_URL={APP_URL}\nENCRYPTION_KEYRING_FILE=/from/dotenv\n")
+    monkeypatch.setenv("ENCRYPTION_KEYRING_FILE", value)
+    settings = Settings(_env_file=env_file)
+    assert settings.encryption_keyring_file is not None
+    assert settings.encryption_keyring_file.get_secret_value() == "/from/dotenv"
+
+
+def test_a_blank_keyring_file_in_the_environment_leaves_the_default_without_a_dotenv_value(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    env_file = tmp_path / ".env"
+    env_file.write_text(f"DATABASE_URL={APP_URL}\n")
+    monkeypatch.setenv("ENCRYPTION_KEYRING_FILE", "")
+    settings = Settings(_env_file=env_file)
+    assert settings.encryption_keyring_file is not None
+    assert settings.encryption_keyring_file.get_secret_value() == ".keys/keyring"

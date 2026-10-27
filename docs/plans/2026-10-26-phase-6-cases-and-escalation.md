@@ -948,6 +948,72 @@ Filled in by Task 31 from screens 11 and 12's `notes.md`.
 Each stage records here: Phase 6's base commit (Stage 1), the gap calls made while building, the
 deviations from this plan and why, each review round's findings, and each paid run's cost.
 
+**Phase 6's base commit is `3b605da`** (`dev` after the planning PR, #77, merged). Task 41's phase
+review diffs against it. The screens PR (#78) merged after it, and Stage 1 branched off `dev` at
+`b48285d`.
+
+### Stage 1: encryption (`feat/phase-6-encryption`, 2026-10-26 to 27)
+
+No paid calls. Every recorded eval fixture still replays.
+
+**Gap calls and deviations:**
+- **The key provider is built in `create_app`, not the lifespan,** because `create_app` must read
+  the keyring to refuse a bad one. It is on `app.state.keys` before the lifespan runs.
+  `build_key_provider(settings)` is public, so the eval runner uses the same keyring as the API.
+- **`get_keys` lives in `app/api/deps.py`,** beside the other `app.state` dependencies, not in
+  `app/modules/identity/deps.py` as the file map says.
+- **`scripts/export_openapi.py` pins a random throwaway keyring,** not the test key, so it runs
+  with `APP_ENV=development`.
+- **Ciphertext columns are `bytea`.** Migration 0012 drops and re-adds the columns rather than
+  renaming them, which is safe because it deletes every sandbox first.
+- **A tool call's input summary stays inside `tool_calls`,** as the base64 of the sealed text, so
+  the column, its grant, and the frozen-turn trigger don't change. Its place is
+  `tool_calls.inputSummary:{index}` (the stored entries carry no `tool_use_id`), so two summaries
+  can't be swapped.
+- **`ConversationCipher`** holds a conversation's unwrapped key, its sandbox, and its ID; every
+  store function takes it and refuses one from another conversation. Admission hands it to the
+  turn, so a request unwraps once. The turn still rereads the history in its own transaction.
+- **A blank `ENCRYPTION_KEYRING_FILE` also counts as unset,** like a blank `ENCRYPTION_KEYRING`.
+- **Data keys are a `bytes` subclass with a redacted `repr`,** so the plan's `-> bytes`
+  signatures hold without showing key bytes.
+- **The migration test can't prove the `NO FORCE` bracket matters,** since the local and CI owner
+  is a superuser. The Opus reviewer proved it by experiment with a non-superuser owner.
+
+**Reviews:**
+- **Batch A (Tasks 1 to 3), Opus 5.5 security and Sonnet compliance:** nothing high or medium.
+  Fixed in Batch B's first step: keyring read errors passed through raw (a non-text file's bytes
+  could ride on the error), the data key's length was unchecked (AES-GCM would quietly run as
+  AES-128), a `type: ignore` in `get_keys`, and a paragraph's wrap. Recorded: the version byte
+  isn't in the associated data (harmless with one version; in the backlog); `make keyring` leaves
+  an existing parent directory's mode alone; a crash between creating and writing the keyring
+  would leave an empty file that `make keyring` won't replace (development only).
+- **Batch B (Tasks 4 and 5), the same Opus reviewer and a new Sonnet compliance reviewer:** one
+  medium, fixed test first: the previous answer was decrypted after the transaction that adds the
+  new turn committed, so a previous answer that wouldn't open left a `running` turn and a 409 for
+  10 minutes. Two lows fixed: a damaged tool-call summary is always `DecryptionFailed`
+  (`validate=True`), and the cipher records its conversation. Recorded: messages are bound to
+  their rows but not their order, and tool-call entries cut off the end of the list still open
+  (both need database write access; in the backlog); one value that won't open makes a person's
+  current conversation a 500 for good (in the backlog); some test helpers seal rows the way the
+  app does, so they could mirror an app bug (mitigated: full turns through the app are tested
+  too); the medium fix has a turn-level regression test, not a route-level one.
+- **`/code-review medium`, round 1:** fixed, test first and mutation-proved: the default keyring
+  path was resolved against the working directory, so the API or the eval runner started from the
+  repository root couldn't find it (now relative to `apps/api`); a blank `ENCRYPTION_KEYRING_FILE`
+  exported in the shell overrode `.env` (now dropped like the API keys); `get_keys` accepted only
+  the local provider, which would have blocked Phase 8's KMS provider (now any `KeyProvider`);
+  `make_keyring.py` repeated the key length and default path. Recorded: the history is decrypted
+  twice per turn (admission counts its tokens, then the turn reads it in its own transaction), and
+  the page and budget reads decrypt it to count tokens; fine at demo sizes. Two small cleanups
+  (the turn's optional cipher, `turn_out`'s separate reason argument) left as they are.
+- **Round 2:** nothing new above low; the review loop stopped here. Fixed anyway, being a few
+  lines each: `make keyring` now writes the file `ENCRYPTION_KEYRING_FILE` names, not always the
+  default, and the settings' default path comes from the one constant. Kept: the decode error in
+  `open_tool_calls` is raised outside its handler on purpose, so nothing is chained; and
+  `conversation_cipher` wraps the unwrapped key in `DataKey` again, so any provider's key gets the
+  redacted `repr`. Repeats of recorded items (the conversation that won't decrypt, the message
+  order, the double decrypt) didn't count.
+
 ## Backlog
 
 Findings and ideas left for later go to [`../BACKLOG.md`](../BACKLOG.md), with the reason.

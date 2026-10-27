@@ -31,9 +31,9 @@ from app.ai.budget import (
 from app.ai.pricing import IterationUsage, Usage, reservation_usd, turn_call_cost
 from app.core.config import Settings
 from app.db.engine import create_engine
-from app.db.models import AiConversation, AiTurn
+from app.db.models import AiConversation
 from app.db.tenancy import TenantContext, tenant_session
-from tests.integration.conftest import MakeTenant, SampleTenant
+from tests.integration.conftest import MakeTenant, SampleTenant, conversation_key, turn_row
 
 pytestmark = pytest.mark.integration
 
@@ -140,6 +140,7 @@ async def add_turn(engine: AsyncEngine, tenant: SampleTenant) -> UUID:
     """A committed turn for the employee: spend rows point at one."""
     context = TenantContext(tenant.id, tenant.employee_id)
     conversation_id, turn_id = uuid4(), uuid4()
+    key_id, wrapped_key, _ = conversation_key(tenant.id, conversation_id)
     async with tenant_session(engine, context) as session:
         session.add(
             AiConversation(
@@ -151,16 +152,17 @@ async def add_turn(engine: AsyncEngine, tenant: SampleTenant) -> UUID:
                 effort="medium",
                 prompt_version="test",
                 toolset_version="test",
+                key_id=key_id,
+                wrapped_key=wrapped_key,
             )
         )
         await session.flush()
         session.add(
-            AiTurn(
-                id=turn_id,
-                tenant_id=tenant.id,
-                person_id=tenant.employee_id,
-                conversation_id=conversation_id,
-                question="How much sick leave do I get?",
+            await turn_row(
+                session,
+                conversation_id,
+                turn_id,
+                "How much sick leave do I get?",
                 status="completed",
             )
         )

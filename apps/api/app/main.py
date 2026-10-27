@@ -15,6 +15,7 @@ from app.api.problems import document_problems_as_problem_json
 from app.api.v1.router import api_router
 from app.core.cache_control import NoStoreMiddleware
 from app.core.config import Settings, get_settings
+from app.core.encryption import LocalKeyProvider, load_key_provider
 from app.core.logging import configure_logging
 from app.core.problems import install_problem_handlers
 from app.core.request_id import RequestIdMiddleware
@@ -47,6 +48,21 @@ def _build_embedder(settings: Settings) -> Embedder | None:
     return QueryEmbeddingLru(VoyageEmbedder(settings.voyage_api_key))
 
 
+def build_key_provider(settings: Settings) -> LocalKeyProvider:
+    """The one key provider, or a refusal to start: no keyring, a keyring file others can read,
+    or the fake test key outside APP_ENV=test. There is no default key."""
+    keyring = settings.encryption_keyring
+    keyring_file = settings.encryption_keyring_file
+    keys = load_key_provider(
+        keyring=None if keyring is None else keyring.get_secret_value(),
+        keyring_file=None if keyring_file is None else keyring_file.get_secret_value(),
+    )
+    if keys.uses_test_key and settings.app_env != "test":
+        msg = "The keyring holds the test key, which only APP_ENV=test accepts. Run `make keyring`."
+        raise ValueError(msg)
+    return keys
+
+
 def create_app(settings: Settings | None = None) -> FastAPI:
     """Build the app. Settings are validated here, so a bad environment fails at boot."""
     if settings is None:
@@ -59,6 +75,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             " fixture-path setting. Use scripted or anthropic for the app."
         )
         raise ValueError(msg)
+    keys = build_key_provider(settings)
     # Refused here so a bad environment fails at boot. The transport itself is built in the
     # lifespan, with the client it closes, so each lifespan run gets its own.
     if settings.ai_transport == "anthropic":
@@ -93,6 +110,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     app = FastAPI(title="Open Door API", version=__version__, lifespan=lifespan)
     app.state.settings = settings
+    app.state.keys = keys
     # The middleware added last runs first. The request-ID middleware wraps the same-origin check,
     # so even a refused request carries its ID, and the no-store middleware wraps both, so a refusal
     # carries `Cache-Control: no-store` too. There is no CORS middleware: the web app reaches the

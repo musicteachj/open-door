@@ -156,10 +156,30 @@ choice described above.
 Added in Phase 4 (migration 0008). Nothing writes to them until the assistant's turn code arrives
 later in Phase 4.
 
-**Questions and answers are stored unencrypted in Phase 4, and so are the ones the guard flagged
-as sensitive or as a crisis.** Phase 6 encrypts case narratives and flagged content together. The
-sandbox is fictional, the landing page asks visitors not to enter real personal information, and
-everything is deleted with the sandbox after 24 hours.
+**All conversation text is encrypted at rest (Phase 6, migration 0012, ADR 0015).** That is every
+question, answer, stored message, tool-call input summary, and feedback reason, whether or not the
+guard flagged it. The API seals each value with AES-256-GCM under a data key that belongs to its
+conversation, and the database stores only ciphertext: it never holds a key or the text. The data
+key is stored wrapped (`ai_conversations.wrapped_key`) by a key-encryption key from the keyring,
+and each ciphertext is bound to its table, column, sandbox, and row, so a value copied to another
+place fails to open. Labels and numbers stay readable, for the console: the guard's verdict,
+statuses, citations (handbook passages), retrieved sections, tool names, results and durations,
+tokens, and costs.
+
+**The keyring.** The key-encryption keys are lines of `id:base64`, newest first, in a file
+(`apps/api/.keys/keyring`, written by `make setup`, git-ignored, mode 600, refused if anyone but its
+owner can read it) or in `ENCRYPTION_KEYRING`. The API will not start without one. Neither value is
+ever printed or logged. Tests and CI use a fixed fake key (all zero bytes, ID `test`) that the API
+refuses outside `APP_ENV=test`. Losing the keyring makes every sandbox unreadable, which for
+24-hour demo sandboxes means starting new ones. Phase 8 adds a managed key service.
+
+**Old plaintext may linger briefly.** Migration 0012 deleted every sandbox and dropped the plaintext
+columns, but Postgres keeps the dropped and deleted data in dead rows and in its write-ahead log
+until a vacuum and the log's recycling. Only the development databases that ran Phase 4 and 5 are
+affected, since nothing is deployed.
+
+The sandbox is fictional, the landing page asks visitors not to enter real personal information,
+and everything is deleted with the sandbox after 24 hours.
 
 Every ID below is a random UUID, so one sandbox can't estimate another's activity.
 
@@ -169,6 +189,7 @@ Every ID below is a random UUID, so one sandbox can't estimate another's activit
 |---|---|---|
 | `id`, `tenant_id`, `person_id` | IDs: the conversation, its sandbox, and the person who owns it | Identity, and the one person who may read it. |
 | `created_at` | When it began (UTC) | Finds a person's newest conversation. |
+| `key_id`, `wrapped_key` | The ID of the key-encryption key that wrapped this conversation's data key, and the wrapped data key (ciphertext) | Opens the conversation's sealed text. The wrapped key is bound to its sandbox and this row. |
 | `model`, `guard_model`, `effort`, `prompt_version`, `toolset_version` | The pins: the assistant's model, the guard's model, the effort setting, and the prompt and tool-set versions at the start | A conversation keeps its model, prompt, and tools for its whole life, so its history stays valid and replayable. |
 
 ### `ai_messages`
@@ -177,7 +198,7 @@ Every ID below is a random UUID, so one sandbox can't estimate another's activit
 |---|---|---|
 | `id`, `tenant_id`, `person_id`, `conversation_id`, `turn_id` | IDs: the message, its sandbox, its owner, its conversation, and the turn that produced it | Identity and ownership. |
 | `position`, `role` | The message's place in the conversation (from 0), and `user`, `assistant`, or `system` | The model has no memory: each turn sends the history back in order. |
-| `content` | The message exactly as the model API takes it, as JSON kept byte for byte. It includes the person's question, the model's replies, and tool results such as handbook passages and the person's own directory card or private details | The history for the next turn. It is `json`, not `jsonb`, because the model's signed thinking blocks must come back unchanged. |
+| `content_ciphertext` | The message exactly as the model API takes it, as JSON text, encrypted. It decrypts to the same text, byte for byte. It includes the person's question, the model's replies, and tool results such as handbook passages and the person's own directory card or private details | The history for the next turn. The text is kept exactly because the model's signed thinking blocks must come back unchanged. |
 | `sources` | For each handbook search result in the message, in order: the section ID, the passage IDs, the title, the group name, the audience label, the last-updated date, and the link. Null when the message has none | The conversation's list of sources, rebuilt for citations, including from turns that were stopped or failed. The result text alone can't give these back reliably. |
 | `reported_outcomes` | On a per-turn context message only: for each confirm card whose outcome that context told the model about, `<card id>:<status shown>` (a card whose time ran out shows as `expired`). Null on every other message | The next turn tells the model about each card's status once, and again if the card changes later (expired, then confirmed by a request already in flight). What was told, not a clock comparison across transactions, decides what is news. |
 | `created_at` | When it was stored (UTC) | The record. |
@@ -187,12 +208,13 @@ Every ID below is a random UUID, so one sandbox can't estimate another's activit
 | Column | Holds | Why |
 |---|---|---|
 | `id`, `tenant_id`, `person_id`, `conversation_id` | IDs: the turn, its sandbox, its owner, and its conversation | Identity and ownership. |
-| `question` | What the person asked | Shown after a reload. |
+| `question_ciphertext` | What the person asked, encrypted | Shown after a reload. |
 | `status`, `error_code` | `running`, `completed`, `stopped`, `failed`, `crisis`, or `guard_unavailable`; and a code. A failed turn's code is the one its error event sent (`refusal`, `model-unavailable`, `budget-sandbox`, `budget-daily`, `spend-limit` (Anthropic's Console spend limit), `too-many-calls`, `internal`), or a more exact one the client sees as `internal`: `prompt-leak` (the system prompt's canary was caught and withheld), `guard-error` (the safety check couldn't run), or `abandoned`. A completed turn cut off by the output limit has `max-tokens`. | One turn runs at a time per conversation. The code explains a failure or an incomplete answer. |
 | `started_at`, `ended_at` | When the turn began and ended (UTC) | The record. |
-| `answer_text`, `citations` | The answer (a stopped turn keeps its partial text) and its citations as JSON | What the person sees after a reload. |
+| `answer_ciphertext` | The answer, encrypted (a stopped turn keeps its partial text). Null until the turn first saves an answer, and read as an empty answer | What the person sees after a reload. |
+| `citations` | The answer's citations as JSON (handbook passages) | What the person sees after a reload. |
 | `guard_verdict` | The guard's verdict as JSON; null if the guard did not run | Phase 7's console shows why a turn was routed. The browser gets the category and kind only (`GET /assistant/conversations/current`), never `injectionSuspected`, the cost, or the cache counts. |
-| `tool_calls`, `sections_retrieved` | Each tool call (name, a short summary of its input, success, duration), and the handbook sections the search returned | What the assistant did. A search's summary holds up to 60 characters of its query (and `find_people`'s up to 40), after control characters are removed. A time-off tool's summary holds its scope, dates, and decision, up to 40 characters of a `person_name`, and a request's ID. Tool calls past the limits (5 per response, 20 per question) aren't run, and a second card in one response isn't made; a round records each kind as one `skipped` entry with a `count`. The summaries never hold private values. |
+| `tool_calls`, `sections_retrieved` | Each tool call (name, a short summary of its input, success, duration), and the handbook sections the search returned. Each input summary is stored encrypted (the base64 of the sealed text, inside the JSON, bound to its place in the list); the name, success, and duration stay readable | What the assistant did. A search's summary holds up to 60 characters of its query (and `find_people`'s up to 40), after control characters are removed. A time-off tool's summary holds its scope, dates, and decision, up to 40 characters of a `person_name`, and a request's ID. Tool calls past the limits (5 per response, 20 per question) aren't run, and a second card in one response isn't made; a round records each kind as one `skipped` entry with a `count`. The summaries never hold private values. |
 | `served_by_models`, `effort`, `prompt_version`, `toolset_version` | The model IDs that served the turn, and the settings in effect | Explains a result, and shows when a fallback happened. |
 | `input_tokens`, `output_tokens`, `cache_read_tokens`, `cache_write_tokens`, `cost_usd` | Token counts and the cost at list price | Measures cost and caching. |
 | `first_event_ms`, `total_ms` | Milliseconds to the first visible event, and in total | Measures latency. |
@@ -203,7 +225,7 @@ Every ID below is a random UUID, so one sandbox can't estimate another's activit
 | Column | Holds | Why |
 |---|---|---|
 | `id`, `tenant_id`, `person_id`, `turn_id` | IDs: the feedback, its sandbox, its owner, and the answer it rates | One per answer. |
-| `helpful`, `reason` | A thumbs up or down, and an optional reason of at most 500 characters | So the owner can see which answers helped. |
+| `helpful`, `reason_ciphertext` | A thumbs up or down, and an optional reason of at most 500 characters, encrypted (the limit is checked before sealing) | So the owner can see which answers helped. |
 | `created_at` | When it was given (UTC) | The record. |
 
 ### `ai_spend`

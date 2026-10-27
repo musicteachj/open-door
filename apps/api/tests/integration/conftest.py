@@ -33,8 +33,26 @@ from pydantic import PostgresDsn
 from sqlalchemy import delete, select, text
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 
+from app.ai.conversations import (
+    TurnOutcome,
+    TurnText,
+    conversation_cipher,
+    finish_turn,
+    open_reason,
+    open_turn,
+    start_turn,
+)
 from app.ai.proposal_cards import RequestCard
 from app.core.config import Settings
+from app.core.encryption import (
+    TEST_KEY,
+    TEST_KEY_ID,
+    LocalKeyProvider,
+    Place,
+    new_data_key,
+    seal,
+    wrap_aad,
+)
 from app.db.engine import create_engine
 from app.db.models import (
     AiConversation,
@@ -55,12 +73,21 @@ from app.db.tenancy import TenantContext, tenant_session
 from app.main import create_app
 from app.modules.identity.cookies import CSRF_COOKIE, CSRF_HEADER, SESSION_COOKIE
 from app.modules.sandbox.seed import SeedCompany, build_company, insert_company
+from tests.conftest import TEST_KEYRING
 
 
 @pytest.fixture(scope="session")
 def database_settings() -> Settings:
-    # Reads the environment (CI) or apps/api/.env (local development).
-    return Settings()
+    # Reads the environment (CI) or apps/api/.env (local development). The keyring is always the
+    # fixed test one, so that rows the tests seal by hand (`TEST_KEYS`) open in the app, and the
+    # app accepts the fake key (APP_ENV=test).
+    return Settings().model_copy(
+        update={
+            "app_env": "test",
+            "encryption_keyring": TEST_KEYRING,
+            "encryption_keyring_file": None,
+        }
+    )
 
 
 def required_url(url: PostgresDsn | None, variable: str) -> str:
@@ -165,16 +192,37 @@ class AssistantRows:
     turn_id: UUID
 
 
+# Stands in for the key provider in rows the tests write by hand. The real store gets its provider
+# from the app.
+TEST_KEYS = LocalKeyProvider([(TEST_KEY_ID, TEST_KEY)])
+# A value the tests store when they only need some bytes in a ciphertext column.
+OPAQUE = b"opaque ciphertext"
+
+
+def conversation_key(tenant_id: UUID, conversation_id: UUID) -> tuple[str, bytes, bytes]:
+    """A new data key for a conversation: its key ID, its wrapped form, and the key itself."""
+    data_key = new_data_key()
+    key_id, wrapped = TEST_KEYS.wrap(
+        data_key, aad=wrap_aad(tenant_id, "ai_conversations", conversation_id)
+    )
+    return key_id, wrapped, data_key
+
+
 async def write_assistant_rows(
     session: AsyncSession, tenant_id: UUID, person_id: UUID
 ) -> AssistantRows:
-    """Write a conversation, a completed turn with its two messages and a thumbs-up, and a spend
-    row, and flush them.
+    """Write a conversation, a completed turn with its two messages and a thumbs-up (with a reason),
+    and a spend row, and flush them. The text is sealed with the conversation's own data key.
 
     The session must be scoped to `person_id`: Postgres shows a person's conversations only to
     that person, and refuses to write one for anyone else.
     """
     rows = AssistantRows(conversation_id=uuid4(), turn_id=uuid4())
+    key_id, wrapped_key, data_key = conversation_key(tenant_id, rows.conversation_id)
+
+    def sealed(text_: str, table: str, column: str, row_id: UUID) -> bytes:
+        return seal(data_key, text_.encode(), place=Place(table, column, tenant_id, row_id))
+
     session.add(
         AiConversation(
             id=rows.conversation_id,
@@ -185,6 +233,8 @@ async def write_assistant_rows(
             effort="medium",
             prompt_version="test",
             toolset_version="test",
+            key_id=key_id,
+            wrapped_key=wrapped_key,
         )
     )
     await session.flush()
@@ -194,31 +244,52 @@ async def write_assistant_rows(
             tenant_id=tenant_id,
             person_id=person_id,
             conversation_id=rows.conversation_id,
-            question="How much sick leave do I get?",
+            question_ciphertext=sealed(
+                "How much sick leave do I get?", "ai_turns", "question_ciphertext", rows.turn_id
+            ),
             status="completed",
-            answer_text="You get 40 hours.",
+            answer_ciphertext=sealed(
+                "You get 40 hours.", "ai_turns", "answer_ciphertext", rows.turn_id
+            ),
         )
     )
     await session.flush()
+    messages = [
+        (uuid4(), position, role, [{"type": "text", "text": text_}])
+        for position, role, text_ in (
+            (0, "user", "How much sick leave do I get?"),
+            (1, "assistant", "You get 40 hours."),
+        )
+    ]
     session.add_all(
         [
             AiMessage(
+                id=message_id,
                 tenant_id=tenant_id,
                 person_id=person_id,
                 conversation_id=rows.conversation_id,
                 turn_id=rows.turn_id,
                 position=position,
                 role=role,
-                content=[{"type": "text", "text": text_}],
+                content_ciphertext=sealed(
+                    json.dumps(content), "ai_messages", "content_ciphertext", message_id
+                ),
             )
-            for position, role, text_ in (
-                (0, "user", "How much sick leave do I get?"),
-                (1, "assistant", "You get 40 hours."),
-            )
+            for message_id, position, role, content in messages
         ]
     )
+    feedback_id = uuid4()
     session.add(
-        AiFeedback(tenant_id=tenant_id, person_id=person_id, turn_id=rows.turn_id, helpful=True)
+        AiFeedback(
+            id=feedback_id,
+            tenant_id=tenant_id,
+            person_id=person_id,
+            turn_id=rows.turn_id,
+            helpful=True,
+            reason_ciphertext=sealed(
+                "Clear answer.", "ai_feedback", "reason_ciphertext", feedback_id
+            ),
+        )
     )
     session.add(
         AiSpend(
@@ -637,3 +708,130 @@ async def audit_events(engine: AsyncEngine, tenant_id: UUID) -> list[AuditEvent]
     async with tenant_session(engine, TenantContext(tenant_id, None)) as session:
         query = select(AuditEvent).order_by(AuditEvent.occurred_at)
         return list((await session.execute(query)).scalars())
+
+
+# --- Reading the encrypted conversation text back ----------------------------------------------
+
+
+class OpenTurn:
+    """An `AiTurn` row with its encrypted text opened: `question`, `answer_text`, and `tool_calls`
+    (input summaries in the clear). Every other attribute is the row's own."""
+
+    def __init__(self, row: AiTurn, text_: TurnText) -> None:
+        self._row = row
+        self.question = text_.question
+        self.answer_text = text_.answer
+        self.tool_calls = text_.tool_calls
+
+    def __getattr__(self, name: str) -> Any:
+        return getattr(self._row, name)
+
+
+class OpenMessage:
+    """An `AiMessage` row with `content` opened. Every other attribute is the row's own."""
+
+    def __init__(self, row: AiMessage, content: list[dict[str, Any]]) -> None:
+        self._row = row
+        self.content = content
+
+    def __getattr__(self, name: str) -> Any:
+        return getattr(self._row, name)
+
+
+async def open_turns(db: AsyncSession, rows: list[AiTurn]) -> list[OpenTurn]:
+    """Open turns as the test keyring would. Reads the conversation rows it needs."""
+    ciphers = {}
+    out = []
+    for row in rows:
+        if row.conversation_id not in ciphers:
+            conversation = await db.get(AiConversation, row.conversation_id)
+            assert conversation is not None
+            ciphers[row.conversation_id] = conversation_cipher(TEST_KEYS, conversation)
+        out.append(OpenTurn(row, open_turn(ciphers[row.conversation_id], row)))
+    return out
+
+
+async def open_messages(db: AsyncSession, rows: list[AiMessage]) -> list[OpenMessage]:
+    ciphers = {}
+    out = []
+    for row in rows:
+        if row.conversation_id not in ciphers:
+            conversation = await db.get(AiConversation, row.conversation_id)
+            assert conversation is not None
+            ciphers[row.conversation_id] = conversation_cipher(TEST_KEYS, conversation)
+        text_ = ciphers[row.conversation_id].open_text(
+            row.content_ciphertext, "ai_messages", "content_ciphertext", row.id
+        )
+        out.append(OpenMessage(row, json.loads(text_)))
+    return out
+
+
+async def open_feedback_reason(db: AsyncSession, row: AiFeedback) -> str | None:
+    turn = await db.get(AiTurn, row.turn_id)
+    assert turn is not None
+    conversation = await db.get(AiConversation, turn.conversation_id)
+    assert conversation is not None
+    return open_reason(conversation_cipher(TEST_KEYS, conversation), row)
+
+
+# --- Writing encrypted conversation text by hand -----------------------------------------------
+
+
+async def begin_turn(db: AsyncSession, conversation: AiConversation, question: str) -> AiTurn:
+    """`start_turn` with the test keyring."""
+    return await start_turn(
+        db, conversation, question, conversation_cipher(TEST_KEYS, conversation)
+    )
+
+
+async def end_turn(
+    db: AsyncSession, conversation: AiConversation, turn_id: UUID, outcome: TurnOutcome
+) -> None:
+    """`finish_turn` with the test keyring."""
+    await finish_turn(db, turn_id, outcome, conversation_cipher(TEST_KEYS, conversation))
+
+
+def message_row(
+    conversation: AiConversation,
+    turn_id: UUID,
+    *,
+    position: int,
+    role: str,
+    content: list[dict[str, Any]],
+    sources: list[dict[str, Any]] | None = None,
+) -> AiMessage:
+    """A message row for the conversation, with `content` sealed as the store seals it."""
+    message_id = uuid4()
+    sealed = conversation_cipher(TEST_KEYS, conversation).seal_text(
+        json.dumps(content), "ai_messages", "content_ciphertext", message_id
+    )
+    return AiMessage(
+        id=message_id,
+        tenant_id=conversation.tenant_id,
+        person_id=conversation.person_id,
+        conversation_id=conversation.id,
+        turn_id=turn_id,
+        position=position,
+        role=role,
+        content_ciphertext=sealed,
+        sources=sources,
+    )
+
+
+async def turn_row(
+    db: AsyncSession, conversation_id: UUID, turn_id: UUID, question: str, **columns: Any
+) -> AiTurn:
+    """A turn row for a conversation that is already flushed, with the question sealed."""
+    conversation = await db.get(AiConversation, conversation_id)
+    assert conversation is not None
+    sealed = conversation_cipher(TEST_KEYS, conversation).seal_text(
+        question, "ai_turns", "question_ciphertext", turn_id
+    )
+    return AiTurn(
+        id=turn_id,
+        tenant_id=conversation.tenant_id,
+        person_id=conversation.person_id,
+        conversation_id=conversation_id,
+        question_ciphertext=sealed,
+        **columns,
+    )

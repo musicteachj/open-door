@@ -11,12 +11,14 @@ changed, so the history can go back to the model unchanged and its cached prefix
 one row that changes is a turn, which is added as `running` and finished once (`finish_turn`).
 """
 
+import base64
+import json
 from collections.abc import Sequence
 from dataclasses import asdict, dataclass, field
 from datetime import date, datetime, timedelta
 from decimal import Decimal
 from typing import Any, Literal, Self, cast
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from sqlalchemy import CursorResult, Interval, func, insert, literal, select, true, update
 from sqlalchemy.exc import DBAPIError, IntegrityError
@@ -25,6 +27,16 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.ai.pricing import HAIKU
 from app.ai.prompts.versions import PROMPT_VERSION, TOOLSET_VERSION
 from app.ai.transport import count_search_results
+from app.core.encryption import (
+    DataKey,
+    DecryptionFailed,
+    KeyProvider,
+    Place,
+    new_data_key,
+    open_,
+    seal,
+    wrap_aad,
+)
 from app.db.errors import constraint_name, has_sqlstate
 from app.db.models import AiConversation, AiFeedback, AiMessage, AiTurn
 from app.policy import Actor
@@ -67,6 +79,110 @@ CURRENT_PINS = Pins(
     prompt_version=PROMPT_VERSION,
     toolset_version=TOOLSET_VERSION,
 )
+
+CONVERSATIONS_TABLE = "ai_conversations"
+
+
+@dataclass(frozen=True)
+class ConversationCipher:
+    """A conversation's data key, unwrapped once, with the sandbox it seals for. It seals and
+    opens every encrypted value in the conversation's messages, turns, and feedback, each bound to
+    its table, column, and row (ADR 0015). Its repr shows no key."""
+
+    tenant_id: UUID
+    conversation_id: UUID
+    data_key: DataKey = field(repr=False)
+
+    def require_conversation(self, conversation_id: UUID) -> None:
+        """Refuse a conversation this key was not unwrapped for, before anything is sealed."""
+        if conversation_id != self.conversation_id:
+            raise ValueError("this cipher belongs to another conversation")
+
+    def seal_text(self, text: str, table: str, column: str, row_id: UUID) -> bytes:
+        place = Place(table, column, self.tenant_id, row_id)
+        return seal(self.data_key, text.encode(), place=place)
+
+    def open_text(self, ciphertext: bytes, table: str, column: str, row_id: UUID) -> str:
+        place = Place(table, column, self.tenant_id, row_id)
+        return open_(self.data_key, ciphertext, place=place).decode()
+
+    def seal_tool_calls(
+        self, turn_id: UUID, calls: Sequence[dict[str, Any]]
+    ) -> list[dict[str, Any]]:
+        """The trace with each `inputSummary` sealed and base64 encoded. Everything else stays
+        readable. The entry's position is part of its place, so summaries can't be swapped between
+        calls and still open."""
+        out = []
+        for index, call in enumerate(calls):
+            if "inputSummary" in call:
+                place = _summary_place(turn_id, index)
+                sealed = self.seal_text(call["inputSummary"], *place)
+                call = {**call, "inputSummary": base64.b64encode(sealed).decode()}
+            out.append(call)
+        return out
+
+    def open_tool_calls(
+        self, turn_id: UUID, calls: Sequence[dict[str, Any]]
+    ) -> list[dict[str, Any]]:
+        out = []
+        for index, call in enumerate(calls):
+            if "inputSummary" in call:
+                try:
+                    sealed = base64.b64decode(call["inputSummary"], validate=True)
+                except (ValueError, TypeError):  # binascii.Error is a ValueError
+                    sealed = None
+                if sealed is None:  # raised here, not in the handler, so nothing is chained
+                    raise DecryptionFailed
+                call = {
+                    **call,
+                    "inputSummary": self.open_text(sealed, *_summary_place(turn_id, index)),
+                }
+            out.append(call)
+        return out
+
+
+def _summary_place(turn_id: UUID, index: int) -> tuple[str, str, UUID]:
+    # Every entry of a turn shares its row, so the entry's position goes in the column part.
+    return "ai_turns", f"tool_calls.inputSummary:{index}", turn_id
+
+
+def conversation_cipher(keys: KeyProvider, conversation: AiConversation) -> ConversationCipher:
+    """Unwrap the conversation's data key. Raises `DecryptionFailed` if it does not open."""
+    aad = wrap_aad(conversation.tenant_id, CONVERSATIONS_TABLE, conversation.id)
+    data_key = keys.unwrap(conversation.key_id, conversation.wrapped_key, aad=aad)
+    return ConversationCipher(conversation.tenant_id, conversation.id, DataKey(data_key))
+
+
+@dataclass(frozen=True)
+class TurnText:
+    """A turn's encrypted text, opened: what the person asked, the answer (empty until the turn
+    ends), and the trace with its input summaries in the clear."""
+
+    question: str
+    answer: str
+    tool_calls: list[dict[str, Any]]
+
+
+def open_turn(cipher: ConversationCipher, turn: AiTurn) -> TurnText:
+    answer = turn.answer_ciphertext
+    return TurnText(
+        question=cipher.open_text(
+            turn.question_ciphertext, "ai_turns", "question_ciphertext", turn.id
+        ),
+        answer=""
+        if answer is None
+        else cipher.open_text(answer, "ai_turns", "answer_ciphertext", turn.id),
+        tool_calls=cipher.open_tool_calls(turn.id, turn.tool_calls),
+    )
+
+
+def open_reason(cipher: ConversationCipher, feedback: AiFeedback) -> str | None:
+    if feedback.reason_ciphertext is None:
+        return None
+    return cipher.open_text(
+        feedback.reason_ciphertext, "ai_feedback", "reason_ciphertext", feedback.id
+    )
+
 
 FEEDBACK_REASON_MAX_CHARACTERS = 500
 
@@ -160,8 +276,19 @@ class TurnOutcome:
     injection_suspected: bool = False
 
 
-async def create_conversation(db: AsyncSession, actor: Actor, pins: Pins) -> AiConversation:
+async def create_conversation(
+    db: AsyncSession, actor: Actor, pins: Pins, keys: KeyProvider
+) -> AiConversation:
+    """Add a conversation with a new data key of its own, wrapped for its sandbox and its ID. The
+    ID is made here, before anything is sealed, because the wrapped key is bound to it."""
+    conversation_id = uuid4()
+    key_id, wrapped_key = keys.wrap(
+        new_data_key(), aad=wrap_aad(actor.tenant_id, CONVERSATIONS_TABLE, conversation_id)
+    )
     conversation = AiConversation(
+        id=conversation_id,
+        key_id=key_id,
+        wrapped_key=wrapped_key,
         tenant_id=actor.tenant_id,
         person_id=actor.person_id,
         model=pins.model,
@@ -189,18 +316,29 @@ async def current_conversation(db: AsyncSession, actor: Actor) -> AiConversation
     ).first()
 
 
-async def model_history(db: AsyncSession, conversation_id: UUID) -> list[dict[str, Any]]:
+async def model_history(
+    db: AsyncSession, conversation_id: UUID, cipher: ConversationCipher
+) -> list[dict[str, Any]]:
     """The messages as the Messages API takes them, in order and exactly as stored.
 
-    Postgres keeps `content` as the text it was given (a `json` column), and SQLAlchemy parses it
-    without reordering, so a thinking block comes back with the bytes its signature covers.
+    Each message was sealed as the JSON text it was given, and `json.loads` keeps its key order,
+    so a thinking block comes back with the bytes its signature covers. A ciphertext that was
+    moved to another row raises `DecryptionFailed`.
     """
     rows = await db.execute(
-        select(AiMessage.role, AiMessage.content)
+        select(AiMessage.id, AiMessage.role, AiMessage.content_ciphertext)
         .where(AiMessage.conversation_id == conversation_id)
         .order_by(AiMessage.position)
     )
-    return [{"role": role, "content": content} for role, content in rows.all()]
+    return [
+        {
+            "role": role,
+            "content": json.loads(
+                cipher.open_text(ciphertext, "ai_messages", "content_ciphertext", message_id)
+            ),
+        }
+        for message_id, role, ciphertext in rows.all()
+    ]
 
 
 def _tool_use_ids(message: StoredMessage) -> set[str]:
@@ -277,12 +415,14 @@ async def append_messages(
     conversation_id: UUID,
     turn_id: UUID,
     messages: Sequence[StoredMessage],
+    cipher: ConversationCipher,
 ) -> None:
     """Add messages after the conversation's last one, with their search sources, in one INSERT.
 
     The tenant and person come from the conversation row, which row-level security shows only to
     its owner. Only one turn at a time runs in a conversation, so positions can't race.
     """
+    cipher.require_conversation(conversation_id)
     # One source per search_result block, or a citation's index would point at the wrong passage.
     for message in messages:
         found = count_search_results(message.content)
@@ -338,32 +478,43 @@ async def append_messages(
         )
     ).scalar_one()
     first_position = 0 if last_position is None else last_position + 1
-    await db.execute(
-        insert(AiMessage),
-        [
+    # The IDs are made here, because each message is sealed for its own row. The default
+    # serialization (ASCII only) is what the JSON column used to store.
+    rows = []
+    for offset, message in enumerate(messages):
+        message_id = uuid4()
+        rows.append(
             {
+                "id": message_id,
                 "tenant_id": conversation.tenant_id,
                 "person_id": conversation.person_id,
                 "conversation_id": conversation_id,
                 "turn_id": turn_id,
                 "position": first_position + offset,
                 "role": message.role,
-                "content": message.content,
+                "content_ciphertext": cipher.seal_text(
+                    json.dumps(message.content), "ai_messages", "content_ciphertext", message_id
+                ),
                 "sources": [entry.to_json() for entry in message.sources] or None,
                 "reported_outcomes": list(message.reported_outcomes) or None,
             }
-            for offset, message in enumerate(messages)
-        ],
-    )
+        )
+    await db.execute(insert(AiMessage), rows)
 
 
-async def start_turn(db: AsyncSession, conversation: AiConversation, question: str) -> AiTurn:
-    """Add a `running` turn. Raises TurnRunning if the conversation already has one."""
+async def start_turn(
+    db: AsyncSession, conversation: AiConversation, question: str, cipher: ConversationCipher
+) -> AiTurn:
+    """Add a `running` turn, with its question sealed. Raises TurnRunning if the conversation
+    already has one."""
+    cipher.require_conversation(conversation.id)
+    turn_id = uuid4()
     turn = AiTurn(
+        id=turn_id,
         tenant_id=conversation.tenant_id,
         person_id=conversation.person_id,
         conversation_id=conversation.id,
-        question=question,
+        question_ciphertext=cipher.seal_text(question, "ai_turns", "question_ciphertext", turn_id),
         status="running",
     )
     try:
@@ -378,7 +529,9 @@ async def start_turn(db: AsyncSession, conversation: AiConversation, question: s
     return turn
 
 
-async def finish_turn(db: AsyncSession, turn_id: UUID, outcome: TurnOutcome) -> None:
+async def finish_turn(
+    db: AsyncSession, turn_id: UUID, outcome: TurnOutcome, cipher: ConversationCipher
+) -> None:
     """Record how the turn ended.
 
     A turn changes only while it is `running`, through this function and `recover_abandoned`; once
@@ -390,12 +543,21 @@ async def finish_turn(db: AsyncSession, turn_id: UUID, outcome: TurnOutcome) -> 
     if str(outcome.status) == "running":
         raise ValueError("a turn is finished with an ending status, not running")
     # Every field of the outcome is a column of the same name, so a new field can't be dropped.
-    values: dict[str, Any] = {**asdict(outcome), "ended_at": func.clock_timestamp()}
+    # The answer and the input summaries are the exceptions: they are sealed on the way in.
+    fields = asdict(outcome)
+    answer = fields.pop("answer_text")
+    values: dict[str, Any] = {
+        **fields,
+        "answer_ciphertext": cipher.seal_text(answer, "ai_turns", "answer_ciphertext", turn_id),
+        "tool_calls": cipher.seal_tool_calls(turn_id, fields["tool_calls"]),
+        "ended_at": func.clock_timestamp(),
+    }
+    # The turn must be in the cipher's conversation: a mismatch finds no row and writes nothing.
     try:
         async with db.begin_nested():
             result = await db.execute(
                 update(AiTurn)
-                .where(AiTurn.id == turn_id)
+                .where(AiTurn.id == turn_id, AiTurn.conversation_id == cipher.conversation_id)
                 .values(**values)
                 .execution_options(synchronize_session=False)
             )
@@ -543,7 +705,13 @@ async def turn_feedback(db: AsyncSession, conversation_id: UUID) -> dict[UUID, A
 
 
 async def add_feedback(
-    db: AsyncSession, actor: Actor, turn_id: UUID, *, helpful: bool, reason: str | None
+    db: AsyncSession,
+    actor: Actor,
+    turn_id: UUID,
+    *,
+    helpful: bool,
+    reason: str | None,
+    keys: KeyProvider,
 ) -> None:
     """Record the actor's thumbs up or down on one of their completed turns.
 
@@ -559,16 +727,27 @@ async def add_feedback(
     if reason is not None and len(reason) > FEEDBACK_REASON_MAX_CHARACTERS:
         # The request body is checked against the same limit, so this is a bug if it is reached.
         raise ValueError("a reason is at most 500 characters")
+    # Feedback is given once and never replaced, so the reason is sealed once, for its own row.
+    feedback_id = uuid4()
+    reason_ciphertext = None
+    if reason is not None:
+        conversation = await db.get(AiConversation, turn.conversation_id)
+        if conversation is None:
+            raise TurnNotFound
+        reason_ciphertext = conversation_cipher(keys, conversation).seal_text(
+            reason, "ai_feedback", "reason_ciphertext", feedback_id
+        )
     try:
         # A savepoint, so that the refused insert doesn't abort the caller's transaction.
         async with db.begin_nested():
             db.add(
                 AiFeedback(
+                    id=feedback_id,
                     tenant_id=actor.tenant_id,
                     person_id=actor.person_id,
                     turn_id=turn.id,
                     helpful=helpful,
-                    reason=reason,
+                    reason_ciphertext=reason_ciphertext,
                 )
             )
             await db.flush()

@@ -17,7 +17,7 @@ from sqlalchemy import func, select, text, update
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 from app.ai.admission import HISTORY_REFUSE_TOKENS
-from app.ai.conversations import Pins, create_conversation, start_turn
+from app.ai.conversations import Pins, create_conversation
 from app.ai.fixed_texts import (
     BUDGET_DAILY_TEXT,
     BUDGET_SANDBOX_TEXT,
@@ -31,7 +31,16 @@ from app.db.models import AiConversation, AiMessage, AiSpend, AiTurn, HandbookVe
 from app.db.tenancy import TenantContext, tenant_session
 from app.modules.handbook.search import pinned_version_id
 from app.modules.identity.actor import load_actor
-from tests.integration.conftest import Browser, OpenBrowser, OpenBrowserWith
+from tests.integration.conftest import (
+    TEST_KEYS,
+    Browser,
+    OpenBrowser,
+    OpenBrowserWith,
+    OpenTurn,
+    begin_turn,
+    message_row,
+    open_turns,
+)
 from tests.integration.test_assistant_routes import add_spend, new_conversation, sign_in
 
 pytestmark = [
@@ -75,9 +84,10 @@ def parse_sse(body: str) -> tuple[list[tuple[str, dict[str, Any]]], list[str]]:
     return events, comments
 
 
-async def turn_rows(engine: AsyncEngine, tenant_id: UUID, person_id: UUID) -> list[AiTurn]:
+async def turn_rows(engine: AsyncEngine, tenant_id: UUID, person_id: UUID) -> list[OpenTurn]:
     async with tenant_session(engine, TenantContext(tenant_id, person_id)) as db:
-        return list((await db.scalars(select(AiTurn).order_by(AiTurn.started_at))).all())
+        rows = list((await db.scalars(select(AiTurn).order_by(AiTurn.started_at))).all())
+        return await open_turns(db, rows)
 
 
 # --- The checks, before the stream opens ----------------------------------------------------
@@ -112,6 +122,7 @@ async def test_a_conversation_pinned_to_an_old_prompt_is_409_conversation_outdat
             db,
             actor,
             Pins("claude-opus-5-5", "claude-haiku-5-5", "low", "2020-01.0", TOOLSET_VERSION),
+            TEST_KEYS,
         )
 
     response = ask(browser, str(old.id), question)
@@ -143,13 +154,11 @@ async def test_a_history_past_80000_tokens_is_refused_as_history_too_long(
     async with tenant_session(app_engine, TenantContext(tenant_id, person_id)) as db:
         conversation = await db.get(AiConversation, UUID(conversation_id))
         assert conversation is not None
-        earlier = await start_turn(db, conversation, "earlier")
+        earlier = await begin_turn(db, conversation, "earlier")
         db.add(
-            AiMessage(
-                tenant_id=tenant_id,
-                person_id=person_id,
-                conversation_id=conversation.id,
-                turn_id=earlier.id,
+            message_row(
+                conversation,
+                earlier.id,
                 position=0,
                 role="user",
                 content=[{"type": "text", "text": "y" * (HISTORY_REFUSE_TOKENS * 2 + 100)}],
@@ -244,7 +253,7 @@ async def test_a_turn_already_running_is_409_turn_running(
     async with tenant_session(app_engine, TenantContext(tenant_id, person_id)) as db:
         conversation = await db.get(AiConversation, UUID(conversation_id))
         assert conversation is not None
-        await start_turn(db, conversation, "still going")
+        await begin_turn(db, conversation, "still going")
 
     response = ask(browser, conversation_id)
 
@@ -262,7 +271,7 @@ async def test_a_running_turn_older_than_ten_minutes_is_abandoned_and_does_not_b
     async with tenant_session(app_engine, TenantContext(tenant_id, person_id)) as db:
         conversation = await db.get(AiConversation, UUID(conversation_id))
         assert conversation is not None
-        old = await start_turn(db, conversation, "died")
+        old = await begin_turn(db, conversation, "died")
     async with owner_engine.begin() as connection:
         await connection.execute(
             text("UPDATE ai_turns SET started_at = now() - interval '11 minutes' WHERE id = :id"),
@@ -287,7 +296,7 @@ async def test_a_sandbox_without_room_is_429_budget_sandbox_and_starts_no_turn(
     async with tenant_session(app_engine, TenantContext(tenant_id, person_id)) as db:
         conversation = await db.get(AiConversation, UUID(conversation_id))
         assert conversation is not None
-        earlier = await start_turn(db, conversation, "earlier")
+        earlier = await begin_turn(db, conversation, "earlier")
         await db.execute(
             update(AiTurn)
             .where(AiTurn.id == earlier.id)
@@ -328,7 +337,7 @@ async def test_the_checks_run_in_the_specs_order(browser: Browser, app_engine: A
     async with tenant_session(app_engine, TenantContext(tenant_id, person_id)) as db:
         conversation = await db.get(AiConversation, UUID(conversation_id))
         assert conversation is not None
-        running = await start_turn(db, conversation, "running")
+        running = await begin_turn(db, conversation, "running")
     await add_spend(app_engine, tenant_id, person_id, running.id, "0.95")
 
     # A turn is running AND the budget is short AND the text is a number: the question is judged
@@ -664,3 +673,56 @@ async def test_a_cited_answer_and_a_decline_that_never_searched_are_not_not_foun
     assert declined["answerText"] == DECLINE_TEXT
     assert [cited["notFound"], declined["notFound"]] == [False, False]
     assert body["hrContacts"] == []
+
+
+# --- A ciphertext that does not open ----------------------------------------------------------
+
+
+async def test_a_ciphertext_moved_between_messages_is_a_500_with_no_turn_row_written(
+    open_browser: OpenBrowser, app_engine: AsyncEngine, owner_engine: AsyncEngine
+) -> None:
+    browser = open_browser(raise_server_exceptions=False)
+    tenant_id, person_id = sign_in(browser)
+    conversation_id = new_conversation(browser)["id"]
+    async with tenant_session(app_engine, TenantContext(tenant_id, person_id)) as db:
+        conversation = await db.get(AiConversation, UUID(conversation_id))
+        assert conversation is not None
+        earlier = await begin_turn(db, conversation, "earlier")
+        for position, role in enumerate(("user", "assistant")):
+            db.add(
+                message_row(
+                    conversation,
+                    earlier.id,
+                    position=position,
+                    role=role,
+                    content=[{"type": "text", "text": f"message {position}"}],
+                )
+            )
+        await db.flush()
+        await db.execute(
+            update(AiTurn)
+            .where(AiTurn.id == earlier.id)
+            .values(status="stopped", ended_at=text("now()"))
+        )
+    async with owner_engine.begin() as connection:
+        await connection.execute(
+            text(
+                "UPDATE ai_messages SET content_ciphertext = (SELECT content_ciphertext"
+                " FROM ai_messages WHERE position = 0 AND conversation_id = :c)"
+                " WHERE position = 1 AND conversation_id = :c"
+            ),
+            {"c": UUID(conversation_id)},
+        )
+
+    response = ask(browser, conversation_id)
+    reading = browser.client.get(f"{BASE}/conversations/current")
+
+    for refused in (response, reading):
+        assert refused.status_code == 500
+        assert refused.headers["content-type"] == "application/problem+json"
+        assert refused.json()["detail"] == "Something went wrong."
+        # Only the generic problem surfaces: no word of ciphertexts, keys, or the text.
+        assert "decrypt" not in refused.text.lower()
+        assert "message 0" not in refused.text
+    # Admission failed before the turn's row was added: only the earlier turn is there.
+    assert [t.question for t in await turn_rows(app_engine, tenant_id, person_id)] == ["earlier"]

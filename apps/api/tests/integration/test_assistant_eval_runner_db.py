@@ -42,6 +42,7 @@ from app.core.config import Settings
 from app.db.models import AiSpend
 from app.db.tenancy import TenantContext, tenant_session
 from tests.assistant_eval import EVAL_DIR, load_handgrades, load_judge, load_runner
+from tests.integration.conftest import TEST_KEYS
 from tests.integration.test_budget import daily_ids, delete_daily_rows_except
 
 pytestmark = pytest.mark.integration
@@ -170,6 +171,7 @@ def make_env(
         "app_engine": app_engine,
         "owner_engine": owner_engine,
         "settings": database_settings,
+        "keys": TEST_KEYS,
         "paths": run.EvalPaths(
             redteam=data / "redteam.yaml",
             qa=data / "qa.yaml",
@@ -1553,6 +1555,7 @@ async def test_the_consoles_spend_limit_shows_in_the_trace_from_the_turns_error_
         effort="low",
         app_engine=app_engine,
         owner_engine=owner_engine,
+        keys=TEST_KEYS,
     )
 
     assert [t.turn_error_code for t in traces] == ["spend-limit"]
@@ -1571,6 +1574,7 @@ async def test_a_working_note_taken_back_by_the_turn_is_not_in_the_traces_answer
         effort="low",
         app_engine=app_engine,
         owner_engine=owner_engine,
+        keys=TEST_KEYS,
     )
 
     (trace,) = traces
@@ -1591,6 +1595,7 @@ async def test_the_ledgers_daily_refusal_is_not_the_consoles_spend_limit(
         effort="low",
         app_engine=app_engine,
         owner_engine=owner_engine,
+        keys=TEST_KEYS,
         caps=Caps(Decimal(1000), Decimal("0.0001")),
     )
 
@@ -2228,6 +2233,7 @@ async def test_a_slow_cleanup_leaves_the_tenant_and_the_ledger_rows_for_the_next
             effort="low",
             app_engine=app_engine,
             owner_engine=owner_engine,
+            keys=TEST_KEYS,
         )
 
         # Nothing was removed, and the warning says so.

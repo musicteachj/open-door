@@ -5,7 +5,9 @@ now, which is how CI keeps the schema, and so the generated client, in step with
 """
 
 import argparse
+import base64
 import json
+import secrets
 import sys
 from pathlib import Path
 
@@ -30,6 +32,10 @@ def render_schema() -> str:
         migration_database_url=None,
         cleanup_database_url=None,
         app_origin="http://localhost:5173",
+        # The app refuses to start without a keyring. This one is random and thrown away: the schema
+        # never encrypts anything.
+        encryption_keyring_file=None,
+        encryption_keyring=f"schema:{base64.b64encode(secrets.token_bytes(32)).decode()}",
     )
     return json.dumps(create_app(settings).openapi(), indent=2) + "\n"
 
