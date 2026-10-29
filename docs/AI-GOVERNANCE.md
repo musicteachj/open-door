@@ -66,6 +66,35 @@ including by not materially influencing the outcome of decision making". Open Do
   of Article 6(3)(a); the decision on a request stays with the manager, who is never told what to
   decide.
 
+**Confidential cases (Phase 6).** A case is the closest the product comes to point 4(b): what HR
+does with a complaint can affect the terms of someone's work. So the assessment covers it on its
+own:
+
+- **The AI decides nothing about a case.** The person opens it with their own words; the model
+  can't open, read, or rank one. HR changes a case's status, and only after reading the person's
+  own words (the service refuses a status change until that HR person has read them). Every read
+  is audited and shown in the case's timeline.
+- **The summary is a preparatory task** in the sense of Article 6(3)(d): it prepares HR's own
+  assessment and doesn't make it. It reports what the person wrote, every sentence attributed to
+  them, with no recommendation, no judgment of credibility or seriousness, and no quotation that
+  isn't in their words; a program check refuses any summary that breaks those rules, and HR then
+  reads the words alone. It is labeled as the AI's, and the person's account sits beside it. So
+  it doesn't "materially influence the outcome of decision making": HR decides from the person's
+  words.
+- **The summary isn't profiling.** Profiling (Article 3(52), by reference to the GDPR's Article
+  4(4)) is processing "to evaluate certain personal aspects relating to a natural person", such as
+  their "performance at work" or "reliability". The summary evaluates no one: it
+  repeats one person's account of one matter in their terms, keeps no record across cases or
+  people, and is refused if it judges anyone.
+- **The person a case names is covered too.** A case often names a coworker or a manager, who
+  never sees it. The summary says only what the writer said about them, as the writer's account;
+  it never weighs whether that's true or what should happen to them. Any decision about that
+  person is HR's, made outside the product.
+- **The queue and the safety check rank no one.** `list_cases` gives HR the queue in a fixed
+  order (new cases by their reply-by date, then the rest oldest first) and never orders by
+  seriousness. The safety check's category only decides whether the panel offers a case; a wrong
+  "sensitive" offers a form the person can ignore.
+
 **Documenting it.** Article 6(4) requires a provider who considers an Annex III system not
 high-risk to "document its assessment before that system is placed on the market or put into
 service", and registers it under Article 49(2). This section is that documentation for the demo.
@@ -76,13 +105,21 @@ systems from 2 August 2026 to 2 December 2027. It keeps the duty to document an 
 assessment, and simplifies (does not remove) the Article 49(2) registration.
 
 **What would change the answer:** any feature that ranks, scores, or monitors employees, screens
-applicants, or suggests a decision about a person's employment. Each needs this assessment redone,
+applicants, or suggests a decision about a person's employment, including a case summary that
+recommends an outcome or rates a case, or HR reading case text through the assistant. Each needs this assessment redone,
 and an ADR, before it is built.
 
 > Source: Regulation (EU) 2024/1689, Article 6(3) and (4) and Annex III, point 4, read from
-> EUR-Lex (CELEX 32024R1689) on 2026-10-17. Regulation (EU) 2026/1744 (the Digital Omnibus on AI,
-> 8 July 2026, Official Journal L of 24 July 2026), Article 1 amending Article 113, point (c), and
-> recital 22, read from EUR-Lex (CELEX 32026R1744) on 2026-10-17.
+> EUR-Lex (CELEX 32024R1689) on 2026-10-17, and read again on 2026-10-29 in the act as published
+> (CELEX 32024R1689) and in its consolidated text of 27 July 2026 (CELEX 02024R1689-20260727),
+> where all three read unchanged; Article 3(52), Article 49(2), and Article 113, point (c), in the
+> consolidated text. Regulation (EU) 2026/1744 (the Digital Omnibus on AI, 8 July 2026, Official
+> Journal L of 24 July 2026), Article 1 amending Article 113, point (c), and recital 22, read from
+> EUR-Lex (CELEX 32026R1744) on 2026-10-17 and again on 2026-10-29. Regulation (EU) 2016/679 (the
+> GDPR), Article 4(4), read on 2026-10-29. On 2026-10-29 EUR-Lex's website refused automated
+> access, so these texts were read from the EU Publications Office's repository
+> (publications.europa.eu, by CELEX number), which holds the Official Journal documents EUR-Lex
+> shows.
 
 ## The models, and how they are pinned
 

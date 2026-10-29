@@ -1344,12 +1344,13 @@ Stage 4's paid calls came to about $13.53, with a few cents of Voyage.
   couldn't find anything about..." because the handbook came before "couldn't find" (qa-51,
   qa-54). The one remaining miss is the model's: asked to "Book 30 days off" (ac-27), one trial
   in three asked for the dates without giving the balance as the reason it can't book them.
-- **The AI Act re-read for `AI-GOVERNANCE.md` (Task 29) is still open.** EUR-Lex returns an empty
-  page to the session's fetch tool (the HTML, the ELI page, and the PDF), as it did while
-  planning. The owner chose to save a copy for the session to read; until then, the governance
-  document's Article 6(3) and Annex III section is unchanged, and its other sections (the models,
-  the guard's measured results, confidential cases, what Anthropic receives) are updated. The
-  re-read follows in its own docs PR.
+- **The AI Act re-read for `AI-GOVERNANCE.md` (Task 29)** came from the EU Publications Office's
+  repository (publications.europa.eu, by CELEX number), because EUR-Lex's website refuses automated
+  access (its fetch, its PDF, and plain `curl` all get an empty challenge page). The repository
+  holds the same Official Journal documents. Article 6(3) and (4) and Annex III point 4 read the
+  same in the act as published and in its consolidated text of 27 July 2026, after the Digital
+  Omnibus; the assessment now covers cases, the summary as a preparatory task (Article 6(3)(d)),
+  why the summary isn't profiling, the person a case names, and HR reading the words first.
 - **Tests after code:** the escalation runner's tests (batch A), the case-summary set's tests, and
   most of the review fixes' grader tests were written alongside or after the code; mutation proofs
   stand in for watching them fail first.

@@ -298,6 +298,11 @@ version (`0.x.y` while the app is being built, `1.0.0` when it is complete).
 
 ### Changed
 
+- **The AI governance assessment covers confidential cases** (Phase 6, stage 4). The AI Act's
+  Article 6(3) and Annex III point 4 were read again in the act and its consolidated text after
+  the Digital Omnibus (both unchanged), and `docs/AI-GOVERNANCE.md` now explains why the case
+  summary is a preparatory task and not profiling, how the person a case names is covered, and
+  the safety check's measured results.
 - **The recorded evals cover the assistant's case work** (Phase 6, stage 4). A fresh full run of
   2026-10-29 ($10.93, 166 items, 3 trials) is committed with the escalation set's and the
   case-summary set's recordings. Against the run of 2026-10-25: red team 100% (from 97.5%),
