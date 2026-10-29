@@ -62,6 +62,7 @@ from pathlib import Path
 from typing import Any, Literal, NamedTuple, Self, get_args
 
 from app.ai.case_summary import (
+    Summarizer,
     SummaryAnswer,
     SummaryRefused,
     SummaryRequest,
@@ -272,14 +273,21 @@ def decode_summary_answer(data: Mapping[str, Any]) -> SummaryAnswer:
 
 # The errors a stream or the guard can raise that the loop handles by type. Anything else is a bug
 # and is never recorded.
-RECORDED_ERRORS = (ModelUnavailable, SpendLimitReached, InvalidToolInput, GuardUnavailable)
+SUMMARY_ERRORS = (SummaryUnavailable, SummaryRefused)
+RECORDED_ERRORS = (
+    ModelUnavailable,
+    SpendLimitReached,
+    InvalidToolInput,
+    GuardUnavailable,
+    *SUMMARY_ERRORS,
+)
 
 
 def is_transient(error: Exception) -> bool:
     """A failure that says nothing about how the model behaves, so it is never recorded: it would
     replay an outage forever. `InvalidToolInput` and a guard failure that carries usage (the model
     did answer, unusably) are model behavior."""
-    if isinstance(error, GuardUnavailable):
+    if isinstance(error, GuardUnavailable | SummaryUnavailable | SummaryRefused):
         return error.usage is None
     return isinstance(error, ModelUnavailable | SpendLimitReached)
 
@@ -639,7 +647,68 @@ class _MissLog(_PerItem):
         )
 
 
-class RecordingTransport(_MissLog):
+class _Recorder(_MissLog):
+    """What a recorder keeps beside the real thing it wraps: the store, the clock, the calls it did
+    not record (`skipped`), and the time of each live call (`timings`)."""
+
+    def __init__(
+        self,
+        inner: Any,
+        store: FixtureStore,
+        *,
+        clock: Callable[[], float] = time.monotonic,
+    ) -> None:
+        super().__init__()
+        self.inner = inner
+        self.store = store
+        self._clock = clock
+        self.skipped: list[Skipped] = []
+        # (kind, fingerprint, occurrence) -> milliseconds, for the live calls of the current item.
+        self.timings: dict[tuple[Kind, str, int], int] = {}
+
+    def _item_changed(self) -> None:
+        self.skipped = []
+        self.misses = []
+        self.timings = {}
+
+    def _timed(self, kind: Kind, key: str, occurrence: int, started: float) -> None:
+        self.timings[(kind, key, occurrence)] = round((self._clock() - started) * 1000)
+
+    def _own(self, key: str, occurrence: int, kind: Kind) -> Record | None:
+        """The recording already in the store for this call, if there is one."""
+        record = self.store.get(key, occurrence)
+        return record if record is not None and record.kind == kind else None
+
+    def _skip(self, key: str, kind: Kind, occurrence: int, reason: str) -> None:
+        self.skipped.append(Skipped(self.current_item, kind, key, occurrence, reason))
+
+    def _put(self, record: Record) -> None:
+        self.store.put(record)
+
+    def _record(
+        self,
+        key: str,
+        kind: Kind,
+        occurrence: int,
+        *,
+        events: tuple[dict[str, Any], ...] | None = None,
+        result: dict[str, Any] | None = None,
+        error: dict[str, Any] | None = None,
+    ) -> None:
+        self._put(
+            Record(
+                fingerprint=key,
+                kind=kind,
+                item=self.current_item,
+                occurrence=occurrence,
+                events=events,
+                result=result,
+                error=error,
+            )
+        )
+
+
+class RecordingTransport(_Recorder):
     """Wraps a real transport for a live eval run: everything passes through unchanged, and each
     request is recorded with its response, or with the typed error that ended it. A request that
     is already in the store, whether this run recorded it (a later item asking the same) or it was
@@ -664,24 +733,14 @@ class RecordingTransport(_MissLog):
         *,
         clock: Callable[[], float] = time.monotonic,
     ) -> None:
-        super().__init__()
-        self.inner = inner
-        self.store = store
-        self._clock = clock
-        self.skipped: list[Skipped] = []
-        # (kind, fingerprint, occurrence) -> milliseconds, for the live calls of the current item.
-        self.timings: dict[tuple[Kind, str, int], int] = {}
+        super().__init__(inner, store, clock=clock)
+        self.inner: Transport = inner
         # Streams the consumer closed early with no error, awaiting the turn's outcome.
         self._pending: list[Record] = []
 
     def _item_changed(self) -> None:
-        self.skipped = []
+        super()._item_changed()
         self._pending = []
-        self.misses = []
-        self.timings = {}
-
-    def _timed(self, kind: Kind, key: str, occurrence: int, started: float) -> None:
-        self.timings[(kind, key, occurrence)] = round((self._clock() - started) * 1000)
 
     @property
     def has_pending_close(self) -> bool:
@@ -783,38 +842,49 @@ class RecordingTransport(_MissLog):
         self._record(key, "guard", occurrence, result=encode_guard_result(result))
         return result
 
-    def _own(self, key: str, occurrence: int, kind: Kind) -> Record | None:
-        """The recording already in the store for this call, if there is one."""
-        record = self.store.get(key, occurrence)
-        return record if record is not None and record.kind == kind else None
 
-    def _skip(self, key: str, kind: Kind, occurrence: int, reason: str) -> None:
-        self.skipped.append(Skipped(self.current_item, kind, key, occurrence, reason))
+class RecordingSummarizer(_Recorder):
+    """Wraps the real summarizer for a live eval run, like `RecordingTransport`: a request already
+    in the store is answered from it, a new one is called and recorded with its answer or the typed
+    summary error that ended it. A failure that reports no usage, a timeout, or an error the
+    recorder does not know says nothing about the model and is listed in `skipped`, not recorded."""
 
-    def _put(self, record: Record) -> None:
-        self.store.put(record)
-
-    def _record(
+    def __init__(
         self,
-        key: str,
-        kind: Kind,
-        occurrence: int,
+        inner: Summarizer,
+        store: FixtureStore,
         *,
-        events: tuple[dict[str, Any], ...] | None = None,
-        result: dict[str, Any] | None = None,
-        error: dict[str, Any] | None = None,
+        clock: Callable[[], float] = time.monotonic,
     ) -> None:
-        self._put(
-            Record(
-                fingerprint=key,
-                kind=kind,
-                item=self.current_item,
-                occurrence=occurrence,
-                events=events,
-                result=result,
-                error=error,
-            )
-        )
+        super().__init__(inner, store, clock=clock)
+        self.inner: Summarizer = inner
+        # How many requests went to the real summarizer (not answered from a recording).
+        self.live_calls = 0
+
+    async def summarize(self, request: SummaryRequest) -> SummaryAnswer:
+        key = summary_fingerprint(request)
+        occurrence = self._next_occurrence(key)
+        recorded = self._own(key, occurrence, "summary")
+        if recorded is not None:
+            return self._serve_summary(recorded, key)
+        started = self._clock()
+        self.live_calls += 1
+        try:
+            answer = await self.inner.summarize(request)
+        except SUMMARY_ERRORS as error:
+            if error.usage is None:
+                reason = f"transient error ({type(error).__name__}), not recorded"
+                self._skip(key, "summary", occurrence, reason)
+            else:
+                self._record(key, "summary", occurrence, error=encode_error(error))
+            raise
+        except BaseException as error:
+            reason = f"ended by {type(error).__name__}, not recorded"
+            self._skip(key, "summary", occurrence, reason)
+            raise
+        self._timed("summary", key, occurrence, started)
+        self._record(key, "summary", occurrence, result=encode_summary_answer(answer))
+        return answer
 
 
 # --- The replay -------------------------------------------------------------------------------

@@ -801,8 +801,10 @@ class Case(Base):
 
     The words are ciphertext under the case's own data key (`key_id`, `wrapped_key`). A trigger
     moves `status` one way and stamps `status_changed_at`. The API may add a case and change only
-    those two columns, HR alone and never on their own case. Rows are never deleted: they go with
-    their sandbox.
+    those two columns, HR alone and never on their own case, plus `screening`: HR's summary
+    retry writes it from `unscreened` to a real verdict, or raises `ordinary` or `sensitive` to
+    `crisis`, and nothing else moves (migration 0014). Rows are never deleted:
+    they go with their sandbox.
     """
 
     __tablename__ = "cases"
@@ -888,7 +890,7 @@ class CaseSummary(Base):
         CheckConstraint("status IN ('written', 'failed')", name="status"),
         CheckConstraint(
             "reason IS NULL OR reason IN ('transport', 'refusal', 'timeout', 'budget', 'checks',"
-            " 'crisis', 'unscreened')",
+            " 'crisis', 'unscreened', 'screening-conflict')",
             name="reason",
         ),
         # A written summary has its ciphertext and no reason; a failed one has a reason and none.

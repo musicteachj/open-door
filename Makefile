@@ -62,12 +62,17 @@ eval-retrieval: ## Score handbook search against the labeled questions (needs `m
 # it needs no key and no network. A prompt, tool, or retrieval change makes a request miss its
 # recording: re-record with `make eval-live SET=full YES=1` (a smoke run re-records only its own
 # items, and this replays the full set). One run at a time.
+# The escalation set (the guard alone, no database) and the case-summary set replay too; until a
+# set's recording is committed it says "not recorded yet" and passes.
 eval-offline: ## Replay the recorded assistant evals (needs `make db`); no network. See evals/README.md
 	cd $(API) && uv run python ../../evals/assistant/run.py --mode offline --set full --check
+	cd $(API) && uv run python ../../evals/assistant/run.py --mode offline --set escalation --check
+	cd $(API) && uv run python ../../evals/assistant/run.py --mode offline --set case-summary --check
 
+# SET=case-summary (3 trials of the case summarizer and its judge, about $1.80, cap $3).
 # PAID. Without YES=1 (exactly 1: YES=0 or YES=no still only prints) it prints the set, the item count, the estimated cost, and the cap, and calls
 # nothing. SET=smoke (about $0.65, cap $2), SET=full (about $14, cap $16), or SET=effort (the smoke
-# items at medium effort, about $1.50, cap $2; its recordings go to a git-ignored folder, and
+# items at medium effort, about $1.75, cap $2; its recordings go to a git-ignored folder, and
 # COMPARE=<a low-effort scoreboard> prints the two side by side). A run reuses the recordings it
 # already has and calls only requests that changed. FRESH=1 calls everything live again. PRUNE=1
 # (SET=full only) also drops the old recordings no item asked for, and implies FRESH=1: with
@@ -77,8 +82,9 @@ eval-offline: ## Replay the recorded assistant evals (needs `make db`); no netwo
 SET ?= smoke
 STAMP := $(shell date -u +%Y%m%dT%H%M%SZ)
 RUNS := ../../evals/assistant/runs
-eval-live: ## PAID: record the assistant evals. SET=smoke|full|effort, YES=1 to run, COMPARE=<scoreboard.json>
+eval-live: ## PAID: record the assistant evals. SET=smoke|full|effort|escalation|case-summary, YES=1 to run, COMPARE=<scoreboard.json>, HALF=tuning|held_out (escalation)
 	cd $(API) && uv run python ../../evals/assistant/run.py --mode live --set $(SET) \
+		$(if $(HALF),--half $(HALF)) \
 		$(if $(filter effort,$(SET)),--fixtures-dir ../../evals/assistant/fixtures-effort) \
 		$(if $(COMPARE),--compare $(abspath $(COMPARE))) \
 		--json $(RUNS)/$(STAMP)-$(SET).json --traces $(RUNS)/$(STAMP)-$(SET)-traces.json \

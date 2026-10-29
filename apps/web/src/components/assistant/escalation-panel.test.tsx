@@ -9,7 +9,7 @@ const announceMock = vi.hoisted(() => vi.fn<(text: string, politeness?: string) 
 vi.mock('@/lib/announce', () => ({ announce: announceMock, resetAnnouncer: () => {} }))
 
 const SENSITIVE_MESSAGE =
-  'A person on the HR team should help with this, and they handle it confidentially. Their contact details are below.'
+  "This sounds like something a person on the HR team should help with. You can open a confidential case below. Only the HR team can open it in Open Door, never your manager, and it's stored encrypted. HR replies within 2 business days. Their contact details are below."
 const UNAVAILABLE_MESSAGE =
   "I'm an AI assistant, and I can't answer right now. Please try again in a moment. If you or someone else is in danger, call 911, or call or text 988 to reach the 988 Suicide & Crisis Lifeline. For anything else that can't wait, the HR team can help directly. Their contact details are below."
 const CRISIS_MESSAGE = `I'm an AI assistant, and what you wrote sounds serious.

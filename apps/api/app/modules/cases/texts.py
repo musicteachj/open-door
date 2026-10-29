@@ -1,12 +1,37 @@
 """The case form's fixed texts and the service's refusals. A model never writes them.
 
-The form's bullets and the sent state are the spec's drafts ("The fixed texts"), worded with the
-owner in Stage 4 and tied to their hashes then. The crisis text that follows a crisis verdict is
-`app.ai.fixed_texts.CRISIS_TEXT`.
+The form's bullets and the sent state are the spec's drafts ("The fixed texts"), tied to their
+hashes in `tests/test_fixed_texts.py`, with an author and an approval date like the crisis text.
+The crisis text that follows a crisis verdict is `app.ai.fixed_texts.CRISIS_TEXT`.
 """
 
 from datetime import date
 from typing import Final
+
+# Fixed English names, so the text doesn't change with the server's locale.
+WEEKDAYS: Final = (
+    "Monday",
+    "Tuesday",
+    "Wednesday",
+    "Thursday",
+    "Friday",
+    "Saturday",
+    "Sunday",
+)
+MONTHS: Final = (
+    "January",
+    "February",
+    "March",
+    "April",
+    "May",
+    "June",
+    "July",
+    "August",
+    "September",
+    "October",
+    "November",
+    "December",
+)
 
 MAX_WORDS_CHARACTERS: Final = 4000
 MAX_WAITING_CASES: Final = 5
@@ -14,27 +39,48 @@ MAX_WAITING_CASES: Final = 5
 
 def reply_by_label(day: date) -> str:
     """ "Wednesday, October 28": the form's and the sent state's wording of the reply-by date."""
-    return f"{day:%A}, {day:%B} {day.day}"
+    return f"{WEEKDAYS[day.weekday()]}, {MONTHS[day.month - 1]} {day.day}"
 
 
-def form_texts(reply_by: date) -> tuple[str, ...]:
-    """The form's bullets, with the reply-by date filled in by the server."""
-    return (
+# The form's bullets, one per line, with the reply-by date left as a placeholder that the server
+# fills in. The hash covers this template, so a changed word fails the hash test. The owner approved
+# it on 2026-10-28. Changing a word means approving it again, then setting the date and the hash.
+FORM_TEXT_TEMPLATE: Final = "\n".join(
+    (
         "HR sees your name and the words below. Managers never see a case, including your own"
         " manager.",
         "Your case is stored encrypted.",
-        f"HR replies by {reply_by_label(reply_by)}, within 2 business days.",
+        "HR replies by {reply_by}, within 2 business days.",
         "Open Door's AI writes HR a short summary of what you send, written to be neutral, with no"
         " recommendation. Anthropic, the company that runs Open Door's AI, processes your words to"
         " write it. A person in HR reads your own words before deciding anything.",
         "If you or someone else is in danger, call 911. You can call or text 988 to reach the 988"
         " Suicide & Crisis Lifeline, or call the Employee Assistance Program at 1-800-555-0137.",
     )
+)
+FORM_TEXT_AUTHOR: Final = "James Littlefield (owner)"
+FORM_TEXT_APPROVED_ON: str | None = "2026-10-28"
+FORM_TEXT_SHA256: Final = "5184e1b01fe6c3ea23f0e315ef035b7810fbc514dfda55851635e33c614d3cb7"
+
+# The sent state: the reply-by date and the page ("My cases" or "Cases") are filled in. For a
+# crisis verdict the fixed crisis text follows it.
+SENT_STATE_TEMPLATE: Final = (
+    "Sent to HR. HR replies by {reply_by}. You can see its status in {where}."
+)
+SENT_STATE_AUTHOR: Final = "James Littlefield (owner)"
+SENT_STATE_APPROVED_ON: str | None = "2026-10-28"
+SENT_STATE_SHA256: Final = "53282b8a6cce4c8ec8b85fc4711542f16a3a71c233d7b4563e0b778df8171567"
+
+
+def form_texts(reply_by: date) -> tuple[str, ...]:
+    """The form's bullets, with the reply-by date filled in by the server."""
+    filled = FORM_TEXT_TEMPLATE.replace("{reply_by}", reply_by_label(reply_by))
+    return tuple(filled.split("\n"))
 
 
 def sent_state_text(reply_by: date, *, where: str = "My cases") -> str:
-    return (
-        f"Sent to HR. HR replies by {reply_by_label(reply_by)}. You can see its status in {where}."
+    return SENT_STATE_TEMPLATE.replace("{reply_by}", reply_by_label(reply_by)).replace(
+        "{where}", where
     )
 
 

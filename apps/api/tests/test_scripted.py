@@ -660,7 +660,25 @@ async def check_cancel_mine(transport: ScriptedTransport, question: str) -> None
     assert the_call(first).input["scope"] == "mine"
 
 
+async def check_my_cases(transport: ScriptedTransport, question: str) -> None:
+    first = await collect(transport, a_request(*with_context(question)))
+    assert (the_call(first).name, the_call(first).input) == ("get_my_cases", {})
+
+
+async def check_open_cases(transport: ScriptedTransport, question: str) -> None:
+    first = await collect(transport, a_request(*with_context(question)))
+    assert (the_call(first).name, the_call(first).input) == ("list_cases", {"status": "open"})
+
+
+async def check_cases_due(transport: ScriptedTransport, question: str) -> None:
+    first = await collect(transport, a_request(*with_context(question)))
+    assert (the_call(first).name, the_call(first).input) == ("list_cases", {"status": "new"})
+
+
 CHECKS: dict[str, Check] = {
+    "my_cases": check_my_cases,
+    "open_cases": check_open_cases,
+    "cases_due": check_cases_due,
     "book_friday": check_book_friday,
     "sick_tomorrow": check_sick_tomorrow,
     "show_balance": check_show_balance,
@@ -721,6 +739,132 @@ async def decision_chain(transport: ScriptedTransport, question: str, decision: 
     call = the_call(second)
     assert call.name == "propose_time_off_decision"
     assert call.input == {"request_id": WAITING["requests"][0]["id"], "decision": decision}
+
+
+QUEUE: dict[str, Any] = {
+    "cases": [
+        {
+            "id": "33333333-3333-4333-8333-333333333333",
+            "category": "pay",
+            "person": "Keisha Zhang",
+            "title": "Warehouse Associate",
+            "location": "Austin",
+            "sentOn": "2026-10-27",
+            "replyBy": "2026-10-29",
+            "status": "new",
+            "replyDue": True,
+        },
+        {
+            "id": "44444444-4444-4444-8444-444444444444",
+            "category": "safety",
+            "person": "Aaliyah Edwards",
+            "title": "Cashier",
+            "location": "Oakland",
+            "sentOn": "2026-10-20",
+            "replyBy": "2026-10-22",
+            "status": "in_review",
+            "replyDue": False,
+        },
+    ],
+    "truncated": False,
+}
+
+
+async def closing_words(
+    transport: ScriptedTransport, question: str, result: Any, *, is_error: bool = False
+) -> str:
+    messages = with_context(question)
+    first = await collect(transport, a_request(*messages))
+    messages += tool_round(first, result=result, is_error=is_error)
+    second = await collect(transport, a_request(*messages))
+    assert not any(isinstance(event, ToolCall) for event in second)
+    return text_of(second)
+
+
+async def test_the_status_of_my_case_quotes_the_tools_labels_and_the_reply_by_date() -> None:
+    mine = {
+        "cases": [
+            {
+                "category": "pay",
+                "sentOn": "2026-10-27",
+                "status": "Sent to HR",
+                "replyBy": "2026-10-29",
+            }
+        ],
+        "truncated": False,
+    }
+
+    words = await closing_words(ScriptedTransport(), "what's the status of my case", mine)
+
+    assert (
+        words == "You have 1 case. The newest is about pay: Sent to HR. HR replies by 2026-10-29."
+    )
+
+
+async def test_the_status_of_my_case_with_none_says_so() -> None:
+    words = await closing_words(
+        ScriptedTransport(), "what's the status of my case", "You have no cases."
+    )
+
+    assert words == "You have no cases."
+
+
+async def test_the_open_cases_name_the_count_and_the_first_in_the_queue() -> None:
+    words = await closing_words(ScriptedTransport(), "show me the open cases", QUEUE)
+
+    assert words == (
+        "There are 2 open cases. First in the queue: Keisha Zhang, pay, sent 2026-10-27, "
+        "status new."
+    )
+
+
+async def test_the_cases_needing_a_reply_soon_are_the_ones_the_tool_marked_due() -> None:
+    words = await closing_words(ScriptedTransport(), "which cases need a reply soon?", QUEUE)
+
+    assert words == ("1 case needs a reply soon: Keisha Zhang, pay, HR replies by 2026-10-29.")
+    nothing = await closing_words(
+        ScriptedTransport(), "which cases need a reply soon?", {"cases": [], "truncated": False}
+    )
+    assert nothing == "No case needs a reply soon."
+
+
+async def test_a_cut_off_list_says_at_least_instead_of_a_count() -> None:
+    cut = {**QUEUE, "truncated": True}
+    mine = {"cases": QUEUE["cases"][:1], "truncated": True}
+
+    opened = await closing_words(ScriptedTransport(), "show me the open cases", cut)
+    due = await closing_words(ScriptedTransport(), "which cases need a reply soon?", cut)
+    own = await closing_words(ScriptedTransport(), "what's the status of my case", mine)
+
+    assert opened.startswith("There are at least 2 open cases. First in the queue: ")
+    assert due.startswith("1 of the first 2 cases needs a reply soon: ")
+    assert own.startswith("You have at least 1 case. ")
+
+
+async def test_a_case_tool_error_is_passed_on_without_saying_a_case_exists() -> None:
+    words = await closing_words(
+        ScriptedTransport(),
+        "show me the open cases",
+        "Only the HR team can see cases.",
+        is_error=True,
+    )
+
+    assert words == "That didn't work: Only the HR team can see cases."
+
+
+@pytest.mark.parametrize(
+    "words",
+    [
+        "My manager keeps making comments about my age.",
+        "my manager keeps making comments about my age",
+    ],
+)
+async def test_the_demos_age_comment_message_is_sensitive_to_the_scripted_guard(
+    words: str,
+) -> None:
+    result = await ScriptedTransport().classify(guard_request(words))
+
+    assert (result.category, result.kind) == ("sensitive", "harassment_discrimination")
 
 
 def test_every_behavior_the_code_implements_has_a_check() -> None:

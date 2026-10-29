@@ -123,9 +123,9 @@ def test_the_three_sets_have_their_trials_caps_efforts_and_estimates() -> None:
     assert (smoke.trials, smoke.cap_usd, smoke.effort) == (1, Decimal("2.00"), "low")
     assert (full.trials, full.cap_usd, full.effort) == (3, Decimal("16.00"), "low")
     assert (effort.trials, effort.cap_usd, effort.effort) == (1, Decimal("2.00"), "medium")
-    assert smoke.estimate_usd == Decimal("1.20")
+    assert smoke.estimate_usd == Decimal("1.40")
     assert full.estimate_usd == Decimal("14.00")
-    assert effort.estimate_usd == Decimal("1.50")
+    assert effort.estimate_usd == Decimal("1.75")
     assert smoke.smoke_only is True
     assert effort.smoke_only is True
     assert full.smoke_only is False
@@ -144,7 +144,7 @@ def test_smoke_runs_the_smoke_lists_and_full_runs_every_item() -> None:
     assert [i.id for i in smoke_rt] == [i.id for i in redteam if i.id in smoke.redteam]
     assert [i.id for i in smoke_qa] == [i.id for i in qa if i.id in smoke.qa]
     assert [i.id for i in smoke_ac] == [i.id for i in actions if i.id in smoke.actions]
-    assert (len(smoke_rt), len(smoke_qa), len(smoke_ac)) == (13, 15, 6)
+    assert (len(smoke_rt), len(smoke_qa), len(smoke_ac)) == (13, 20, 6)
     assert (len(full_rt), len(full_qa), len(full_ac)) == (len(redteam), len(qa), len(actions))
     effort_rt, effort_qa, effort_ac = run.items_for_set(
         run.SETS["effort"], redteam, qa, actions, smoke
@@ -1062,9 +1062,9 @@ async def test_live_without_yes_prints_the_estimate_and_makes_no_call(
     out = capsys.readouterr().out
     assert code == 0
     assert "smoke" in out
-    assert "34 items" in out
+    assert "39 items" in out
     assert "1 trial" in out
-    assert "$1.20" in out
+    assert "$1.40" in out
     assert "$2.00" in out
     assert "--yes" in out
     assert not os.listdir(tmp_path)
@@ -1073,8 +1073,8 @@ async def test_live_without_yes_prints_the_estimate_and_makes_no_call(
 @pytest.mark.parametrize(
     ("name", "items", "trials", "estimate", "cap", "effort"),
     [
-        ("smoke", 34, 1, "$1.20", "$2.00", "low"),
-        ("effort", 34, 1, "$1.50", "$2.00", "medium"),
+        ("smoke", 39, 1, "$1.40", "$2.00", "low"),
+        ("effort", 39, 1, "$1.75", "$2.00", "medium"),
     ],
 )
 async def test_each_live_set_estimates_its_own_cost_and_cap(

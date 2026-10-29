@@ -235,7 +235,9 @@ async def test_the_checks_refuse_values_outside_the_planned_ones(
         await insert_in_one_transaction(tenant, table, overrides)
 
 
-@pytest.mark.parametrize("reason", ["transport", "refusal", "timeout", "budget", "checks"])
+@pytest.mark.parametrize(
+    "reason", ["transport", "refusal", "timeout", "budget", "checks", "screening-conflict"]
+)
 async def test_a_failed_summary_names_its_reason(make_tenant: MakeTenant, reason: str) -> None:
     tenant = await make_tenant()
 
@@ -598,6 +600,225 @@ async def test_the_stamp_alone_cannot_be_moved(make_tenant: MakeTenant) -> None:
             )
 
     assert sqlstate(raised.value) == "OD004"
+
+
+# --- The screening write-back (migration 0014) ---
+
+SCREENING_REFUSED = "OD005"
+
+
+async def unscreened_case(tenant: SampleTenant) -> UUID:
+    """Someone else's case the safety check could not screen, written as the seed would."""
+    async with as_person(tenant, None) as session:
+        return await insert_case(session, tenant, tenant.colleague_id, screening="unscreened")
+
+
+async def set_screening(
+    tenant: SampleTenant,
+    case_id: UUID,
+    verdict: str,
+    *,
+    person: UUID | None,
+    hr: bool,
+    set_sql: str = "",
+) -> int:
+    async with as_person(tenant, person, hr=hr) as session:
+        result = await session.execute(
+            text(f"UPDATE cases SET screening = :verdict{set_sql} WHERE id = :id"),  # noqa: S608
+            {"verdict": verdict, "id": case_id},
+        )
+        return int(result.rowcount)  # type: ignore[attr-defined]
+
+
+@pytest.mark.parametrize("verdict", ["ordinary", "sensitive", "crisis"])
+async def test_hr_screens_an_unscreened_case_and_leaves_the_status_alone(
+    make_tenant: MakeTenant, verdict: str
+) -> None:
+    tenant = await make_tenant()
+    case_id = await unscreened_case(tenant)
+    async with as_person(tenant, tenant.hr_id, hr=True) as session:
+        before = await scalar(
+            session, "SELECT status_changed_at FROM cases WHERE id = :id", id=case_id
+        )
+
+    moved = await set_screening(tenant, case_id, verdict, person=tenant.hr_id, hr=True)
+
+    async with as_person(tenant, tenant.hr_id, hr=True) as session:
+        row = (
+            await session.execute(
+                text("SELECT screening, status, status_changed_at FROM cases WHERE id = :id"),
+                {"id": case_id},
+            )
+        ).one()
+    # The status and its stamp are untouched: the status trigger does not run for this change.
+    assert (moved, row.screening, row.status, row.status_changed_at) == (1, verdict, "new", before)
+
+
+ALLOWED_MOVES = [
+    ("unscreened", "ordinary"),
+    ("unscreened", "sensitive"),
+    ("unscreened", "crisis"),
+    ("ordinary", "crisis"),
+    ("sensitive", "crisis"),
+]
+REFUSED_MOVES = [
+    ("ordinary", "sensitive"),
+    ("sensitive", "ordinary"),
+    ("ordinary", "unscreened"),
+    ("sensitive", "unscreened"),
+    ("crisis", "ordinary"),
+    ("crisis", "sensitive"),
+    ("crisis", "unscreened"),
+]
+
+
+async def case_labeled(tenant: SampleTenant, label: str) -> UUID:
+    async with as_person(tenant, None) as session:
+        return await insert_case(session, tenant, tenant.colleague_id, screening=label)
+
+
+async def screening_now(tenant: SampleTenant, case_id: UUID) -> str:
+    async with as_person(tenant, tenant.hr_id, hr=True) as session:
+        return str(await scalar(session, "SELECT screening FROM cases WHERE id = :id", id=case_id))
+
+
+@pytest.mark.parametrize(("old", "new"), ALLOWED_MOVES)
+async def test_hr_may_make_the_two_allowed_screening_moves(
+    make_tenant: MakeTenant, old: str, new: str
+) -> None:
+    tenant = await make_tenant()
+    case_id = await case_labeled(tenant, old)
+
+    moved = await set_screening(tenant, case_id, new, person=tenant.hr_id, hr=True)
+
+    assert (moved, await screening_now(tenant, case_id)) == (1, new)
+
+
+@pytest.mark.parametrize(("old", "new"), REFUSED_MOVES)
+async def test_every_other_screening_move_is_refused(
+    make_tenant: MakeTenant, old: str, new: str
+) -> None:
+    tenant = await make_tenant()
+    case_id = await case_labeled(tenant, old)
+
+    with pytest.raises(DBAPIError) as raised:
+        await set_screening(tenant, case_id, new, person=tenant.hr_id, hr=True)
+
+    assert sqlstate(raised.value) == SCREENING_REFUSED
+    assert await screening_now(tenant, case_id) == old
+
+
+@pytest.mark.parametrize("old", ["ordinary", "sensitive"])
+async def test_a_raised_crisis_stays(make_tenant: MakeTenant, old: str) -> None:
+    tenant = await make_tenant()
+    case_id = await case_labeled(tenant, old)
+    await set_screening(tenant, case_id, "crisis", person=tenant.hr_id, hr=True)
+
+    with pytest.raises(DBAPIError) as raised:
+        await set_screening(tenant, case_id, old, person=tenant.hr_id, hr=True)
+
+    assert sqlstate(raised.value) == SCREENING_REFUSED
+    assert await screening_now(tenant, case_id) == "crisis"
+
+
+async def test_a_case_cannot_be_moved_back_to_unscreened_or_to_a_made_up_label(
+    make_tenant: MakeTenant,
+) -> None:
+    tenant = await make_tenant()
+    # tenant.case_id is "ordinary" already: moving it anywhere is refused by the trigger.
+    with pytest.raises(DBAPIError) as raised:
+        await set_screening(tenant, tenant.case_id, "unscreened", person=tenant.hr_id, hr=True)
+    assert sqlstate(raised.value) == SCREENING_REFUSED
+
+    case_id = await unscreened_case(tenant)
+    with pytest.raises(DBAPIError) as bad:
+        await set_screening(tenant, case_id, "banana", person=tenant.hr_id, hr=True)
+    # The column's check or the trigger: the label is refused either way.
+    assert sqlstate(bad.value) in {SCREENING_REFUSED, "23514"}
+
+
+async def test_only_hr_screens_a_case_and_never_their_own(make_tenant: MakeTenant) -> None:
+    tenant = await make_tenant()
+    case_id = await unscreened_case(tenant)
+    raised_case = await case_labeled(tenant, "ordinary")
+    async with as_person(tenant, tenant.hr_id, hr=True) as session:
+        own = await insert_case(session, tenant, tenant.hr_id, screening="unscreened")
+        own_ordinary = await insert_case(session, tenant, tenant.hr_id, screening="ordinary")
+
+    moved = {
+        "opener": await set_screening(
+            tenant, case_id, "crisis", person=tenant.colleague_id, hr=False
+        ),
+        "other_person": await set_screening(
+            tenant, case_id, "crisis", person=tenant.employee_id, hr=False
+        ),
+        "hr_without_flag": await set_screening(
+            tenant, case_id, "crisis", person=tenant.hr_id, hr=False
+        ),
+        "no_person_with_flag": await set_screening(tenant, case_id, "crisis", person=None, hr=True),
+        "no_person_no_flag": await set_screening(tenant, case_id, "crisis", person=None, hr=False),
+        "hr_on_own": await set_screening(tenant, own, "crisis", person=tenant.hr_id, hr=True),
+        # Raising an ordinary case to crisis has the same conditions.
+        "raise_as_opener": await set_screening(
+            tenant, raised_case, "crisis", person=tenant.colleague_id, hr=False
+        ),
+        "raise_without_flag": await set_screening(
+            tenant, raised_case, "crisis", person=tenant.hr_id, hr=False
+        ),
+        "raise_on_own": await set_screening(
+            tenant, own_ordinary, "crisis", person=tenant.hr_id, hr=True
+        ),
+    }
+
+    async with as_person(tenant, tenant.hr_id, hr=True) as session:
+        left = [
+            await scalar(session, "SELECT screening FROM cases WHERE id = :id", id=c)
+            for c in (case_id, own, raised_case, own_ordinary)
+        ]
+    assert set(moved.values()) == {0}
+    assert left == ["unscreened", "unscreened", "ordinary", "ordinary"]
+
+
+async def test_the_openers_own_screening_is_not_theirs_to_change(make_tenant: MakeTenant) -> None:
+    tenant = await make_tenant()
+    async with as_person(tenant, tenant.employee_id) as session:
+        own = await insert_case(session, tenant, tenant.employee_id, screening="unscreened")
+
+    assert await set_screening(tenant, own, "ordinary", person=tenant.employee_id, hr=False) == 0
+
+
+@pytest.mark.parametrize(
+    "also", [", status = 'in_review'", ", status_changed_at = now() - interval '3 days'"]
+)
+@pytest.mark.parametrize("old", ["unscreened", "ordinary", "sensitive"])
+async def test_nothing_else_changes_with_the_screening(
+    make_tenant: MakeTenant, also: str, old: str
+) -> None:
+    tenant = await make_tenant()
+    case_id = await case_labeled(tenant, old)
+
+    with pytest.raises(DBAPIError) as raised:
+        await set_screening(tenant, case_id, "crisis", person=tenant.hr_id, hr=True, set_sql=also)
+    assert sqlstate(raised.value) == SCREENING_REFUSED
+    assert await screening_now(tenant, case_id) == old
+
+
+async def test_screening_cannot_change_another_column_alongside_it(
+    make_tenant: MakeTenant,
+) -> None:
+    tenant = await make_tenant()
+    case_id = await unscreened_case(tenant)
+
+    for column in ("text_ciphertext", "category", "reply_by"):
+        with pytest.raises(DBAPIError, match="permission denied"):
+            await set_screening(
+                tenant,
+                case_id,
+                "crisis",
+                person=tenant.hr_id,
+                hr=True,
+                set_sql=f", {column} = {column}",
+            )
 
 
 # --- The summaries ---

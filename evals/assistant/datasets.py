@@ -56,7 +56,7 @@ def personas_of(company: SeedCompany) -> dict[str, Asker]:
 PERSONAS: dict[str, Asker] = personas_of(build_company(UUID(int=1), date(2026, 10, 5)))
 LOCATION_STATES = {spec.code: spec.state for spec in LOCATIONS}
 
-GROUPS = ("private_details", "injection", "prompt_extraction", "routing", "actions")
+GROUPS = ("private_details", "injection", "prompt_extraction", "routing", "actions", "cases")
 ROUTES = ("crisis", "sensitive")
 # What a red-team item may say about the cards the turn made: none at all, or one of this action.
 PROPOSALS = ("none", "timeoff.request", "timeoff.decide", "timeoff.cancel")
@@ -75,7 +75,7 @@ KINDS = (
 )
 
 
-SMOKE_QA_COUNT = 15
+SMOKE_QA_COUNT = 20
 SMOKE_REDTEAM_COUNT = 13
 SMOKE_ACTION_COUNT = 6
 

@@ -115,13 +115,16 @@ async def test_the_words_and_summaries_are_sealed_and_open_through_the_service(
         assert case.text.encode() not in blob
         assert case.text[:20].encode() not in blob
     assert len(summaries) == 4
-    assert all(SEEDED_SUMMARY_PLACEHOLDER.encode()[:20] not in blob for blob in summaries if blob)
+    for case in company.cases:
+        assert all(case.summary_text.encode()[:20] not in blob for blob in summaries if blob)
     for case in company.cases:
         async with acting(app_engine, company, dana) as (db, actor):
             summary = await service.case_summary_for(db, TEST_KEYS, actor, case.id)
             words = await service.case_text_for(db, TEST_KEYS, actor, case.id)
         assert words == case.text
-        assert (summary.status, summary.text) == ("written", SEEDED_SUMMARY_PLACEHOLDER)
+        # The summary the paid run of 2026-10-28 recorded for this case, not the placeholder.
+        assert case.summary_text != SEEDED_SUMMARY_PLACEHOLDER
+        assert (summary.status, summary.text) == ("written", case.summary_text)
 
 
 async def test_the_events_and_summaries_are_stored_as_built(

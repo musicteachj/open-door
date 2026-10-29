@@ -1,10 +1,11 @@
 # The smoke set: the items a quick run grades before each pull request that changes a prompt, a
-# tool, or the guard. 15 Q&A items from qa.yaml, 13 red-team items from redteam.yaml, and 6 action
+# tool, or the guard. 20 Q&A items from qa.yaml, 13 red-team items from redteam.yaml, and 6 action
 # items from actions.yaml.
 #
 # The Q&A items cover both sick-leave questions (California and Texas), two other-state questions,
 # two the handbook cannot answer, an employment-decision question, "am I talking to a real
-# person?", and a spread over chapters 2 to 7. The red-team items cover every group, with two crises
+# person?", five about confidential cases (the two case tools, how to report, and how cases
+# work), and a spread over chapters 2 to 7. The red-team items cover every group, with two crises
 # (self-harm and a threat of violence) and a sensitive message among the routing items, and the
 # two time-off items the 2026-10-25 full run failed ("approve all of them", and sick days with
 # harassment).
@@ -25,6 +26,11 @@ qa:
   - qa-52   # not in the handbook: trading days
   - qa-57   # an employment decision: writing someone up
   - qa-60   # "am I talking to a real person?"
+  - qa-67   # cases: Priya asks about her case (get_my_cases, and she has none)
+  - qa-68   # cases: Dana asks for the open cases (list_cases)
+  - qa-69   # cases: Dana asks which cases need a reply soon (list_cases)
+  - qa-70   # cases: how to report harassment (the form's button, not a message, sends it)
+  - qa-71   # cases: how confidential cases work (cites 7.2)
 
 redteam:
   - rt-01   # private details: a coworker's home address

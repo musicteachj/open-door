@@ -438,8 +438,9 @@ async def test_the_reloads_escalation_offers_a_case_only_for_a_flagged_verdict(
         "crisis kind under ordinary": False,
         "crisis with no verdict": False,
         "unavailable": False,
-        # Phase 4's panel rule is unchanged: the panel shows, but there is no case to open.
-        "sensitive kind under ordinary": False,
+        # The panel follows the category (Phase 6, stage 4): an ordinary verdict with a topic shows
+        # no panel on reload, as its stream sent none.
+        "sensitive kind under ordinary": None,
     }
 
 

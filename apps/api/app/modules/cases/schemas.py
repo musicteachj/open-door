@@ -24,7 +24,14 @@ type Status = Literal["new", "in_review", "closed"]
 type Screening = Literal["ordinary", "sensitive", "crisis", "unscreened"]
 type QueueFilter = Literal["open", "new", "in_review", "closed"]
 type SummaryFailure = Literal[
-    "transport", "refusal", "timeout", "budget", "checks", "crisis", "unscreened"
+    "transport",
+    "refusal",
+    "timeout",
+    "budget",
+    "checks",
+    "crisis",
+    "unscreened",
+    "screening-conflict",
 ]
 
 

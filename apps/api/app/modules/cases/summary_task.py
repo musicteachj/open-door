@@ -7,16 +7,20 @@ a background task must never raise, and logs error names only, never an error's 
 A shutdown can cancel it; HR's retry covers that.
 
 Every failure is a `failed` summary row with its code: `transport`, `refusal`, `timeout`, `budget`,
-or `checks`; HR's retry, which screens an unscreened case first, can also write `unscreened` or
-`crisis`. The case itself is never changed by any of them.
+or `checks`; HR's retry, which screens an unscreened case first, can also write `unscreened`,
+`crisis`, or `screening-conflict` (its screening found another verdict than the one a parallel
+retry already wrote). Only that retry changes the case: it writes the verdict to
+`cases.screening`, once, in the same transaction as the summary row.
 """
 
 import asyncio
 import json
 import logging
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from decimal import Decimal
 from uuid import UUID
+
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.ai.budget import BudgetExceeded, Reservation, reserve, settle
 from app.ai.case_summary import (
@@ -64,8 +68,11 @@ class SummaryJob:
 
 
 def summary_reservation_usd(request: SummaryRequest) -> Decimal:
-    """What to reserve for one summary call: the whole request as input and a full `max_tokens`."""
-    text = json.dumps({"messages": list(request.messages)}, ensure_ascii=False)
+    """What to reserve for one summary call: the whole request (the system prompt and the message)
+    as input and a full `max_tokens`."""
+    text = json.dumps(
+        {"system": request.system, "messages": list(request.messages)}, ensure_ascii=False
+    )
     return reservation_usd(
         request.model,
         estimated_input_tokens=estimate_request_tokens(text),
@@ -139,7 +146,16 @@ async def generate_summary(job: SummaryJob) -> SummaryResult:
     return SummaryWritten(answer.text, answer.model, answer.prompt_version)
 
 
-async def _result_of(job: SummaryJob) -> SummaryResult:
+@dataclass(frozen=True)
+class JobResult:
+    """What a job found: the summary result, and the verdict if this job screened the words."""
+
+    summary: SummaryResult
+    screening: str | None = None
+
+
+async def _result_of(job: SummaryJob) -> JobResult:
+    verdict = None
     if job.screen_first:
         try:
             outcome = await screen_text(job.guard, job.ctx, job.words)
@@ -147,23 +163,62 @@ async def _result_of(job: SummaryJob) -> SummaryResult:
             logger.error("Screening a case failed (%s)", error_name(error))
             outcome = None
         if outcome is None:
-            return SummaryFailed("unscreened")
-        if outcome.route == "crisis":
-            return SummaryFailed("crisis")
-    return await generate_summary(job)
+            return JobResult(SummaryFailed("unscreened"))
+        verdict = service.screening_label(outcome)
+        if verdict == "crisis":
+            return JobResult(SummaryFailed("crisis"), verdict)
+    return JobResult(await generate_summary(job), verdict)
+
+
+async def _after_screening(db: AsyncSession, job: SummaryJob, found: JobResult) -> SummaryResult:
+    """Write this job's verdict, and say what this job may record. A verdict that was already
+    written (another retry screened first) is read back in the same transaction: a crisis there
+    (or a crisis verdict of this job's own, which raises an ordinary or sensitive label) means this
+    job records the `crisis` note and no summary; two different non-crisis verdicts mean
+    this job records a `screening-conflict` note and no summary (the other job's verdict stands,
+    and the AI action is still audited); the same verdict changes nothing."""
+    if found.screening is None or job.actor is None:
+        return found.summary
+    if await service.record_screening(db, job.case_id, found.screening, actor=job.actor):
+        return found.summary
+    current = await service.screening_of(db, job.case_id)
+    if current == "crisis":
+        return SummaryFailed("crisis")
+    if found.screening == "crisis":
+        # The write-back should have raised the label to crisis; it was refused (the HR flag gone,
+        # say). The crisis is still the job's result: no summary, the crisis note.
+        return SummaryFailed("crisis")
+    if current in (None, "unscreened"):
+        # Nothing screened the case (the HR flag was gone or the row hidden): not a conflict.
+        return SummaryFailed("unscreened")
+    if current != found.screening:
+        logger.warning(
+            "A retry found another verdict than the case's (case %s, %s)",
+            job.case_id,
+            "ScreeningConflict",
+        )
+        return SummaryFailed("screening-conflict")
+    return found.summary
 
 
 async def run_summary_job(job: SummaryJob) -> None:
     """The background task: write the summary (or the note that none could be written) and its
-    events. Catches everything and logs the error's name only."""
+    events. Catches everything and logs the error's name only.
+
+    A verdict found by a retry's screening is written back to the case in the same transaction as
+    the summary row and its events, before them. One transaction keeps the timeline and the case
+    in step (a queue that shows a crisis always has the `crisis` row beside it), and a refused
+    write-back (another retry screened first) is a savepoint that costs the summary nothing."""
     try:
-        result = await _result_of(job)
+        found = await _result_of(job)
         async with tenant_session(job.guard.engine, job.ctx) as db:
             if job.actor is not None:
                 # The tenant context, the HR flag included, resets with each transaction.
                 await set_is_hr(db, job.actor.is_hr_admin)
+                if found.screening is not None:
+                    found = replace(found, summary=await _after_screening(db, job, found))
             recorded = await service.record_summary(
-                db, job.keys, job.case_id, result, actor=job.actor
+                db, job.keys, job.case_id, found.summary, actor=job.actor
             )
         if not recorded:
             logger.warning("A case summary was not recorded (case %s)", job.case_id)

@@ -96,10 +96,15 @@ export function workdays(facts: Facts, fromOffset: number, count: number): strin
   return days
 }
 
+// A request spans at most this many calendar days (the API's MAX_REQUEST_DAYS).
+const MAX_REQUEST_DAYS = 31
+
 /**
- * Working days, starting 15 days out, that together cost more PTO than the person has now. The
- * seed's balances change with the date, so the count comes from the API: one day more than the
- * available minutes cover at the calendar's day length.
+ * Working days, starting 15 days out or later, that together cost more PTO than the person has
+ * now. The seed's balances change with the date, so the count comes from the API: one day more
+ * than the available minutes cover at the calendar's day length. The first run of days that fits
+ * in one request (at most 31 calendar days, inside one year, so one year's balance pays for it)
+ * is used. A fixed start broke once the balance grew and the run crossed Thanksgiving.
  */
 export async function daysPastBalance(page: Page, facts: Facts): Promise<string[]> {
   const { availableMinutes, dayMinutes } = await page.evaluate(async (today) => {
@@ -108,7 +113,19 @@ export async function daysPastBalance(page: Page, facts: Facts): Promise<string[
     const calendar = (await get(`/api/v1/time-off/calendar?to=${today}`)) as { dayMinutes: number }
     return { availableMinutes: summary.ptoAvailableMinutes, dayMinutes: calendar.dayMinutes }
   }, facts.today)
-  return workdays(facts, 15, Math.floor(availableMinutes / dayMinutes) + 1)
+  const count = Math.floor(availableMinutes / dayMinutes) + 1
+  for (let start = 15; start < 15 + 120; start += 1) {
+    const days = workdays(facts, start, count)
+    const first = days[0]!
+    const last = days.at(-1)!
+    if (
+      daysBetween(first, last) + 1 <= MAX_REQUEST_DAYS &&
+      first.slice(0, 4) === last.slice(0, 4)
+    ) {
+      return days
+    }
+  }
+  throw new Error(`no ${count} working days fit in one request within the next 4 months`)
 }
 
 /** Opens a form's date picker and Tabs into its grid, onto today or the chosen day. */

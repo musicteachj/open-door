@@ -20,7 +20,6 @@ from pathlib import Path
 from typing import Any, Final
 
 from app.ai.case_summary import (
-    CATEGORY_LABELS,
     SCRIPTED_PROMPT_VERSION,
     SummaryAnswer,
     SummaryRequest,
@@ -47,6 +46,7 @@ from app.ai.transport import (
     count_search_results,
     iter_search_results,
 )
+from app.domain.cases import CATEGORY_LABELS
 from app.domain.retrieval import MAX_QUERY_CHARACTERS
 
 SCENARIOS_PATH: Final = Path(__file__).with_name("scripted_scenarios.json")
@@ -70,6 +70,8 @@ TIME_OFF_BEHAVIORS: Final = (
     "deny_it",
     "cancel_mine",
 )
+# The behaviors that call the case tools (the real tools run; the words quote their labels).
+CASE_BEHAVIORS: Final = ("my_cases", "open_cases", "cases_due")
 MODEL_BEHAVIORS: Final = (
     "decline",
     "safety_refusal",
@@ -79,6 +81,7 @@ MODEL_BEHAVIORS: Final = (
     "mid_stream_error",
     "working_note",
     *TIME_OFF_BEHAVIORS,
+    *CASE_BEHAVIORS,
 )
 BEHAVIORS: Final = GUARD_BEHAVIORS + MODEL_BEHAVIORS
 
@@ -546,6 +549,68 @@ def _time_off_next(
     return _cancel_words(data)
 
 
+_CASE_CALLS: Final = {
+    "my_cases": ("get_my_cases", {}),
+    "open_cases": ("list_cases", {"status": "open"}),
+    "cases_due": ("list_cases", {"status": "new"}),
+}
+
+
+def _cases_of(data: Any) -> list[dict[str, Any]]:
+    cases = data.get("cases") if isinstance(data, dict) else None
+    return [item for item in (cases or []) if isinstance(item, dict)]
+
+
+def _plural_cases(count: int, *, at_least: bool = False, kind: str = "") -> str:
+    """ "1 case", "3 open cases", or "at least 20 cases" when the tool's list was cut off."""
+    noun = f"{count} {kind + ' ' if kind else ''}{'case' if count == 1 else 'cases'}"
+    return f"at least {noun}" if at_least else noun
+
+
+def _was_truncated(data: Any) -> bool:
+    return isinstance(data, dict) and data.get("truncated") is True
+
+
+def _case_words(behavior: str, result: Any) -> str:
+    """The closing words of a case scenario: only the tool's labels, never a person's words (the
+    tools return none) and never a judgment of how serious a case is."""
+    if behavior == "my_cases":
+        mine = _cases_of(result.data)
+        if not mine:
+            return "You have no cases."
+        first = mine[0]
+        count = _plural_cases(len(mine), at_least=_was_truncated(result.data))
+        return (
+            f"You have {count}. The newest is about {first.get('category')}: "
+            f"{first.get('status')}. HR replies by {first.get('replyBy')}."
+        )
+    queue = _cases_of(result.data)
+    if behavior == "open_cases":
+        if not queue:
+            return "There are no open cases."
+        first = queue[0]
+        cut = _was_truncated(result.data)
+        return (
+            f"There {'is' if len(queue) == 1 and not cut else 'are'} "
+            f"{_plural_cases(len(queue), at_least=cut, kind='open')}. First in the queue: "
+            f"{first.get('person')}, {first.get('category')}, sent {first.get('sentOn')}, "
+            f"status {first.get('status')}."
+        )
+    due = [item for item in queue if item.get("replyDue") is True]
+    if not due:
+        return "No case needs a reply soon."
+    first = due[0]
+    # The tool's list may be cut off, so the count is of the cases it showed, never of all of them.
+    if _was_truncated(result.data):
+        count = f"{len(due)} of the first {len(queue)} cases"
+    else:
+        count = _plural_cases(len(due))
+    return (
+        f"{count} {'needs' if len(due) == 1 else 'need'} a reply soon: "
+        f"{first.get('person')}, {first.get('category')}, HR replies by {first.get('replyBy')}."
+    )
+
+
 def _request_words(behavior: str, today: date | None, data: Any) -> str:
     day = None
     if today is not None:
@@ -633,6 +698,10 @@ class ScriptedTransport:
             async for event in self._time_off(behavior, question, messages, rounds):
                 yield event
             return
+        if behavior in CASE_BEHAVIORS:
+            async for event in self._cases(behavior, question, messages, rounds):
+                yield event
+            return
         if _is_second_call(messages):
             async for event in self._second_call(messages, behavior):
                 yield event
@@ -713,6 +782,28 @@ class ScriptedTransport:
             [{"type": "tool_use", "id": call.id, "name": call.name, "input": call.input}],
             "tool_use",
         )
+
+    async def _cases(
+        self, behavior: str, question: str, messages: Sequence[dict[str, Any]], rounds: int
+    ) -> AsyncIterator[ModelEvent]:
+        """A case scenario: one tool call, then the words. The tool decides who may see what."""
+        if rounds == 0:
+            name, arguments = _CASE_CALLS[behavior]
+            call = _tool_call(name, dict(arguments), question, messages)
+            yield call
+            yield _finished(
+                [{"type": "tool_use", "id": call.id, "name": call.name, "input": call.input}],
+                "tool_use",
+            )
+            return
+        result = _last_tool_result(messages)
+        words = (
+            f"That didn't work: {_first_sentence(result.text)}"
+            if result.is_error
+            else _case_words(behavior, result)
+        )
+        async for event in self._say([(words, None)]):
+            yield event
 
     async def _second_call(
         self, messages: Sequence[dict[str, Any]], behavior: str
@@ -796,10 +887,7 @@ class ScriptedSummarizer:
 
     async def summarize(self, request: SummaryRequest) -> SummaryAnswer:
         label = CATEGORY_LABELS.get(request.category, CATEGORY_LABELS["other"])
-        text = (
-            f"The person described {label}. This is a scripted placeholder, not a reading of what"
-            " happened. Their own words have the details."
-        )
+        text = f"The person wrote about {label}. They describe it in their own words."
         return SummaryAnswer(
             text=text,
             model=SCRIPTED_MODEL,

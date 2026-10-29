@@ -5,6 +5,7 @@ phone numbers use 555-0100 to 555-0199, which are reserved for fiction, and stre
 made up. seed.py turns this data into rows.
 """
 
+from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import time
 
@@ -300,8 +301,8 @@ STREET_TYPES = ("Street", "Avenue", "Lane", "Court", "Drive", "Way", "Place")
 # on Denver HQ's calendar (weekends and HQ holidays), the calendar HR's reply-by date uses.
 # The words are the owner's to approve: each is the person's own, first person, short and plain.
 
-# The summary every seeded case carries until Stage 4's Task 28 records real ones. It says plainly
-# that it is a stand-in, and it is not model output.
+# The summary a seeded case carries until the case-summary run has written a real one. It says
+# plainly that it is a stand-in, and it is not model output.
 SEEDED_SUMMARY_PLACEHOLDER = (
     "Placeholder summary for the demo. A real summary of what the person wrote appears here"
     " once Open Door's AI has written one."
@@ -309,6 +310,66 @@ SEEDED_SUMMARY_PLACEHOLDER = (
 # Values that make a placeholder obvious in the timeline and the summary's footer.
 SEEDED_SUMMARY_MODEL = "seeded-placeholder"
 SEEDED_SUMMARY_PROMPT_VERSION = "seeded-placeholder-1"
+
+
+@dataclass(frozen=True, slots=True)
+class SeededSummary:
+    """A real summary of a seeded case's words, with the model and prompt version that wrote it."""
+
+    text: str
+    model: str
+    prompt_version: str
+
+
+# Trial 1's summaries of the seeded cases' words, by case key, from a paid case-summary run
+# (`make eval-live SET=case-summary YES=1` writes them to `runs/<stamp>-case-summary-seeded.json`;
+# `uv run python scripts/apply_seeded_summaries.py <that file>` rewrites this block). A case with no
+# entry here keeps the placeholder above. Each entry passes the same checks every live summary
+# passes, against its own case's words (a test holds it).
+# BEGIN SEEDED SUMMARIES
+SEEDED_SUMMARIES: Mapping[str, SeededSummary] = {
+    "keisha-zhang": SeededSummary(
+        text=(
+            "The person says their last two paychecks were each about four hours short. They "
+            "say their shift lead had them finish loading a truck after they clocked out, and "
+            "they think that is where the hours went. They ask someone to check their time "
+            "and tell them if they are owed the pay."
+        ),
+        model="claude-opus-5-5",
+        prompt_version="2026-11.2",
+    ),
+    "chloe-foster": SeededSummary(
+        text=(
+            "The person says a regional visitor keeps commenting on their accent in front of "
+            "customers. They say he also calls them by a nickname they have asked him not to "
+            "use, and he keeps doing it. The person says they do not want to make a scene at "
+            "the store, but they want it to stop."
+        ),
+        model="claude-opus-5-5",
+        prompt_version="2026-11.2",
+    ),
+    "aaliyah-edwards": SeededSummary(
+        text=(
+            "The person reports that the top step of the ladder in the stockroom is cracked. "
+            "They say they told their supervisor and were told to keep using it until a new "
+            "one arrives. The person says they are worried someone is going to fall. They ask "
+            "someone to look at the ladder before the new one arrives."
+        ),
+        model="claude-opus-5-5",
+        prompt_version="2026-11.2",
+    ),
+    "lucia-gutierrez": SeededSummary(
+        text=(
+            "The person says they were diagnosed with migraines last month. They say their "
+            "doctor suggested a screen filter for their monitor and a few more short breaks "
+            "during the day. The person reports that they asked for both a while ago and have "
+            "not heard back. They ask where their request stands."
+        ),
+        model="claude-opus-5-5",
+        prompt_version="2026-11.2",
+    ),
+}
+# END SEEDED SUMMARIES
 
 
 @dataclass(frozen=True, slots=True)

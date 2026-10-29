@@ -45,7 +45,13 @@ from app.ai.fixed_texts import (
     SENSITIVE_TEXT,
     UNAVAILABLE_TEXT,
 )
-from app.ai.guard import INJECTION_NOTE, build_guard_request, guard_reservation_usd
+from app.ai.guard import (
+    INJECTION_NOTE,
+    SENSITIVE_NOTE,
+    TOPIC_NOTE,
+    build_guard_request,
+    guard_reservation_usd,
+)
 from app.ai.pricing import IterationUsage, Usage, estimate_input_tokens, turn_call_cost
 from app.ai.prompts.versions import CANARY, PROMPT_VERSION, TOOLSET_VERSION
 from app.ai.scripted import DECLINE_TEXT, MODEL_USAGE, WORKING_NOTE_TEXT, ScriptedTransport
@@ -599,11 +605,14 @@ async def test_contradictory_guard_verdicts_route_safer(
         transport=PlanTransport(text_plan(), guard_result=guard_result("ordinary", "pay")),
     )
     events = await sensitive.ask("hello")
-    assert [e.kind for e in of_type(events, Escalation)] == ["sensitive"]
-    # The panel still shows for a kind alone (Phase 4's rule), but there is no case to open.
-    assert [e.offer_case for e in of_type(events, Escalation)] == [False]
+    # The panel follows the category (Phase 6, stage 4): an ordinary message with a topic gets no
+    # panel, but the model still reads a "don't counsel" note that names no panel.
+    assert of_type(events, Escalation) == []
     assert isinstance(events[-1], TurnCompleted)
     assert len(sensitive.transport.requests) == 1
+    sent = json.dumps(sensitive.transport.requests[0].messages, default=str)
+    assert TOPIC_NOTE in sent
+    assert SENSITIVE_NOTE not in sent
 
 
 # --- Stop reasons -----------------------------------------------------------------------------
@@ -1452,6 +1461,8 @@ async def test_the_trace_records_how_the_turn_went(
         "propose_time_off_request",
         "propose_time_off_decision",
         "propose_cancel_time_off",
+        "get_my_cases",
+        "list_cases",
     ]
 
 
