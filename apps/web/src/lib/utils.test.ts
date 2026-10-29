@@ -29,4 +29,10 @@ describe('cn', () => {
     expect(cn('h-control', 'h-control-sm')).toBe('h-control-sm')
     expect(cn('rounded-md', 'rounded-lg')).toBe('rounded-lg')
   })
+
+  it('knows every spacing name in the theme', () => {
+    expect(cn('w-rail', 'w-panel')).toBe('w-panel')
+    expect(cn('w-panel', 'w-content')).toBe('w-content')
+    expect(cn('max-w-sidebar', 'max-w-panel')).toBe('max-w-panel')
+  })
 })

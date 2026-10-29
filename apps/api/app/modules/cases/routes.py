@@ -40,6 +40,7 @@ from app.modules.cases.api_schemas import (
     QueuePageOut,
     StatusBody,
     SummaryRetryOut,
+    sent_line_out,
 )
 from app.modules.cases.schemas import OpenCase, QueueFilter
 from app.modules.cases.summary_task import SummaryJob, run_summary_job
@@ -125,6 +126,7 @@ async def open_case(
         response.status_code = status.HTTP_200_OK
     return CaseSentOut(
         case=CaseStatusOut.model_validate(opened.case, from_attributes=True),
+        sent_line=sent_line_out(opened.case.reply_by, is_hr=caller.actor.is_hr_admin),
         created=opened.created,
         crisis_text=opened.crisis_text,
     )
@@ -156,7 +158,11 @@ async def get_case_texts(signed_in: SignedInDep) -> CaseTextsOut:
     # The database's clock, the one the reply-by date of a case sent now would come from.
     now = await database_now(signed_in.db)
     reply_by = await queries.reply_by_at(signed_in.db, signed_in.actor.tenant_id, now)
-    return CaseTextsOut(bullets=list(texts.form_texts(reply_by)), reply_by=reply_by)
+    return CaseTextsOut(
+        bullets=list(texts.form_texts(reply_by)),
+        reply_by=reply_by,
+        waiting_limit=texts.WAITING_LIMIT_TEXT,
+    )
 
 
 @router.get(

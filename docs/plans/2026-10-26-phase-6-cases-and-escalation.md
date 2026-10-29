@@ -948,7 +948,37 @@ cards, `components/assistant/answer.tsx`, `features/personas/personas.ts`, `pers
 
 ## Self-review: acceptance criteria to tasks
 
-Filled in by Task 31 from screens 11 and 12's `notes.md`.
+Filled in by Task 31 from screens 11 and 12's `notes.md`. "Gallery" is
+`e2e/gallery-cases.spec.ts` (axe at 1440 and 390 px, no sideways scroll) with the components'
+unit tests; Stage 6's browser tests prove the criteria that need the pages and the API.
+
+| Screen | Acceptance criterion | Proved by |
+|---|---|---|
+| 11 | Every state matches its screenshot at 1440 px within the spacing tokens, with the build decisions applied | Stage 5's self-review against every frame; Stage 6's capture report |
+| 11 | Usable at 390 px as "Phone (390 px)" describes; nothing scrolls sideways | Gallery (Task 32); Stage 6 browser tests (Task 40) |
+| 11 | "Open a confidential case" appears on the sensitive and crisis panels only when `offerCase` is true; the other panels show "Write to HR" | `escalation-panel.test.tsx`, `hr-contacts.test.tsx` (Task 32); Task 40 |
+| 11 | The panel text, the form's five lines, and the sent line are the API's texts, word for word, with the reply date from the API | The sent line's route tests and the parts-join test (Task 32); the components take every fixed text as a prop; Task 40 |
+| 11 | The form opens prefilled with the turn's own question, verbatim; a prefill under 40 characters shows the short-reply prompt | `case-form.test.tsx` (Task 32); Task 35 for the turn's question |
+| 11 | "Send to HR" validates in the order the notes give; each error is `role="alert"` with `aria-invalid` on its field, and focus moves to the first | `validate.test.ts`, `case-form.test.tsx` (Task 32) |
+| 11 | A double click on "Send to HR" opens one case, and a turn opens at most one case, in this tab, after a reload, and in another tab | One `submissionId` per open form (`case-form.test.tsx`, Task 32); Tasks 35, 36, 40 |
+| 11 | Sending shows "Sending…" with `aria-busy`; the sent line is `role="status"` and takes focus; a failed send keeps the category and the words | `case-form.test.tsx`, `case-sent.test.tsx` (Task 32) |
+| 11 | The waiting-limit line replaces the button and links to My cases | `case-sent.test.tsx`, `escalation-panel.test.tsx` (Task 32) |
+| 11 | A crisis verdict shows the fixed crisis text right after the sent line, unchanged | `case-sent.test.tsx` (Task 32); Task 36 |
+| 11 | My cases shows status only: no words and no link into a case; the badges and date lines follow the spec | `case-list.test.tsx`, `status-badge.test.tsx` (Task 33); Task 36 |
+| 11 | "My cases" sits after "Time off" for everyone but HR | Task 38 (`nav.test.ts`) |
+| 11 | No pronouns in any copy; red only for real errors; axe reports no violations in any state | Gallery (Tasks 32, 33); Task 40 |
+| 12 | Every state matches its screenshot at 1440 px within the spacing tokens, with the build decisions applied | Stage 5's self-review against every frame; Stage 6's capture report |
+| 12 | Usable at 390 px as "Phone (390 px)" describes; nothing scrolls sideways | Gallery (Task 33); Task 40 |
+| 12 | The queue never shows any part of a case's words or summary; its order and filters are as the notes say, with each filter's empty text | `case-queue-table.test.tsx` (Task 33); Task 37 |
+| 12 | An overdue reply and the crisis fact use neutral styling, never red or a warning style | `case-queue-table.test.tsx`, gallery (Task 33) |
+| 12 | The Cases badge and the home card's figures come from `GET /cases/counts`; the badge hides at zero | Task 38 |
+| 12 | The summary is plain text under the "AI summary" label with its time and model; its pending, failed, and crisis states match their frames, and "Try again" retries | `case-summary-block.test.tsx` (Task 33); Task 37 |
+| 12 | Every view starts with the words hidden; showing them adds one timeline row, announced politely; hiding adds nothing; a window refocus adds nothing | `case-words-reveal.test.tsx`, `case-timeline.test.tsx` (Task 33); Tasks 37 and 40 |
+| 12 | The status actions are `aria-disabled`, focusable, and described by the read-first line until the words are read; the server refuses an early change too | The status actions' tests (Task 33); the server's `words-not-read` tests (Stages 2 and 3) |
+| 12 | The dialogs are alert dialogs that start on Cancel, close on Escape, and return focus; confirming updates the badge, the header line, and the timeline | `case-status-dialog.test.tsx` (Task 33); Tasks 37 and 40 |
+| 12 | HR's own case shows its metadata only, in the queue and the detail, with no actions | `case-queue-table.test.tsx` and the own-case notice's test (Task 33); Task 37 |
+| 12 | Anyone who isn't HR gets the not-found page at `/cases` and `/cases/:id`, and no Cases item | Tasks 37, 38, 40 |
+| 12 | No pronouns in any copy; axe reports no violations in any state | Gallery (Task 33); Task 40 |
 
 ---
 
@@ -1455,6 +1485,87 @@ Stage 4's paid calls came to about $13.53, with a few cents of Voyage.
   checks that rounds 2 to 5 had added; the same Opus reviewer re-checked the new trigger and the
   race paths. A comment line in the evals' grader was over 100 characters (the fixers had linted
   `apps/api` alone); `make check` caught it.
+
+### Stage 5: the components (`feat/phase-6-components`, 2026-10-29)
+
+Branched off `dev` at `e924230`. No paid AI calls.
+
+**Gap calls and deviations:**
+- **The sent line now comes from the API (the owner's call).** Stage 4 hashed it, but no route
+  sent it: `POST /cases` and a reloaded turn carried only the status and the date. Both now carry
+  `sentLine` in two parts, filled by the server from the hashed template with the case's own
+  reply-by date: the lead ("Sent to HR. HR replies by Wednesday, October 28.") and the pointer
+  ("You can see its status in My cases.", or "Cases" for HR). The two parts joined are the hashed
+  text, so the hash test still guards every word, and My cases shows the lead alone, as designed.
+- **The waiting-limit line comes from the API too** (`GET /cases/texts` gains `waitingLimit`), so
+  the web app keeps no copy that could drift from the server's 409 text. "View your cases" stays
+  web copy (the screen's build decision), and the line on My cases has no link to its own page.
+- **A paste past the limit cuts only the pasted part:** the form finds what was inserted and keeps
+  the person's own text before and after it whole (Phase 5's note field cuts the whole text at the
+  end, which for a case would drop the person's own words). Composition and autocorrect input are
+  cut the same way, not refused.
+- **Pressing Send at the limit announces the counter's line** through the shared live region,
+  since adding an alert role to the existing counter is often not read out.
+- **The case form takes three gallery-only props** (`validateOnMount`, `initialCategory`,
+  `focusHeadingOnMount`), off by default, so fixed frames can show errors without a press.
+- **The tailwind-merge spacing list now has `panel`** (the backlog's item from the screens PR).
+
+**Reviews:**
+- **Batch A (Tasks 31 and 32 and the API's sent line), combined Sonnet review:** nothing high.
+  Fixed, the mediums: a paste in the middle of nearly full text cut off the person's own text at
+  the end (the new tests fail on the old cut, 9 of them); the limit's announcement could be
+  missed. Lows fixed: composition input refused past the limit; the sent line's props allowed a
+  sent state with no line; the waiting-limit line copied in the web app. Left for Stage 6: the
+  page must ignore a second Send while one is pending (the form reuses one `submissionId`, and
+  the server returns the same case), and HR's sent line needs a link to Cases, not My cases.
+- **Batch B (Tasks 33 and 34), combined Sonnet review:** nothing high; its three mutation checks
+  were each caught by the intended tests. Fixed, the mediums: the timeline announced every added
+  entry, so a refetch after the page's own summary read would have announced "read the AI
+  summary" on every open (now only a read of the words or a status change); a failed words open
+  wasn't announced; the summary helper couldn't tell a failed fetch from one still loading, so a
+  written summary whose fetch failed showed "Writing the summary…" for good (it now takes a
+  failed-fetch flag and says whether "Try again" should fetch again or ask for a new summary).
+  Lows fixed: a dangling separator in the summary's meta line, the header's two date facts read
+  as one by a screen reader, the time-off badge importing from the cases folder, and (from my
+  screenshots) the header's lock wrapping onto its own line at 390 px. Recorded, no change: the
+  detail's header says "Reply due" even when overdue (the spec keeps the overdue wording to the
+  queue); the timeline shows the date on the first entry and whenever the day changes, since the
+  frames disagree; an old-style model ID would read oddly (only the pinned IDs appear); HR's own
+  row in the queue has no visible cue, as the notes give none.
+- **Gap calls in Batch B:** the failed words line, which the design doesn't draw, reads "{First
+  name}'s words couldn't be opened. Please try again."; the newest timeline entry's dot is a
+  primary ring, as the design's CSS draws it; the gallery's wide frames (the queue, the detail,
+  My cases) spill past the gallery's column so they can be compared at their designed widths.
+- **`/code-review medium`, round 1** (against `origin/dev`): fixed, test first: the sent line's
+  and the limit line's default links and "Write to HR" pointed at `/my-cases`, which HR doesn't
+  have (every link is now a prop the page passes, or none); the detail's header said "Reply due"
+  for an overdue case while the queue said "Reply was due" (both now use one reply line, so
+  `today` is a prop); a `false` case area hid the case button and showed nothing; dated and bare
+  model IDs read oddly in the summary's meta line; two identical timeline entries shared one key,
+  so the second wasn't announced; the sent template's split failed silently if its wording lost
+  the boundary (it now raises); a badge lookup matched `toString`; two components joined classes
+  without `cn()`, and one built `aria-describedby` with it.
+- **Round 2:** fixed, test first: the summary block offered "Try again" by the browser's clock
+  while the server's 2-minute gate uses the database's, so a fast clock offered a retry the server
+  refused (it now waits 30 seconds more, and a refused retry leaves the block pending); the
+  waiting-limit line, replacing the form after a refused send, left focus on nothing (it can now
+  take focus). Lows fixed: a written summary whose fetch came back empty stayed pending for good;
+  the short-reply rule trimmed differently from the empty check; the sent template is split once
+  at startup, and the full sent line is built from its parts; the link type the assistant
+  components share moved out of the cases folder. Recorded, no change: the form's own error lines
+  and its 4,000 limit are unhashed copy the spec lets the web app hold, and the server repeats
+  every check.
+- **Round 3:** nothing above low; the review loop stopped here. Recorded: the three links to
+  `/my-cases` ("View in My cases", "View your cases", "Write to HR") are constants a page could
+  pass to HR, so Stage 6 must give HR none of them; the timeline formats each entry's day twice
+  per render; the time-off and case badges draw their icons through two identical components;
+  `CaseSentLink` is a second name for the shared link type. Repeats didn't count: the form's own
+  error lines (unhashed copy), and My cases showing the sent line's lead alone (the approved
+  design).
+- **For Stage 6:** the page re-renders with a fresh `now` so a summary still missing after 2
+  minutes offers "Try again"; it moves focus after a status change through the refs the actions
+  and the header expose; and it decides a failed summary fetch's "Try again" with
+  `summaryRetryKind`.
 
 ## Backlog
 

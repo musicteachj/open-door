@@ -12,6 +12,36 @@ version (`0.x.y` while the app is being built, `1.0.0` when it is complete).
 
 ### Added
 
+- **The case components: the panel's case button, the case form, My cases, and HR's queue and
+  case detail** (Phase 6, stage 5). Every part of screens 11 and 12 in every state, under
+  `components/cases/`, shown in the component gallery and checked for accessibility at 1440 and
+  390 px. No page uses them yet, and none of them fetches data (Stage 6 builds the pages).
+  - The escalation panel takes `offerCase`: "Open a confidential case" as a primary button on the
+    sensitive panel and a secondary one on the crisis panel, which keeps its crisis text first. The
+    form opens in its place, and "Not now" returns focus to the button. The HR contacts can end
+    with a "Write to HR" link the page passes (never assumed, since HR has no My cases), which the
+    "can't answer right now" panel shows.
+  - The form: the category choices, the person's words with a 4,000-character counter that counts
+    as the server does, the five lines from the API, and "Send to HR" with every state the design
+    draws (the short-reply prompt, field errors in the design's order, the limit, sending, a failed
+    send kept for "Try again"). One submission ID per open form, so a double click opens one case.
+    A paste, a drop, or an autocorrect that would pass the limit is cut at what was inserted, so
+    the person's own text on either side stays whole.
+  - The sent line and the waiting-limit line, in the panel and on My cases (the line on My cases
+    has no link to the page it's on).
+  - My cases' list (status and dates only, never the words, and no way into a case) and the six
+    case statuses on the one `StatusBadge`.
+  - HR's queue: the "Show" filter, a link per case named by its facts, the reply lines ("Reply due
+    today", "Reply was due Mon, Oct 26"), the crisis fact, and each filter's empty text. An overdue
+    reply and the crisis fact are neutral ink, never red.
+  - The case detail's parts: the header, the person card, the AI summary (written, pending, failed,
+    and crisis), the words behind "Show {first name}'s words", the status actions (locked and
+    still focusable until the words are read), the two status dialogs, the timeline (a read of the
+    words or a status change is announced), and HR's own-case notice. The words and the summary
+    are plain text only, with nothing turned into a link.
+  - Every fixed text is a prop: the web app holds no copy of the panel text, the form's lines, the
+    sent line, or the waiting-limit line.
+
 - **One summary retry in flight per case, and a crisis is never dropped** (Phase 6, stage 4,
   batch C review). HR's retry now takes the case's row before it reads, and refuses with the
   existing 409 `summary-retry-refused` while an earlier retry is in flight: asked less than 60
@@ -298,6 +328,13 @@ version (`0.x.y` while the app is being built, `1.0.0` when it is complete).
 
 ### Changed
 
+- **The sent line and the waiting-limit line come from the API** (Phase 6, stage 5). A send's
+  answer and a reloaded turn's `caseOpened` now carry `sentLine` in two parts, `lead` ("Sent to HR.
+  HR replies by Wednesday, October 28.") and `pointer` ("You can see its status in My cases.", or
+  "Cases" for HR), cut from the owner-approved template so its hash still guards every word, with
+  the case's own reply-by date. `GET /cases/texts` also serves `waitingLimit`. Until now no route
+  sent either line, so the web app would have needed its own copy. The web client is regenerated.
+
 - **The AI governance assessment covers confidential cases** (Phase 6, stage 4). The AI Act's
   Article 6(3) and Annex III point 4 were read again in the act and its consolidated text after
   the Digital Omnibus (both unchanged), and `docs/AI-GOVERNANCE.md` now explains why the case
@@ -345,6 +382,10 @@ version (`0.x.y` while the app is being built, `1.0.0` when it is complete).
   screening now price a guard call through one helper. No behavior changed.
 
 ### Fixed
+
+- **The class-merging helper knows the `panel` width** (Phase 6, stage 5). `cn('w-rail',
+  'w-panel')` kept both classes, so the CSS order decided the width; it now keeps the last, as for
+  the theme's other spacing names.
 
 - **Two eval graders no longer fail correct answers** (Phase 6, stage 4). The no-case-claim grader
   took the handbook's instruction to a manager, relayed ("tell the employee that HR will follow

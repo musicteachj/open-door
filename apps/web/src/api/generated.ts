@@ -375,16 +375,27 @@ export const CaseOpenedOutStatus = {
 } as const
 
 /**
+ * The owner-approved sent line in two parts, both cut from its hashed template. The page shows
+ * them as one line, with its own link between the pointer and the page it names.
+ */
+export interface SentLineOut {
+  lead: string
+  pointer: string
+}
+
+/**
  * The case the person opened from a turn: enough to show the sent state after a reload. Never
  * the words, and not the screening label.
  */
 export interface CaseOpenedOut {
   status: CaseOpenedOutStatus
   replyBy: string
+  sentLine: SentLineOut
 }
 
 export interface CaseSentOut {
   case: CaseStatusOut
+  sentLine: SentLineOut
   created: boolean
   crisisText: string | null
 }
@@ -416,6 +427,7 @@ export interface CaseTextOut {
 export interface CaseTextsOut {
   bullets: string[]
   replyBy: string
+  waitingLimit: string
 }
 
 export interface ProblemOut {

@@ -1,10 +1,12 @@
 import { Users } from 'lucide-react'
 import { useId } from 'react'
+import { Link } from 'react-router'
 import type { HrContactOut } from '@/api/generated'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { initialsOf } from '@/lib/initials'
 import { cn } from '@/lib/utils'
 import { APP_LINK } from './link-class'
+import type { PageLink } from '@/lib/page-link'
 import { HR_SHARED_INBOX, conversationCopy } from './labels'
 
 type HrContactsProps = {
@@ -15,6 +17,11 @@ type HrContactsProps = {
    * bordered card under a not-found answer.
    */
   variant?: 'inline' | 'card'
+  /**
+   * Adds this link ("Write to HR") after the contacts. No default: the page passes
+   * `WRITE_TO_HR_LINK`, or nothing. HR has no My cases page, so no link is ever assumed.
+   */
+  writeToHr?: PageLink | null
   className?: string
 }
 
@@ -73,7 +80,12 @@ function ContactRow({
  * person from the directory, then the shared HR inbox (a fixed entry, always last). Every escalation
  * panel and a not-found answer end with it. Rows stack below 640 px, with the email under the name.
  */
-function HrContacts({ contacts, variant = 'inline', className }: HrContactsProps) {
+function HrContacts({
+  contacts,
+  variant = 'inline',
+  writeToHr = null,
+  className,
+}: HrContactsProps) {
   const headingId = useId()
   return (
     <div
@@ -107,6 +119,11 @@ function HrContacts({ contacts, variant = 'inline', className }: HrContactsProps
           avatar={null}
         />
       </ul>
+      {writeToHr && (
+        <Link to={writeToHr.to} className={cn(APP_LINK, 'mt-3 self-start text-ui')}>
+          {writeToHr.label}
+        </Link>
+      )}
     </div>
   )
 }

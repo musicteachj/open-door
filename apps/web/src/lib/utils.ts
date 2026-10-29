@@ -12,7 +12,7 @@ const twMerge = extendTailwindMerge({
       shadow: ['xs', 'md', 'focus-halo'],
       radius: ['xs', 'sm', 'md', 'lg', 'xl', 'full'],
       'font-weight': ['regular', 'medium', 'semibold'],
-      spacing: ['sidebar', 'rail', 'content', 'sheet', 'control', 'control-sm', 'row'],
+      spacing: ['sidebar', 'rail', 'panel', 'content', 'sheet', 'control', 'control-sm', 'row'],
     },
   },
 })

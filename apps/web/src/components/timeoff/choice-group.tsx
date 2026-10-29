@@ -11,6 +11,12 @@ type ChoiceGroupProps = {
   value: string
   onValueChange: (value: string) => void
   disabled?: boolean
+  /** Marks the group invalid (`aria-invalid`), for a form that found no choice. */
+  invalid?: boolean
+  /** The ID of the error or hint that describes the group. */
+  describedBy?: string
+  /** Replaces the default columns (the case form's two at desktop and one on a phone). */
+  optionsClassName?: string
   className?: string
 }
 
@@ -25,6 +31,9 @@ function ChoiceGroup({
   value,
   onValueChange,
   disabled = false,
+  invalid = false,
+  describedBy,
+  optionsClassName,
   className,
 }: ChoiceGroupProps) {
   const labelId = useId()
@@ -38,8 +47,13 @@ function ChoiceGroup({
         value={value}
         onValueChange={onValueChange}
         disabled={disabled}
+        aria-invalid={invalid || undefined}
+        aria-describedby={describedBy}
         // 180 px fits "Half day (4 hours)" on one line: two cards in the 372 px form, stacked on a phone.
-        className="grid grid-cols-[repeat(auto-fit,minmax(180px,1fr))] gap-2"
+        className={cn(
+          'grid grid-cols-[repeat(auto-fit,minmax(180px,1fr))] gap-2',
+          optionsClassName,
+        )}
       >
         {options.map((option) => (
           <RadioGroup.Item

@@ -4,6 +4,8 @@ import hashlib
 import re
 from datetime import date
 
+import pytest
+
 from app.ai import fixed_texts
 from app.ai.fixed_texts import (
     BUDGET_DAILY_TEXT,
@@ -268,6 +270,31 @@ def test_the_sent_template_has_only_the_reply_date_and_the_place_filled_in() -> 
     )
     assert case_texts.sent_state_text(date(2026, 10, 28), where="Cases").endswith("in Cases.")
     assert case_texts.SENT_STATE_TEMPLATE.count("{") == 2
+
+
+def test_the_sent_line_in_two_parts_joins_to_the_hashed_whole() -> None:
+    day = date(2026, 10, 28)
+    for where in ("My cases", "Cases"):
+        lead, pointer = case_texts.sent_state_parts(day, where=where)
+        assert lead + " " + pointer == case_texts.sent_state_text(day, where=where)
+    lead, pointer = case_texts.sent_state_parts(day, where="My cases")
+    assert lead == "Sent to HR. HR replies by Wednesday, October 28."
+    assert pointer == "You can see its status in My cases."
+
+
+def test_a_sent_template_without_the_reply_by_boundary_raises() -> None:
+    with pytest.raises(ValueError, match="reply_by"):
+        case_texts.split_sent_template("Sent to HR. You can see its status in {where}.")
+    head, tail = case_texts.split_sent_template(case_texts.SENT_STATE_TEMPLATE)
+    assert head.endswith("{reply_by}.")
+    assert tail.startswith("You can see")
+
+
+def test_the_sent_template_is_split_once_at_import() -> None:
+    assert case_texts.SENT_LEAD_TEMPLATE + " " + case_texts.SENT_POINTER_TEMPLATE == (
+        case_texts.SENT_STATE_TEMPLATE
+    )
+    assert case_texts.SENT_LEAD_TEMPLATE.endswith("{reply_by}.")
 
 
 def test_each_phase_6_text_matches_its_pinned_hash() -> None:

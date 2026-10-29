@@ -16,6 +16,7 @@ from pydantic import AfterValidator, ConfigDict, Field, StringConstraints
 from app.ai.conversations import FEEDBACK_REASON_MAX_CHARACTERS
 from app.ai.proposals import ProposalOut
 from app.api.schemas import CamelModel
+from app.modules.cases.api_schemas import SentLineOut
 
 
 def is_storable(text: str) -> bool:
@@ -109,6 +110,8 @@ class CaseOpenedOut(CamelModel):
 
     status: Literal["new", "in_review", "closed"]
     reply_by: date
+    # The fixed sent line for the case's own reply-by date and the caller's role.
+    sent_line: SentLineOut
 
 
 class TurnOut(CamelModel):

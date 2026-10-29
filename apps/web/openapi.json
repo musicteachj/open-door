@@ -3325,12 +3325,16 @@
             "type": "string",
             "format": "date",
             "title": "Replyby"
+          },
+          "sentLine": {
+            "$ref": "#/components/schemas/SentLineOut"
           }
         },
         "type": "object",
         "required": [
           "status",
-          "replyBy"
+          "replyBy",
+          "sentLine"
         ],
         "title": "CaseOpenedOut",
         "description": "The case the person opened from a turn: enough to show the sent state after a reload. Never\nthe words, and not the screening label."
@@ -3339,6 +3343,9 @@
         "properties": {
           "case": {
             "$ref": "#/components/schemas/CaseStatusOut"
+          },
+          "sentLine": {
+            "$ref": "#/components/schemas/SentLineOut"
           },
           "created": {
             "type": "boolean",
@@ -3359,6 +3366,7 @@
         "type": "object",
         "required": [
           "case",
+          "sentLine",
           "created",
           "crisisText"
         ],
@@ -3505,12 +3513,17 @@
             "type": "string",
             "format": "date",
             "title": "Replyby"
+          },
+          "waitingLimit": {
+            "type": "string",
+            "title": "Waitinglimit"
           }
         },
         "type": "object",
         "required": [
           "bullets",
-          "replyBy"
+          "replyBy",
+          "waitingLimit"
         ],
         "title": "CaseTextsOut",
         "description": "The form's fixed bullets, with today's reply-by date filled in."
@@ -6240,6 +6253,25 @@
           "match"
         ],
         "title": "Segment"
+      },
+      "SentLineOut": {
+        "properties": {
+          "lead": {
+            "type": "string",
+            "title": "Lead"
+          },
+          "pointer": {
+            "type": "string",
+            "title": "Pointer"
+          }
+        },
+        "type": "object",
+        "required": [
+          "lead",
+          "pointer"
+        ],
+        "title": "SentLineOut",
+        "description": "The owner-approved sent line in two parts, both cut from its hashed template. The page shows\nthem as one line, with its own link between the pointer and the page it names."
       },
       "SickYearOut": {
         "properties": {
