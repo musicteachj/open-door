@@ -106,4 +106,30 @@ describe('ChoiceGroup', () => {
     await user.click(screen.getByRole('radio', { name: 'Half day' }))
     expect(onChange).not.toHaveBeenCalled()
   })
+
+  it('passes an invalid mark, a description, and a layout class to the group', () => {
+    render(
+      <ChoiceGroup
+        label="How much"
+        options={OPTIONS}
+        value=""
+        onValueChange={() => {}}
+        invalid
+        describedBy="why"
+        optionsClassName="grid-cols-1"
+      />,
+    )
+    const group = screen.getByRole('radiogroup', { name: 'How much' })
+    expect(group).toHaveAttribute('aria-invalid', 'true')
+    expect(group).toHaveAttribute('aria-describedby', 'why')
+    expect(group).toHaveClass('grid-cols-1')
+    expect(group).not.toHaveClass('grid-cols-[repeat(auto-fit,minmax(180px,1fr))]')
+  })
+
+  it('has no invalid mark or description unless asked', () => {
+    render(<Controlled />)
+    const group = screen.getByRole('radiogroup', { name: 'How much' })
+    expect(group).not.toHaveAttribute('aria-invalid')
+    expect(group).not.toHaveAttribute('aria-describedby')
+  })
 })

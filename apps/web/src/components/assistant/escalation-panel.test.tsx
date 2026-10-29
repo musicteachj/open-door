@@ -1,6 +1,7 @@
 import { screen, within } from '@testing-library/react'
 import { MemoryRouter } from 'react-router'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { WRITE_TO_HR_LINK } from '@/components/cases/labels'
 import { DANA } from '@/test/assistant-fixtures'
 import { renderWithRouter } from '@/test/render-with-router'
 import { EscalationPanel, type EscalationPanelProps } from './escalation-panel'
@@ -252,5 +253,20 @@ describe('EscalationPanel: its arrival is announced', () => {
   it('never puts the fixed message in the announcement', () => {
     renderPanel({ kind: 'unavailable', announceOnMount: true })
     expect(announceMock.mock.calls[0]![0]).not.toContain('try again in a moment')
+  })
+})
+
+describe('EscalationPanel: Write to HR', () => {
+  it('shows the link on the unavailable panel only when asked', () => {
+    const { unmount } = renderPanel({ kind: 'unavailable' })
+    expect(screen.queryByRole('link', { name: 'Write to HR' })).not.toBeInTheDocument()
+    unmount()
+    renderPanel({ kind: 'unavailable', writeToHr: WRITE_TO_HR_LINK })
+    expect(screen.getByRole('link', { name: 'Write to HR' })).toHaveAttribute('href', '/my-cases')
+  })
+
+  it('never shows it on the sensitive or crisis panel', () => {
+    renderPanel({ kind: 'sensitive', writeToHr: WRITE_TO_HR_LINK })
+    expect(screen.queryByRole('link', { name: 'Write to HR' })).not.toBeInTheDocument()
   })
 })

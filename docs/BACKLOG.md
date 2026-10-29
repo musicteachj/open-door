@@ -205,12 +205,6 @@ the conversation read after a turn ends.
 - **Encrypt case narratives.** They are the most sensitive text the app will hold.
   Source: [the Phase 1 spec](specs/2026-10-03-phase-1-tenancy-identity-permissions.md#later-phases).
 
-- **The class-merging list misses `panel`.** `apps/web/src/lib/utils.ts` tells tailwind-merge
-  which spacing names the theme defines, and its comment says to keep the list in step with
-  `theme.css`, but `--spacing-panel` (Phase 5) isn't in it. So `cn('w-rail', 'w-panel')` keeps
-  both classes, and the CSS order decides the width. Add it, with a test, in Stage 5 or 6, which
-  touch the components. (Phase 6 screens PR review.)
-
 ## Phase 7: AI Ops console, reviewer experience, model decision
 
 - **Rename the bare `amount` key in the time-off tool results.** `timeoff_results.py` sends

@@ -78,9 +78,42 @@ def form_texts(reply_by: date) -> tuple[str, ...]:
     return tuple(filled.split("\n"))
 
 
+def split_sent_template(template: str) -> tuple[str, str]:
+    """The template cut at its `{reply_by}. ` boundary into a lead and a pointer.
+
+    Raises if the boundary is missing: a silent cut would hand the page the whole line as the lead
+    and an empty pointer.
+    """
+    head, boundary, pointer = template.partition("{reply_by}. ")
+    if not boundary:
+        raise ValueError("The sent template has no '{reply_by}. ' boundary to cut at")
+    return (head + boundary).rstrip(), pointer
+
+
+# The template cut once, at import: a template that loses its boundary fails at startup (and in the
+# test import), not on a request.
+SENT_LEAD_TEMPLATE, SENT_POINTER_TEMPLATE = split_sent_template(SENT_STATE_TEMPLATE)
+
+
+def _fill(template: str, reply_by: date, where: str) -> str:
+    return template.replace("{reply_by}", reply_by_label(reply_by)).replace("{where}", where)
+
+
 def sent_state_text(reply_by: date, *, where: str = "My cases") -> str:
-    return SENT_STATE_TEMPLATE.replace("{reply_by}", reply_by_label(reply_by)).replace(
-        "{where}", where
+    lead, pointer = sent_state_parts(reply_by, where=where)
+    return f"{lead} {pointer}"
+
+
+def sent_state_parts(reply_by: date, *, where: str = "My cases") -> tuple[str, str]:
+    """The sent line as its lead and its pointer, both cut from the hashed template.
+
+    The page shows the pointer as plain words and the link ("View in My cases") apart from it, so
+    it needs the two sentences separately. The cut is the template's own `{reply_by}. ` boundary,
+    so the parts joined by one space are exactly `sent_state_text`.
+    """
+    return (
+        _fill(SENT_LEAD_TEMPLATE, reply_by, where),
+        _fill(SENT_POINTER_TEMPLATE, reply_by, where),
     )
 
 

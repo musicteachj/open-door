@@ -11,6 +11,7 @@ from uuid import UUID
 from pydantic import Field
 
 from app.api.schemas import CamelModel
+from app.modules.cases import texts
 from app.modules.cases.schemas import Category, Status
 
 # Like the assistant's question limit: far above the 4,000 the service allows.
@@ -40,8 +41,25 @@ class CaseStatusOut(CamelModel):
     status_changed_at: datetime
 
 
+class SentLineOut(CamelModel):
+    """The owner-approved sent line in two parts, both cut from its hashed template. The page shows
+    them as one line, with its own link between the pointer and the page it names."""
+
+    lead: str
+    pointer: str
+
+
+def sent_line_out(reply_by: date, *, is_hr: bool) -> SentLineOut:
+    """The sent line for a case's own reply-by date. HR has no "My cases" page, so HR's pointer
+    names "Cases"."""
+    lead, pointer = texts.sent_state_parts(reply_by, where="Cases" if is_hr else "My cases")
+    return SentLineOut(lead=lead, pointer=pointer)
+
+
 class CaseSentOut(CamelModel):
     case: CaseStatusOut
+    # The fixed sent line for this case's reply-by date and the caller's role.
+    sent_line: SentLineOut
     # False when the submission already had a case: the same case comes back.
     created: bool
     # The fixed crisis text, for a crisis verdict only.
@@ -57,6 +75,8 @@ class CaseTextsOut(CamelModel):
 
     bullets: list[str]
     reply_by: date
+    # The line shown in place of the case button when five cases are waiting.
+    waiting_limit: str
 
 
 class CountsOut(CamelModel):

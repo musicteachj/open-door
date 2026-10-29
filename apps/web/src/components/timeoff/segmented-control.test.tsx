@@ -98,4 +98,24 @@ describe('SegmentedControl', () => {
     await user.click(screen.getByRole('radio', { name: 'Sick time' }))
     expect(onChange).not.toHaveBeenCalled()
   })
+
+  it('can sit inline: the label beside the options, one row, scrolling inside itself', () => {
+    render(
+      <SegmentedControl
+        label="Show"
+        options={[
+          { value: 'a', label: 'Open' },
+          { value: 'b', label: 'New' },
+          { value: 'c', label: 'All' },
+        ]}
+        value="a"
+        onValueChange={() => {}}
+        layout="inline"
+      />,
+    )
+    const group = screen.getByRole('radiogroup', { name: 'Show' })
+    expect(group).toHaveClass('flex', 'overflow-x-auto')
+    expect(group).not.toHaveClass('grid-cols-2')
+    expect(screen.getByText('Show').parentElement).toHaveClass('flex-row')
+  })
 })

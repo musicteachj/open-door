@@ -34,6 +34,8 @@ import { CoreSections } from './sections/core-sections'
 import { LandingSections } from './sections/landing-sections'
 import { NavigationSections } from './sections/navigation-sections'
 import { ApprovalsSections } from './sections/approvals-sections'
+import { CasesSections } from './sections/cases-sections'
+import { CasesHrSections } from './sections/cases-hr-sections'
 import { ConfirmCardSections } from './sections/confirm-card-sections'
 import { TimeOffSections } from './sections/timeoff-sections'
 
@@ -281,6 +283,8 @@ export function Gallery() {
         <TimeOffSections />
         <ApprovalsSections />
         <ConfirmCardSections />
+        <CasesSections />
+        <CasesHrSections />
       </main>
       <ToastViewport />
     </ToastProvider>

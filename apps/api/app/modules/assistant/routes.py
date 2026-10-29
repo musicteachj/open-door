@@ -121,6 +121,7 @@ from app.modules.assistant.schemas import (
     is_storable,
 )
 from app.modules.assistant.sse import StreamTracker, TurnResponse, TurnStream
+from app.modules.cases.api_schemas import sent_line_out
 from app.modules.cases.queries import cases_by_turn
 from app.modules.handbook.asker import load_asker
 from app.modules.handbook.search import pinned_version_id
@@ -343,7 +344,13 @@ async def conversation_out(
                 by_turn.get(t.id, ()),
                 None
                 if t.id not in opened
-                else CaseOpenedOut(status=opened[t.id].status, reply_by=opened[t.id].reply_by),
+                else CaseOpenedOut(
+                    status=opened[t.id].status,
+                    reply_by=opened[t.id].reply_by,
+                    sent_line=sent_line_out(
+                        opened[t.id].reply_by, is_hr=signed_in.actor.is_hr_admin
+                    ),
+                ),
             )
             for t, s in zip(turns, shows, strict=True)
         ],

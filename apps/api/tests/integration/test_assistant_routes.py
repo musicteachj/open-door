@@ -6,6 +6,7 @@ own functions, so these tests do not depend on the stream.
 
 import json
 from collections.abc import Sequence
+from datetime import date
 from decimal import Decimal
 from typing import Any
 from uuid import UUID, uuid4
@@ -30,6 +31,7 @@ from app.ai.fixed_texts import (
 )
 from app.db.models import AiConversation, AiSpend
 from app.db.tenancy import TenantContext, set_is_hr, tenant_session
+from app.modules.cases import texts as case_texts
 from app.modules.cases.queries import cases_by_turn
 from tests.integration.conftest import (
     Browser,
@@ -477,10 +479,45 @@ async def test_a_turn_with_a_case_shows_it_opened_and_only_to_its_owner(
     [opened, other] = priya.client.get(f"{BASE}/conversations/current").json()["turns"]
     [theirs, _] = mateo.client.get(f"{BASE}/conversations/current").json()["turns"]
 
-    assert opened["caseOpened"] == {"status": "new", "replyBy": cases["priya"]}
+    lead, pointer = case_texts.sent_state_parts(date.fromisoformat(cases["priya"]))
+    assert opened["caseOpened"] == {
+        "status": "new",
+        "replyBy": cases["priya"],
+        "sentLine": {"lead": lead, "pointer": pointer},
+    }
     # The other turn of the conversation has no case, and neither does Mateo's own flagged turn.
     assert other["caseOpened"] is None
     assert theirs["caseOpened"] is None
+
+
+async def test_an_hr_persons_reloaded_turn_points_to_cases_not_my_cases(
+    open_browser: OpenBrowser, app_engine: AsyncEngine
+) -> None:
+    dana = open_browser()
+    tenant_id, person_id = sign_in(dana, "dana")
+    cid = UUID(new_conversation(dana)["id"])
+    flagged = await seed_turn(
+        app_engine,
+        tenant_id,
+        person_id,
+        cid,
+        outcome=completed(guard_verdict=verdict_of("sensitive")),
+    )
+    sent = dana.client.post(
+        "/api/v1/cases",
+        json={
+            "submissionId": str(uuid4()),
+            "category": "pay",
+            "text": "My pay was short.",
+            "turnId": str(flagged),
+        },
+        headers=dana.csrf,
+    )
+    assert sent.status_code == 201, sent.text
+
+    [turn] = dana.client.get(f"{BASE}/conversations/current").json()["turns"]
+
+    assert turn["caseOpened"]["sentLine"]["pointer"] == "You can see its status in Cases."
 
 
 async def test_the_cases_by_turn_query_filters_by_person_even_for_a_session_that_reads_all(

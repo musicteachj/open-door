@@ -6,6 +6,7 @@ new, Aaliyah in review, Lucia closed). The model transport is the scripted one: 
 words is a crisis verdict and "harass" is sensitive.
 """
 
+from datetime import date
 from typing import Any
 from uuid import UUID, uuid4
 
@@ -16,7 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncEngine
 from app.db.locks import database_now
 from app.db.models import Case
 from app.db.tenancy import TenantContext, set_is_hr, tenant_session
-from app.modules.cases import queries, routes
+from app.modules.cases import queries, routes, texts
 from app.modules.cases.summary_task import SummaryJob
 from tests.integration.conftest import Browser, OpenBrowser, audit_events
 
@@ -106,6 +107,41 @@ def test_a_repeated_submission_returns_the_same_case_and_schedules_nothing(
     assert again.json()["created"] is False
     # Only the first send asks for a summary.
     assert len(scheduled) == 1
+
+
+def expected_sent_line(body: dict[str, Any], where: str) -> dict[str, str]:
+    """The sent line for the case's own reply-by date, cut from the hashed template."""
+    lead, pointer = texts.sent_state_parts(date.fromisoformat(body["case"]["replyBy"]), where=where)
+    return {"lead": lead, "pointer": pointer}
+
+
+def test_a_persons_send_carries_the_sent_line_pointing_to_my_cases(browser: Browser) -> None:
+    browser.start_sandbox("priya")
+
+    body = send(browser).json()
+
+    assert body["sentLine"] == expected_sent_line(body, "My cases")
+    assert body["sentLine"]["pointer"] == "You can see its status in My cases."
+
+
+def test_an_hr_persons_send_points_to_cases_since_hr_has_no_my_cases(browser: Browser) -> None:
+    browser.start_sandbox("dana")
+
+    body = send(browser).json()
+
+    assert body["sentLine"] == expected_sent_line(body, "Cases")
+
+
+def test_a_repeated_submission_carries_the_same_sent_line_from_the_cases_own_date(
+    browser: Browser,
+) -> None:
+    browser.start_sandbox("priya")
+    submission = uuid4()
+
+    first = send(browser, submission_id=submission).json()
+    again = send(browser, submission_id=submission).json()
+
+    assert again["sentLine"] == first["sentLine"] == expected_sent_line(first, "My cases")
 
 
 def test_the_same_submission_with_other_words_is_a_conflict(browser: Browser) -> None:
@@ -230,6 +266,8 @@ async def test_texts_carry_todays_reply_by_date(browser: Browser, app_engine: As
         expected = await queries.reply_by_at(db, tenant_of(sandbox), now)
     assert body["replyBy"] == expected.isoformat()
     assert len(body["bullets"]) == 5
+    # The waiting-limit line is the API's, so the web app holds no copy that could drift.
+    assert body["waitingLimit"] == texts.WAITING_LIMIT_TEXT
     assert any(expected.strftime("%A, %B") in bullet for bullet in body["bullets"])
     # Anyone with a session reads them; no session is a 401.
     browser.client.cookies.clear()
