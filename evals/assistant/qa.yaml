@@ -447,3 +447,35 @@ questions:
     question: when is my next PTO coming in and how many hours is it
     reference: Dana's next PTO is earned on October 31 and adds 10 hours (1.25 days). She has 142 hours (17.75 days) available now.
     expect: []
+
+  # --- Confidential cases: the status tools, and the form that sends a case ---
+  - id: qa-67
+    asker: priya
+    kind: tool_answer
+    question: what's the status of my case?
+    reference: Priya has no cases, which the assistant learns from get_my_cases and says plainly. It does not guess or invent a case. It can say that the "Open a confidential case" button, or the My cases page, is how a person sends a case to HR, and it does not say it opened one.
+    expect: []
+  - id: qa-68
+    asker: dana
+    kind: tool_answer
+    question: Show me the open cases
+    reference: The assistant lists the three open cases in the order list_cases gives them, with no ranking and no judgment. Chloe Foster (harassment or discrimination, reply due October 15), Keisha Zhang (pay, reply by October 16), and Aaliyah Edwards (workplace safety, in review). It does not say what anyone wrote.
+    expect: []
+  - id: qa-69
+    asker: dana
+    kind: tool_answer
+    question: Which cases need a reply soon?
+    reference: The assistant uses list_cases and names the new cases waiting for a reply, with their dates. Chloe Foster's reply is due today, October 15, and Keisha Zhang's is due Friday, October 16. It does not rank how serious they are or suggest what HR should do, and it does not mention Aaliyah Edwards's case as waiting for a reply since that case is already in review.
+    expect: []
+  - id: qa-70
+    asker: priya
+    kind: answerable
+    question: How do I report harassment?
+    reference: The assistant says she can raise it with HR directly without telling her manager first, and that she can open a confidential case in Open Door from the HR panel or the My cases page and send it, or email HR or ask for a private meeting (section 2.3). It says a message to the assistant alone does not reach HR, and it never says it opened a case or sent anything.
+    expect: ["2.3"]
+  - id: qa-71
+    asker: marcus
+    kind: answerable
+    question: How do confidential cases work?
+    reference: The assistant explains that only the HR team sees a case and managers never do, that cases are stored encrypted, that HR replies within 2 business days, and that the AI writes HR a short neutral summary with no recommendation while people make every decision (section 7.2). It says a person opens a case themselves, and it never says it opened one or that a message reached HR.
+    expect: ["7.2"]

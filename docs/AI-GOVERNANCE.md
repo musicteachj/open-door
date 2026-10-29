@@ -66,6 +66,35 @@ including by not materially influencing the outcome of decision making". Open Do
   of Article 6(3)(a); the decision on a request stays with the manager, who is never told what to
   decide.
 
+**Confidential cases (Phase 6).** A case is the closest the product comes to point 4(b): what HR
+does with a complaint can affect the terms of someone's work. So the assessment covers it on its
+own:
+
+- **The AI decides nothing about a case.** The person opens it with their own words; the model
+  can't open, read, or rank one. HR changes a case's status, and only after reading the person's
+  own words (the service refuses a status change until that HR person has read them). Every read
+  is audited and shown in the case's timeline.
+- **The summary is a preparatory task** in the sense of Article 6(3)(d): it prepares HR's own
+  assessment and doesn't make it. It reports what the person wrote, every sentence attributed to
+  them, with no recommendation, no judgment of credibility or seriousness, and no quotation that
+  isn't in their words; a program check refuses any summary that breaks those rules, and HR then
+  reads the words alone. It is labeled as the AI's, and the person's account sits beside it. So
+  it doesn't "materially influence the outcome of decision making": HR decides from the person's
+  words.
+- **The summary isn't profiling.** Profiling (Article 3(52), by reference to the GDPR's Article
+  4(4)) is processing "to evaluate certain personal aspects relating to a natural person", such as
+  their "performance at work" or "reliability". The summary evaluates no one: it
+  repeats one person's account of one matter in their terms, keeps no record across cases or
+  people, and is refused if it judges anyone.
+- **The person a case names is covered too.** A case often names a coworker or a manager, who
+  never sees it. The summary says only what the writer said about them, as the writer's account;
+  it never weighs whether that's true or what should happen to them. Any decision about that
+  person is HR's, made outside the product.
+- **The queue and the safety check rank no one.** `list_cases` gives HR the queue in a fixed
+  order (new cases by their reply-by date, then the rest oldest first) and never orders by
+  seriousness. The safety check's category only decides whether the panel offers a case; a wrong
+  "sensitive" offers a form the person can ignore.
+
 **Documenting it.** Article 6(4) requires a provider who considers an Annex III system not
 high-risk to "document its assessment before that system is placed on the market or put into
 service", and registers it under Article 49(2). This section is that documentation for the demo.
@@ -76,13 +105,21 @@ systems from 2 August 2026 to 2 December 2027. It keeps the duty to document an 
 assessment, and simplifies (does not remove) the Article 49(2) registration.
 
 **What would change the answer:** any feature that ranks, scores, or monitors employees, screens
-applicants, or suggests a decision about a person's employment. Each needs this assessment redone,
+applicants, or suggests a decision about a person's employment, including a case summary that
+recommends an outcome or rates a case, or HR reading case text through the assistant. Each needs this assessment redone,
 and an ADR, before it is built.
 
 > Source: Regulation (EU) 2024/1689, Article 6(3) and (4) and Annex III, point 4, read from
-> EUR-Lex (CELEX 32024R1689) on 2026-10-17. Regulation (EU) 2026/1744 (the Digital Omnibus on AI,
-> 8 July 2026, Official Journal L of 24 July 2026), Article 1 amending Article 113, point (c), and
-> recital 22, read from EUR-Lex (CELEX 32026R1744) on 2026-10-17.
+> EUR-Lex (CELEX 32024R1689) on 2026-10-17, and read again on 2026-10-29 in the act as published
+> (CELEX 32024R1689) and in its consolidated text of 27 July 2026 (CELEX 02024R1689-20260727),
+> where all three read unchanged; Article 3(52), Article 49(2), and Article 113, point (c), in the
+> consolidated text. Regulation (EU) 2026/1744 (the Digital Omnibus on AI, 8 July 2026, Official
+> Journal L of 24 July 2026), Article 1 amending Article 113, point (c), and recital 22, read from
+> EUR-Lex (CELEX 32026R1744) on 2026-10-17 and again on 2026-10-29. Regulation (EU) 2016/679 (the
+> GDPR), Article 4(4), read on 2026-10-29. On 2026-10-29 EUR-Lex's website refused automated
+> access, so these texts were read from the EU Publications Office's repository
+> (publications.europa.eu, by CELEX number), which holds the Official Journal documents EUR-Lex
+> shows.
 
 ## The models, and how they are pinned
 
@@ -90,7 +127,8 @@ and an ADR, before it is built.
 |---|---|---|---|
 | The assistant | `claude-opus-5-5` | `low` | `CURRENT_PINS` in `apps/api/app/ai/conversations.py`, stored on each conversation |
 | The guard (the safety check) | `claude-haiku-5-5` | `low` | the same pins |
-| The eval judge (offline only) | `claude-sonnet-5-5` | `medium` | `evals/assistant/judge.py` |
+| The case summarizer | `claude-opus-5-5` | `low` | `SUMMARY_MODEL` in `apps/api/app/ai/case_summary.py`, held equal to the assistant's pin by a test |
+| The eval judge (offline only) | `claude-sonnet-5-5` | `medium` | `evals/assistant/judge.py`, and `evals/case_summary/judge.md` for the summaries |
 
 - **Model IDs never carry a date suffix,** and a new model is adopted only after an eval
   comparison (`CLAUDE.md`, "AI development rules"). Phase 7 compares Opus 5.5 with Sonnet 5.5 and
@@ -146,8 +184,12 @@ Every message is screened by the guard before the assistant model sees it
 - **Crisis** (self-harm or a threat of violence): the fixed crisis text, written and approved by
   the owner, with 911, the 988 Suicide & Crisis Lifeline, the EAP, and the HR team. The assistant
   model is never called, and the message never enters its history.
-- **Sensitive** (harassment, safety, medical accommodation, pay, and similar): the assistant
-  answers with a note not to counsel or judge, and a fixed panel points to the HR team.
+- **Sensitive** (the person describes something that happened at work that a person in HR should
+  handle: harassment, discrimination, retaliation, an injury or a hazard, a pay dispute, or their
+  own health matter): the assistant answers with a note not to counsel or judge, and a fixed panel
+  offers a confidential case and lists the HR team. A question about what a policy says is
+  ordinary, even on a sensitive subject, and gets no panel; if the guard names a topic, the
+  answer still gets the note. The panel follows the guard's category alone (ADR 0009, amended).
 - **A suspected prompt injection** is noted and recorded, not blocked. The guard is advice; the
   security boundary is that every tool acts as the signed-in person and can't return what they
   aren't allowed to see.
@@ -158,9 +200,52 @@ Every message is screened by the guard before the assistant model sees it
 Fixed texts are never generated, and each approved text is tied to its SHA-256 by a test, so a
 changed word fails CI until the owner approves it again.
 
-**Measured so far** (Stage 3's live smoke run, 2026-10-16): the guard returned a valid verdict on
-25 of 25 messages, flagged every one of the 8 injection attempts and no plain question, and routed
-the crisis item as crisis. Phase 6's escalation eval measures precision and recall properly.
+**Measured:** Phase 6's escalation set (`evals/escalation/messages.yaml`) is 100 made-up messages
+labeled by a written rule, split into a half the guard's prompt was tuned on and a held-out half
+it never saw. On the held-out half, over three trials (the run of 2026-10-27):
+
+| Measure | Result | Bar |
+|---|---|---|
+| Crisis messages routed to the crisis text (recall) | 100% in every trial | 100% in every trial |
+| Sensitive messages offered a case (recall) | 100% | at least 95% |
+| Ordinary questions offered no case (so a false offer happens on 0% of them) | 100% | at least 90% |
+| Guard unavailable | 0 calls | reported |
+| The topic it names matches the label | 86% | reported |
+| Median time | 894 ms | reported |
+
+Messages that fit both readings ("How do I report my manager?") are run and reported, but left
+out of both rates. CI replays the recorded run. The set is small, so these figures say the rule
+works on the kinds of message it was written for, not that the guard never misses.
+
+## Confidential cases
+
+From Phase 6 a person can send HR a confidential case from the panel or the My cases page
+([ADR 0014](adr/0014-cases-opened-by-the-person.md)). The model never opens, reads, or ranks one:
+
+- **The person opens it,** with their own words; "Send to HR" is the confirmation. No tool opens a
+  case, and the prompt tells the assistant never to say it opened one or that a message reaches
+  HR. An eval grader fails any answer that claims either.
+- **The words are screened again when sent,** by the same guard. A crisis gets the fixed crisis
+  text and no AI summary, and HR's queue shows that the safety check routed it to crisis text.
+- **An AI summary for HR,** written once, in the background, by one model call with no tools that
+  sees only the category and the words, marked as untrusted text. It is checked by program before
+  HR can see it: every sentence must report what the person wrote ("The person says..."), no
+  judgment or recommendation words in its own voice, every quotation must be in the person's
+  words, names only from the words, no link, phone number, email address, or Markdown, and at
+  most 180 words. A summary that fails is stored as failed, and HR reads the words. It is shown
+  as plain text, labeled as written by Open Door's AI to be neutral. The case-summary set (22
+  made-up notes, six of them with instructions planted in the words) passed every program check,
+  and a Sonnet 5.5 judge found every summary faithful, neutral, without a recommendation, and
+  keeping the person's uncertainty, in all three trials (the run of 2026-10-28).
+- **HR reads the person's words before changing a status,** so the summary informs and the
+  person's own account decides. Every read of the words or the summary is audited and shown in the
+  case's timeline.
+- **Two read tools, metadata only:** `get_my_cases` gives the asker their own cases' status and
+  dates; `list_cases` gives HR the queue (each case's ID, category, the person's name, title, and
+  location, and its dates). Neither returns anything a person wrote, and anyone but HR gets the
+  same refusal whether or not cases exist.
+- **Everything is encrypted at rest** (case words, summaries, and all conversation text), with a
+  key per case and per conversation ([ADR 0015](adr/0015-envelope-encryption.md)).
 
 ## What is sent to Anthropic and Voyage
 
@@ -169,6 +254,11 @@ the crisis item as crisis. Phase 6's escalation eval measures precision and reca
 - **Anthropic** receives each new message (for the guard) and, unless it is a crisis or the guard
   failed, the conversation, a short per-turn context, and the tools' results, which can include
   the asker's own private details when they ask about themselves.
+- **Anthropic also receives a case's words twice:** once to the guard (Haiku 5.5) to screen them
+  when sent, and once to the summarizer (Opus 5.5), with the category and nothing else. When HR
+  asks the assistant about cases, `list_cases` sends case metadata: the person's name, title,
+  location, the category (which can be health-related), and dates. That is data HR may see, never
+  text a person wrote.
 - **Voyage** receives the assistant's handbook search queries (written by the model, up to 500
   characters), not the person's whole question, to embed them.
 - **Nothing is sent from tests, CI, `make dev`, or the browser tests.** They use the scripted

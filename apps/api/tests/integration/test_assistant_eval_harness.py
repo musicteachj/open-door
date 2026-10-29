@@ -46,7 +46,7 @@ from app.ai.transport import (
 from app.ai.transport import TextDelta as ModelText
 from app.core.config import Settings
 from app.db.spend_cleanup import delete_daily_rows
-from app.db.tenancy import TenantContext, tenant_session
+from app.db.tenancy import TenantContext, set_is_hr, tenant_session
 from app.domain.handbook.models import Audience
 from app.modules.handbook.search import pinned_version_id
 from app.modules.handbook.source import read_handbook
@@ -127,6 +127,36 @@ async def live_run(
 
 
 # --- The fixed sandbox ------------------------------------------------------------------------
+
+
+async def test_with_keys_the_sandbox_holds_the_seeds_four_cases_at_the_same_ids_every_run(
+    app_engine: AsyncEngine, owner_engine: AsyncEngine
+) -> None:
+    """`list_cases` needs data in the eval, so the harness seeds the cases (sealed with the run's
+    keys). Their IDs come from the fixed tenant's ID, so they repeat and fingerprints are stable."""
+    seen: list[list[UUID]] = []
+    for _ in range(2):
+        async with (
+            run.fixed_sandbox(app_engine, owner_engine, TEST_KEYS) as company,
+            tenant_session(app_engine, TenantContext(run.TENANT_ID, None)) as db,
+        ):
+            await set_is_hr(db, True)
+            stored: list[UUID] = list(
+                (await db.execute(text("SELECT id FROM cases ORDER BY id"))).scalars()
+            )
+            seen.append(stored)
+        assert len(company.cases) == 4
+        assert seen[-1] == sorted(case.id for case in company.cases)
+        assert await count_rows(owner_engine, "cases") == 0
+        assert await count_rows(owner_engine, "tenants") == 0
+    assert seen[0] == seen[1]
+
+
+async def test_without_keys_the_sandbox_has_no_cases(
+    app_engine: AsyncEngine, owner_engine: AsyncEngine
+) -> None:
+    async with run.fixed_sandbox(app_engine, owner_engine) as company:
+        assert company.cases == ()
 
 
 def test_the_fixed_tenant_id_is_a_literal_that_never_moves() -> None:

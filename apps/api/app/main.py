@@ -38,12 +38,14 @@ def _build_transport(settings: Settings) -> Transport:
     return ScriptedTransport()
 
 
-def _build_summarizer(settings: Settings) -> Summarizer | None:
-    """The case summarizer. Every transport but `anthropic` gets the scripted one. Under
-    `anthropic` there is none until Stage 4 adds the real one: the API still starts, and each
-    summary is recorded as failed with `transport`."""
+def _build_summarizer(settings: Settings, transport: Transport) -> Summarizer:
+    """The case summarizer. Under `anthropic` it shares the transport's client (and so its pool,
+    which the lifespan closes); every other transport gets the scripted one."""
     if settings.ai_transport == "anthropic":
-        return None
+        if not isinstance(transport, anthropic_transport.AnthropicTransport):
+            msg = "AI_TRANSPORT=anthropic needs an AnthropicTransport to build the summarizer on"
+            raise ValueError(msg)
+        return anthropic_transport.AnthropicSummarizer(transport.client)
     return ScriptedSummarizer()
 
 
@@ -97,7 +99,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         app.state.engine = create_engine(str(settings.database_url))
         app.state.transport = transport
         app.state.embedder = _build_embedder(settings)
-        app.state.summarizer = _build_summarizer(settings)
+        app.state.summarizer = _build_summarizer(settings, transport)
         streams = StreamTracker()
         app.state.streams = streams
         try:

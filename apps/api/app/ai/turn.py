@@ -52,6 +52,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 
 from app.ai.budget import BudgetExceeded, Caps, Reservation, reserve, settle
+from app.ai.case_outcomes import unreported_cases, with_case_sentences
 from app.ai.citations import CitationEvent, CitationMapper
 from app.ai.context import ActorView, turn_context
 from app.ai.conversations import (
@@ -79,6 +80,7 @@ from app.ai.fixed_texts import (
 from app.ai.guard import (
     GuardOutcome,
     build_guard_request,
+    guard_cost,
     guard_reservation_usd,
     offers_case,
     screen,
@@ -87,7 +89,6 @@ from app.ai.pricing import (
     IterationUsage,
     Usage,
     estimate_input_tokens,
-    is_priced,
     reservation_usd,
     total_usage,
     turn_call_cost,
@@ -824,6 +825,12 @@ class TurnRun:
             outcomes, outcome_entries = unreported_outcomes(
                 await conversation_proposals(db, conversation.id, untold_at=now_db), now_db
             )
+            # A case the person opened from this conversation is told the same way, once.
+            case_sentences, case_entries = await unreported_cases(
+                db, conversation.tenant_id, conversation.person_id, conversation.id
+            )
+            outcomes = with_case_sentences(outcomes, case_sentences)
+            outcome_entries += case_entries
         return cls(
             deps,
             conversation,
@@ -1078,19 +1085,7 @@ class TurnRun:
             self.budget_stopped = True
             self.fail("spend-limit")
             return None, []
-        usage = outcome.usage
-        # Priced at the model that served it when that has a pinned price (the scripted stand-in
-        # is free). The name the API echoes can be a dated snapshot with no pinned price, which
-        # would be charged at the dearest rates, so then the pinned guard model is used.
-        model = (
-            outcome.served_by
-            if outcome.served_by is not None and is_priced(outcome.served_by)
-            else self.conversation.guard_model
-        )
-        await self._settle(
-            reservation,
-            None if usage is None else partial(turn_call_cost, [IterationUsage(model, usage)]),
-        )
+        await self._settle(reservation, guard_cost(outcome, self.conversation.guard_model))
         self.guard_verdict = outcome.verdict_json()
         self.injection = outcome.injection_suspected
         if outcome.route == "crisis":

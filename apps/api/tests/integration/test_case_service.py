@@ -730,6 +730,28 @@ async def open_with_summary(env: Env, words: str = WORDS) -> UUID:
     return opened.case.id
 
 
+async def test_a_crisis_case_never_shows_or_opens_a_written_summary_even_when_it_is_newest(
+    env: Env,
+) -> None:
+    # A written row, then the label raised to crisis: as if two retries interleaved and the
+    # written row were stamped after the crisis one.
+    case_id = await open_with_summary(env)
+    async with acting(env.engine, env.tenant.id, env.dana) as (db, actor):
+        assert await service.record_screening(db, case_id, "crisis", actor=actor)
+
+    async with acting(env.engine, env.tenant.id, env.dana) as (db, actor):
+        detail = await service.case_detail(db, actor, case_id)
+        read = await service.case_summary_for(db, env.keys, actor, case_id)
+
+    assert detail.summary is not None
+    assert (detail.summary.status, detail.summary.reason) == ("failed", "crisis")
+    assert (read.status, read.reason, read.text) == ("failed", "crisis", None)
+    # The read is audited like any other summary read.
+    assert [e.action for e in await audit_events(env.engine, env.tenant.id)].count(
+        "case.viewed"
+    ) == 1
+
+
 async def test_hr_reads_the_words_and_the_summary_and_each_read_is_recorded(env: Env) -> None:
     case_id = await open_with_summary(env)
 
@@ -1024,6 +1046,43 @@ async def test_a_second_summary_from_the_person_is_refused_and_hrs_retry_is_adde
     assert len(rows) == 2
     [events] = [[e for e in await events_of(env, case_id) if e.kind == "summary_written"]]
     assert [e.actor_person_id for e in events] == [None, env.dana]
+
+
+async def test_a_written_summary_for_a_crisis_is_recorded_as_a_failed_crisis_one(env: Env) -> None:
+    case_id = await seed_case(env, env.leo, screening="crisis")
+    async with acting(env.engine, env.tenant.id, env.dana) as (db, actor):
+        noted = await service.record_summary(
+            db, env.keys, case_id, SummaryFailed("crisis"), actor=actor
+        )
+    async with acting(env.engine, env.tenant.id, env.dana) as (db, actor):
+        late = await service.record_summary(
+            db,
+            env.keys,
+            case_id,
+            SummaryWritten("A late one.", "claude-haiku-5-5", "summary-v1"),
+            actor=actor,
+        )
+    assert (noted, late) == (True, True)
+    rows = await hr_query(
+        env,
+        select(CaseSummary.status, CaseSummary.reason, CaseSummary.ciphertext).where(
+            CaseSummary.case_id == case_id
+        ),
+    )
+    # The billed call is recorded, but its text is nowhere.
+    assert [(r.status, r.reason, r.ciphertext) for r in rows] == [
+        ("failed", "crisis", None),
+        ("failed", "crisis", None),
+    ]
+    kinds = [e.kind for e in await events_of(env, case_id)]
+    assert kinds.count("summary_failed") == 2
+    assert "summary_written" not in kinds
+    audited = [
+        e.after
+        for e in await audit_events(env.engine, env.tenant.id)
+        if e.action.startswith("case.summary.")
+    ]
+    assert audited == [{"reason": "crisis"}, {"reason": "crisis"}]
 
 
 async def test_a_summary_after_the_first_ten_minutes_is_refused_for_the_person(env: Env) -> None:
@@ -1345,3 +1404,364 @@ async def test_the_words_never_reach_a_log_a_problem_or_an_audit_row(
     assert CANARY.encode() not in row.text_ciphertext
     stored = await hr_query(env, select(CaseSummary.ciphertext))
     assert all(CANARY.encode() not in (r.ciphertext or b"") for r in stored)
+
+
+# --- two retries in flight on one unscreened case ---
+
+CRISIS_WORDS = "I want to hurt myself."
+
+
+class Writes:
+    """A summarizer that writes a neutral summary and counts its calls."""
+
+    def __init__(self) -> None:
+        self.calls = 0
+
+    async def summarize(self, request: Any) -> Any:
+        from app.ai.case_summary import SummaryAnswer
+        from app.ai.pricing import Usage
+
+        self.calls += 1
+        return SummaryAnswer(
+            "The person wrote about pay.", "scripted", "scripted-1", Usage(1, 1, 0, 0)
+        )
+
+
+async def retry_job(env: Env, case_id: UUID, words: str, writes: Writes) -> Any:
+    """A retry's background job, built as the route builds it (HR's, screening first)."""
+    from app.modules.cases.summary_task import SummaryJob
+
+    async with acting(env.engine, env.tenant.id, env.dana) as (_, actor):
+        pass
+    return SummaryJob(
+        guard=env.guard(),
+        keys=env.keys,
+        summarizer=writes,
+        ctx=TenantContext(env.tenant.id, env.dana),
+        case_id=case_id,
+        category="pay",
+        words=words,
+        actor=actor,
+        screen_first=True,
+    )
+
+
+async def screening_and_summaries(env: Env, case_id: UUID) -> tuple[str, list[tuple[str, Any]]]:
+    async with acting(env.engine, env.tenant.id, env.dana) as (db, _):
+        screening = (
+            await db.execute(select(Case.screening).where(Case.id == case_id))
+        ).scalar_one()
+        rows = (
+            await db.execute(
+                select(CaseSummary.status, CaseSummary.reason)
+                .where(CaseSummary.case_id == case_id)
+                .order_by(CaseSummary.created_at, CaseSummary.id)
+            )
+        ).all()
+    return screening, [(r.status, r.reason) for r in rows]
+
+
+async def test_a_crisis_job_first_then_an_ordinary_job_leaves_no_written_summary(env: Env) -> None:
+    from app.modules.cases.summary_task import run_summary_job
+
+    case_id = await seed_case(env, env.leo, screening="unscreened", words=WORDS)
+    writes = Writes()
+    crisis = await retry_job(env, case_id, CRISIS_WORDS, writes)
+    ordinary = await retry_job(env, case_id, WORDS, writes)
+
+    await run_summary_job(crisis)
+    await run_summary_job(ordinary)
+
+    screening, summaries = await screening_and_summaries(env, case_id)
+    assert screening == "crisis"
+    # The ordinary job called the model before it found the case was already a crisis.
+    assert writes.calls == 1
+    # Each job recorded the crisis note; neither a summary.
+    assert summaries == [("failed", "crisis"), ("failed", "crisis")]
+
+
+@pytest.mark.parametrize(
+    ("first_words", "first_label"), [(WORDS, "ordinary"), ("They harass me.", "sensitive")]
+)
+async def test_a_crisis_job_after_another_verdict_raises_the_label_to_crisis(
+    env: Env, first_words: str, first_label: str
+) -> None:
+    from app.modules.cases.summary_task import run_summary_job
+
+    case_id = await seed_case(env, env.leo, screening="unscreened", words=WORDS)
+    writes = Writes()
+    first = await retry_job(env, case_id, first_words, writes)
+    crisis = await retry_job(env, case_id, CRISIS_WORDS, writes)
+
+    await run_summary_job(first)
+    await run_summary_job(crisis)
+
+    screening, summaries = await screening_and_summaries(env, case_id)
+    # The crisis job raises the label (ordinary or sensitive to crisis, once): no written summary
+    # of its own, and a "failed, crisis" note HR's detail shows.
+    assert screening == "crisis"
+    assert summaries == [("written", None), ("failed", "crisis")]
+    assert writes.calls == 1
+    screened = [
+        e.after
+        for e in await audit_events(env.engine, env.tenant.id)
+        if e.action == "case.screened"
+    ]
+    assert screened == [{"screening": first_label}, {"screening": "crisis"}]
+    async with acting(env.engine, env.tenant.id, env.dana) as (db, actor):
+        queue = await service.queue(db, actor, None, None)
+        detail = await service.case_detail(db, actor, case_id)
+    assert [i.crisis for i in queue.items if i.id == case_id] == [True]
+    assert detail.summary is not None
+    assert (detail.screening, detail.summary.status, detail.summary.reason) == (
+        "crisis",
+        "failed",
+        "crisis",
+    )
+
+
+async def test_a_non_crisis_job_that_loses_to_another_verdict_records_the_conflict(
+    env: Env, caplog: pytest.LogCaptureFixture
+) -> None:
+    from app.modules.cases.summary_task import run_summary_job
+
+    case_id = await seed_case(env, env.leo, screening="unscreened", words=WORDS)
+    writes = Writes()
+    sensitive = await retry_job(env, case_id, "They harass me.", writes)
+    ordinary = await retry_job(env, case_id, WORDS, writes)
+
+    await run_summary_job(sensitive)
+    with caplog.at_level(logging.WARNING):
+        await run_summary_job(ordinary)
+
+    screening, summaries = await screening_and_summaries(env, case_id)
+    # The other job's verdict stands; this AI action is recorded, not dropped.
+    assert (screening, summaries) == (
+        "sensitive",
+        [("written", None), ("failed", "screening-conflict")],
+    )
+    assert str(case_id) in caplog.text
+    assert WORDS not in caplog.text
+    kinds = [e.kind for e in await events_of(env, case_id)]
+    assert kinds.count("summary_failed") == 1
+    failed = [
+        e.after
+        for e in await audit_events(env.engine, env.tenant.id)
+        if e.action == "case.summary.failed"
+    ]
+    assert failed == [{"reason": "screening-conflict"}]
+    async with acting(env.engine, env.tenant.id, env.dana) as (db, actor):
+        detail = await service.case_detail(db, actor, case_id)
+    assert detail.summary is not None
+    assert (detail.summary.status, detail.summary.reason) == ("failed", "screening-conflict")
+
+
+async def test_a_refused_write_back_on_a_still_unscreened_case_records_unscreened(
+    env: Env, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from app.modules.cases.summary_task import run_summary_job
+
+    async def refused(*args: Any, **kwargs: Any) -> bool:
+        return False
+
+    monkeypatch.setattr(service, "record_screening", refused)
+    case_id = await seed_case(env, env.leo, screening="unscreened", words=WORDS)
+    job = await retry_job(env, case_id, WORDS, Writes())
+
+    await run_summary_job(job)
+
+    screening, summaries = await screening_and_summaries(env, case_id)
+    assert (screening, summaries) == ("unscreened", [("failed", "unscreened")])
+
+
+async def test_a_retry_is_refused_for_a_crisis_case(env: Env) -> None:
+    case_id = await seed_case(env, env.leo, screening="crisis", words=WORDS)
+    async with acting(env.engine, env.tenant.id, env.dana) as (db, actor):
+        await service.record_summary(db, env.keys, case_id, SummaryFailed("timeout"), actor=actor)
+
+    refused = await problem(plan(env, case_id))
+
+    assert (refused.status_code, refused.code) == (409, "summary-retry-refused")
+
+
+async def test_a_retry_uses_the_screening_as_it_is_under_the_lock(
+    env: Env, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    case_id = await failed_unscreened_case(env)
+    real_lock = queries.lock_case
+
+    async def lock_after_another_retry_screened(*args: Any) -> Any:
+        # Between the read and the lock, another request screens the case as a crisis.
+        async with acting(env.engine, env.tenant.id, env.dana) as (other, actor):
+            assert await service.record_screening(other, case_id, "crisis", actor=actor)
+        return await real_lock(*args)
+
+    monkeypatch.setattr(queries, "lock_case", lock_after_another_retry_screened)
+
+    refused = await problem(plan(env, case_id))
+
+    assert (refused.status_code, refused.code) == (409, "summary-retry-refused")
+
+
+async def test_my_cases_reads_only_the_views_columns_and_honors_a_limit(env: Env) -> None:
+    for _ in range(3):
+        await seed_case(env, env.leo, words=WORDS)
+    async with acting(env.engine, env.tenant.id, env.leo) as (db, actor):
+        statements: list[str] = []
+        sync = db.sync_session.get_bind()
+        event.listen(sync, "before_cursor_execute", lambda *a: statements.append(a[2]))
+        everything = await service.my_cases(db, actor)
+        two = await service.my_cases(db, actor, limit=2)
+
+    assert (len(everything), len(two)) == (3, 2)
+    selects = [q for q in statements if "FROM cases" in q]
+    assert selects
+    assert all("text_ciphertext" not in q for q in selects)
+    assert "LIMIT" in selects[-1]
+
+
+async def failed_unscreened_case(env: Env) -> UUID:
+    """An unscreened case with the opener's fixed `unscreened` note: HR may retry it at once."""
+    case_id = await seed_case(env, env.leo, screening="unscreened", words=WORDS)
+    async with acting(env.engine, env.tenant.id, env.leo) as (db, _):
+        assert await service.record_summary(db, env.keys, case_id, SummaryFailed("unscreened"))
+    return case_id
+
+
+async def plan(env: Env, case_id: UUID) -> Any:
+    async with acting(env.engine, env.tenant.id, env.dana) as (db, actor):
+        return await service.plan_summary_retry(db, env.keys, actor, case_id)
+
+
+async def test_a_second_retry_while_one_is_in_flight_is_refused(env: Env) -> None:
+    case_id = await failed_unscreened_case(env)
+
+    await plan(env, case_id)
+    refused = await problem(plan(env, case_id))
+
+    assert (refused.status_code, refused.code) == (409, "summary-retry-refused")
+
+
+async def test_a_retry_is_allowed_again_once_the_job_has_recorded_its_result(env: Env) -> None:
+    case_id = await failed_unscreened_case(env)
+    await plan(env, case_id)
+    async with acting(env.engine, env.tenant.id, env.dana) as (db, actor):
+        assert await service.record_summary(
+            db, env.keys, case_id, SummaryFailed("timeout"), actor=actor
+        )
+
+    again = await plan(env, case_id)
+
+    assert again.case_id == case_id
+
+
+async def test_a_retry_is_allowed_again_after_the_window_if_the_job_never_recorded(
+    env: Env, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    case_id = await failed_unscreened_case(env)
+    await plan(env, case_id)
+    monkeypatch.setattr(service, "IN_FLIGHT_WINDOW", timedelta(0))
+
+    again = await plan(env, case_id)
+
+    assert again.case_id == case_id
+
+
+async def test_the_window_covers_the_summary_and_screening_time_limits_with_a_margin() -> None:
+    from app.ai.case_summary import SUMMARY_TIMEOUT_SECONDS
+    from app.ai.transport import GUARD_TIMEOUT_SECONDS
+
+    needed = SUMMARY_TIMEOUT_SECONDS + GUARD_TIMEOUT_SECONDS
+    assert timedelta(seconds=needed) < service.IN_FLIGHT_WINDOW
+    assert timedelta(seconds=needed * 2) >= service.IN_FLIGHT_WINDOW
+
+
+async def test_a_retry_started_while_another_is_open_waits_for_it_and_is_then_refused(
+    env: Env,
+) -> None:
+    case_id = await failed_unscreened_case(env)
+
+    async with acting(env.engine, env.tenant.id, env.dana) as (db, actor):
+        await service.plan_summary_retry(db, env.keys, actor, case_id)
+        second = asyncio.create_task(plan(env, case_id))
+        await asyncio.sleep(0.5)
+        # The first request has not committed, and holds the case: the second is waiting for it.
+        assert second.done() is False
+
+    refused = await problem(second)
+    assert (refused.status_code, refused.code) == (409, "summary-retry-refused")
+
+
+async def test_two_jobs_that_find_the_same_verdict_both_write(env: Env) -> None:
+    from app.modules.cases.summary_task import run_summary_job
+
+    case_id = await seed_case(env, env.leo, screening="unscreened", words=WORDS)
+    writes = Writes()
+    first = await retry_job(env, case_id, WORDS, writes)
+    second = await retry_job(env, case_id, WORDS, writes)
+
+    await run_summary_job(first)
+    await run_summary_job(second)
+
+    screening, summaries = await screening_and_summaries(env, case_id)
+    assert (screening, summaries) == ("ordinary", [("written", None), ("written", None)])
+
+
+async def test_a_written_summary_for_a_crisis_case_is_recorded_as_a_failed_crisis_note(
+    env: Env,
+) -> None:
+    case_id = await seed_case(env, env.leo, screening="crisis")
+
+    async with acting(env.engine, env.tenant.id, env.dana) as (db, actor):
+        written = await service.record_summary(
+            db,
+            env.keys,
+            case_id,
+            SummaryWritten("A neutral summary.", "claude-haiku-5-5", "summary-v1"),
+            actor=actor,
+        )
+        failed = await service.record_summary(
+            db, env.keys, case_id, SummaryFailed("crisis"), actor=actor
+        )
+
+    assert (written, failed) == (True, True)
+    _, summaries = await screening_and_summaries(env, case_id)
+    assert summaries == [("failed", "crisis"), ("failed", "crisis")]
+
+
+async def test_a_second_screening_write_loses_the_race_and_says_so(env: Env) -> None:
+    case_id = await seed_case(env, env.leo, screening="unscreened", words=WORDS)
+
+    async with acting(env.engine, env.tenant.id, env.dana) as (db, actor):
+        first = await service.record_screening(db, case_id, "crisis", actor=actor)
+    async with acting(env.engine, env.tenant.id, env.dana) as (db, actor):
+        second = await service.record_screening(db, case_id, "ordinary", actor=actor)
+        current = await service.screening_of(db, case_id)
+
+    assert (first, second, current) == (True, False, "crisis")
+
+
+async def test_a_written_summary_waits_for_a_crisis_another_retry_has_not_committed(
+    env: Env,
+) -> None:
+    case_id = await seed_case(env, env.leo, screening="ordinary", words=WORDS)
+    written = SummaryWritten("A neutral summary.", "claude-haiku-5-5", "summary-v1")
+    async with acting(env.engine, env.tenant.id, env.dana) as (first, first_actor):
+        # The label is raised to crisis but not committed: the case's row is locked.
+        assert await service.record_screening(first, case_id, "crisis", actor=first_actor)
+
+        async def late_writer() -> bool:
+            async with acting(env.engine, env.tenant.id, env.dana) as (second, second_actor):
+                return await service.record_summary(
+                    second, env.keys, case_id, written, actor=second_actor
+                )
+
+        task = asyncio.create_task(late_writer())
+        await asyncio.sleep(0.5)
+        assert not task.done()  # it is waiting for the case's row, not past the check
+    # It saw the crisis only after the first session committed, so it recorded a failed one.
+    assert await asyncio.wait_for(task, 5) is True
+    rows = await hr_query(
+        env, select(CaseSummary.status, CaseSummary.reason).where(CaseSummary.case_id == case_id)
+    )
+    assert [(r.status, r.reason) for r in rows] == [("failed", "crisis")]

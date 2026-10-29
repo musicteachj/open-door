@@ -97,7 +97,7 @@ UPDATABLE_REQUEST_COLUMNS = {"status", "decided_by", "decided_at", "decision_not
 UPDATABLE_PROPOSAL_COLUMNS = {"status", "ended_at", "outcome"}
 # A case's status moves one way, by trigger, and HR alone can change it. Its words, category, dates,
 # and owner are never updatable, and a summary and a timeline event never change at all.
-UPDATABLE_CASE_COLUMNS = {"status", "status_changed_at"}
+UPDATABLE_CASE_COLUMNS = {"status", "status_changed_at", "screening"}
 EXPECTED_COLUMN_GRANTS = {
     *(("od_app", "ai_turns", column, "UPDATE") for column in UPDATABLE_TURN_COLUMNS),
     *(("od_app", "time_off_requests", column, "UPDATE") for column in UPDATABLE_REQUEST_COLUMNS),

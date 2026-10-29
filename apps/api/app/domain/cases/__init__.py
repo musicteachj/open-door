@@ -15,6 +15,16 @@ from app.domain.holidays import holidays_for
 HQ_LOCATION_CODE = "den"
 HQ_TIMEZONE = "America/Denver"
 
+# How a case's category reads in plain words, for what the assistant is told. Made from the stored
+# category only, never from anything a person wrote.
+CATEGORY_LABELS = {
+    "harassment_discrimination": "harassment or discrimination",
+    "safety": "workplace safety",
+    "medical_accommodation": "a medical need or accommodation",
+    "pay": "pay",
+    "other": "something else",
+}
+
 REPLY_BUSINESS_DAYS = 2
 # Monday is 0 and Friday is 4.
 LAST_WEEKDAY = 4

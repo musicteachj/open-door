@@ -12,6 +12,12 @@
     "note": "The guard calls this sensitive (harassment or discrimination). The model answers, and the HR escalation follows."
   },
   {
+    "id": "guard-sensitive-age",
+    "trigger": "comments about my age",
+    "behavior": "guard_sensitive",
+    "note": "The guard calls the demo's age-comment message sensitive (harassment or discrimination), so the panel offers a confidential case. The model answers, and the HR escalation follows."
+  },
+  {
     "id": "guard-injection",
     "trigger": "ignore your instructions",
     "behavior": "guard_injection",
@@ -112,5 +118,23 @@
     "trigger": "cancel my request",
     "behavior": "cancel_mine",
     "note": "It lists the person's own requests, takes the first one that can still be canceled, and asks for a cancel card. Nothing is canceled until the person confirms."
+  },
+  {
+    "id": "my-cases",
+    "trigger": "status of my case",
+    "behavior": "my_cases",
+    "note": "It reads the person's own cases through the real tool and quotes the newest one's labels and the date HR replies by. It never reads the person's words."
+  },
+  {
+    "id": "open-cases",
+    "trigger": "show me the open cases",
+    "behavior": "open_cases",
+    "note": "As HR, it lists the open cases through the real tool and names the count and the first one in the queue. Anyone else gets the tool's fixed error."
+  },
+  {
+    "id": "cases-due",
+    "trigger": "which cases need a reply soon",
+    "behavior": "cases_due",
+    "note": "As HR, it lists the new cases through the real tool and names those the tool marked as due. Anyone else gets the tool's fixed error."
   }
 ]

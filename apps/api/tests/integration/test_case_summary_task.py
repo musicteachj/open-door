@@ -66,7 +66,7 @@ class FakeSummarizer:
             await asyncio.sleep(self.sleep_seconds)
         if isinstance(self.answer, Exception):
             raise self.answer
-        text_ = self.answer or "The person described a pay concern."
+        text_ = self.answer or "The person wrote about pay."
         return SummaryAnswer(text_, self.model, "fake-1", USAGE)
 
 
@@ -141,7 +141,7 @@ def test_the_summary_is_written_after_the_send_and_never_holds_the_words(
 
     assert state["status"] == "written"
     assert read["status"] == "written"
-    assert "pay concern" in read["text"]
+    assert "wrote about pay" in read["text"]
     assert CANARY not in read["text"]
     assert (read["model"], read["promptVersion"]) == ("scripted", "scripted-1")
 
@@ -173,9 +173,9 @@ def test_the_summarizer_gets_the_category_and_the_escaped_words_and_no_tools(
 
     [request] = fake.requests
     content = request.messages[0]["content"]
-    assert request.tools == ()
+    assert not hasattr(request, "tools")
     assert request.category == "pay"
-    assert content.startswith("Category: a pay concern\n<case_words>")
+    assert content.startswith("Category: pay\n<case_words>")
     assert content.endswith("</case_words>")
     assert content.count("</case_words>") == 1
     assert len(request.messages) == 1
@@ -398,6 +398,13 @@ def test_a_summary_that_could_not_be_recorded_is_logged_by_case_id_only(
     assert record.getMessage() == f"A case summary was not recorded (case {case.id})"
     assert CANARY not in caplog.text
     assert record.exc_info is None
+
+
+def test_the_reservation_counts_the_system_prompt_as_input() -> None:
+    request = case_summary.build_summary_request("pay", WORDS)
+    without = dataclasses.replace(request, system="")
+
+    assert summary_reservation_usd(request) > summary_reservation_usd(without)
 
 
 def test_the_reservation_reads_the_requests_own_max_tokens() -> None:
@@ -684,3 +691,81 @@ def test_a_retry_needs_the_csrf_header(browser: Browser) -> None:
 
     assert retry(browser, case.id, csrf=False).status_code == 403
     assert working.requests == []
+
+
+# --- the retry's screening is written back to the case (migration 0014) ---
+
+
+def screening_in_detail(browser: Browser, case_id: str) -> str | None:
+    value: str | None = detail(browser, case_id)["screening"]
+    return value
+
+
+def queue_item(browser: Browser, case_id: str) -> dict[str, Any]:
+    items = get(browser, "").json()["items"]
+    return next(item for item in items if item["id"] == case_id)
+
+
+def test_a_crisis_found_by_the_retry_shows_in_hrs_queue_and_detail(browser: Browser) -> None:
+    use(browser, FakeSummarizer())
+    case = unscreened_case(browser, "I want to hurt myself.")
+    assert screening_in_detail(browser, case.id) == "unscreened"
+    assert queue_item(browser, case.id)["crisis"] is False
+
+    retry(browser, case.id)
+
+    assert screening_in_detail(browser, case.id) == "crisis"
+    assert queue_item(browser, case.id)["crisis"] is True
+
+
+@pytest.mark.parametrize(
+    ("words", "verdict"),
+    [(WORDS, "ordinary"), ("My manager began to harass me.", "sensitive")],
+)
+def test_a_verdict_found_by_the_retry_is_kept_on_the_case(
+    browser: Browser, words: str, verdict: str
+) -> None:
+    use(browser, FakeSummarizer())
+    case = unscreened_case(browser, words)
+
+    retry(browser, case.id)
+
+    assert screening_in_detail(browser, case.id) == verdict
+    assert queue_item(browser, case.id)["crisis"] is False
+
+
+async def test_the_write_back_is_audited_without_the_words(
+    browser: Browser, app_engine: AsyncEngine
+) -> None:
+    use(browser, FakeSummarizer())
+    case = unscreened_case(browser, "I want to hurt myself. " + CANARY)
+    retry(browser, case.id)
+
+    rows = [e for e in await audit_events(app_engine, case.tenant) if e.action == "case.screened"]
+
+    assert [(e.after, str(e.target_id)) for e in rows] == [({"screening": "crisis"}, case.id)]
+    assert CANARY not in repr(rows)
+
+
+def test_a_retry_that_cannot_screen_leaves_the_case_unscreened(browser: Browser) -> None:
+    use(browser, FakeSummarizer())
+    case = unscreened_case(browser, "Please note the scripted guard failure.")
+
+    retry(browser, case.id)
+
+    assert screening_in_detail(browser, case.id) == "unscreened"
+
+
+def test_a_second_retry_after_a_verdict_does_not_screen_again(browser: Browser) -> None:
+    fake = FakeSummarizer("I am a summary that fails the checks, you should be fired.")
+    use(browser, fake)
+    case = unscreened_case(browser, WORDS)
+    retry(browser, case.id)
+    assert screening_in_detail(browser, case.id) == "ordinary"
+    assert detail(browser, case.id)["summary"]["reason"] == "checks"
+
+    # The case is screened now, so this retry makes no screening call and keeps the verdict.
+    app_of(browser).state.transport = GuardDown()
+    retry(browser, case.id)
+
+    assert screening_in_detail(browser, case.id) == "ordinary"

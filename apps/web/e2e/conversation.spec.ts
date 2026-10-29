@@ -215,7 +215,7 @@ test.describe('the escalation panels', () => {
     expect(panelBox!.y).toBeGreaterThanOrEqual(answerBox!.y + answerBox!.height - 1)
     // The event's fixed text, verbatim, and focus stays in the composer.
     await expect(panel).toContainText(
-      'A person on the HR team should help with this, and they handle it confidentially. Their contact details are below.',
+      "This sounds like something a person on the HR team should help with. You can open a confidential case below. Only the HR team can open it in Open Door, never your manager, and it's stored encrypted. HR replies within 2 business days. Their contact details are below.",
     )
     await expect(composerBox(page)).toBeFocused()
     // The panel's band is surface-sunken, with the fixed text and the link to §7.2.

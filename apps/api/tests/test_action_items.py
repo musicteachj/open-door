@@ -358,7 +358,16 @@ def test_the_balance_references_quote_the_engines_labels_for_the_eval_sandbox() 
 def test_the_tool_answer_items_need_no_handbook_section() -> None:
     items = [q for q in datasets.load_qa() if q.kind == "tool_answer"]
 
-    assert [q.id for q in items] == ["qa-63", "qa-64", "qa-65", "qa-66"]
+    # qa-67 to qa-69 are Phase 6's case-tool questions: they need no handbook section either.
+    assert [q.id for q in items] == [
+        "qa-63",
+        "qa-64",
+        "qa-65",
+        "qa-66",
+        "qa-67",
+        "qa-68",
+        "qa-69",
+    ]
     assert all(q.expect == () for q in items)
 
 

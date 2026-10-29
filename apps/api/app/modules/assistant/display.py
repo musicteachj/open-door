@@ -16,7 +16,7 @@ from app.ai.fixed_texts import (
     UNAVAILABLE_TEXT,
     HrContact,
 )
-from app.ai.guard import offers_case
+from app.ai.guard import escalation_for_verdict, offers_case
 from app.ai.proposals import ProposalOut
 from app.db.models import AiFeedback, AiTurn
 from app.modules.assistant.schemas import (
@@ -63,7 +63,8 @@ def escalation_kind(
     if error_code == GUARD_ERROR_CODE:
         return "unavailable"
     if guard_verdict is not None and (
-        guard_verdict.get("category") == "sensitive" or guard_verdict.get("kind") is not None
+        escalation_for_verdict(guard_verdict.get("category"), guard_verdict.get("kind"))
+        == "sensitive"
     ):
         return "sensitive"
     return None

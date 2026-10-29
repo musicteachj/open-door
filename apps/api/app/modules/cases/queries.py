@@ -20,6 +20,7 @@ from app.ai.guard import FLAGGED_CATEGORIES
 from app.db.locks import CASE_PERSON_NS, lock_tenant_scoped
 from app.db.models import (
     AiTurn,
+    AuditEvent,
     Case,
     CaseEvent,
     CaseSummary,
@@ -232,6 +233,34 @@ async def add_event(
     )
 
 
+async def lock_case(db: AsyncSession, tenant_id: UUID, case_id: UUID) -> Case:
+    """Hold the case's row until this transaction ends, so two retries on it take turns. Returns the
+    row as it is under the lock (the loaded object is refreshed), since a write that committed
+    while this transaction waited would otherwise leave the caller a stale screening or status."""
+    return (
+        await db.execute(
+            select(Case)
+            .where(Case.tenant_id == tenant_id, Case.id == case_id)
+            .with_for_update()
+            .execution_options(populate_existing=True)
+        )
+    ).scalar_one()
+
+
+async def last_retry_at(db: AsyncSession, tenant_id: UUID, case_id: UUID) -> datetime | None:
+    """When HR last asked for a summary retry on this case (its audit row; HR reads these)."""
+    return (
+        await db.execute(
+            select(func.max(AuditEvent.occurred_at)).where(
+                AuditEvent.tenant_id == tenant_id,
+                AuditEvent.target_type == "case",
+                AuditEvent.target_id == case_id,
+                AuditEvent.action == "case.summary.retried",
+            )
+        )
+    ).scalar_one()
+
+
 async def newest_summary(db: AsyncSession, tenant_id: UUID, case_id: UUID) -> CaseSummary | None:
     return (
         await db.execute(
@@ -322,7 +351,8 @@ _NEW_FIRST = case((Case.status == "new", 0), else_=1)
 _REPLY_KEY = case((Case.status == "new", Case.reply_by), else_=date(1970, 1, 1))
 
 
-def encode_cursor(row: Case) -> str:
+def encode_cursor(row: Any) -> str:
+    """The cursor for the page's last row: a `Case` or a queue row with the same four columns."""
     key = [
         0 if row.status == "new" else 1,
         (row.reply_by if row.status == "new" else date(1970, 1, 1)).isoformat(),
@@ -369,7 +399,16 @@ async def queue_rows(
 ) -> list[Any]:
     query = (
         select(
-            Case,
+            # The metadata columns only: the encrypted words and their key never leave the
+            # database for a queue read.
+            Case.id,
+            Case.category,
+            Case.person_id,
+            Case.created_at,
+            Case.reply_by,
+            Case.status,
+            Case.status_changed_at,
+            Case.screening,
             Person.given_name,
             Person.family_name,
             Person.title,

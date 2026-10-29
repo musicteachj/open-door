@@ -89,3 +89,11 @@ def make_trace(
     assert not unknown, f"ItemTrace has no field {sorted(unknown)}"
     values.update(overrides)
     return run.ItemTrace(**values)
+
+
+def load_escalation() -> ModuleType:
+    return load_eval_module("escalation.py")
+
+
+def load_case_summary() -> ModuleType:
+    return load_eval_module("case_summary.py")

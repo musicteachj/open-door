@@ -4,8 +4,8 @@ A case's words are the most sensitive text in the product, so the summary call i
 little as possible: the category and the words, in one message, with no tools. The words sit only
 inside an untrusted-text tag whose own name is escaped in them. The call is a `Summarizer`, not a
 `Transport` method: a second interface keeps the many `Transport` fakes untouched, and the lifespan
-builds it like the embedder. This stage has the scripted and replay versions; the Anthropic version
-and the prompt arrive with Stage 4.
+builds it like the embedder. There are scripted, replay, and Anthropic versions (the last is in
+`anthropic_transport.py`).
 
 `summary_problem` runs on every summary before it is stored, whoever wrote it.
 """
@@ -15,7 +15,10 @@ from dataclasses import dataclass, field
 from typing import Any, Final, Protocol
 
 from app.ai.pricing import Usage
+from app.ai.prompts.versions import case_summary_prompt
+from app.ai.summary_checks import judges, misquotes, unattributed
 from app.ai.text import neutralize
+from app.domain.cases import CATEGORY_LABELS
 
 # The words go inside this tag, as untrusted data.
 SUMMARY_WORDS_TAG: Final = "case_words"
@@ -24,9 +27,13 @@ SUMMARY_WORDS_TAG: Final = "case_words"
 SUMMARY_MODEL: Final = "claude-opus-5-5"
 SUMMARY_EFFORT: Final = "low"
 SUMMARY_TIMEOUT_SECONDS: Final = 30
-SUMMARY_MAX_TOKENS: Final = 1024  # Thinking counts toward this.
-# The spec asks for about 120 words; a summary over this is stored as failed.
-SUMMARY_MAX_WORDS: Final = 150
+# Thinking counts toward this and cannot be turned off on Opus 5.5, so a `max_tokens` stop would
+# fail the summary; the room is for the thinking and the answer.
+SUMMARY_MAX_TOKENS: Final = 2048
+# The prompt asks for at most 120 words; a summary over this is stored as failed. The paid runs of
+# 2026-10-28 showed the longest note's summary at 161 to 171 words even when asked for 120, with
+# every judge line passing, so the ceiling sits above that rather than refusing a sound summary.
+SUMMARY_MAX_WORDS: Final = 180
 
 SCRIPTED_PROMPT_VERSION: Final = "scripted-1"
 
@@ -37,14 +44,6 @@ SUMMARY_OUTPUT_SCHEMA: Final[dict[str, Any]] = {
     "additionalProperties": False,
 }
 
-CATEGORY_LABELS: Final = {
-    "harassment_discrimination": "harassment or discrimination",
-    "safety": "workplace safety",
-    "medical_accommodation": "a medical need or accommodation",
-    "pay": "a pay concern",
-    "other": "something else",
-}
-
 
 @dataclass(frozen=True)
 class SummaryRequest:
@@ -53,11 +52,11 @@ class SummaryRequest:
     category: str
     messages: tuple[dict[str, Any], ...] = field(repr=False)
     timeout_seconds: int
+    # The summary's prompt (`prompts/case_summary.md`), sent as the system prompt.
+    system: str = field(default_factory=case_summary_prompt, repr=False)
     model: str = SUMMARY_MODEL
     effort: str = SUMMARY_EFFORT
     max_tokens: int = SUMMARY_MAX_TOKENS
-    # Always empty: the model never opens, reads, or ranks a case.
-    tools: tuple[dict[str, Any], ...] = ()
 
 
 @dataclass(frozen=True)
@@ -103,13 +102,13 @@ def build_summary_request(category: str, words: str) -> SummaryRequest:
 
 
 def summary_api_kwargs(request: SummaryRequest) -> dict[str, Any]:
-    """The call as plain JSON-able data: what a replay fingerprints (and, in Stage 4, what is
-    sent)."""
+    """The call as plain JSON-able data: what a replay fingerprints and what the Anthropic
+    summarizer sends."""
     return {
         "model": request.model,
         "max_tokens": request.max_tokens,
+        "system": request.system,
         "messages": list(request.messages),
-        "tools": list(request.tools),
         "output_config": {
             "effort": request.effort,
             "format": {"type": "json_schema", "schema": SUMMARY_OUTPUT_SCHEMA},
@@ -119,21 +118,19 @@ def summary_api_kwargs(request: SummaryRequest) -> dict[str, Any]:
 
 # --- The program checks -----------------------------------------------------------------------
 
-# Phrases that recommend an action or outcome, or judge credibility or seriousness. Ordinary
-# descriptive words (fire, must, dismissed) are left out: a neutral summary may report them.
-# Stage 4 tunes the list against the case-summary set.
+# What is wrong even in reported form, because it is the summary's own framing: the summarizer's
+# first person ("I recommend", "we suggest") and a label that sets the summary up as a verdict or
+# a plan ("Priority:", "Severity:", "Next step:", "Recommendation:"). Everything else that judged
+# or recommended (credibility, seriousness, "HR should", "warrants an investigation") is caught
+# by the attribution check below, since in the summary's own voice it is never attributed to the
+# person, and when it is attributed it is reported speech and allowed ("They want someone to take
+# it seriously").
 _RECOMMENDING = re.compile(
-    r"\b(?:recommend\w*|advis\w*|ought to|appropriate action"
-    r"|suggest\w* that (?:hr|the company)"
-    r"|hr (?:should|must|needs? to)"
-    r"|(?:should|must|ought to) be"
-    r" (?:fired|terminated|dismissed|suspended|disciplined|investigated)"
-    r"|credib\w*|believab\w*|exaggerat\w*|seriousness"
-    r"|(?:seems?|sounds?|appears?) (?:very |quite )?(?:a )?serious"
-    r"|is (?:a )?(?:very |quite )?serious (?:complaint|case|matter|allegation|concern)"
-    r"|takes? (?:this|it) seriously)\b",
+    r"\b(?:(?:i|we) (?:would |strongly )?(?:recommend|advis|suggest)\w*"
+    r"|(?:recommendations?|priority|severity|next steps?)\s*:)",
     re.IGNORECASE,
 )
+
 _LINK = re.compile(r"https?://|www\.|\b[\w-]+\.(?:com|org|net|gov|edu|io|co)\b", re.IGNORECASE)
 _PHONE = re.compile(
     r"\+\d[\d\s().-]{7,}\d"  # an international number
@@ -168,7 +165,12 @@ def _starts_sentence(text: str, index: int) -> bool:
     """Whether the word at `index` follows the start or a stop, past spaces, quotes, brackets."""
     i = index - 1
     while i >= 0 and text[i] in _SKIPPED_BEFORE_WORD:
-        if text[i] == "\n":
+        # A line break, or a quotation that opens right here, starts a sentence of its own.
+        if text[i] in "\n\u201c\u2018":
+            return True
+        # A straight quote opens only when the word follows it directly and the quote itself
+        # follows a space or the start; with a space after it, it closes a quotation.
+        if text[i] == '"' and i == index - 1 and (i == 0 or text[i - 1] in " \t\r\n([:"):
             return True
         i -= 1
     return i < 0 or text[i] in _SENTENCE_STOPS
@@ -205,6 +207,12 @@ def summary_problem(summary: str, words: str) -> str | None:
         return "phone number"
     if _MARKDOWN.search(summary):
         return "markdown"
+    if unattributed(summary):
+        return "unattributed"
+    if misquotes(summary, words):
+        return "misquote"
+    if judges(summary):
+        return "judgment"
     if _invented_name(summary, words):
         return "name"
     return None

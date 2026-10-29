@@ -7,17 +7,17 @@ the seed data), so "next Friday" means the Friday the person means.
 
 from collections.abc import Sequence
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import date, datetime
 from typing import Literal
 
 from app.ai.text import one_line
+from app.domain.cases import CATEGORY_LABELS
 from app.domain.timeoff.today import today_at
+from app.modules.cases.texts import WEEKDAYS, reply_by_label
 from app.modules.people.schemas import Me
 
 Role = Literal["employee", "manager", "hr"]
 
-# Fixed English names, so the text doesn't change with the server's locale.
-_WEEKDAYS = ("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday")
 ROLE_LABELS: dict[Role, str] = {"employee": "employee", "manager": "manager", "hr": "HR"}
 
 
@@ -57,6 +57,17 @@ def actor_view(me: Me) -> ActorView:
     )
 
 
+def case_opened_sentence(category: str, reply_by: date) -> str:
+    """The sentence (lowercase first word, to follow the "Since the last message:" prefix) for a
+    case the person opened from this conversation since the last turn
+    (spec, "What the model learns afterward"). Made from the stored category and the reply-by date
+    only, worded here: nothing the person wrote ever reaches it, and an unknown category reads as
+    "something else"."""
+    label = CATEGORY_LABELS.get(category, "something else")
+    day = reply_by_label(reply_by)
+    return f"the person opened a confidential case with HR ({label}). HR replies by {day}."
+
+
 def turn_context(
     actor_view: ActorView,
     *,
@@ -77,7 +88,7 @@ def turn_context(
         f"{actor_view.employment_type} employee.",
         f"Location: {one_line(actor_view.location_name)} "
         f"({actor_view.state}, code {actor_view.location_code}).",
-        f"Today: {_WEEKDAYS[local.weekday()]}, {local.isoformat()} ({actor_view.timezone}).",
+        f"Today: {WEEKDAYS[local.weekday()]}, {local.isoformat()} ({actor_view.timezone}).",
         f"Handbook version: {handbook_label}.",
     ]
     lines.extend(one_line(outcome) for outcome in outcomes)

@@ -1103,6 +1103,12 @@ def told_entry(proposal_id: UUID, status: str) -> str:
     return f"{proposal_id}:{status}"
 
 
+def join_outcome_sentences(sentences: Sequence[str]) -> str:
+    """The sentences of the one "Since the last message:" line: the first follows the prefix as it
+    is, and each later one starts a sentence of its own."""
+    return " ".join([sentences[0], *(s[0].upper() + s[1:] for s in sentences[1:])])
+
+
 def unreported_outcomes(
     rows: Sequence[_Identified], now: datetime
 ) -> tuple[tuple[str, ...], tuple[str, ...]]:
@@ -1128,8 +1134,6 @@ def unreported_outcomes(
     if not changes:
         return (), ()
     sentences = [sentence for _, _, _, sentence in changes]
-    # The first follows the prefix as it is; each later one starts a sentence of its own.
-    joined = " ".join([sentences[0], *(s[0].upper() + s[1:] for s in sentences[1:])])
-    return (OUTCOME_PREFIX + joined,), tuple(
+    return (OUTCOME_PREFIX + join_outcome_sentences(sentences),), tuple(
         told_entry(row.id, status) for _, row, status, _ in changes
     )

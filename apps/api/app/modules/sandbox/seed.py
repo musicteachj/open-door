@@ -68,6 +68,7 @@ from app.modules.sandbox.seed_data import (
     PENDING_REQUEST_SEAT,
     PERSONAL_EMAIL_DOMAIN,
     SEED,
+    SEEDED_SUMMARIES,
     SEEDED_SUMMARY_MODEL,
     SEEDED_SUMMARY_PLACEHOLDER,
     SEEDED_SUMMARY_PROMPT_VERSION,
@@ -79,6 +80,7 @@ from app.modules.sandbox.seed_data import (
     LocationSpec,
     PersonSpec,
     Position,
+    SeededSummary,
 )
 
 # Everyone drawn from the seed is 22 to 63 years old, was hired at 19 or older, and joined between
@@ -549,6 +551,10 @@ def _cases(
         if status != spec.status:
             msg = f"The seeded case {spec.key!r} ends {status!r}, not {spec.status!r}"
             raise ValueError(msg)
+        # A recorded real summary if there is one, else the placeholder.
+        summary = SEEDED_SUMMARIES.get(spec.key) or SeededSummary(
+            SEEDED_SUMMARY_PLACEHOLDER, SEEDED_SUMMARY_MODEL, SEEDED_SUMMARY_PROMPT_VERSION
+        )
         rows.append(
             CaseRow(
                 id=make_id("case", spec.key),
@@ -563,10 +569,10 @@ def _cases(
                 status_changed_at=status_changed_at,
                 text=spec.text,
                 summary_id=make_id("case-summary", spec.key),
-                summary_text=SEEDED_SUMMARY_PLACEHOLDER,
+                summary_text=summary.text,
                 summary_created_at=sent_at + timedelta(minutes=SUMMARY_DELAY_MINUTES),
-                summary_model=SEEDED_SUMMARY_MODEL,
-                summary_prompt_version=SEEDED_SUMMARY_PROMPT_VERSION,
+                summary_model=summary.model,
+                summary_prompt_version=summary.prompt_version,
                 events=tuple(events),
             )
         )

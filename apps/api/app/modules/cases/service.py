@@ -14,18 +14,20 @@ flag set from the actor, as the session dependency does).
 """
 
 import logging
-from datetime import timedelta
-from typing import Final, NamedTuple
+from datetime import date, datetime, timedelta
+from typing import Final, NamedTuple, Protocol
 from uuid import UUID, uuid4
 
 from sqlalchemy import insert, select, update
 from sqlalchemy.exc import DBAPIError, IntegrityError
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 
+from app.ai.case_summary import SUMMARY_TIMEOUT_SECONDS
 from app.ai.fixed_texts import CRISIS_TEXT
-from app.ai.guard import CaseGuard, screen_text
+from app.ai.guard import CaseGuard, GuardOutcome, screen_text
 from app.ai.personal_data import kind_of_personal_data
 from app.ai.text import error_name
+from app.ai.transport import GUARD_TIMEOUT_SECONDS
 from app.core.encryption import (
     DataKey,
     KeyProvider,
@@ -73,6 +75,7 @@ STATUS_REFUSED_SQLSTATE: Final = "OD004"
 ONE_SUMMARY_CONSTRAINT: Final = "uq_case_summaries_one_not_by_hr_per_case"
 # The summary and event triggers' code for a write the person may not make (migration 0013).
 TRIGGER_REFUSED_SQLSTATE: Final = "OD003"
+SCREENING_REFUSED_SQLSTATE: Final = "OD005"
 TURN_CONSTRAINTS: Final = frozenset({"fk_cases_turn_owner", "fk_cases_conversation_owner"})
 
 NOT_FOUND_CODE: Final = "case-not-found"
@@ -80,6 +83,11 @@ TURN_NOT_FOUND_CODE: Final = "case-turn-not-found"
 # A case with no summary at all can be retried once it is this old (the first one is the person's
 # background task, which takes at most 30 seconds).
 RETRY_AFTER: Final = timedelta(minutes=2)
+# A retry's job is "in flight" this long after HR asks for it, unless it has recorded a summary
+# by then. Its slowest honest run is the screening (the guard's 10 s limit) then the summary call
+# (30 s), about 40 s; the extra 20 s is for queuing, the budget's reserve and settle, and the
+# write. A crashed or canceled job therefore blocks HR's next try for at most a minute.
+IN_FLIGHT_WINDOW: Final = timedelta(seconds=SUMMARY_TIMEOUT_SECONDS + GUARD_TIMEOUT_SECONDS + 20)
 
 
 def _not_found() -> ProblemError:
@@ -140,7 +148,24 @@ def _resource(case: Case, *, words_read: bool = False) -> CaseResource:
     return CaseResource(case.person_id, case.status, words_read)
 
 
-def _status_view(case: Case) -> CaseStatusView:
+class _StatusColumns(Protocol):
+    """What the person's status view reads: a `Case`, or a row of just these columns."""
+
+    @property
+    def id(self) -> UUID: ...
+    @property
+    def category(self) -> str: ...
+    @property
+    def status(self) -> str: ...
+    @property
+    def created_at(self) -> datetime: ...
+    @property
+    def reply_by(self) -> date: ...
+    @property
+    def status_changed_at(self) -> datetime: ...
+
+
+def _status_view(case: _StatusColumns) -> CaseStatusView:
     return CaseStatusView(
         id=case.id,
         category=case.category,
@@ -332,6 +357,12 @@ async def _screen(guard: CaseGuard, actor: Actor, words: str) -> str:
         return "unscreened"
     if outcome is None:
         return "unscreened"
+    return screening_label(outcome)
+
+
+def screening_label(outcome: GuardOutcome) -> str:
+    """The case's label for a guard outcome that screened the words: crisis, sensitive, or
+    ordinary."""
     if outcome.route == "crisis":
         return "crisis"
     return "sensitive" if outcome.category == "sensitive" else "ordinary"
@@ -340,15 +371,27 @@ async def _screen(guard: CaseGuard, actor: Actor, words: str) -> str:
 # --- the person's view and HR's queue ---
 
 
-async def my_cases(db: AsyncSession, actor: Actor) -> list[CaseStatusView]:
-    """The actor's own cases, newest first. HR's session could read every case, so the filter is
-    the actor's ID, not the database's rule."""
-    rows = await db.scalars(
-        select(Case)
+async def my_cases(
+    db: AsyncSession, actor: Actor, *, limit: int | None = None
+) -> list[CaseStatusView]:
+    """The actor's own cases, newest first, at most `limit` of them when given. HR's session could
+    read every case, so the filter is the actor's ID, not the database's rule. Only the columns of
+    the view are read: the encrypted words and their key never leave the database here."""
+    query = (
+        select(
+            Case.id,
+            Case.category,
+            Case.status,
+            Case.created_at,
+            Case.reply_by,
+            Case.status_changed_at,
+        )
         .where(Case.tenant_id == actor.tenant_id, Case.person_id == actor.person_id)
         .order_by(Case.created_at.desc(), Case.id.desc())
     )
-    return [_status_view(row) for row in rows]
+    if limit is not None:
+        query = query.limit(limit)
+    return [_status_view(row) for row in await db.execute(query)]
 
 
 async def queue(
@@ -366,27 +409,25 @@ async def queue(
     page = rows[: queries.PAGE_SIZE]
     items = tuple(
         QueueItem(
-            id=row.Case.id,
-            category=row.Case.category,
-            person_id=row.Case.person_id,
+            id=row.id,
+            category=row.category,
+            person_id=row.person_id,
             given_name=row.given_name,
             family_name=row.family_name,
             title=row.title,
             location_name=row.location_name,
-            sent_at=row.Case.created_at,
-            reply_by=row.Case.reply_by,
-            status=row.Case.status,
-            status_changed_at=row.Case.status_changed_at,
+            sent_at=row.created_at,
+            reply_by=row.reply_by,
+            status=row.status,
+            status_changed_at=row.status_changed_at,
             # HR's own case hides the verdict, as the opener's view does.
-            crisis=None
-            if row.Case.person_id == actor.person_id
-            else row.Case.screening == "crisis",
-            is_own=row.Case.person_id == actor.person_id,
+            crisis=None if row.person_id == actor.person_id else (row.screening == "crisis"),
+            is_own=row.person_id == actor.person_id,
         )
         for row in page
     )
     more = len(rows) > queries.PAGE_SIZE
-    return QueuePage(items, queries.encode_cursor(page[-1].Case) if more else None)
+    return QueuePage(items, queries.encode_cursor(page[-1]) if more else None)
 
 
 async def counts(db: AsyncSession, actor: Actor) -> Counts:
@@ -413,7 +454,7 @@ async def case_detail(db: AsyncSession, actor: Actor, case_id: UUID) -> CaseDeta
     if not own:
         card = await queries.person_card(db, actor.tenant_id, row.person_id)
         latest = await queries.newest_summary(db, actor.tenant_id, row.id)
-        summary = _summary_state(latest)
+        summary = _summary_state(latest, crisis=row.screening == "crisis")
         entries = tuple(
             TimelineEntry(
                 kind=event.kind,
@@ -447,9 +488,14 @@ async def case_detail(db: AsyncSession, actor: Actor, case_id: UUID) -> CaseDeta
     )
 
 
-def _summary_state(latest: CaseSummary | None) -> SummaryState:
+def _summary_state(latest: CaseSummary | None, *, crisis: bool = False) -> SummaryState:
     if latest is None:
         return SummaryState("none")
+    if crisis:
+        # A crisis case never shows a written summary, whatever the newest row is: two retries
+        # that interleave can stamp a written row after the crisis one (`created_at` is the
+        # transaction's start).
+        return SummaryState("failed", "crisis", latest.created_at)
     return SummaryState(
         "written" if latest.status == "written" else "failed", latest.reason, latest.created_at
     )
@@ -502,6 +548,9 @@ async def case_summary_for(
     latest = await queries.newest_summary(db, case.tenant_id, case.id)
     if latest is None:
         read = SummaryRead("none")
+    elif case.screening == "crisis":
+        # Never opened for a crisis case, whatever the newest row is (see `_summary_state`).
+        read = SummaryRead("failed", reason="crisis", created_at=latest.created_at)
     elif latest.status == "failed" or latest.ciphertext is None:
         read = SummaryRead(
             "failed",
@@ -617,10 +666,11 @@ async def record_summary(
     audit event (`via` `assistant`).
 
     The session is scoped to the person who opened the case (the background task, no `actor`) or
-    to HR (a retry, with the HR `actor`, who must be allowed to act on the case). Returns False when
-    nothing was recorded: the database allows the person's side one summary, in the case's first
-    10 minutes, so a second one (or a late one) is refused here as a value, and HR's retry is the
-    way to add another.
+    to HR (a retry, with the HR `actor`, who must be allowed to act on the case). A written summary
+    for a case that holds a crisis is recorded as a failed one with the reason `crisis` instead.
+    Returns False when nothing was recorded: the database allows the person's side one summary, in
+    the case's first 10 minutes, so a second one (or a late one) is refused here as a value, and
+    HR's retry is the way to add another.
     """
     # Row-level security limits this to the session's own sandbox, and to the case's opener or HR.
     case = await queries.load_case_by_id(db, case_id)
@@ -635,6 +685,19 @@ async def record_summary(
             raise _own_case()
         if not can(actor, Action.CASE_READ_SUMMARY, _resource(case)):
             raise _not_found()
+    if isinstance(result, SummaryWritten) and actor is not None:
+        # HR's retry takes the case's row first, so the check below reads the label as it is once
+        # a parallel retry's `record_screening` (which updates the same row) has committed. The
+        # person's own first summary can't take it (row-level security lets only HR update a
+        # case), and nothing can raise a crisis under it: a crisis comes only from a retry of an
+        # unscreened case, which has no first summary job.
+        case = await queries.lock_case(db, case.tenant_id, case.id)
+    if isinstance(result, SummaryWritten) and case.screening == "crisis":
+        # A crisis verdict gets no summary, whoever got there first (a second retry in flight can
+        # have found the crisis before this one wrote). The text is dropped, never stored or
+        # shown; the billed call is still recorded and audited, as a failed summary with the
+        # reason `crisis`.
+        result = SummaryFailed("crisis")
     summary_id = uuid4()
     values: dict[str, object] = {
         "id": summary_id,
@@ -696,6 +759,52 @@ async def record_summary(
     return True
 
 
+async def screening_of(db: AsyncSession, case_id: UUID) -> str | None:
+    """The case's label as the session sees it now (HR's session sees every case in the sandbox)."""
+    return await db.scalar(select(Case.screening).where(Case.id == case_id))
+
+
+async def record_screening(db: AsyncSession, case_id: UUID, verdict: str, *, actor: Actor) -> bool:
+    """Write the safety check's verdict, as HR (HR's retry screened the words): from `unscreened`
+    to any verdict, or from `ordinary` or `sensitive` up to `crisis`, so the case's own label is
+    the one place a crisis is kept. The database allows only those moves, with HR's flag set and
+    not on HR's own case; a refusal (another retry got there first) returns False. The audit event
+    holds the label only."""
+    try:
+        # A savepoint, so a refused update leaves the transaction usable for the summary.
+        async with db.begin_nested():
+            changed = await db.execute(
+                update(Case)
+                .where(
+                    Case.tenant_id == actor.tenant_id,
+                    Case.id == case_id,
+                    Case.screening.in_(
+                        ("unscreened", "ordinary", "sensitive")
+                        if verdict == "crisis"
+                        else ("unscreened",)
+                    ),
+                )
+                .values(screening=verdict)
+            )
+    except DBAPIError as error:
+        if has_sqlstate(error, SCREENING_REFUSED_SQLSTATE):
+            return False
+        raise
+    if changed.rowcount != 1:  # type: ignore[attr-defined]
+        return False
+    await record_event(
+        db,
+        tenant_id=actor.tenant_id,
+        actor_id=actor.person_id,
+        action="case.screened",
+        target_type="case",
+        target_id=case_id,
+        after={"screening": verdict},
+        via="assistant",
+    )
+    return True
+
+
 async def plan_summary_retry(
     db: AsyncSession, keys: KeyProvider, actor: Actor, case_id: UUID
 ) -> SummaryRetry:
@@ -707,10 +816,22 @@ async def plan_summary_retry(
     here, and the job's summary event, with HR as the actor, records its result.
     """
     case = await _readable(db, actor, case_id, Action.CASE_READ_SUMMARY)
+    # Take the case's row, then read: a second retry waits here until the first has recorded its
+    # request, so one is in flight at a time. The row is read again under the lock, because the
+    # screening and status read before it can be stale by the time the lock is held.
+    case = await queries.lock_case(db, case.tenant_id, case.id)
     latest = await queries.newest_summary(db, case.tenant_id, case.id)
+    asked_at = await queries.last_retry_at(db, case.tenant_id, case.id)
+    # The database's clock, the one that stamped the case.
+    now = await database_now(db)
+    if (
+        asked_at is not None
+        and now - asked_at < IN_FLIGHT_WINDOW
+        and (latest is None or latest.created_at < asked_at)
+    ):
+        raise ProblemError(409, "summary-retry-refused", texts.SUMMARY_RETRY_REFUSED_TEXT)
     if latest is None:
-        # The database's clock, the one that stamped the case.
-        allowed = await database_now(db) - case.created_at >= RETRY_AFTER
+        allowed = now - case.created_at >= RETRY_AFTER
     else:
         allowed = latest.status == "failed" and latest.reason != "crisis"
     if case.screening == "crisis" or not allowed:
@@ -746,7 +867,9 @@ __all__ = [
     "open_case",
     "plan_summary_retry",
     "queue",
+    "record_screening",
     "record_summary",
+    "screening_label",
     "seal_case_words",
     "seal_summary_text",
 ]

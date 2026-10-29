@@ -8,7 +8,7 @@ before any tool runs; a bad one comes back as an error result the model can read
 import logging
 from typing import Any
 
-from app.ai.tools import handbook, people, timeoff
+from app.ai.tools import cases, handbook, people, timeoff
 from app.ai.tools.base import Tool, ToolContext, ToolOutcome, failure
 
 __all__ = [
@@ -29,6 +29,8 @@ _TOOLS: tuple[Tool, ...] = (
     people.PROFILE_TOOL,
     people.FIND_TOOL,
     *timeoff.TOOLS,
+    cases.MY_CASES_TOOL,
+    cases.LIST_TOOL,
 )
 _BY_NAME: dict[str, Tool] = {tool.name: tool for tool in _TOOLS}
 TOOL_DEFINITIONS: list[dict[str, Any]] = [tool.definition for tool in _TOOLS]

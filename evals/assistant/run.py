@@ -63,8 +63,9 @@ from sqlalchemy.exc import DBAPIError, SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 
 from app.ai import anthropic_transport
-from app.ai.anthropic_transport import AnthropicTransport
+from app.ai.anthropic_transport import AnthropicSummarizer, AnthropicTransport
 from app.ai.budget import DAY_SUM, Caps
+from app.ai.case_summary import SUMMARY_MODEL, Summarizer
 from app.ai.context import actor_view
 from app.ai.conversations import CURRENT_PINS, Pins, create_conversation
 from app.ai.embeddings import (
@@ -77,13 +78,21 @@ from app.ai.embeddings import (
     VoyageEmbedder,
 )
 from app.ai.pricing import IterationUsage, is_priced, turn_call_cost
-from app.ai.prompts.versions import GUARD_PROMPT_VERSION, PROMPT_VERSION, TOOLSET_VERSION
+from app.ai.prompts.versions import (
+    CASE_SUMMARY_PROMPT_VERSION,
+    GUARD_PROMPT_VERSION,
+    PROMPT_VERSION,
+    TOOLSET_VERSION,
+    guard_prompt,
+)
 from app.ai.replay import (
     RE_RECORD_HINT,
     FixtureStore,
     Kind,
+    RecordingSummarizer,
     RecordingTransport,
     ReplayMiss,
+    ReplaySummarizer,
     ReplayTransport,
     guard_fingerprint,
     model_fingerprint,
@@ -145,7 +154,9 @@ if str(EVALS_ROOT) not in sys.path:
 
 from assistant import (  # noqa: E402
     action_graders,
+    case_summary,
     datasets,
+    escalation,
     eval_sandbox,
     graders,
     handgrades,
@@ -201,12 +212,18 @@ class EvalItem:
     question: str
 
 
-async def create_fixed_sandbox(app_engine: AsyncEngine) -> SeedCompany:
+async def create_fixed_sandbox(
+    app_engine: AsyncEngine, keys: KeyProvider | None = None
+) -> SeedCompany:
     """Create the fixed tenant with the full seed company and the eval's own requests (see
-    eval_sandbox.py), as the API's own login. Returns the company with those requests in it."""
-    # No cases: nothing in the eval reads one (the model never sees a case), and without them the
-    # eval needs no encryption keys.
-    seeded = replace(build_company(TENANT_ID, ANCHOR_DATE), cases=())
+    eval_sandbox.py), as the API's own login. Returns the company with those requests in it.
+
+    With `keys` the seed's four cases go in too, sealed with them, so `list_cases` has data. Their
+    IDs come from the fixed tenant's ID (`make_id` in seed.py), so they repeat from run to run and
+    recorded fixtures stay stable. Without `keys` there are no cases, since sealing needs them."""
+    seeded = build_company(TENANT_ID, ANCHOR_DATE)
+    if keys is None:
+        seeded = replace(seeded, cases=())
     company = eval_sandbox.with_eval_requests(seeded)
     extra = company.time_off_requests[len(seeded.time_off_requests) :]
     expires_at = datetime.now(UTC) + SANDBOX_LIFETIME
@@ -214,7 +231,7 @@ async def create_fixed_sandbox(app_engine: AsyncEngine) -> SeedCompany:
         session.add(Tenant(id=TENANT_ID, expires_at=expires_at, anchor_date=ANCHOR_DATE))
         # The tenant row goes first: every seeded row refers to it.
         await session.flush()
-        await insert_company(session, seeded)
+        await insert_company(session, seeded, keys)
         await insert_time_off_requests(session, extra)
     return company
 
@@ -227,7 +244,7 @@ async def _remove_fixed_sandbox(owner_engine: AsyncEngine, rows: Sequence[SpendR
 
 @asynccontextmanager
 async def fixed_sandbox(
-    app_engine: AsyncEngine, owner_engine: AsyncEngine
+    app_engine: AsyncEngine, owner_engine: AsyncEngine, keys: KeyProvider | None = None
 ) -> AsyncIterator[SeedCompany]:
     """The fixed sandbox for the length of the block, removed (with the ledger rows it wrote) when
     it ends however it ends.
@@ -256,7 +273,7 @@ async def fixed_sandbox(
     await _remove_fixed_sandbox(owner_engine, leftover)
     body_error: BaseException | None = None
     try:
-        yield await create_fixed_sandbox(app_engine)
+        yield await create_fixed_sandbox(app_engine, keys)
     except BaseException as error:
         body_error = error
         raise
@@ -374,6 +391,8 @@ class GuardVerdict:
 class EscalationNote:
     kind: str
     message: str
+    # Whether the panel offered to open a case (the turn's `offerCase`).
+    offer_case: bool = False
 
 
 @dataclass(frozen=True)
@@ -644,7 +663,7 @@ async def run_items(
     watched = WatchedEmbedder(embedder)
     traces: list[ItemTrace] = []
     try:
-        async with fixed_sandbox(app_engine, owner_engine) as company:
+        async with fixed_sandbox(app_engine, owner_engine, keys) as company:
             for item in items:
                 _name_item(transport, item.id)
                 trace = await _run_item(
@@ -781,7 +800,9 @@ async def _run_item(
         main_model_called=bool(observer.requests),
         model_call_count=len(observer.requests),
         escalations=tuple(
-            EscalationNote(e.kind, e.message) for e in events if isinstance(e, Escalation)
+            EscalationNote(e.kind, e.message, e.offer_case)
+            for e in events
+            if isinstance(e, Escalation)
         ),
         error_codes=tuple(e.code for e in events if isinstance(e, Error)),
         status_note_count=sum(1 for e in events if isinstance(e, Status)),
@@ -1005,10 +1026,10 @@ NO_HANDBOOK = "No published handbook in the database. Run `make db` first."
 # What a live run of each set costs, from the plan's token budget (Opus 5.5 at low effort for the
 # answers, Haiku 5.5 for the guard, Sonnet 5.5 at medium effort for the judge). They are estimates
 # to print before spending anything, not limits: the caps below are the limits.
-SMOKE_ESTIMATE_USD = Decimal("1.20")
+SMOKE_ESTIMATE_USD = Decimal("1.40")
 FULL_ESTIMATE_USD = Decimal("14.00")
 # The medium-effort half of the effort comparison. The low half is the smoke run.
-EFFORT_ESTIMATE_USD = Decimal("1.50")
+EFFORT_ESTIMATE_USD = Decimal("1.75")
 
 SMOKE_CAP_USD = Decimal("2.00")
 FULL_CAP_USD = Decimal("16.00")
@@ -1071,6 +1092,8 @@ class EvalPaths:
     judge_md: Path = judge.JUDGE_MD_PATH
     hand_grades: Path = handgrades.HAND_GRADES_PATH
     todo: Path = handgrades.TODO_PATH
+    escalation: Path = escalation.ESCALATION_PATH
+    case_summary: Path = case_summary.NARRATIVES_PATH
 
 
 def dataset_hashes(paths: EvalPaths) -> dict[str, str]:
@@ -1120,6 +1143,13 @@ def real_judge_caller(transport: Transport) -> judge.JudgeCaller:
     return judge.anthropic_caller(transport.client)
 
 
+def real_summarizer(transport: Transport) -> Summarizer:
+    """The live case summarizer, on the answers' client (so the same timeouts and retries)."""
+    if not isinstance(transport, AnthropicTransport):
+        raise EvalFailure("the live case summarizer needs the Anthropic transport's client")
+    return AnthropicSummarizer(transport.client)
+
+
 @dataclass
 class RunEnv:
     """What a run touches outside itself, so a test can replace each piece. The defaults are the
@@ -1132,6 +1162,7 @@ class RunEnv:
     paths: EvalPaths = field(default_factory=EvalPaths)
     transport_factory: Callable[[Settings], Transport] = real_transport
     judge_caller_factory: Callable[[Transport], judge.JudgeCaller] = real_judge_caller
+    summarizer_factory: Callable[[Transport], Summarizer] = real_summarizer
     # Embeds the queries a live run has not cached. None means Voyage, from VOYAGE_API_KEY.
     query_embedder_inner: Embedder | None = None
     measure_spend: Callable[[AsyncEngine], Awaitable[Decimal]] = measured_spend_usd
@@ -1659,7 +1690,11 @@ class EvalRun:
             trace = slim_trace(trace)
             return scoreboard.ItemRecord(trial, dataset, item.id, None, item.kind, grade, trace)
         grade = self.grader.redteam(
-            trace, route=item.route, proposal=item.proposal, clarify=item.clarify
+            trace,
+            route=item.route,
+            proposal=item.proposal,
+            clarify=item.clarify,
+            group=item.group,
         )
         trace = slim_trace(trace)
         return scoreboard.ItemRecord(trial, dataset, item.id, item.group, None, grade, trace)
@@ -1796,7 +1831,14 @@ def build_parser() -> argparse.ArgumentParser:
         description="Run the assistant evals: offline from recorded fixtures, or live (paid).",
     )
     parser.add_argument("--mode", choices=("offline", "live"), default="offline")
-    parser.add_argument("--set", choices=tuple(SETS), default="smoke")
+    parser.add_argument("--set", choices=(*SETS, "escalation", "case-summary"), default="smoke")
+    parser.add_argument(
+        "--half",
+        choices=("both", "tuning", "held_out"),
+        default="both",
+        help="with --set escalation only: which half of the escalation set to run. Prompt tuning"
+        " runs the tuning half alone; the bars are graded on the held-out half",
+    )
     parser.add_argument(
         "--check",
         action="store_true",
@@ -2337,6 +2379,206 @@ async def agreement_command(args: argparse.Namespace, env: RunEnv) -> int:
     return 0 if accepted else 1
 
 
+async def escalation_command(args: argparse.Namespace, env: RunEnv) -> int:
+    """Run the escalation set through the guard alone (no sandbox, no main model, no database).
+
+    Offline it replays the recordings in `escalation.jsonl.gz`, the first trial only. With no such
+    file yet it says so and exits 0, since a set nobody has recorded cannot fail a replay; once the
+    file is committed, a missing recording is a failure like any other set's. Live (with --yes) it
+    records all three trials' first, and keeps the other two in memory."""
+    live = args.mode == "live"
+    if args.fresh and not live:
+        raise EvalFailure("--fresh is for live runs only: an offline run calls nothing")
+    if args.prune:
+        raise EvalFailure("--prune is for --set full: use --fresh to start the escalation set over")
+    if args.fresh and args.half != "both":
+        raise EvalFailure(
+            "--fresh starts the recordings over and would drop the other half: use it with"
+            " --half both, or record one half into a scratch folder with --fixtures-dir"
+        )
+    items = escalation.load_messages(env.paths.escalation)
+    escalation.check_not_in_prompt(items, guard_prompt())
+    if args.half != "both":
+        items = [i for i in items if i.half == args.half]
+    path = args.fixtures_dir / escalation.FIXTURE_NAME
+    if not live and not path.exists():
+        print(
+            "The escalation set is not recorded yet: there is no"
+            f" {escalation.FIXTURE_NAME} to replay, so there is nothing to check."
+            " Record it with `make eval-live SET=escalation YES=1`."
+        )
+        return 0
+    trials = escalation.TRIALS if live else 1
+    if live and not args.yes:
+        calls = len(items) * trials
+        print(
+            f"Live run of the escalation set: {_plural(len(items), 'item')},"
+            f" {_plural(trials, 'trial')}, the guard only ({args.half} half).\n"
+            f"Estimated cost ${calls * escalation.ESTIMATE_PER_CALL_USD:.2f}."
+            f" The run stops at its ${escalation.CAP_USD:.2f} cap.\n"
+            "Nothing was called. Add --yes to run it (`make eval-live SET=escalation YES=1`)."
+        )
+        return 0
+    commit = env.git()
+    store = FixtureStore(path) if live and args.fresh else _load_store(path)
+    meter: LiveCallMeter | None = None
+    if live:
+        meter = LiveCallMeter(env.transport_factory(env.settings or get_settings()))
+
+    def transport_for_trial(trial: int) -> Transport:
+        if meter is None:
+            return ReplayTransport(store)
+        # Only the first trial is recorded: the later ones measure variance.
+        scratch = store if trial == 1 else FixtureStore(path.with_name(f"unsaved-trial-{trial}"))
+        return RecordingTransport(meter, scratch)
+
+    try:
+        outcome = await escalation.run_escalation(
+            items,
+            transport_for_trial,
+            trials=trials,
+            meter=meter,
+            cap_usd=escalation.CAP_USD if live else None,
+            retry_once=live,
+        )
+    finally:
+        if live:
+            store.save()
+    facts: dict[str, Any] = {
+        "mode": args.mode,
+        "trials": trials,
+        "commit": commit,
+        "date": utc_now().isoformat(timespec="seconds"),
+        "half_run": args.half,
+        "models": {"guard": GUARD_MODEL_ID},
+        "guard_prompt": GUARD_PROMPT_VERSION,
+        "dataset_sha256": {"messages.yaml": escalation.dataset_sha256(env.paths.escalation)},
+    }
+    if meter is not None:
+        facts["cap_usd"] = str(escalation.CAP_USD)
+        facts["cost_usd"] = str(meter.total_usd)
+    board = escalation.build_board(outcome.calls, facts, not_run=outcome.not_run)
+    print(escalation.render(board))
+    if args.json is not None:
+        _write_json(args.json, board)
+    if args.traces is not None:
+        _write_json(args.traces, escalation.traces_document(facts, outcome.calls))
+    if not args.check:
+        return 0
+    problems = escalation.check_problems(board)
+    for line in problems:
+        print(f"CHECK FAILED: {line}", file=sys.stderr)
+    return 1 if problems else 0
+
+
+async def case_summary_command(args: argparse.Namespace, env: RunEnv) -> int:
+    """Run the case-summary set: each narrative through the summarizer, graded by program, and
+    judged (reported, never a gate). No sandbox, no database, no guard.
+
+    Offline it replays trial 1 from `case_summary.jsonl.gz`. With no such file yet it says so and
+    exits 0, as the escalation set does; once it is committed a missing recording is a failure.
+    Live (with --yes) it records trial 1 and keeps trials 2 and 3 in memory. With --json, trial 1's
+    seeded summaries go beside the scoreboard (`<name>-seeded.json`) for Task 28."""
+    live = args.mode == "live"
+    if args.fresh and not live:
+        raise EvalFailure("--fresh is for live runs only: an offline run calls nothing")
+    if args.prune:
+        raise EvalFailure("--prune is for --set full: use --fresh to start the set over")
+    items = case_summary.load_narratives(env.paths.case_summary)
+    path = args.fixtures_dir / case_summary.FIXTURE_NAME
+    if not live and not path.exists():
+        print(
+            "The case-summary set is not recorded yet: there is no"
+            f" {case_summary.FIXTURE_NAME} to replay, so there is nothing to check."
+            " Record it with `make eval-live SET=case-summary YES=1`."
+        )
+        return 0
+    trials = case_summary.TRIALS if live else 1
+    if live and not args.yes:
+        runs = len(items) * trials
+        print(
+            f"Live run of the case-summary set: {_plural(len(items), 'narrative')},"
+            f" {_plural(trials, 'trial')}, each summarized and judged.\n"
+            f"Estimated cost ${runs * case_summary.ESTIMATE_PER_ITEM_TRIAL_USD:.2f}."
+            f" The run stops at its ${case_summary.CAP_USD:.2f} cap.\n"
+            "Nothing was called. Add --yes to run it (`make eval-live SET=case-summary YES=1`)."
+        )
+        return 0
+    commit = env.git()
+    store = FixtureStore(path) if live and args.fresh else _load_store(path)
+    spend = case_summary.Spend()
+    real: Summarizer | None = None
+    caller: judge.JudgeCaller | None = None
+    if live:
+        transport = env.transport_factory(env.settings or get_settings())
+        real = env.summarizer_factory(transport)
+        caller = env.judge_caller_factory(transport)
+
+    def scratch_for(trial: int) -> FixtureStore:
+        # Only the first trial is recorded: the later ones measure variance.
+        return store if trial == 1 else FixtureStore(path.with_name(f"unsaved-trial-{trial}"))
+
+    stores: dict[int, FixtureStore] = {}
+
+    def store_of(trial: int) -> FixtureStore:
+        return stores.setdefault(trial, scratch_for(trial))
+
+    def summarizer_for_trial(trial: int) -> Summarizer:
+        if real is None:
+            return ReplaySummarizer(store)
+        return RecordingSummarizer(real, store_of(trial))
+
+    def judge_for_trial(trial: int) -> case_summary.SummaryJudge:
+        return case_summary.SummaryJudge(
+            store=store_of(trial) if live else store, caller=caller, record=True
+        )
+
+    try:
+        outcome = await case_summary.run_case_summary(
+            items,
+            summarizer_for_trial,
+            judge_for_trial,
+            trials=trials,
+            spend=spend,
+            cap_usd=case_summary.CAP_USD if live else None,
+            retry_once=live,
+        )
+    finally:
+        if live:
+            store.save()
+    facts: dict[str, Any] = {
+        "mode": args.mode,
+        "trials": trials,
+        "commit": commit,
+        "date": utc_now().isoformat(timespec="seconds"),
+        "models": {"summary": case_summary_model(), "judge": judge.JUDGE_MODEL},
+        "summary_prompt": CASE_SUMMARY_PROMPT_VERSION,
+        "judge_version": case_summary.judge_version(),
+        "dataset_sha256": {"narratives.yaml": case_summary.dataset_sha256(env.paths.case_summary)},
+    }
+    if live:
+        facts["cap_usd"] = str(case_summary.CAP_USD)
+        facts["cost_usd"] = str(spend.total_usd)
+    board = case_summary.build_board(outcome.calls, facts, not_run=outcome.not_run)
+    print(case_summary.render(board))
+    if args.json is not None:
+        _write_json(args.json, board)
+        seeded_path = args.json.with_name(args.json.stem + case_summary.SEEDED_FILE_SUFFIX)
+        _write_json(seeded_path, case_summary.seeded_document(facts, outcome.seeded))
+    if args.traces is not None:
+        _write_json(args.traces, case_summary.traces_document(facts, outcome.calls))
+    if not args.check:
+        return 0
+    problems = case_summary.check_problems(board)
+    for line in problems:
+        print(f"CHECK FAILED: {line}", file=sys.stderr)
+    return 1 if problems else 0
+
+
+def case_summary_model() -> str:
+    return SUMMARY_MODEL
+
+
 async def run_cli(argv: Sequence[str] | None = None, *, env: RunEnv | None = None) -> int:
     """The whole command. Returns the exit code: 0, 1 (`--check` failed), or 2 (it couldn't run)."""
     args = build_parser().parse_args(argv)
@@ -2347,6 +2589,10 @@ async def run_cli(argv: Sequence[str] | None = None, *, env: RunEnv | None = Non
             return await todo_command(args, env)
         if args.agreement:
             return await agreement_command(args, env)
+        if args.set == "escalation":
+            return await escalation_command(args, env)
+        if args.set == "case-summary":
+            return await case_summary_command(args, env)
         return await eval_command(args, env)
     except (
         datasets.DatasetError,
