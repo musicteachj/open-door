@@ -433,6 +433,13 @@ version (`0.x.y` while the app is being built, `1.0.0` when it is complete).
 
 ### Fixed
 
+- **The approvals accessibility browser test no longer times out on GitHub's CI** (Phase 6,
+  stage 6). The component gallery grew with the case states, and the scan of the "deciding"
+  dialog, which closes itself after 4 seconds, held the page's clock and moved it forward a
+  millisecond at a time so the scanner's timers could fire. On a slow machine that stalled the test
+  past its two-minute limit. The gallery's demo now waits to be released by the test instead of
+  closing on a timer, so the scan runs on the real clock, the dialog is still open while it is
+  scanned, and the test closes it afterward.
 - **Four small glitches on the conversation page** (Phase 6, stage 6), each with a
   browser test:
   - A question sent to a conversation that no longer exists no longer drops the page to

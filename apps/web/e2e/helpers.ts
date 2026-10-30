@@ -181,7 +181,7 @@ type Host = {
   role: 'dialog' | 'alertdialog'
   /**
    * `timer`: the dialog can't be closed from the page (it is busy) and closes itself on a timer.
-   * The page's clock is held while it is scanned, then run past the timer.
+   * The gallery holds it open while it is scanned, then releases it.
    */
   closes?: 'timer'
 }
@@ -253,34 +253,25 @@ export async function expectNoViolationsIn(
       try {
         const dialog = `[role="${host.role}"]`
         if (host.closes === 'timer') {
-          // The page's clock stops here, so the dialog's own timer can't fire during the scan.
-          await page.clock.install({ time: new Date() })
-          await page.clock.pauseAt(new Date(Date.now() + 1_000))
+          // The gallery's demo then waits to be released instead of closing on its own timer, so
+          // the scan runs on the real clock and takes as long as the machine needs.
+          await page.evaluate(() => {
+            document.documentElement.dataset.galleryHold = ''
+          })
         }
         await galleryState(page, id)
           .getByRole('button', { name: host.button })
           .click({ timeout: 5_000 })
         await expect(page.locator(dialog)).toHaveCount(1)
         await expect(page.locator(dialog)).toBeVisible()
-        // Axe needs the page's timers to fire, so a held clock is nudged 1 ms at a time while it
-        // scans: far too little to reach the dialog's own timer.
-        let scanning = true
-        const nudge = (async () => {
-          while (host.closes === 'timer' && scanning) {
-            await page.clock.runFor(1)
-            await page.waitForTimeout(10)
-          }
-        })()
-        let open
-        try {
-          open = await scan(page, MODAL_OVERLAY_RULES, [dialog, galleryStateSelector(id)])
-        } finally {
-          scanning = false
-          await nudge
-        }
+        const open = await scan(page, MODAL_OVERLAY_RULES, [dialog, galleryStateSelector(id)])
         expect.soft(open.violations, `${id} has no accessibility violations`).toEqual([])
-        if (host.closes === 'timer') await page.clock.runFor(10_000)
-        else await page.keyboard.press('Escape')
+        if (host.closes === 'timer') {
+          await page.evaluate(() => {
+            delete document.documentElement.dataset.galleryHold
+            window.dispatchEvent(new Event('gallery:release'))
+          })
+        } else await page.keyboard.press('Escape')
         // Gone from the page, so the next host's dialog is the only one there.
         await expect(page.locator(dialog)).toHaveCount(0)
       } catch (error) {
