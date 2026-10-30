@@ -15,7 +15,9 @@ import {
   type Area,
   type ComponentRow,
   type ApprovalsState,
+  type CasesState,
   type ConfirmCardState,
+  type HrCasesState,
   type ScreenRow,
   type TimeOffState,
 } from './manifest'
@@ -31,6 +33,7 @@ import {
   openFromNav,
   pickDays,
   railLink,
+  nav,
   switchPersona,
   daysPastBalance,
   workdays,
@@ -53,6 +56,21 @@ import {
   SICK_LEAVE_SENTENCE,
 } from '../held-stream'
 import { holdList, isListRequest, openProfileBySearch } from '../directory-helpers'
+import {
+  CRISIS_WORDS,
+  SENSITIVE_QUESTION,
+  casePanels,
+  fillForm,
+  formHeading,
+  HARASSMENT,
+  openCaseButton,
+  queueRowOf,
+  queueRows,
+  sendButton,
+  sendCaseByApi,
+  sentLine,
+  wordsBox,
+} from '../cases-helpers'
 import { renderReport, type ReportRow } from './report'
 
 // `make captures`. Photographs each gallery state at 1440 px, after the interaction the manifest
@@ -343,6 +361,12 @@ async function reachScreen(page: Page, row: ScreenRow) {
       break
     case 'confirm-card':
       await reachConfirmCard(page, row.state as ConfirmCardState)
+      break
+    case 'cases':
+      await reachCases(page, row.state as CasesState)
+      break
+    case 'hr-cases':
+      await reachHrCases(page, row.state as HrCasesState)
       break
     case 'home':
     case 'expiry-banner':
@@ -919,6 +943,283 @@ async function reachConversation(page: Page, scenario: NonNullable<ScreenRow['sc
   await page.mouse.move(1000, 600)
 }
 
+// ---------------------------------------------------------------------------------------------
+// Screens 11 and 12: the case form in the conversation, My cases, and HR's queue and detail. The
+// cases are real (sent through the form or the API), screened and summarized by the scripted
+// model. A frame for HR that shows Priya's case starts as Priya, who sends it, and the steps switch
+// to Dana. The sample people and dates in the frames (Megan, "Tuesday, October 27") can't be had in
+// the real app, so those rows photograph the nearest real state and say so in the manifest.
+
+/** As Dana, reads a case's words and moves its status: the read is what unlocks the change. */
+async function danaMoves(page: Page, caseId: string, to: 'in_review' | 'closed') {
+  await page.evaluate(
+    async ({ id, status }) => {
+      const token = document.cookie
+        .split('; ')
+        .find((part) => part.startsWith('__Host-od_csrf='))
+        ?.slice('__Host-od_csrf='.length)
+      const headers = { 'Content-Type': 'application/json', 'X-CSRF-Token': token ?? '' }
+      await fetch(`/api/v1/cases/${id}/text`, { headers })
+      const response = await fetch(`/api/v1/cases/${id}/status`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ to: status }),
+      })
+      if (!response.ok) throw new Error(`the status change was refused: ${response.status}`)
+    },
+    { id: caseId, status: to },
+  )
+}
+
+/** The open cases a filter lists, as Dana's queue reports them. */
+function caseIdsIn(page: Page, status: string): Promise<string[]> {
+  return page.evaluate(async (filter) => {
+    const response = await fetch(`/api/v1/cases?status=${filter}`)
+    return ((await response.json()) as { items: { id: string }[] }).items.map((item) => item.id)
+  }, status)
+}
+
+/** Priya's chat after the sensitive message: the saved turn with the case offered. */
+async function askSensitive(page: Page, question = SENSITIVE_QUESTION) {
+  await askAndWaitForAnswer(page, question)
+  await expect(casePanels(page).last()).toBeVisible()
+}
+
+/** The form's heading at the top of the window, so the photograph shows the form, not the answer. */
+const formToTop = (page: Page) => formHeading(page).evaluate((el) => el.scrollIntoView({ block: 'start' }))
+
+async function reachCases(page: Page, state: CasesState) {
+  const jsonProblem = (status: number, title: string) =>
+    ({ status, contentType: 'application/problem+json', body: problem(status, title) }) as const
+  switch (state) {
+    case 'sensitive-offer':
+      await askSensitive(page)
+      await expect(openCaseButton(page)).toBeVisible()
+      break
+    case 'form':
+      await askSensitive(page)
+      await openCaseButton(page).click()
+      await expect(formHeading(page)).toBeFocused()
+      await formToTop(page)
+      break
+    case 'form-ready':
+      await askSensitive(page)
+      await openCaseButton(page).click()
+      await fillForm(page, HARASSMENT, null)
+      await sendButton(page).focus()
+      break
+    case 'form-short':
+      await askSensitive(page)
+      await askSensitive(page, 'yes, I was harassed')
+      await openCaseButton(page).last().click()
+      await expect(page.getByText('19 of 4,000 characters')).toBeVisible()
+      await formToTop(page)
+      break
+    case 'form-errors':
+      await askSensitive(page)
+      await openCaseButton(page).click()
+      await wordsBox(page).fill(`${SENSITIVE_QUESTION} My employee number is 123-45-6789.`)
+      await sendButton(page).click()
+      await expect(page.getByRole('alert').first()).toBeVisible()
+      await formToTop(page)
+      break
+    case 'form-limit':
+      await askSensitive(page)
+      await openCaseButton(page).click()
+      await wordsBox(page).fill('My manager keeps making comments about my age. '.repeat(100).slice(0, 4000))
+      await expect(page.getByText(/4,000 of 4,000 characters/).first()).toBeVisible()
+      await formToTop(page)
+      break
+    case 'sending':
+      await askSensitive(page)
+      await openCaseButton(page).click()
+      await fillForm(page, HARASSMENT, null)
+      await holdRequests(page, '**/api/v1/cases', 'POST')
+      await sendButton(page).click()
+      await expect(page.getByRole('button', { name: 'Sending…' })).toBeVisible()
+      // The button, not the form's heading, is what this frame shows; centered, the sticky
+      // composer can't cover it.
+      await page
+        .getByRole('button', { name: 'Sending…' })
+        .evaluate((el) => el.scrollIntoView({ block: 'center' }))
+      break
+    case 'sent':
+      await askSensitive(page)
+      await openCaseButton(page).click()
+      await fillForm(page, HARASSMENT, null)
+      await sendButton(page).click()
+      await expect(sentLine(page)).toBeVisible()
+      break
+    case 'send-error':
+      await askSensitive(page)
+      await openCaseButton(page).click()
+      await fillForm(page, HARASSMENT, null)
+      await page.route('**/api/v1/cases', (route) =>
+        route.request().method() === 'POST'
+          ? route.fulfill(jsonProblem(500, 'Internal Server Error'))
+          : route.fallback(),
+      )
+      await sendButton(page).click()
+      await expect(page.getByRole('button', { name: 'Try again' })).toBeVisible()
+      break
+    case 'waiting-limit':
+      for (let i = 1; i <= 5; i += 1) await sendCaseByApi(page, `Concern number ${i}.`)
+      await askSensitive(page)
+      await expect(page.locator('[data-slot="case-sent"]')).toContainText('You have 5 cases')
+      await page
+        .locator('[data-slot="case-sent"]')
+        .evaluate((el) => el.scrollIntoView({ block: 'center' }))
+      break
+    case 'crisis-offer':
+      await ask(page, QUESTIONS.crisis)
+      await expect(openCaseButton(page)).toBeVisible()
+      break
+    case 'cant-answer-link':
+      await ask(page, QUESTIONS.guardFailure)
+      await expect(page.getByRole('region', { name: "Can't answer right now" })).toBeVisible()
+      await expect(page.getByRole('link', { name: 'Write to HR' })).toBeVisible()
+      break
+    case 'my-cases-empty':
+      await expect(page.getByText('You haven’t sent HR a case.')).toBeVisible()
+      break
+    case 'my-cases': {
+      const ids = [
+        await sendCaseByApi(page, 'My last two paychecks were short.', 'pay'),
+        await sendCaseByApi(page, 'The loading dock door sticks.', 'safety'),
+        await sendCaseByApi(page, 'I need a different chair for my back.', 'medical_accommodation'),
+      ]
+      await switchPersona(page, 'Dana')
+      await danaMoves(page, ids[0]!, 'closed')
+      await danaMoves(page, ids[1]!, 'in_review')
+      await switchPersona(page, 'Priya')
+      await page.goto('/my-cases')
+      await expect(page.locator('[data-slot="case-list"] > li')).toHaveCount(3)
+      break
+    }
+    case 'my-cases-form':
+      await openCaseButton(page).click()
+      await expect(formHeading(page)).toBeFocused()
+      break
+    case 'sent-crisis':
+      await openCaseButton(page).click()
+      await fillForm(page, 'Something else, or not sure', CRISIS_WORDS)
+      await sendButton(page).click()
+      await expect(page.locator('[data-slot="case-sent"] + [data-slot="escalation-panel"]')).toBeVisible()
+      break
+    case 'nav':
+      await expect(page.getByRole('heading', { level: 1, name: 'My cases' })).toBeVisible()
+      break
+  }
+}
+
+async function reachHrCases(page: Page, state: HrCasesState) {
+  const showWords = page.getByRole('button', { name: /^Show .+ words$/ })
+  const summaryUrl = '**/api/v1/cases/*/summary'
+  // Priya sends a case, and the page switches to Dana.
+  const priyaSends = async (words = SENSITIVE_QUESTION) => {
+    const id = await sendCaseByApi(page, words, 'harassment_discrimination')
+    await switchPersona(page, 'Dana')
+    return id
+  }
+  const detailOf = async (id: string) => {
+    await page.goto(`/cases/${id}`)
+    await expect(page.getByRole('heading', { level: 1, name: HARASSMENT })).toBeVisible()
+  }
+  switch (state) {
+    case 'queue':
+      await priyaSends()
+      await page.goto('/cases')
+      await expect(queueRows(page)).toHaveCount(4)
+      break
+    case 'queue-closed':
+      await page.goto('/cases?status=closed')
+      await expect(queueRows(page)).toHaveCount(1)
+      break
+    case 'queue-empty':
+      for (const id of await caseIdsIn(page, 'new')) await danaMoves(page, id, 'closed')
+      await page.goto('/cases?status=new')
+      await expect(page.getByText(/^No new cases\./)).toBeVisible()
+      break
+    case 'queue-facts':
+      await priyaSends(CRISIS_WORDS)
+      await page.goto('/cases')
+      await expect(page.getByText('The safety check routed this message to crisis text.')).toBeVisible()
+      break
+    case 'detail':
+      await detailOf(await priyaSends())
+      await expect(page.locator('[data-slot="case-summary"]')).toContainText('The person wrote about')
+      break
+    case 'detail-revealed':
+    case 'dialog-review':
+    case 'dialog-close':
+      await detailOf(await priyaSends())
+      await expect(page.locator('[data-slot="case-summary"]')).toContainText('The person wrote about')
+      await showWords.click()
+      await expect(page.getByText(SENSITIVE_QUESTION)).toBeVisible()
+      if (state === 'dialog-review') {
+        await page.getByRole('button', { name: 'Start review' }).click()
+        await expect(page.getByRole('alertdialog')).toBeVisible()
+      } else if (state === 'dialog-close') {
+        await page.getByRole('button', { name: 'Close case' }).click()
+        await expect(page.getByRole('alertdialog')).toBeVisible()
+      }
+      break
+    case 'detail-in-review':
+      await page.goto('/cases')
+      await queueRowOf(page, 'Aaliyah Edwards').click()
+      await expect(page.getByRole('heading', { level: 1, name: 'Workplace safety' })).toBeVisible()
+      await expect(page.locator('[data-slot="case-summary"]')).toBeVisible()
+      break
+    case 'summary-pending': {
+      const id = await priyaSends()
+      await holdRequests(page, summaryUrl, 'GET')
+      await detailOf(id)
+      await expect(page.getByText('Writing the summary…')).toBeVisible()
+      break
+    }
+    case 'summary-failed': {
+      const id = await priyaSends()
+      await page.route(summaryUrl, (route) =>
+        route.request().method() === 'GET'
+          ? route.fulfill({
+              status: 500,
+              contentType: 'application/problem+json',
+              body: problem(500, 'Internal Server Error'),
+            })
+          : route.fallback(),
+      )
+      await detailOf(id)
+      await expect(page.getByText('No AI summary. Read the person’s words below.')).toBeVisible()
+      break
+    }
+    case 'summary-crisis':
+      await detailOf(await priyaSends(CRISIS_WORDS))
+      await expect(
+        page.getByText('No AI summary for this case. The safety check routed it to crisis text.'),
+      ).toBeVisible()
+      break
+    case 'own-case': {
+      await page.goto('/ask')
+      const id = await sendCaseByApi(page, 'My own pay concern.', 'pay')
+      await page.goto(`/cases/${id}`)
+      await expect(
+        page.getByText('You opened this case, so you can’t act on it or read it here.'),
+      ).toBeVisible()
+      break
+    }
+    case 'home-hr':
+      await priyaSends()
+      await page.goto('/ask')
+      await expect(page.getByRole('link', { name: /new cases?\. Open/ })).toBeVisible()
+      break
+    case 'nav-hr':
+      await priyaSends()
+      await page.goto('/cases')
+      await expect(nav(page).getByRole('link', { name: 'Cases, 3 new', exact: true })).toBeVisible()
+      break
+  }
+}
+
 async function photographScreen(browser: Browser, row: ScreenRow): Promise<string | null> {
   console.log(`Photographing ${row.title}`)
   const context = await browser.newContext({
@@ -927,6 +1228,9 @@ async function photographScreen(browser: Browser, row: ScreenRow): Promise<strin
   })
   try {
     const page = await context.newPage()
+    // A step that can't be done, such as a click on a state the date makes unreachable (a card for
+    // "I'm sick tomorrow" on a Friday), fails the row in 30 seconds instead of hanging the run.
+    page.setDefaultTimeout(30_000)
     await reachScreen(page, row)
     // Let a hover or focus transition settle, and a held request's spinner draw.
     await page.waitForTimeout(400)
@@ -1001,7 +1305,7 @@ test('captures the build and the design specimens, then writes the report', asyn
     }
 
     for (const row of SCREEN_ROWS) {
-      // A step per row, so a timeout of the run's 900 s names the row that was stuck.
+      // A step per row, so a timeout of the run names the row that was stuck.
       const build = await test.step(`screen row: ${row.title}`, () => photographScreen(browser, row))
       rows.push({
         group: screenGroup(row),

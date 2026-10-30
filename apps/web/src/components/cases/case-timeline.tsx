@@ -44,6 +44,8 @@ function linesOf(entries: TimelineEntryOut[], screening: string | null, personNa
   for (const { entry, key, nth } of withOccurrence(entries)) {
     const text = timelineEntryText(entry, { personName })
     if (text === null) continue
+    // A crisis case is never summarized, so there is no summary to have failed.
+    if (screening === 'crisis' && entry.kind === 'summary_failed') continue
     lines.push({
       key: `${key}|${nth}`,
       text,

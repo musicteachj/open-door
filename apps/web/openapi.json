@@ -3517,13 +3517,21 @@
           "waitingLimit": {
             "type": "string",
             "title": "Waitinglimit"
+          },
+          "hrContacts": {
+            "items": {
+              "$ref": "#/components/schemas/HrContactOut"
+            },
+            "type": "array",
+            "title": "Hrcontacts"
           }
         },
         "type": "object",
         "required": [
           "bullets",
           "replyBy",
-          "waitingLimit"
+          "waitingLimit",
+          "hrContacts"
         ],
         "title": "CaseTextsOut",
         "description": "The form's fixed bullets, with today's reply-by date filled in."

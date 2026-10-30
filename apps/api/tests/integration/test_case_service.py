@@ -14,6 +14,7 @@ import base64
 import contextlib
 import json
 import logging
+import secrets
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from dataclasses import asdict, dataclass, fields
@@ -1317,6 +1318,30 @@ async def test_counts_are_new_cases_and_the_new_ones_due_today_or_late(env: Env)
 
 
 # --- the detail ---
+
+
+async def test_the_timeline_puts_opened_first_when_events_share_a_moment(env: Env) -> None:
+    # `opened` and a failed summary written in one transaction have the same timestamp. The failed
+    # summary's ID sorts first here, to show the order does not follow IDs. Both IDs are fresh each
+    # run (a small one and a large one), so rows left by an interrupted run can't collide.
+    case_id = await seed_case(env, env.leo)
+    low = UUID(int=secrets.randbits(64))
+    high = UUID(int=(1 << 127) | secrets.randbits(64))
+    async with acting(env.engine, env.tenant.id, env.leo) as (db, _):
+        for event_id, kind in ((low, "summary_failed"), (high, "opened")):
+            await db.execute(
+                insert(CaseEvent).values(
+                    id=event_id,
+                    tenant_id=env.tenant.id,
+                    case_id=case_id,
+                    actor_person_id=None,
+                    kind=kind,
+                )
+            )
+    async with acting(env.engine, env.tenant.id, env.dana) as (db, _):
+        rows = await queries.timeline(db, env.tenant.id, case_id)
+    kinds = [row.kind for row in rows]
+    assert kinds.index("opened") < kinds.index("summary_failed")
 
 
 async def test_the_detail_shows_metadata_the_summary_state_and_the_timeline(env: Env) -> None:

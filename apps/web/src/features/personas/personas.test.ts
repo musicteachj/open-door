@@ -58,7 +58,7 @@ const EXPECTED = {
     cardPrompt: 'See the confidential case queue.',
     tryAsking: [
       'Show me the open cases',
-      'Summarize the newest case',
+      'Which cases need a reply soon?',
       'What does the handbook say about reporting harassment?',
       'How has the assistant been doing this week?',
     ],

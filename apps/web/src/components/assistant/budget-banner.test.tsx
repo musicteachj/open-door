@@ -1,4 +1,5 @@
 import { render, screen } from '@testing-library/react'
+import { renderWithRouter } from '@/test/render-with-router'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 import { BudgetBanner } from './budget-banner'
@@ -57,5 +58,25 @@ describe('BudgetBanner', () => {
   it('cannot be dismissed: the composer stays off until the budget is back', () => {
     render(<BudgetBanner kind="daily" message={DAILY_TEXT} />)
     expect(screen.queryByRole('button', { name: /dismiss/i })).not.toBeInTheDocument()
+  })
+})
+
+describe('BudgetBanner: Write to HR', () => {
+  it('shows the link inside the text, after it, when given one', () => {
+    renderWithRouter(
+      <BudgetBanner
+        kind="daily"
+        message={DAILY_TEXT}
+        writeToHr={{ to: '/my-cases', label: 'Write to HR' }}
+      />,
+    )
+    const link = screen.getByRole('link', { name: 'Write to HR' })
+    expect(link).toHaveAttribute('href', '/my-cases')
+    expect(link.closest('p')).toHaveTextContent(`${DAILY_TEXT} Write to HR`)
+  })
+
+  it('shows no link when given null, or nothing', () => {
+    renderWithRouter(<BudgetBanner kind="daily" message={DAILY_TEXT} writeToHr={null} />)
+    expect(screen.queryByRole('link', { name: 'Write to HR' })).not.toBeInTheDocument()
   })
 })

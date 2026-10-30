@@ -1,4 +1,4 @@
-import type { SummaryOut } from '@/api/generated'
+import type { CountsOut, SummaryOut } from '@/api/generated'
 import type { GlanceItem } from '@/components/status/glance-list'
 import { splitLabel } from '@/components/timeoff/label-parts'
 
@@ -40,4 +40,28 @@ export function timeOffGlance(summary: SummaryOut): GlanceItem[] {
     })
   }
   return items
+}
+
+/**
+ * HR's two case figures for the rail, from `GET /cases/counts`: new cases (with the marker when
+ * any are) and replies due (today or already late; the queue says which). Both go to the queue.
+ */
+export function casesGlance(counts: CountsOut): GlanceItem[] {
+  return [
+    {
+      id: 'cases-new',
+      value: String(counts.new),
+      label: plural(counts.new, 'new case', 'new cases'),
+      destination: 'Cases',
+      to: '/cases',
+      marker: counts.new > 0,
+    },
+    {
+      id: 'cases-reply-due',
+      value: String(counts.replyDue),
+      label: plural(counts.replyDue, 'reply due', 'replies due'),
+      destination: 'Cases',
+      to: '/cases',
+    },
+  ]
 }

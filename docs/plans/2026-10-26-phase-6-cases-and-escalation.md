@@ -1567,6 +1567,134 @@ Branched off `dev` at `e924230`. No paid AI calls.
   and the header expose; and it decides a failed summary fetch's "Try again" with
   `summaryRetryKind`.
 
+### Stage 6: the pages, and closing Phase 6 (`feat/phase-6-pages`, 2026-10-29 to 30)
+
+Branched off `dev` at `8d2e46d`. No paid AI calls.
+
+**The owner's decisions (2026-10-29):**
+- **HR is given no link to My cases anywhere,** not on its sent line, its waiting-limit line, or
+  its panels, and no "View in Cases" link either: the sent line already says "Cases", and the nav
+  has it.
+- **A crisis screening's text shows right after sending only,** held in the page's state, as on
+  My cases. A reload shows the sent line from `caseOpened`, with no API change. (A retry that later
+  raises a case to crisis never surfaces to the person.)
+
+**Gap calls and deviations:**
+- **The case button appears on saved turns only,** never on an answer still arriving: once the
+  saved copy replaces the live one. This closes Stage 3's recorded gap (the verdict is stored by
+  then) and means a form can't lose its words or its submission ID when the live turn is redrawn
+  as the saved one. A saved turn offers a case whether it completed, stopped, or failed (the
+  spec's "whatever its status"), except after an internal error. The button waits for the form's
+  texts; if they can't be read, the panel shows no case area.
+- **`GET /cases/texts` also returns the HR contacts** (`hrContacts`), so My cases shows them on the
+  limit line and after a crisis send without reading, and decrypting, the conversation.
+  `HrContactOut` moved to `app/api/schemas.py` to avoid a circular import.
+- **The case timeline orders events written in the same moment with `opened` first** (they share
+  the transaction's time, and the tie fell to a random ID), and **a crisis case's timeline leaves
+  out the failed-summary row**, since the crisis line says why there's no summary (the frame
+  `desktop-summary-crisis` shows only those two).
+- **The detail reads its metadata again after the summary read,** so "read the AI summary" shows
+  as the frame draws it; the timeline doesn't announce it (Stage 5's rule). While a summary is
+  being written, the page reads the metadata (not audited) every few seconds, up to 150 seconds,
+  and reads the summary once it exists; a 15-second tick moves the block to "Try again" at 2.5
+  minutes and stops once it's failed.
+- **The queue's filter lives in the address** (`?status=`, Open by default), keeps the previous
+  rows while the next filter loads (so the filter keeps focus), and "Show more cases" pages by
+  cursor.
+- **The queue has the lock and the confidentiality line** from the frame: "Confidential. Only the
+  HR team can open these cases, and every read of a case's text is recorded."
+- **My cases keeps the sent line where the button was** for the rest of the view, as the design
+  draws it.
+- **The answer's link allow-list follows the viewer's role:** `/my-cases` for everyone but HR,
+  `/cases` and `/cases/...` for HR only, so a model-written link never gives HR a way to My cases.
+- **The Cases count reads "3 new"** in the badge and "Cases, 3 new" as its name; Approvals keeps
+  "waiting". Dana's rail says "1 reply due" and "2 replies due" (see round 3).
+- **"Write to HR" on the budget banner** sits at the end of the banner's text, since the banner
+  has no contact list.
+- **The detail's back link** keeps the directory profile's ink arrow (the shared page header), not
+  the frame's primary chevron, so every detail page matches.
+- **The four conversation-page items:** a send that finds its conversation gone re-reads it
+  without emptying the page (and the next send waits for that read, so the dead ID is never
+  reused); "Start a new conversation" with a source panel open goes back over the panel's own
+  history entry, marks it stale so Forward can't reopen the panel, and a module-level guard stops
+  a double back; a send re-checks for a new conversation after its conversation ID resolves; the
+  composer is busy from the first Enter while a send waits.
+
+**Reviews:**
+- **Batch A (Tasks 35 to 37), combined Sonnet review:** nothing high. Fixed, the mediums: the
+  queue's filter unmounted on every change, losing focus; a failed turn never offered a case; a
+  refusal from an earlier send came back when the form reopened; a failed texts read left a
+  button that did nothing; a form could lose its words and submission ID when the live turn was
+  redrawn as the saved one (the saved-turns-only call above). Lows fixed: a words read finishing
+  after Hide showed the words again; an older summary read could overwrite a newer one; two fast
+  "Try again" clicks sent two requests; the tick ran forever once failed; a failed "Show more
+  cases" was silent and stale pages stayed after a refetch; a crisis send under the crisis panel
+  repeated the crisis text; "Not now" on the empty list lost focus. **My screenshots against the
+  frames** found six more, all fixed: the contacts source, the timeline order, the crisis
+  timeline, the missing "read the AI summary" row, the queue's lock and line, and the crisis
+  panel's width on My cases.
+- **Batch B (Tasks 38 and 39), combined Sonnet review:** nothing high. Fixed, the mediums: the
+  allow-list gave HR a live `/my-cases` link from model text (now role-aware); a second Enter right
+  after "Start a new conversation" could drop the first question (the busy state now starts
+  before the first wait). Lows fixed: a background read failing could fail a send; a test that the
+  next send after a 404 creates a conversation; the stale-entries parse memoized and the back
+  guard shared; a flaky arrow-key test helper (it now waits for focus to move).
+- **Test-first notes:** Batch A's chat panel code and Batch B's browser spec were written before
+  their tests; mutation proofs (each guard broken, its test failing) stand in.
+- **Batch C (Task 40):** `e2e/cases.spec.ts` (12 tests) proves the acceptance criteria that need
+  the pages and the API; mutation proofs: a second words read, and a refocus that reads again,
+  each fail the one-row-and-one-audit-event test; giving everyone the Cases item fails Marcus's
+  test (removing the page's own HR gate fails nothing, since the API answers him with a 404 too:
+  two layers). The capture report has a row for each of the 32 pictures in screens 11 and 12.
+  Approximations, each in its row's note: `form-short` uses "yes, I was harassed" (the scripted
+  guard flags only its trigger words); `form-errors` shows the first error only, as the form
+  validates in order; `queue-facts` and `summary-crisis` use Priya's crisis case in place of the
+  sample Megan; `summary-pending` and `summary-failed` hold or fail the summary read, so their
+  timelines already show "AI summary written"; every date is the run's own. The capture run now
+  gives each row 30 seconds, so an unreachable state (four time-off card rows can't be reached on
+  a Friday or Saturday, as on 2026-10-30) fails its row instead of the whole run. In the chat
+  states, axe scans the panel only: at a 900-pixel window the sticky composer partly covers "Show
+  your work", and axe's target-size rule flags it (a conversation-page item, in the backlog).
+- **`/code-review medium`, round 1** (against `origin/dev`): fixed, test first and mutation-proved,
+  the mediums: "Show more cases" dropped its extra pages on any refetch, a window focus included
+  (they now drop only when the first page's data changes); a send waiting across a persona switch
+  could post the old person's question into the new person's conversation (a generation check
+  after every wait); any failed background read made the next send wait for a fresh read, as if
+  the conversation were gone (only the 404 path does now); My cases kept the waiting-limit line
+  after the list showed fewer than five. Lows fixed: a stale comment and a helper named like
+  generated code, `hr_contact_out` moved beside `HrContactOut` so cases no longer import the
+  assistant's display layer, one shared type for the signed-in person. Recorded, no change: a
+  crisis case's timeline hides every failed-summary row, so an earlier "unscreened" failure on a
+  case later retried into crisis isn't shown (rare, and only history; the events carry no reason
+  to tell them apart); My cases keeps the sent line in the button's place for the rest of the
+  view, as designed. The first `make check` was green up to the browser tests, where two specs
+  failed under load while the fixer ran its own browser tests; both pass alone.
+- **Round 2:** fixed, test first and mutation-proved, the mediums: My cases didn't clear an old
+  refusal or failed send when its form reopened (the chat panel already did); a send whose first
+  try reached the server but lost its answer looped on "Try again" with a 409
+  `case-submission-conflict` (now it's treated as sent: the form closes and the refetched list or
+  turn shows the case). A test now proves that any failed send refetches the cases, so a case the
+  server saved anyway appears at once. Lows fixed: the date helper builds one formatter per time
+  zone; a later good read clears the "conversation gone" flag; "the other way round" in the
+  changelog. Dismissed: the crisis text after a reload (the owner's decision). Recorded, no change:
+  the queue and the detail say "due today" by the viewer's own date, while the counts use Denver
+  HQ's (they agree for Dana, the only HR person; a later HR person elsewhere would need the
+  server's date); invalidating every case query after a status change drops the queue's extra
+  pages, which is right, since the first page changed.
+- **Round 3:** nothing high or medium; the review loop stopped here. Lows fixed: the rail called
+  every reply due or late "due today" (it now says "1 reply due" and "2 replies due", since the
+  count includes late ones; the frame's "1 reply due today" wording is a deviation); a stale
+  comment on which failed turns offer a case, and a panel built twice; the back-over guard in
+  `source-url.ts` is capped and cleared on a persona switch; a double click on "Show more cases"
+  sent two requests; the base schema module imported the AI package (the HR contact schema moved
+  to its own small module). Recorded, no change: the queue's paging could use TanStack's infinite
+  query instead of its own state (a refactor for later); `GET /cases/texts` reads the HR contacts
+  on every call, though only My cases shows them (one small query). Repeats didn't count: the
+  queue's "today" by the viewer's zone.
+- **After the loop:** the timeline-order test used fixed event IDs, so rows left by an interrupted
+  run made every later run fail on a duplicate key; it now draws a fresh small ID and a fresh large
+  one each run.
+
 ## Backlog
 
 Findings and ideas left for later go to [`../BACKLOG.md`](../BACKLOG.md), with the reason.

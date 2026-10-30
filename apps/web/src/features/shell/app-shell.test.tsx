@@ -106,7 +106,7 @@ describe('the shell: layout', () => {
       within(nav)
         .getAllByRole('link')
         .map((a) => a.textContent),
-    ).toEqual(['Ask', 'Time off', 'Directory', 'Handbook'])
+    ).toEqual(['Ask', 'Time off', 'My cases', 'Directory', 'Handbook'])
   })
 
   it('marks the page you are on, and Directory for a profile below it', async () => {
@@ -735,7 +735,7 @@ describe('the shell: time off, approvals, and the rail', () => {
     installFakeApi('priya')
     renderApp({ at: '/ask' })
     await screen.findByRole('navigation', { name: 'Main' })
-    expect(navLinks()).toEqual(['Ask', 'Time off', 'Directory', 'Handbook'])
+    expect(navLinks()).toEqual(['Ask', 'Time off', 'My cases', 'Directory', 'Handbook'])
   })
 
   it('shows plain "Approvals" with no badge when nothing is waiting', async () => {
@@ -786,9 +786,110 @@ describe('the shell: time off, approvals, and the rail', () => {
     await waitFor(() => expect(toast()).not.toBeNull())
     observer.disconnect()
 
-    expect(navLinks()).toEqual(['Ask', 'Time off', 'Directory', 'Handbook'])
+    expect(navLinks()).toEqual(['Ask', 'Time off', 'My cases', 'Directory', 'Handbook'])
     expect(seen.filter((entry) => entry.who === PRIYA).length).toBeGreaterThan(0)
     expect(seen.filter((entry) => entry.who === PRIYA && entry.approvals)).toEqual([])
+  })
+
+  describe('HR: the Cases item and the rail', () => {
+    const countsUrl = () => `${window.location.origin}/api/v1/cases/counts`
+    const failCounts = () =>
+      server.use(
+        http.get(countsUrl(), () =>
+          HttpResponse.json(
+            { type: 'about:blank', title: 'Boom', status: 500, instance: '/x' },
+            { status: 500 },
+          ),
+        ),
+      )
+
+    it('gives Dana Cases after Handbook with "3 new" in its badge and name, and no My cases', async () => {
+      installFakeApi('dana')
+      renderApp({ at: '/ask' })
+      const nav = await screen.findByRole('navigation', { name: 'Main' })
+      const cases = await within(nav).findByRole('link', { name: 'Cases, 3 new' })
+      expect(cases).toHaveAttribute('href', '/cases')
+      expect(cases.querySelector('[data-slot="nav-count"]')).toHaveTextContent('3 new')
+      expect(navLinks()).toEqual(['Ask', 'Time off', 'Directory', 'Handbook', 'Cases, 3 new'])
+    })
+
+    it('shows plain "Cases" with no badge when nothing is new', async () => {
+      installFakeApi('dana')
+      server.use(http.get(countsUrl(), () => HttpResponse.json({ new: 0, replyDue: 0 })))
+      renderApp({ at: '/ask' })
+      const nav = await screen.findByRole('navigation', { name: 'Main' })
+      const cases = await within(nav).findByRole('link', { name: 'Cases' })
+      expect(cases.querySelector('[data-slot="nav-count"]')).toBeNull()
+    })
+
+    it('keeps the Cases item, without a count, when the counts fail', async () => {
+      installFakeApi('dana')
+      failCounts()
+      renderApp({ at: '/ask' })
+      const nav = await screen.findByRole('navigation', { name: 'Main' })
+      const cases = await within(nav).findByRole('link', { name: 'Cases' })
+      expect(cases.querySelector('[data-slot="nav-count"]')).toBeNull()
+    })
+
+    it('reads the counts for HR only', async () => {
+      const asked = vi.fn<() => void>()
+      installFakeApi('priya')
+      server.use(
+        http.get(countsUrl(), () => {
+          asked()
+          return HttpResponse.json({ new: 3, replyDue: 1 })
+        }),
+      )
+      renderApp({ at: '/ask' })
+      const glance = await screen.findByRole('region', { name: 'At a glance' })
+      await within(glance).findByRole('link', { name: /Handbook updated/ })
+      expect(asked).not.toHaveBeenCalled()
+    })
+
+    it('adds "new cases" and "reply due" to Dana\'s rail, after time off, before the handbook', async () => {
+      installFakeApi('dana')
+      renderApp({ at: '/ask' })
+      const glance = await screen.findByRole('region', { name: 'At a glance' })
+      await within(glance).findByRole('link', { name: '3 new cases. Open Cases' })
+      const links = within(glance).getAllByRole('link')
+      expect(links.map((link) => link.getAttribute('aria-label'))).toEqual([
+        '92 hours PTO available. Open Time off',
+        '0 requests pending. Open Time off',
+        '3 new cases. Open Cases',
+        '1 reply due. Open Cases',
+        'Sep 12 Handbook updated. Open Handbook',
+      ])
+      expect(links[2]).toHaveAttribute('href', '/cases')
+      expect(links[3]).toHaveAttribute('href', '/cases')
+      expect(links[2]!.querySelector('[data-slot="glance-marker"]')).not.toBeNull()
+    })
+
+    it('says "replies" for more than one, and shows no marker when nothing is new', async () => {
+      installFakeApi('dana')
+      server.use(http.get(countsUrl(), () => HttpResponse.json({ new: 0, replyDue: 2 })))
+      renderApp({ at: '/ask' })
+      const glance = await screen.findByRole('region', { name: 'At a glance' })
+      const none = await within(glance).findByRole('link', { name: '0 new cases. Open Cases' })
+      expect(none.querySelector('[data-slot="glance-marker"]')).toBeNull()
+      expect(within(glance).getByRole('link', { name: '2 replies due. Open Cases' })).toBeVisible()
+    })
+
+    it('leaves the two figures out quietly when the counts fail', async () => {
+      installFakeApi('dana')
+      failCounts()
+      renderApp({ at: '/ask' })
+      const glance = await screen.findByRole('region', { name: 'At a glance' })
+      await within(glance).findByRole('link', { name: /Handbook updated/ })
+      expect(
+        within(glance)
+          .getAllByRole('link')
+          .map((link) => link.getAttribute('aria-label')),
+      ).toEqual([
+        '92 hours PTO available. Open Time off',
+        '0 requests pending. Open Time off',
+        'Sep 12 Handbook updated. Open Handbook',
+      ])
+    })
   })
 
   it('adds PTO available and requests pending to the rail, before "Handbook updated"', async () => {

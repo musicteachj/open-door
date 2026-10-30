@@ -222,20 +222,20 @@ describe('the docked panel (a wide window)', () => {
     await waitFor(() => expect(second).toHaveFocus())
   })
 
-  it('closes when "Start a new conversation" replaces the conversation, without a history step', async () => {
+  it('closes when "Start a new conversation" replaces the conversation, by going back over the panel\'s step', async () => {
     const { user, router } = signedIn()
     const [marker] = await markers(CA_MARKER)
     await user.click(marker!)
     await panel()
-    const length = window.history.length
     await user.click(screen.getByRole('button', { name: 'Start a new conversation' }))
     await screen.findByRole('heading', { level: 1 })
     await waitFor(() => expect(source(router)).toBeNull())
     expect(
       screen.queryByRole('complementary', { name: 'Handbook passage' }),
     ).not.toBeInTheDocument()
-    expect(router.state.historyAction).toBe('REPLACE')
-    expect(window.history.length).toBe(length)
+    // The step the panel added is gone back over, so Back never stops on a step that changes
+    // nothing.
+    expect(router.state.historyAction).toBe('POP')
     // The marker it came from is gone, and focus is in the new composer, not a stale element.
     expect(await screen.findByRole('textbox', { name: 'Ask Open Door' })).toHaveFocus()
   })

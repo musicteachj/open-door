@@ -183,27 +183,9 @@ the conversation read after a turn ends.
 
 ## Phase 6: cases and escalation
 
-- **Small conversation-page glitches the v0.4.0 release review left alone.** When a
-  remembered conversation turns out to be gone (a 404 on send), the page drops to "Loading…" while
-  it reloads, and the composer loses focus. And "Start a new conversation" with a source panel open
-  replaces the panel's history entry, leaving a Back step that changes nothing. The release review
-  tried fixes for both, and each brought new edge cases (a stale Forward step, a conversation id
-  missed on a send that created it), so they were reverted. Also: "Start a new conversation"
-  clicked after a send has already begun still lets that send go to the old conversation, and a
-  second Enter while a send waits for the new conversation is dropped without a word. Fix them with
-  the page's next real change, with browser tests. (v0.4.0 release review. Phase 5 stage 6 added the
-  confirm card to the page without touching these paths, so they move to Phase 6, whose escalation
-  panel and confidential-case confirm change the conversation page next.)
-- **The hand-off says only what's true.** Before the person writes anything, say:
-  - only HR sees it, never managers;
-  - it's encrypted;
-  - when to expect a reply;
-  - the AI writes HR a neutral summary.
-
-  Never say "the AI won't read it": the guard reads every message, and `summarize_case` is
-  AI-written. (2026-10-06 design brainstorm.)
-- **Encrypt case narratives.** They are the most sensitive text the app will hold.
-  Source: [the Phase 1 spec](specs/2026-10-03-phase-1-tenancy-identity-permissions.md#later-phases).
+All three items were closed in Phase 6: the hand-off's texts say only what's true (the panel and
+form texts approved in stage 4), case text is encrypted (stages 1 and 2), and the four
+conversation-page glitches are fixed with browser tests (stage 6).
 
 ## Phase 7: AI Ops console, reviewer experience, model decision
 
@@ -277,6 +259,15 @@ the conversation read after a turn ends.
   signed-in `/api/` request, or have the audited-read services check that the request carried it.
   (Phase 6 stage 3, `/code-review medium` round 4.)
 
+- **The sticky composer can cover "Show your work".** At a 900-pixel-high window, with a tall HR
+  panel above it, the conversation page's sticky composer partly covers the "Show your work"
+  toggle, and axe's target-size rule flags it, so Stage 6's case tests scan the panel only. Check
+  it in the accessibility audit: scroll padding under the last turn, or a test of the toggle's
+  visible area. (Phase 6 stage 6.)
+- **A second route for a concern about the HR team.** A case goes only to HR, so a person whose
+  concern is about someone in HR has no other way in through Open Door; today the handbook's
+  contacts are the only route. A later phase could add a named second reviewer outside HR for
+  such cases. (Phase 6 spec.)
 - **Encrypt the time-off denial note.** `time_off_requests.decision_note` is a manager's own
   words and stays readable in Phase 6, which encrypts only conversation and case text (ADR 0015).
   Seal it with a data key for the request, as the conversation store does. (Phase 6 spec.)

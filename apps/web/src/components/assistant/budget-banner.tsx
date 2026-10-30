@@ -1,5 +1,8 @@
+import { Link } from 'react-router'
 import { Banner } from '@/components/feedback/banner'
 import { Button } from '@/components/ui/button'
+import { APP_LINK } from './link-class'
+import type { PageLink } from '@/lib/page-link'
 import { Segments } from './crisis-segments'
 import { linkifyEmergency } from './crisis-text'
 import { conversationCopy } from './labels'
@@ -14,6 +17,8 @@ type BudgetBannerProps = {
   message: string
   /** Sandbox only. A new sandbox starts with a fresh budget. */
   onStartNewSandbox?: () => void
+  /** "Write to HR", after the text. A person gets it; HR gets null, as HR has no My cases. */
+  writeToHr?: PageLink | null
   className?: string
 }
 
@@ -23,10 +28,28 @@ type BudgetBannerProps = {
  * status, and it can't be dismissed, because the composer stays off until the budget is back. The
  * sandbox kind offers "Start a new sandbox" and the daily kind has nothing to do but wait.
  */
-function BudgetBanner({ kind, message, onStartNewSandbox, className }: BudgetBannerProps) {
+function BudgetBanner({
+  kind,
+  message,
+  onStartNewSandbox,
+  writeToHr = null,
+  className,
+}: BudgetBannerProps) {
   return (
     <Banner
-      message={<Segments segments={linkifyEmergency(message)} />}
+      message={
+        <>
+          <Segments segments={linkifyEmergency(message)} />
+          {writeToHr && (
+            <>
+              {' '}
+              <Link to={writeToHr.to} className={APP_LINK}>
+                {writeToHr.label}
+              </Link>
+            </>
+          )}
+        </>
+      }
       className={className}
       action={
         kind === 'sandbox' && onStartNewSandbox ? (

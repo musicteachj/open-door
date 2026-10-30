@@ -5,8 +5,7 @@ drift apart: the second is made from the first.
 """
 
 from app.ai.fixed_texts import HrContact
-from app.modules.assistant.display import hr_contact_out
-from app.modules.assistant.schemas import HrContactOut
+from app.api.contacts import HrContactOut, hr_contact_out
 
 DANA = HrContact(
     name="Dana Whitfield",

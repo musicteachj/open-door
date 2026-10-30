@@ -19,7 +19,9 @@ from fastapi import APIRouter, BackgroundTasks, Depends, Query, Request, Respons
 
 from app.ai.budget import Caps
 from app.ai.case_summary import Summarizer
+from app.ai.fixed_texts import hr_contact
 from app.ai.guard import CaseGuard
+from app.api.contacts import hr_contact_out
 from app.api.deps import get_app_settings, get_engine, get_keys, get_summarizer, get_transport
 from app.api.problems import problem_responses
 from app.core.cache_control import CACHE_CONTROL_HEADER, NO_STORE
@@ -162,6 +164,7 @@ async def get_case_texts(signed_in: SignedInDep) -> CaseTextsOut:
         bullets=list(texts.form_texts(reply_by)),
         reply_by=reply_by,
         waiting_limit=texts.WAITING_LIMIT_TEXT,
+        hr_contacts=hr_contact_out(await hr_contact(signed_in.db)),
     )
 
 

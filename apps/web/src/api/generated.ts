@@ -421,6 +421,13 @@ export interface CaseTextOut {
   text: string
 }
 
+export interface HrContactOut {
+  name: string
+  workEmail: string
+  jobTitle: string | null
+  locationName: string | null
+}
+
 /**
  * The form's fixed bullets, with today's reply-by date filled in.
  */
@@ -428,6 +435,7 @@ export interface CaseTextsOut {
   bullets: string[]
   replyBy: string
   waitingLimit: string
+  hrContacts: HrContactOut[]
 }
 
 export interface ProblemOut {
@@ -502,13 +510,6 @@ export const EscalationOutKind = {
   crisis: 'crisis',
   unavailable: 'unavailable',
 } as const
-
-export interface HrContactOut {
-  name: string
-  workEmail: string
-  jobTitle: string | null
-  locationName: string | null
-}
 
 /**
  * The fixed text the stream's `escalation` event had, and the HR team to reach.

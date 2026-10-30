@@ -4,6 +4,8 @@ import { Link } from 'react-router'
 import { cn } from '@/lib/utils'
 
 type PageHeaderProps = {
+  /** A mark before the title, such as a lock. Decorative: hide it from screen readers yourself. */
+  icon?: ReactNode
   /** Content on the right, usually the sandbox indicator. */
   right?: ReactNode
   className?: string
@@ -28,7 +30,7 @@ type PageHeaderProps = {
  * From the directory frames in docs/design/system/Directory.dc.html, which has no component
  * sketch for it. The profile's back link is a ghost-sized link with a neutral hover.
  */
-function PageHeader({ title, count, back, right, className }: PageHeaderProps) {
+function PageHeader({ title, icon, count, back, right, className }: PageHeaderProps) {
   return (
     <header
       data-slot="page-header"
@@ -46,6 +48,7 @@ function PageHeader({ title, count, back, right, className }: PageHeaderProps) {
         </Link>
       ) : (
         <div className="flex min-w-0 flex-wrap items-baseline gap-x-3">
+          {icon}
           <h1 className="text-h1 wrap-break-word text-ink">{title}</h1>
           {count && <span className="text-body text-ink-muted">{count}</span>}
         </div>

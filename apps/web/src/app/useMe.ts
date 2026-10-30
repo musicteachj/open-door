@@ -3,6 +3,9 @@ import { getGetMeQueryKey, useGetMe, type Me } from '@/api/generated'
 import { resetIdentity } from '@/lib/identity'
 import { rememberPerson } from './session-status'
 
+/** The signed-in person, once /me has answered. */
+export type SignedInMe = NonNullable<ReturnType<typeof useMe>['data']>
+
 /** Who is signed in. The landing page and the session guard share this one query. */
 export function useMe() {
   return useGetMe()
