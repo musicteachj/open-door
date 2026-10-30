@@ -15,6 +15,7 @@ from pydantic import AfterValidator, ConfigDict, Field, StringConstraints
 
 from app.ai.conversations import FEEDBACK_REASON_MAX_CHARACTERS
 from app.ai.proposals import ProposalOut
+from app.api.contacts import HrContactOut
 from app.api.schemas import CamelModel
 from app.modules.cases.api_schemas import SentLineOut
 
@@ -85,13 +86,6 @@ class TurnErrorOut(CamelModel):
 
     code: str
     message: str
-
-
-class HrContactOut(CamelModel):
-    name: str
-    work_email: str
-    job_title: str | None
-    location_name: str | None
 
 
 class EscalationOut(CamelModel):

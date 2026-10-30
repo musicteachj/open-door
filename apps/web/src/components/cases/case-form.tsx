@@ -32,6 +32,12 @@ type CaseFormProps = {
   sending?: boolean
   /** The last send failed: the refusal shows above the buttons and the primary reads "Try again". */
   sendFailed?: boolean
+  /**
+   * What the server refused the words for, after a send the form's own checks let through (the
+   * server repeats every check). It shows as the form's own error on the words, and the words
+   * take focus. The caller clears it (null) when the next send starts.
+   */
+  refusal?: 'empty' | 'personal-data' | null
   /** The person pressed Send to HR and everything passed. Each press of a form sends the same `submissionId`. */
   onSend: (input: CaseSubmission) => void
   /** "Not now". The caller closes the form and returns focus to the button that opened it. */
@@ -60,6 +66,7 @@ function CaseForm({
   prefill = '',
   sending = false,
   sendFailed = false,
+  refusal = null,
   onSend,
   onCancel,
   focusHeadingOnMount = true,
@@ -100,6 +107,12 @@ function CaseForm({
     if (sendFailed && !previousFailed.current) failureRef.current?.focus()
     previousFailed.current = sendFailed
   }, [sendFailed])
+
+  useEffect(() => {
+    if (refusal === null) return
+    setProblems([refusal])
+    wordsRef.current?.focus()
+  }, [refusal])
 
   const Heading = variant === 'panel' ? 'h3' : 'h2'
   const SubHeading = variant === 'panel' ? 'h4' : 'h3'

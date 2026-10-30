@@ -194,6 +194,33 @@ describe('the home and the conversation', () => {
     await waitFor(async () => expect(await composer()).toHaveFocus())
   })
 
+  it('shows the composer busy while a question waits for the new conversation, and a second Enter changes nothing', async () => {
+    signedInWith(conversationOut({ turns: [cited()] }))
+    let release: () => void = () => {}
+    const gate = new Promise<void>((resolve) => (release = resolve))
+    server.use(
+      http.post(`${window.location.origin}/api/v1/assistant/conversations`, async () => {
+        await gate
+        return HttpResponse.json(conversationOut(), { status: 201 })
+      }),
+    )
+    const posted = onTurn(() => eventStream(...completedEvents('t-2', 'Back.')))
+    const { user } = renderApp({ at: '/ask' })
+    await user.click(await screen.findByRole('button', { name: 'Start a new conversation' }))
+    // The page is still the conversation (the new one is not created yet).
+    await user.type(await composer(), 'Sick days?{Enter}')
+    const ask = await screen.findByRole('button', { name: 'Ask' })
+    await waitFor(() => expect(ask).toHaveAttribute('aria-busy', 'true'))
+    await user.type(await composer(), '{Enter}')
+    expect(posted).toEqual([])
+    expect(screen.getByRole('button', { name: 'Ask' })).toHaveAttribute('aria-busy', 'true')
+    release()
+    await waitFor(() => expect(posted).toHaveLength(1))
+    await waitFor(() =>
+      expect(screen.queryByRole('button', { name: 'Ask' })).not.toHaveAttribute('aria-busy'),
+    )
+  })
+
   it('offers a new conversation when the API says this one cannot go on (409 conversation-outdated)', async () => {
     signedInWith(conversationOut({ turns: [cited()] }))
     onTurn(() =>

@@ -45,6 +45,9 @@ export function installFakeApi(initial: PersonaKey | null = null) {
         waitingCount: current === 'marcus' ? 2 : null,
       }),
     ),
+    // HR's shell reads the case counts for the Cases item and the rail: three new, one reply due.
+    // Only HR asks. A test that installs the fake cases (fake-cases.ts) overrides it.
+    http.get(url('/api/v1/cases/counts'), () => HttpResponse.json({ new: 3, replyDue: 1 })),
     // The assistant page reads these two on arrival: nothing asked yet, and the fixed texts. A test
     // that needs a conversation or a stream installs its own (fake-assistant.ts), which wins.
     http.get(url('/api/v1/assistant/texts'), () => HttpResponse.json(TEXTS)),

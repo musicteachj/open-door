@@ -182,7 +182,25 @@ export const detailCopy = {
   closeTitle: 'Close this case?',
   closeBody: (first: string) =>
     `${first} will see “HR has finished its review.” A closed case can’t be reopened in Open Door.`,
+  statusFailed: 'The status wasn’t changed. Please try again.',
+  statusMoved: 'This case’s status changed. The page shows it as it is now.',
   cancel: 'Cancel',
   starting: 'Starting…',
   closing: 'Closing…',
+} as const
+
+/** The pages' own words: My cases (people) and the queue (HR). */
+export const pagesCopy = {
+  myCasesTitle: 'My cases',
+  myCasesIntro:
+    'Cases you’ve sent to HR. Only the HR team can open them in Open Door, and they’re stored encrypted.',
+  myCasesLoading: 'Loading your cases',
+  casesTitle: 'Cases',
+  casesIntro:
+    'Confidential. Only the HR team can open these cases, and every read of a case’s text is recorded.',
+  loadMoreFailed: 'More cases couldn’t be loaded. Please try again.',
+  casesLoading: 'Loading the cases',
+  caseLoading: 'Loading the case',
+  loadMore: 'Show more cases',
+  back: 'Cases',
 } as const

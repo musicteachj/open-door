@@ -311,7 +311,13 @@ async def timeline(db: AsyncSession, tenant_id: UUID, case_id: UUID) -> list[Tim
                     & (Person.id == CaseEvent.actor_person_id),
                 )
                 .where(CaseEvent.tenant_id == tenant_id, CaseEvent.case_id == case_id)
-                .order_by(CaseEvent.occurred_at, CaseEvent.id)
+                # Events written in one transaction share a moment: `opened` comes first among
+                # them ("Sent by" before "AI summary couldn't be written"), then by ID.
+                .order_by(
+                    CaseEvent.occurred_at,
+                    case((CaseEvent.kind == "opened", 0), else_=1),
+                    CaseEvent.id,
+                )
             )
         ).all()
     )

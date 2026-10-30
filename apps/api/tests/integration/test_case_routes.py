@@ -269,6 +269,10 @@ async def test_texts_carry_todays_reply_by_date(browser: Browser, app_engine: As
     # The waiting-limit line is the API's, so the web app holds no copy that could drift.
     assert body["waitingLimit"] == texts.WAITING_LIMIT_TEXT
     assert any(expected.strftime("%A, %B") in bullet for bullet in body["bullets"])
+    # The HR team's contacts come with them, for My cases, which has no panel to carry them.
+    names = [contact["name"] for contact in body["hrContacts"]]
+    assert "Dana Whitfield" in names
+    assert all(contact["workEmail"] for contact in body["hrContacts"])
     # Anyone with a session reads them; no session is a 401.
     browser.client.cookies.clear()
     assert browser.client.get(f"{BASE}/texts").status_code == 401

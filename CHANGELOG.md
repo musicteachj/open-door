@@ -12,6 +12,53 @@ version (`0.x.y` while the app is being built, `1.0.0` when it is complete).
 
 ### Added
 
+- **The case pages: the form in chat, My cases, HR's queue and case detail, and their place in
+  the app** (Phase 6, stage 6). The components from stage 5 now run on real pages.
+  - **In the conversation,** a flagged turn's HR panel offers "Open a confidential case" once the
+    turn is saved (never on an answer still arriving), whether it completed, stopped, or failed,
+    but not after an internal error, and only once the form's texts have loaded. The form opens
+    under the panel with the turn's own question in it, and sending shows the sent line, with the
+    crisis text right after when the safety check routed the words to crisis. A reload shows the
+    sent line from the saved turn instead of the button, and a person with five cases waiting sees
+    the limit line in its place. HR is given no link on any of these lines, since HR has no My cases
+    page.
+  - **`/my-cases`** lists a person's cases (status only) and opens the same form, empty. A second
+    press of Send while one is waiting is ignored, so one case is opened. HR gets the Not found
+    page.
+  - **`/cases`** is HR's queue, with the lock and the confidentiality line from the design,
+    filtered by `?status=` (Open by default), keeping its rows and the filter's focus while the
+    next filter loads, with "Show more cases" when the API has more. **`/cases/:caseId`** shows a
+    case's person, AI summary, words, status actions, and timeline. The summary and the words are
+    audited reads: fetched with plain calls, held only in the page's state, never in the query
+    cache, and read once per view (the summary) or per press (the words), so switching windows or
+    reconnecting never writes an audit row. While a summary is being written the page looks again
+    every few seconds, and "Try again" appears after 2.5 minutes. The status buttons unlock once
+    this person has read the words, and the page re-locks them if the server says otherwise. HR's
+    own case shows its header and a notice only. Anyone but HR gets the Not found page.
+  - **The timeline** no longer says a crisis case's summary failed (the crisis line says why), shows
+    the reader's "read the AI summary" row after the page reads it, and puts "Sent by" before an
+    event written in the same moment.
+  - **The nav:** "My cases" right after Time off for everyone but HR, and "Cases" for HR, with how
+    many cases are new ("3 new" in the badge, "Cases, 3 new" as its name), hidden at zero or when
+    the count can't be read. Only HR asks for the count.
+  - **Dana's home** adds "N new cases" (with the marker when any are new) and the replies due or
+    late ("1 reply due", "2 replies due"), both linking to Cases, before "Handbook updated".
+    Her starter prompt "Summarize the newest case" is now "Which cases need a reply soon?".
+  - **Links:** an answer can link to My cases (`/my-cases`) for a person, and to the queue
+    (`/cases`) and a case under `/cases/` for HR, never the other way around. Other paths under
+    those names and every path with a dot segment or a backslash still show as plain text. "Write
+    to HR" follows the HR contacts on the "Can't answer right now" panel and on a not-found answer,
+    and ends the budget banner's text, for everyone but HR.
+  - **The case form** can show a refusal from the server (a card number it let through) as its own
+    error on the words.
+  - **Browser tests** walk the demo's steps 5 and 6 end to end, from the chat panel and from My
+    cases, and prove that showing the words adds one timeline row and one audit event while a
+    window refocus and hiding add none. They also cover the status dialogs and focus, crisis words,
+    the five-waiting limit, Marcus seeing no case and no Cases page, HR's own read-only case, and
+    axe at 1440 and 390 px. **The capture report** gains a row for every picture in screens 11 and
+    12 (32 in all); frames with sample people or dates are photographed in the nearest real state,
+    as each row's note says.
+
 - **The case components: the panel's case button, the case form, My cases, and HR's queue and
   case detail** (Phase 6, stage 5). Every part of screens 11 and 12 in every state, under
   `components/cases/`, shown in the component gallery and checked for accessibility at 1440 and
@@ -328,6 +375,9 @@ version (`0.x.y` while the app is being built, `1.0.0` when it is complete).
 
 ### Changed
 
+- **`GET /cases/texts` also returns the HR contacts** (`hrContacts`), so My cases shows them
+  without reading the conversation (Phase 6, stage 6). The case timeline orders events
+  written at the same moment with `opened` first.
 - **The sent line and the waiting-limit line come from the API** (Phase 6, stage 5). A send's
   answer and a reloaded turn's `caseOpened` now carry `sentLine` in two parts, `lead` ("Sent to HR.
   HR replies by Wednesday, October 28.") and `pointer` ("You can see its status in My cases.", or
@@ -382,6 +432,21 @@ version (`0.x.y` while the app is being built, `1.0.0` when it is complete).
   screening now price a guard call through one helper. No behavior changed.
 
 ### Fixed
+
+- **Four small glitches on the conversation page** (Phase 6, stage 6), each with a
+  browser test:
+  - A question sent to a conversation that no longer exists no longer drops the page to
+    "Loading…" and takes focus out of the box. The page keeps what it shows and the focus stays,
+    says the send failed, keeps the draft, and the next question goes to the conversation the
+    server has now, never the dead one.
+  - "Start a new conversation" with a source panel open now goes back over the history step the
+    panel added, so Back no longer stops on a step that changes nothing. That step is marked, so
+    going Forward to it does not reopen the panel on the new conversation.
+  - A question sent just before "Start a new conversation", while the page was still working out
+    where to send it, now goes to the new conversation, not the old one.
+  - A second Enter while a question waits for the new conversation was ignored without a word. The
+    box now shows its busy state from the first Enter, as it does while sending, and a second
+    Enter can no longer start a competing send that drops the first question.
 
 - **The class-merging helper knows the `panel` width** (Phase 6, stage 5). `cn('w-rail',
   'w-panel')` kept both classes, so the CSS order decided the width; it now keeps the last, as for

@@ -11,6 +11,7 @@ import { Link } from 'react-router'
 import type { CitationOut } from '@/api/generated'
 import { cn } from '@/lib/utils'
 import { APP_LINK } from './link-class'
+import { AnswerViewerContext, type AnswerViewer } from './answer-viewer'
 import { autolinkSpans, definitionSpans, linkAddressSpans, type Span } from './link-spans'
 
 type AnswerProps = {
@@ -309,13 +310,20 @@ function CaretSlot() {
 }
 
 /**
- * Only a path inside the app is a link: under /handbook/ or /directory/, with no "." or ".."
- * segment (written plainly or percent-encoded, since the router would resolve it to a page
- * outside those two) and no backslash. Anything else shows as its text.
+ * Only a path inside the app is a link: under /handbook/ or /directory/; for HR, exactly /cases
+ * or below /cases/; for a person, exactly /my-cases (a query or fragment may follow). It has no
+ * "." or ".." segment (written plainly or percent-encoded, since the router would resolve it to a
+ * page outside those) and no backslash. Anything else shows as its text.
  */
-function isAppPath(href: string): boolean {
-  if (!href.startsWith('/handbook/') && !href.startsWith('/directory/')) return false
+function isAppPath(href: string, viewer: AnswerViewer): boolean {
   const path = href.split(/[?#]/, 1)[0]!
+  const exact =
+    (viewer === 'person' && path === '/my-cases') || (viewer === 'hr' && path === '/cases')
+  const below =
+    href.startsWith('/handbook/') ||
+    href.startsWith('/directory/') ||
+    (viewer === 'hr' && href.startsWith('/cases/'))
+  if (!exact && !below) return false
   let decoded: string
   try {
     decoded = decodeURIComponent(path)
@@ -330,7 +338,9 @@ function AnswerLink({ href, children }: ComponentProps<'a'> & ExtraProps) {
   // react-markdown has already blanked the schemes it distrusts. This allow-list is the real check.
   // A link with nothing left inside (it held only an image with no alt text) would be an anchor with
   // no name.
-  if (!isAppPath(href ?? '') || Children.toArray(children).length === 0) return <>{children}</>
+  const viewer = useContext(AnswerViewerContext)
+  if (!isAppPath(href ?? '', viewer) || Children.toArray(children).length === 0)
+    return <>{children}</>
   return (
     <Link to={href!} className={APP_LINK}>
       {children}

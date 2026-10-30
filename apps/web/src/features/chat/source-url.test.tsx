@@ -1,7 +1,11 @@
 import { act, render, screen } from '@testing-library/react'
+import { QueryClient } from '@tanstack/react-query'
 import { createMemoryRouter, RouterProvider, useLocation } from 'react-router'
-import { describe, expect, it } from 'vitest'
-import { useSourceUrl } from './source-url'
+import { beforeEach, describe, expect, it } from 'vitest'
+import { resetIdentity } from '@/lib/identity'
+import { goneBackOverCount, useSourceUrl } from './source-url'
+
+beforeEach(() => sessionStorage.clear())
 
 function Probe() {
   const { key, open, close, clear } = useSourceUrl()
@@ -14,6 +18,14 @@ function Probe() {
       <button onClick={() => open('4.3~p1')}>open other</button>
       <button onClick={() => close()}>close</button>
       <button onClick={() => clear()}>clear</button>
+      <button
+        onClick={() => {
+          clear()
+          clear()
+        }}
+      >
+        clear twice
+      </button>
       <button
         onClick={() => {
           close()
@@ -117,10 +129,110 @@ describe('useSourceUrl', () => {
     expect(router.state.location.state).toBeNull()
   })
 
+  it('remembers at most the last 50 entries gone back over, and forgets them on a persona switch', async () => {
+    const router = createMemoryRouter([{ path: '/ask', element: <Probe /> }], {
+      initialEntries: ['/ask'],
+    })
+    render(<RouterProvider router={router} />)
+    for (let i = 0; i < 55; i++) {
+      await act(async () => {
+        await router.navigate('/ask?source=CA-4.3~p1', {
+          state: { openedSource: true, keepScroll: true },
+        })
+      })
+      await act(async () => {
+        screen.getByRole('button', { name: 'clear' }).click()
+      })
+    }
+    expect(goneBackOverCount()).toBe(50)
+    resetIdentity(new QueryClient())
+    expect(goneBackOverCount()).toBe(0)
+  })
+
   it('leaves no marker when the source is cleared', async () => {
     const { router, press } = setup('/ask?source=CA-4.3~p1')
     await press('clear')
     expect(router.state.location.state).toBeNull()
     expect(router.state.location.search).toBe('')
+  })
+
+  describe('clearing a panel the panel opened (Start a new conversation)', () => {
+    it('goes back over the entry the panel added, so no step is left that changes nothing', async () => {
+      const { router, url, press } = setup('/ask')
+      await press('open p1')
+      await press('clear')
+      expect(url()).toBe('/ask')
+      expect(screen.getByTestId('key')).toHaveTextContent('none')
+      expect(router.state.historyAction).toBe('POP')
+      expect(router.state.location.state).toBeNull()
+    })
+
+    it('goes back only once when cleared twice, as a development double effect does', async () => {
+      const { router, url, press } = setup('/ask?first=1')
+      await press('open p1')
+      await press('clear twice')
+      expect(url()).toBe('/ask?first=1')
+      expect(router.state.location.pathname).toBe('/ask')
+    })
+
+    it('leaves no Forward step that reopens the panel: going forward lands on a closed page', async () => {
+      const { router, url, press } = setup('/ask')
+      await press('open p1')
+      await press('clear')
+      await act(async () => {
+        await router.navigate(1)
+      })
+      expect(screen.getByTestId('key')).toHaveTextContent('none')
+      expect(url()).toBe('/ask')
+      // Its address was replaced, not left as "?source=" for a later render to trip over.
+      expect(router.state.historyAction).toBe('REPLACE')
+    })
+
+    it('still reopens a panel the same way once the person opens one again', async () => {
+      const { url, press } = setup('/ask')
+      await press('open p1')
+      await press('clear')
+      await press('open p1')
+      expect(url()).toBe('/ask?source=CA-4.3%7Ep1')
+      expect(screen.getByTestId('key')).toHaveTextContent('CA-4.3~p1')
+    })
+
+    it('remembers the stale entry across a reload, in the session', async () => {
+      const { press } = setup('/ask')
+      await press('open p1')
+      await press('clear')
+      expect(sessionStorage.getItem('od.staleSourceEntries')).toMatch(/\w/)
+    })
+  })
+})
+
+describe('two components using the hook at once', () => {
+  function Two() {
+    const first = useSourceUrl()
+    const second = useSourceUrl()
+    return (
+      <div>
+        <button onClick={() => first.open('CA-4.3~p1')}>open</button>
+        <button
+          onClick={() => {
+            first.clear()
+            second.clear()
+          }}
+        >
+          clear both
+        </button>
+      </div>
+    )
+  }
+
+  it('goes back once when both ask to clear', async () => {
+    const router = createMemoryRouter([{ path: '/ask', element: <Two /> }], {
+      initialEntries: ['/ask?before=1', '/ask?first=1'],
+      initialIndex: 1,
+    })
+    render(<RouterProvider router={router} />)
+    await act(async () => screen.getByRole('button', { name: 'open' }).click())
+    await act(async () => screen.getByRole('button', { name: 'clear both' }).click())
+    expect(router.state.location.search).toBe('?first=1')
   })
 })

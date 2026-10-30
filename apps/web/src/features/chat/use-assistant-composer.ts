@@ -14,6 +14,7 @@ export function useAssistantComposer(conversation: ConversationOut | null, budge
   const draft = useChatStore((s) => s.draft)
   const status = useChatStore((s) => s.status)
   const sendError = useChatStore((s) => s.sendError)
+  const waitingToSend = useChatStore((s) => s.waitingToSend)
   const warning = useChatStore((s) => s.warning)
   const setDraft = useChatStore((s) => s.setDraft)
   const banner = (conversation?.budget ?? budget)?.banner ?? null
@@ -21,7 +22,8 @@ export function useAssistantComposer(conversation: ConversationOut | null, budge
     value: draft,
     onChange: setDraft,
     onSubmit: (question) => void send(question),
-    busy: status === 'sending',
+    // Busy while a question waits for "Start a new conversation" too, so a second Enter is seen.
+    busy: status === 'sending' || waitingToSend,
     streaming: status === 'streaming',
     onStop: stop,
     onSubmitWhileStreaming: () => void send(draft),

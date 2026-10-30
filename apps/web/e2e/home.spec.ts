@@ -107,7 +107,7 @@ test('every interactive element is reachable by keyboard in the order above and 
   await expect(page.getByRole('link', { name: /requests? pending/ })).toBeVisible()
   const stops: { name: string; ring: unknown }[] = []
   const priya = PERSONAS[0]!
-  for (let i = 0; i < 14; i += 1) {
+  for (let i = 0; i < 15; i += 1) {
     await page.keyboard.press('Tab')
     stops.push({
       name: await page.evaluate(() => {
@@ -120,6 +120,7 @@ test('every interactive element is reachable by keyboard in the order above and 
   expect(stops.map((stop) => stop.name)).toEqual([
     'Ask',
     'Time off',
+    'My cases',
     'Directory',
     'Handbook',
     `Switch persona. Current: ${priya.name}, ${priya.title}`,
@@ -134,7 +135,7 @@ test('every interactive element is reachable by keyboard in the order above and 
   // The ring is 2 px, offset 2 px. The composer's box shows its own primary border and halo
   // instead (components.spec.ts), so its stop is checked there.
   for (const [index, stop] of stops.entries()) {
-    if (index === 5) continue
+    if (index === 6) continue
     expect(stop.ring).toEqual({ width: '2px', style: 'solid', offset: '2px' })
   }
   // Focus then leaves the page's controls: nothing after the last row takes it.
@@ -168,7 +169,7 @@ test('the composer shows its primary border and halo when the keyboard reaches i
   const [light, dark] = [luminance(sheet), luminance(resting.border)].sort((a, b) => b - a)
   expect((light! + 0.05) / (dark! + 0.05)).toBeGreaterThanOrEqual(3)
 
-  for (let i = 0; i < 6; i += 1) await page.keyboard.press('Tab')
+  for (let i = 0; i < 7; i += 1) await page.keyboard.press('Tab')
   await expect(box(page)).toBeFocused()
   await expect.poll(async () => (await read()).border).toBe(await themeColor(page, 'primary'))
   // The halo transitions in with the border, so wait for it too.

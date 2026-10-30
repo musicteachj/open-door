@@ -196,3 +196,25 @@ describe('CaseTimeline announcements', () => {
     expect(announcement()).toBe('')
   })
 })
+
+describe('CaseTimeline: a crisis case has no summary to fail', () => {
+  const failed = [
+    entry({ kind: 'opened', actorGivenName: 'Priya', actorFamilyName: 'Raman' }),
+    entry({ kind: 'summary_failed' }),
+  ]
+
+  it('leaves out "AI summary couldn’t be written" for a crisis case', () => {
+    render(<CaseTimeline {...props({ entries: failed, screening: 'crisis' })} />)
+    const texts = lines().map((line) => line.textContent)
+    expect(texts.some((text) => /summary couldn.t be written/.test(text ?? ''))).toBe(false)
+    expect(texts).toHaveLength(2)
+    expect(texts[1]).toContain('The safety check routed it to crisis text')
+  })
+
+  it('still shows it for any other case', () => {
+    render(<CaseTimeline {...props({ entries: failed })} />)
+    expect(lines().some((line) => /summary couldn.t be written/.test(line.textContent ?? ''))).toBe(
+      true,
+    )
+  })
+})

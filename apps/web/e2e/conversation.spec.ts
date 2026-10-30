@@ -863,11 +863,12 @@ test.describe('the header and the conversation', () => {
     await startAs(page, 'Priya')
     await askAndWaitForAnswer(page, QUESTIONS.cited)
     await focusPageStart(page)
-    const stops = await tabStops(page, 17)
+    const stops = await tabStops(page, 18)
     const source = 'Source 1: Handbook §4.3, Time off'
     expect(stops.map((stop) => stop.name)).toEqual([
       'Ask',
       'Time off',
+      'My cases',
       'Directory',
       'Handbook',
       'Switch persona. Current: Priya Raman, Visual Merchandiser',
@@ -886,8 +887,8 @@ test.describe('the header and the conversation', () => {
       expect.stringMatching(/ requests? pending\. Open Time off$/),
       expect.stringMatching(/Handbook updated\. Open Handbook$/),
     ])
-    expect(stops[12]!.tag).toBe('TEXTAREA')
-    expect(stops[13]!.slot).toBe('composer-ask')
+    expect(stops[13]!.tag).toBe('TEXTAREA')
+    expect(stops[14]!.slot).toBe('composer-ask')
   })
 
   test("while an answer streams, Stop takes Ask's place in the Tab order", async ({ page }) => {
@@ -1029,21 +1030,23 @@ test.describe('budget and length states (STUB: the conversation GET)', () => {
       // thread, then the two links in place of the composer, and the rail. The box and Ask are skipped.
       const stops = await allTabStops(page)
       const names = stops.map((stop) => stop.name)
-      expect(names.slice(0, 5)).toEqual([
+      expect(names.slice(0, 6)).toEqual([
         'Ask',
         'Time off',
+        'My cases',
         'Directory',
         'Handbook',
         'Switch persona. Current: Priya Raman, Visual Merchandiser',
       ])
       // The banner comes before the page: its two emergency links, then (sandbox only) its action.
-      const afterSwitcher = names.slice(5)
-      expect(afterSwitcher.slice(0, 2)).toEqual(['call 911', 'call or text 988'])
-      if (kind === 'sandbox') expect(afterSwitcher[2]).toBe('Start a new sandbox')
-      expect(afterSwitcher[kind === 'sandbox' ? 3 : 2]).toBe('Start a new conversation')
+      // Then "Write to HR" (a person's banner has it), the last words of its message.
+      const afterSwitcher = names.slice(6)
+      expect(afterSwitcher.slice(0, 3)).toEqual(['call 911', 'call or text 988', 'Write to HR'])
+      if (kind === 'sandbox') expect(afterSwitcher[3]).toBe('Start a new sandbox')
+      expect(afterSwitcher[kind === 'sandbox' ? 4 : 3]).toBe('Start a new conversation')
       expect(stops.some((stop) => stop.tag === 'TEXTAREA')).toBe(false)
       expect(stops.some((stop) => stop.slot === 'composer-ask')).toBe(false)
-      const handbookAt = names.indexOf('Handbook', 5)
+      const handbookAt = names.indexOf('Handbook', 6)
       expect(handbookAt).toBeGreaterThan(names.indexOf('Show your work'))
       expect(names[handbookAt + 1]).toBe('Directory')
       expect(names[handbookAt + 2]).toMatch(/ PTO available\. Open Time off$/)

@@ -266,6 +266,159 @@ describe('a conversation that is gone', () => {
 
     expect(posted.map((p) => p.conversationId)).toEqual(['gone-1', 'live-2'])
   })
+
+  it('creates a new conversation, and never sends to the dead one again, when the server has none now', async () => {
+    const api = installAssistantApi({ conversation: conversationOut({ id: 'gone-1' }) })
+    const posted = onTurn((_question, conversationId) =>
+      conversationId === 'gone-1'
+        ? problemResponse(404, 'about:blank', 'Not found')
+        : eventStream(started, completed),
+    )
+    const { wrapper } = setup()
+    const { result } = renderHook(
+      () => ({ actions: useConversationActions(), view: useConversationTurns() }),
+      { wrapper },
+    )
+    await waitFor(() => expect(result.current.view.conversation.data?.id).toBe('gone-1'))
+    await waitFor(() => expect(result.current.actions.ready).toBe(true))
+    api.setCurrent(null)
+    // The read that says so is slow, so the next question is asked before it lands.
+    server.use(
+      http.get(url('/api/v1/assistant/conversations/current'), async () => {
+        await delay(200)
+        return HttpResponse.json(null)
+      }),
+    )
+    await act(() => result.current.actions.send('First'))
+    await act(() => result.current.actions.send('Second'))
+    expect(posted.map((p) => p.conversationId)).toEqual(['gone-1', CONVERSATION_ID])
+    expect(api.requests.created).toBe(1)
+  })
+
+  it('stops reading the conversation before each send once a later read went through, after the read the 404 started failed', async () => {
+    const api = installAssistantApi({ conversation: conversationOut({ id: 'gone-1' }) })
+    let readsAtThird = -1
+    const posted = onTurn((question, conversationId) => {
+      if (question === 'Third') readsAtThird = api.requests.current
+      return conversationId === 'gone-1'
+        ? problemResponse(404, 'about:blank', 'Not found')
+        : eventStream(started, completed)
+    })
+    const { wrapper, queryClient } = setup()
+    const { result } = renderHook(
+      () => ({ actions: useConversationActions(), view: useConversationTurns() }),
+      { wrapper },
+    )
+    await waitFor(() => expect(result.current.view.conversation.data?.id).toBe('gone-1'))
+    await waitFor(() => expect(result.current.actions.ready).toBe(true))
+    // The read the 404 starts fails, so the dead conversation stays in the cache.
+    server.use(
+      http.get(
+        url('/api/v1/assistant/conversations/current'),
+        () => new HttpResponse(null, { status: 500 }),
+      ),
+    )
+    await act(() => result.current.actions.send('First'))
+    await waitFor(() =>
+      expect(queryClient.getQueryState(getGetCurrentConversationQueryKey())?.status).toBe('error'),
+    )
+    // The server is reachable again: the next send reads the current conversation and succeeds.
+    api.setCurrent(conversationOut({ id: 'live-2' }))
+    server.use(
+      http.get(url('/api/v1/assistant/conversations/current'), () => {
+        api.requests.current++
+        return HttpResponse.json(conversationOut({ id: 'live-2' }))
+      }),
+    )
+    await act(() => result.current.actions.send('Second'))
+    expect(posted.map((p) => p.conversationId)).toEqual(['gone-1', 'live-2'])
+    // Nothing is dead any more: a third send uses what the cache holds and asks for nothing.
+    useChatStore.setState({ conversationId: null })
+    // The read that follows the second turn has finished.
+    await act(() => new Promise((resolve) => setTimeout(resolve, 100)))
+    const before = api.requests.current
+    await act(() => result.current.actions.send('Third'))
+    expect(readsAtThird).toBe(before)
+  })
+
+  it('is not failed by an ordinary background read that fails, because only the read the 404 started is waited for', async () => {
+    installAssistantApi({ conversation: conversationOut({ id: 'live-1', turns: [turnOut()] }) })
+    const posted = onTurn(() => eventStream(started, completed))
+    const { wrapper, queryClient } = setup()
+    const { result } = renderHook(
+      () => ({ actions: useConversationActions(), view: useConversationTurns() }),
+      { wrapper },
+    )
+    await waitFor(() => expect(result.current.view.conversation.data?.id).toBe('live-1'))
+    await waitFor(() => expect(result.current.actions.ready).toBe(true))
+    // A background read (after a turn, or a window focus) is on its way, and it fails.
+    server.use(
+      http.get(url('/api/v1/assistant/conversations/current'), async () => {
+        await delay(100)
+        return new HttpResponse(null, { status: 500 })
+      }),
+    )
+    void queryClient.invalidateQueries({ queryKey: getGetCurrentConversationQueryKey() })
+    await act(() => result.current.actions.send('Sick days?'))
+    expect(useChatStore.getState().sendError).toBeNull()
+    expect(posted.map((p) => p.conversationId)).toEqual(['live-1'])
+  })
+
+  it('uses the cached conversation after a background read failed and left its error behind', async () => {
+    installAssistantApi({ conversation: conversationOut({ id: 'live-1', turns: [turnOut()] }) })
+    const posted = onTurn(() => eventStream(started, completed))
+    const { wrapper, queryClient } = setup()
+    const { result } = renderHook(
+      () => ({ actions: useConversationActions(), view: useConversationTurns() }),
+      { wrapper },
+    )
+    await waitFor(() => expect(result.current.view.conversation.data?.id).toBe('live-1'))
+    await waitFor(() => expect(result.current.actions.ready).toBe(true))
+    server.use(
+      http.get(
+        url('/api/v1/assistant/conversations/current'),
+        () => new HttpResponse(null, { status: 500 }),
+      ),
+    )
+    // A window-focus read fails and is over: the data stays, the query is in the error state.
+    await queryClient.invalidateQueries({ queryKey: getGetCurrentConversationQueryKey() })
+    await waitFor(() =>
+      expect(queryClient.getQueryState(getGetCurrentConversationQueryKey())?.status).toBe('error'),
+    )
+    await act(() => result.current.actions.send('Sick days?'))
+    expect(useChatStore.getState().sendError).toBeNull()
+    expect(posted.map((p) => p.conversationId)).toEqual(['live-1'])
+  })
+
+  it('keeps showing the conversation it had while the server is asked again', async () => {
+    const api = installAssistantApi({ conversation: conversationOut({ id: 'gone-1' }) })
+    onTurn(() => problemResponse(404, 'about:blank', 'Not found'))
+    const { wrapper } = setup()
+    const { result } = renderHook(
+      () => ({ actions: useConversationActions(), view: useConversationTurns() }),
+      { wrapper },
+    )
+    await waitFor(() => expect(result.current.view.conversation.data?.id).toBe('gone-1'))
+    await waitFor(() => expect(result.current.actions.ready).toBe(true))
+    api.setCurrent(conversationOut({ id: 'live-2' }))
+    // The read that says what is there now is slow: the page must not be empty meanwhile.
+    server.use(
+      http.get(url('/api/v1/assistant/conversations/current'), async () => {
+        await delay(200)
+        return HttpResponse.json(conversationOut({ id: 'live-2' }))
+      }),
+    )
+    const seen: (string | null | undefined)[] = []
+    await act(async () => {
+      const sending = result.current.actions.send('First')
+      const watch = setInterval(() => seen.push(result.current.view.conversation.data?.id), 10)
+      await sending
+      await waitFor(() => expect(result.current.view.conversation.data?.id).toBe('live-2'))
+      clearInterval(watch)
+    })
+    expect(seen).not.toContain(undefined)
+    expect(useChatStore.getState().sendError).toBe('Something went wrong sending that.')
+  })
 })
 
 describe('the budget before a conversation', () => {
@@ -784,6 +937,168 @@ describe('starting a new conversation while one is being created', () => {
       await Promise.all([starting, sending])
     })
     expect(posted.map((p) => p.conversationId)).toEqual([CONVERSATION_ID])
+  })
+})
+
+describe('a send that is waiting when the person changes', () => {
+  it("sends nothing, and leaves the new person's own wait alone", async () => {
+    installAssistantApi({ conversation: conversationOut({ id: 'old-1', turns: [turnOut()] }) })
+    let release: () => void = () => {}
+    const gate = new Promise<void>((resolve) => (release = resolve))
+    server.use(
+      http.post(url('/api/v1/assistant/conversations'), async () => {
+        await gate
+        return HttpResponse.json(conversationOut(), { status: 201 })
+      }),
+    )
+    const posted = onTurn(() => eventStream(started, completed))
+    const { wrapper, queryClient } = setup()
+    const { result } = renderHook(() => useConversationActions(), { wrapper })
+    await waitFor(() => expect(result.current.ready).toBe(true))
+    let starting!: Promise<void>
+    let sending!: Promise<void>
+    act(() => {
+      starting = result.current.startNewConversation()
+      sending = result.current.send('Old person question')
+    })
+    await waitFor(() => expect(useChatStore.getState().waitingToSend).toBe(true))
+    // A persona switch, and the new person's own send is now waiting.
+    act(() => resetIdentity(queryClient))
+    useChatStore.setState({ waitingToSend: true })
+    release()
+    await act(async () => {
+      await Promise.all([starting, sending])
+    })
+    expect(posted).toEqual([])
+    expect(useChatStore.getState().waitingToSend).toBe(true)
+    expect(useChatStore.getState().sendError).toBeNull()
+  })
+})
+
+describe('a send that races "Start a new conversation"', () => {
+  it('goes to the new conversation when the click came while the send was still finding out where to go', async () => {
+    installAssistantApi()
+    // The read that says which conversation exists is slow, so the send has not reached the server.
+    let release: () => void = () => {}
+    const gate = new Promise<void>((resolve) => (release = resolve))
+    server.use(
+      http.get(url('/api/v1/assistant/conversations/current'), async () => {
+        await gate
+        return HttpResponse.json(conversationOut({ id: 'old-1', turns: [turnOut()] }))
+      }),
+    )
+    const posted = onTurn(() => eventStream(started, completed))
+    const { wrapper } = setup()
+    const { result } = renderHook(() => useConversationActions(), { wrapper })
+    await waitFor(() => expect(result.current.ready).toBe(true))
+    let sending!: Promise<void>
+    act(() => {
+      sending = result.current.send('Sick days?')
+    })
+    await act(() => result.current.startNewConversation())
+    expect(useChatStore.getState().conversationId).toBe(CONVERSATION_ID)
+    release()
+    await act(() => sending)
+    expect(posted.map((p) => p.conversationId)).toEqual([CONVERSATION_ID])
+  })
+
+  it('keeps the first question, and ignores a second Enter, when the click and the second Enter come while the first is still finding out where to go', async () => {
+    installAssistantApi()
+    let release: () => void = () => {}
+    const gate = new Promise<void>((resolve) => (release = resolve))
+    server.use(
+      http.get(url('/api/v1/assistant/conversations/current'), async () => {
+        await gate
+        return HttpResponse.json(conversationOut({ id: 'old-1', turns: [turnOut()] }))
+      }),
+    )
+    const posted = onTurn(() => eventStream(started, completed))
+    const { wrapper } = setup()
+    const { result } = renderHook(() => useConversationActions(), { wrapper })
+    await waitFor(() => expect(result.current.ready).toBe(true))
+    let first!: Promise<void>
+    let second!: Promise<void>
+    act(() => {
+      first = result.current.send('First question')
+    })
+    // The composer is busy from the first Enter.
+    expect(useChatStore.getState().waitingToSend).toBe(true)
+    await act(() => result.current.startNewConversation())
+    act(() => {
+      second = result.current.send('Second question')
+    })
+    release()
+    await act(async () => {
+      await Promise.all([first, second])
+    })
+    expect(posted.map((p) => [p.conversationId, p.question])).toEqual([
+      [CONVERSATION_ID, 'First question'],
+    ])
+    expect(useChatStore.getState().waitingToSend).toBe(false)
+  })
+
+  it('does not send a second time when nothing was started meanwhile', async () => {
+    installAssistantApi({ conversation: conversationOut({ id: 'old-1', turns: [turnOut()] }) })
+    const posted = onTurn(() => eventStream(started, completed))
+    const { wrapper } = setup()
+    const { result } = renderHook(() => useConversationActions(), { wrapper })
+    await waitFor(() => expect(result.current.ready).toBe(true))
+    await act(() => result.current.send('Sick days?'))
+    expect(posted.map((p) => p.conversationId)).toEqual(['old-1'])
+  })
+})
+
+describe('a second send while one waits for the new conversation', () => {
+  it('shows the wait in the store, so the composer is busy, and ends it when the send goes out', async () => {
+    installAssistantApi({ conversation: conversationOut({ id: 'old-1', turns: [turnOut()] }) })
+    let release: () => void = () => {}
+    const gate = new Promise<void>((resolve) => (release = resolve))
+    server.use(
+      http.post(url('/api/v1/assistant/conversations'), async () => {
+        await gate
+        return HttpResponse.json(conversationOut(), { status: 201 })
+      }),
+    )
+    const posted = onTurn(() => eventStream(started, completed))
+    const { wrapper } = setup()
+    const { result } = renderHook(() => useConversationActions(), { wrapper })
+    await waitFor(() => expect(result.current.ready).toBe(true))
+    expect(useChatStore.getState().waitingToSend).toBe(false)
+    let starting!: Promise<void>
+    let sending!: Promise<void>
+    act(() => {
+      starting = result.current.startNewConversation()
+      sending = result.current.send('Sick days?')
+    })
+    await waitFor(() => expect(useChatStore.getState().waitingToSend).toBe(true))
+    // The second Enter changes nothing more, and sends nothing.
+    await act(() => result.current.send('Sick days?'))
+    expect(posted).toEqual([])
+    release()
+    await act(async () => {
+      await Promise.all([starting, sending])
+    })
+    expect(useChatStore.getState().waitingToSend).toBe(false)
+    expect(posted).toHaveLength(1)
+  })
+
+  it('ends the wait when the new conversation could not be created', async () => {
+    installAssistantApi({ conversation: conversationOut({ id: 'old-1', turns: [turnOut()] }) })
+    server.use(
+      http.post(url('/api/v1/assistant/conversations'), async () => {
+        await delay(30)
+        return new HttpResponse(null, { status: 500 })
+      }),
+    )
+    const { wrapper } = setup()
+    const { result } = renderHook(() => useConversationActions(), { wrapper })
+    await waitFor(() => expect(result.current.ready).toBe(true))
+    await act(async () => {
+      const starting = result.current.startNewConversation()
+      const sending = result.current.send('Sick days?')
+      await Promise.all([starting, sending])
+    })
+    expect(useChatStore.getState().waitingToSend).toBe(false)
   })
 })
 

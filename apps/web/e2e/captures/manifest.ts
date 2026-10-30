@@ -410,6 +410,8 @@ export const SCREEN_FOLDERS = [
   '08-time-off',
   '09-approvals',
   '10-confirm-cards',
+  '11-escalation-cases',
+  '12-hr-cases',
 ] as const
 
 /** How to reach each state in the build. The capture spec holds the steps for each one; they use
@@ -451,6 +453,8 @@ export type ScreenSetup =
   | 'time-off'
   | 'approvals'
   | 'confirm-card'
+  | 'cases'
+  | 'hr-cases'
 
 /** The states of screen 08, by the design file's name (desktop-<state>.png). */
 export type TimeOffState =
@@ -514,6 +518,44 @@ export type ConfirmCardState =
   | 'sensitive'
   | 'sensitive-work'
 
+/** The states of screen 11, by the design file's name (desktop-<state>.png). */
+export type CasesState =
+  | 'sensitive-offer'
+  | 'form'
+  | 'form-ready'
+  | 'form-short'
+  | 'form-errors'
+  | 'form-limit'
+  | 'sending'
+  | 'sent'
+  | 'send-error'
+  | 'waiting-limit'
+  | 'crisis-offer'
+  | 'cant-answer-link'
+  | 'my-cases-empty'
+  | 'my-cases'
+  | 'my-cases-form'
+  | 'sent-crisis'
+  | 'nav'
+
+/** The states of screen 12. */
+export type HrCasesState =
+  | 'queue'
+  | 'queue-closed'
+  | 'queue-empty'
+  | 'queue-facts'
+  | 'detail'
+  | 'detail-revealed'
+  | 'dialog-review'
+  | 'dialog-close'
+  | 'detail-in-review'
+  | 'summary-pending'
+  | 'summary-failed'
+  | 'summary-crisis'
+  | 'own-case'
+  | 'home-hr'
+  | 'nav-hr'
+
 /** What the build photograph shows: the whole viewport, or one region of it. */
 export type ScreenTarget = 'viewport' | 'page' | 'sidebar' | 'main' | 'rail'
 
@@ -532,7 +574,7 @@ export type ScreenRow = {
   scenario?: ConversationFile
   /** For `time-off`, `approvals`, and `confirm-card`: the state of the real page to reach, named
    * by the design file (desktop-<state>.png). capture.spec.ts holds the steps for each. */
-  state?: TimeOffState | ApprovalsState | ConfirmCardState
+  state?: TimeOffState | ApprovalsState | ConfirmCardState | CasesState | HrCasesState
   target?: ScreenTarget
   /** Photographed at this size. 1440 by 900 when left out, the width the designs are drawn at. */
   viewport?: { width: number; height: number }
@@ -635,6 +677,39 @@ const pageRow = (
     ...(DATE_DEPENDENT.includes(state as ConfirmCardState)
       ? { note: [extra.note, DATE_CAVEAT].filter(Boolean).join(' ') }
       : {}),
+  }
+}
+
+/**
+ * A row for screens 11 and 12: the real chat, My cases, Cases, or a case, against the real API with
+ * the scripted model, brought to the state of the design file's name by the steps in
+ * capture.spec.ts. A frame for HR that shows Priya's case starts as Priya, who sends it, and the
+ * spec switches to Dana. The frames' people and dates are sample data, so a row says where the
+ * photograph is the nearest real state.
+ */
+const casesRow = (
+  folder: '11-escalation-cases' | '12-hr-cases',
+  state: CasesState | HrCasesState,
+  title: string,
+  extra: Pick<ScreenRow, 'note' | 'target'> = {},
+): ScreenRow => {
+  const screen = {
+    '11-escalation-cases': { label: '11 Escalation cases', setup: 'cases', route: '/ask' },
+    '12-hr-cases': { label: '12 HR cases', setup: 'hr-cases', route: '/cases' },
+  } as const
+  const { label, setup, route } = screen[folder]
+  const mine = ['my-cases-empty', 'my-cases', 'my-cases-form', 'sent-crisis', 'nav']
+  const dana = ['queue-closed', 'queue-empty', 'detail-in-review', 'own-case']
+  return {
+    title: `${label}: ${title}`,
+    designImage: `${SCREENS}/${folder}/desktop-${state}.png`,
+    route: mine.includes(state) ? '/my-cases' : route,
+    // Dana's frames that show Priya's case start as Priya, who sends it.
+    persona: folder === '11-escalation-cases' || !dana.includes(state) ? 'Priya' : 'Dana',
+    setup,
+    state,
+    target: 'viewport',
+    ...extra,
   }
 }
 
@@ -1221,6 +1296,105 @@ export const SCREEN_ROWS: ScreenRow[] = [
   }),
   pageRow('10-confirm-cards', 'sensitive-work', 'sensitive turn, show your work', {
     note: 'STUB: as the row above, with "Show your work" open',
+  }),
+
+  // Screen 11, the case button, the confidential-case form, and My cases. Priya.
+  casesRow('11-escalation-cases', 'sensitive-offer', 'sensitive message, case offered', {
+    note: 'Asked "My manager keeps making comments about my age." The answer and its two sources are the scripted model\'s, so the wording differs from the frame',
+  }),
+  casesRow('11-escalation-cases', 'form', 'form open', {
+    note: 'The form opens prefilled with the question, 46 characters',
+  }),
+  casesRow('11-escalation-cases', 'form-ready', 'form, category chosen', {
+    note: '"Harassment or discrimination" chosen, focus on "Send to HR"',
+  }),
+  casesRow('11-escalation-cases', 'form-short', 'form, short reply', {
+    note: 'The scripted model flags a message only for words like "harass", so the earlier turn is the age question and the short reply is "yes, I was harassed" (19 characters), not the frame\'s "yes, that\'s what happened" (25). The hint is the short-reply one',
+  }),
+  casesRow('11-escalation-cases', 'form-errors', 'form, errors', {
+    note: "Send pressed with no category and a number like 123-45-6789 in the words. The frame's sample words are used",
+  }),
+  casesRow('11-escalation-cases', 'form-limit', 'form, at the limit', {
+    note: 'The words are filled to 4,000 characters',
+  }),
+  casesRow('11-escalation-cases', 'sending', 'sending', {
+    note: 'The send is held, so the button stays on "Sending…"',
+  }),
+  casesRow('11-escalation-cases', 'sent', 'sent', {
+    note: "A case is sent from the panel. The reply-by date is the real one, not the frame's Wednesday, October 28",
+  }),
+  casesRow('11-escalation-cases', 'send-error', 'send failed', {
+    note: 'The send is answered with a 500, so the message shows and the button reads "Try again"',
+  }),
+  casesRow('11-escalation-cases', 'waiting-limit', 'waiting limit', {
+    note: 'Five cases are sent first through the API, then the sensitive message asked',
+  }),
+  casesRow('11-escalation-cases', 'crisis-offer', 'crisis panel with the case button', {
+    note: 'Asked "I want to hurt myself". The panel is screen 07\'s, with the secondary "Open a confidential case"',
+  }),
+  casesRow('11-escalation-cases', 'cant-answer-link', "can't answer right now, Write to HR", {
+    note: "The scripted guard failure makes the panel. The frame's question differs",
+  }),
+  casesRow('11-escalation-cases', 'my-cases-empty', 'My cases, empty'),
+  casesRow('11-escalation-cases', 'my-cases', 'My cases, three cases', {
+    note: "Three cases are sent through the API, then Dana starts one review and closes another, so the badges differ. The sent dates are today's, not the frame's",
+  }),
+  casesRow('11-escalation-cases', 'my-cases-form', 'My cases, form open'),
+  casesRow('11-escalation-cases', 'sent-crisis', 'sent, crisis text after it', {
+    note: 'Words with "hurt myself" are sent, which the scripted guard screens as crisis. The sent line shows, then the crisis panel, then the list',
+  }),
+  casesRow('11-escalation-cases', 'nav', 'navigation, Priya', {
+    target: 'sidebar',
+    note: "The sidebar as Priya sees it on My cases. The frame also draws Marcus, with Approvals, which screen 09's rows show",
+  }),
+
+  // Screen 12, the HR case queue and the case detail. Dana, with Priya's case sent first where
+  // the frame has it.
+  casesRow('12-hr-cases', 'queue', 'queue', {
+    note: "Priya's case is sent first, so the open filter lists Chloe, Keisha, Priya, then Aaliyah. The dates and the reply line follow today's date, not the frame's",
+  }),
+  casesRow('12-hr-cases', 'queue-closed', 'queue, closed filter', {
+    note: "Lucia Gutierrez, as in the frame. The date is the seed's",
+  }),
+  casesRow('12-hr-cases', 'queue-empty', 'queue, nothing new', {
+    note: 'The two new cases are read and closed first, then the New filter opened',
+  }),
+  casesRow('12-hr-cases', 'queue-facts', 'queue, crisis fact', {
+    note: "Not the frame's Tuesday: a crisis case from Priya is sent first, so the queue shows the crisis fact under it. Megan Coleman is sample data, so Priya is the person, and the overdue reply line depends on the real date",
+  }),
+  casesRow('12-hr-cases', 'detail', 'detail', {
+    note: "Priya's case. The summary is the scripted summarizer's fixed template",
+  }),
+  casesRow('12-hr-cases', 'detail-revealed', 'detail, words shown', {
+    note: 'The words are shown, and the timeline gains the read row',
+  }),
+  casesRow('12-hr-cases', 'dialog-review', 'start review dialog', {
+    note: 'The words are read first, then "Start review" pressed, focus on Cancel',
+  }),
+  casesRow('12-hr-cases', 'dialog-close', 'close case dialog', {
+    note: 'The words are read first, then "Close case" pressed, focus on Cancel',
+  }),
+  casesRow('12-hr-cases', 'detail-in-review', 'detail, in review', {
+    note: "The seed's Aaliyah Edwards case, opened from the queue",
+  }),
+  casesRow('12-hr-cases', 'summary-pending', 'summary pending', {
+    note: 'The summary request is held, so the block stays on "Writing the summary…". The timeline shows the written row, where the frame\'s has only "Sent by"',
+  }),
+  casesRow('12-hr-cases', 'summary-failed', 'summary failed', {
+    note: "The summary request is answered with a 500, so the block shows its failed state. The timeline shows the written row, where the frame's does not",
+  }),
+  casesRow('12-hr-cases', 'summary-crisis', 'summary, crisis', {
+    note: 'Not Megan\'s case, which is sample data: Priya\'s case with "hurt myself" in the words, screened as crisis by the scripted guard',
+  }),
+  casesRow('12-hr-cases', 'own-case', "HR's own case", {
+    note: "Dana sends a case from her own chat, then opens it from the API's ID. The frame's sent date is Friday",
+  }),
+  casesRow('12-hr-cases', 'home-hr', "Dana's home", {
+    note: 'Priya\'s case is sent first, so the rail reads "3 new cases". The "reply due" line shows only on a date a case is due, so it can differ from the frame\'s "1 reply due today"',
+  }),
+  casesRow('12-hr-cases', 'nav-hr', 'navigation, Dana', {
+    target: 'sidebar',
+    note: "The sidebar as Dana sees it on Cases, with 3 new after Priya's case is sent",
   }),
 ]
 

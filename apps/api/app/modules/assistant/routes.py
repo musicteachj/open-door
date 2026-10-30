@@ -91,6 +91,7 @@ from app.ai.turn import (
     TurnDeps,
     start_turn_run,
 )
+from app.api.contacts import hr_contact_out
 from app.api.deps import (
     Now,
     get_app_settings,
@@ -107,7 +108,7 @@ from app.core.problems import ProblemError, problem_response
 from app.db.models import AiConversation, HandbookVersion
 from app.db.tenancy import TenantContext, set_is_hr, tenant_session
 from app.domain.handbook.applicability import Asker
-from app.modules.assistant.display import hr_contact_out, needs_hr_contact, shown, turn_out
+from app.modules.assistant.display import needs_hr_contact, shown, turn_out
 from app.modules.assistant.schemas import (
     AssistantTextsOut,
     BudgetBannerOut,

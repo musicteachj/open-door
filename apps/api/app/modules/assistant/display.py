@@ -18,6 +18,7 @@ from app.ai.fixed_texts import (
 )
 from app.ai.guard import escalation_for_verdict, offers_case
 from app.ai.proposals import ProposalOut
+from app.api.contacts import hr_contact_out
 from app.db.models import AiFeedback, AiTurn
 from app.modules.assistant.schemas import (
     CaseOpenedOut,
@@ -25,7 +26,6 @@ from app.modules.assistant.schemas import (
     EscalationOut,
     FeedbackOut,
     GuardOut,
-    HrContactOut,
     SectionOut,
     ToolCallOut,
     TurnErrorOut,
@@ -147,12 +147,6 @@ def shown(turn: AiTurn, now: datetime) -> Shown:
 def needs_hr_contact(turns: Sequence[Shown]) -> bool:
     """Whether any turn shows an escalation or a not-found card."""
     return any(t.kind is not None or t.not_found for t in turns)
-
-
-def hr_contact_out(contacts: Sequence[HrContact]) -> list[HrContactOut]:
-    """The contacts as the conversation read shows them, built from the event's own form
-    (`HrContact.to_json`), so the two can't drift apart."""
-    return [HrContactOut.model_validate(c.to_json()) for c in contacts]
 
 
 def sections_out(

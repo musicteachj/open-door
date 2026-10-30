@@ -456,3 +456,27 @@ describe('CaseForm: the keyboard', () => {
     expect(choice('Workplace safety')).toBeChecked()
   })
 })
+
+describe('CaseForm: a refusal from the server', () => {
+  it('shows the personal-data line on the words and focuses them', () => {
+    const { rerender } = setup({ initialCategory: 'pay' })
+    expect(screen.queryByText(/Social Security or card number/)).not.toBeInTheDocument()
+    rerender({ initialCategory: 'pay', refusal: 'personal-data' })
+    expect(screen.getByText(/Social Security or card number/)).toBeInTheDocument()
+    expect(words()).toHaveAttribute('aria-invalid', 'true')
+    expect(words()).toHaveFocus()
+  })
+
+  it('shows the empty-words line for an empty refusal', () => {
+    const { rerender } = setup({ initialCategory: 'pay' })
+    rerender({ initialCategory: 'pay', refusal: 'empty' })
+    expect(screen.getByText('Add your words before sending.')).toBeInTheDocument()
+  })
+
+  it('clears the line when the person edits the words', async () => {
+    const { user, rerender } = setup({ initialCategory: 'pay' })
+    rerender({ initialCategory: 'pay', refusal: 'personal-data' })
+    await user.type(words(), ' x')
+    expect(screen.queryByText(/Social Security or card number/)).not.toBeInTheDocument()
+  })
+})

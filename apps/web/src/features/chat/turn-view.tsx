@@ -1,13 +1,14 @@
 import { memo, useContext, type ReactNode } from 'react'
-import type { CitationOut, HrContactOut, TurnOut } from '@/api/generated'
+import type { CitationOut, EscalationOut, HrContactOut, TurnOut } from '@/api/generated'
 import { CitationMarker } from '@/components/assistant/citation-marker'
 import { ApiError } from '@/lib/api-fetch'
+import type { PageLink } from '@/lib/page-link'
 import {
   AssistantMessage,
   type AssistantMessageProps,
   type AssistantMessageStatus,
 } from '@/components/assistant/assistant-message'
-import { EscalationPanel } from '@/components/assistant/escalation-panel'
+import { CasePanel } from '@/features/cases/case-panel'
 import { AnswerFooter, Feedback } from '@/components/assistant/feedback'
 import { HrContacts } from '@/components/assistant/hr-contacts'
 import { conversationCopy } from '@/components/assistant/labels'
@@ -37,6 +38,8 @@ export type TurnContext = {
   onAskAgain: (question: string) => void
   /** A budget banner is up, so the composer is off and Retry would only fail again. */
   budgetStop: boolean
+  /** "Write to HR" after the HR contacts. Null for HR, who has no My cases page. */
+  writeToHr: PageLink | null
 }
 
 /** A marker that knows whether its passage is the open one, from `OpenSourceContext`. */
@@ -122,6 +125,43 @@ function TurnFeedback({ turn }: { turn: TurnOut }) {
   return <Feedback status="idle" onSubmit={onSubmit} />
 }
 
+/**
+ * Whether a saved turn may offer a case: it has ended, whatever became of its answer (it can fail
+ * or be stopped), except after an internal error, when the server may not have stored its verdict.
+ */
+function caseOffered(turn: TurnOut): boolean {
+  if (turn.status === 'running') return false
+  return !(turn.status === 'failed' && turn.error?.code === 'internal')
+}
+
+/**
+ * A stored turn's HR panel, with its case offer. A saved panel never announces. The offer needs a
+ * turn that is not still running and did not fail with an internal error (a turn that failed in
+ * another way is still offered).
+ */
+function storedPanel(
+  turn: TurnOut,
+  escalation: EscalationOut,
+  writeToHr: PageLink | null,
+  onTryAgain?: () => void,
+) {
+  return (
+    <CasePanel
+      key={`escalation-${turn.id}`}
+      kind={escalation.kind}
+      message={escalation.message}
+      contacts={escalation.hrContact}
+      onTryAgain={onTryAgain}
+      writeToHr={writeToHr}
+      turnId={turn.id}
+      question={turn.question}
+      ended={caseOffered(turn)}
+      offerCase={escalation.offerCase}
+      caseOpened={turn.caseOpened}
+    />
+  )
+}
+
 function trace(turn: TurnOut, citations: CitationOut[]) {
   return (
     <WorkTrace
@@ -150,7 +190,7 @@ export const StoredTurn = memo(function StoredTurn({
   // The HR contacts card of a not-found answer, whatever else the turn made, so no branch below
   // can leave it out.
   const notFoundContacts = turn.notFound ? (
-    <HrContacts variant="card" contacts={context.hrContacts} />
+    <HrContacts variant="card" contacts={context.hrContacts} writeToHr={context.writeToHr} />
   ) : undefined
   // The confirm cards the turn made, under its message. A card whose turn did not finish is
   // already canceled in the saved copy, and shows that.
@@ -159,15 +199,16 @@ export const StoredTurn = memo(function StoredTurn({
   const again = context.budgetStop ? undefined : () => context.onAskAgain(turn.question)
   // A sensitive turn shows its HR panel whatever became of the answer (it can fail, or be cut
   // off): sensitive topics go to a person. Keyed by the turn, and a saved panel never announces.
+  // A "can't answer right now" panel can try again; a crisis one has nothing to retry.
   const panel =
-    escalation === null ? null : (
-      <EscalationPanel
-        key={`escalation-${turn.id}`}
-        kind={escalation.kind}
-        message={escalation.message}
-        contacts={escalation.hrContact}
-      />
-    )
+    escalation === null
+      ? null
+      : storedPanel(
+          turn,
+          escalation,
+          context.writeToHr,
+          escalation.kind === 'unavailable' ? again : undefined,
+        )
 
   // A crisis or "can't answer right now" never reached the model: the panel alone follows the
   // question.
@@ -175,13 +216,7 @@ export const StoredTurn = memo(function StoredTurn({
     return (
       <>
         <UserMessage text={turn.question} />
-        <EscalationPanel
-          key={`escalation-${turn.id}`}
-          kind={escalation.kind}
-          message={escalation.message}
-          contacts={escalation.hrContact}
-          onTryAgain={escalation.kind === 'unavailable' ? again : undefined}
-        />
+        {panel}
       </>
     )
   }
@@ -257,12 +292,7 @@ export const StoredTurn = memo(function StoredTurn({
           context={context}
         />
         {cards}
-        <EscalationPanel
-          key={`escalation-${turn.id}`}
-          kind="sensitive"
-          message={escalation.message}
-          contacts={escalation.hrContact}
-        />
+        {panel}
         <div className="max-w-[680px]">
           <AnswerFooter work={trace(turn, citations)} />
         </div>
@@ -340,13 +370,20 @@ export function LiveTurnView({
     escalation !== null ? (
       // Keyed by the turn, so each turn's panel is its own and announces its own arrival. Only a
       // panel that came down the stream announces (`live`), never one read back from the server.
-      <EscalationPanel
+      <CasePanel
         key={`escalation-${live.turnId ?? 'pending'}`}
         kind={escalation.kind}
         message={escalation.message}
         contacts={escalation.hrContact}
         onTryAgain={escalation.kind === 'unavailable' ? again : undefined}
+        writeToHr={context.writeToHr}
         announceOnMount={escalation.live && !settling}
+        turnId={live.turnId}
+        question={live.question}
+        // Never on a live turn: it is offered on the saved copy, once the verdict is stored.
+        ended={false}
+        offerCase={escalation.offerCase}
+        caseOpened={null}
       />
     ) : null
 

@@ -1,3 +1,4 @@
+import type { Ref } from 'react'
 import type { CaseStatusOut } from '@/api/generated'
 import { StatusBadge } from '@/components/timeoff/status-badge'
 import { cn } from '@/lib/utils'
@@ -12,6 +13,8 @@ type CaseListProps = {
   timeZone: string
   /** The empty state's button. The page opens the form. */
   onOpenCase: () => void
+  /** The empty state's button, so the page can return focus to it when a form closes. */
+  openButtonRef?: Ref<HTMLButtonElement>
   className?: string
 }
 
@@ -20,7 +23,7 @@ type CaseListProps = {
  * the category, the day it was sent, a badge, and a date line. Empty, it is a sunken card with
  * the one button that opens the form.
  */
-function CaseList({ cases, timeZone, onOpenCase, className }: CaseListProps) {
+function CaseList({ cases, timeZone, onOpenCase, openButtonRef, className }: CaseListProps) {
   if (cases.length === 0) {
     return (
       <div
@@ -31,7 +34,7 @@ function CaseList({ cases, timeZone, onOpenCase, className }: CaseListProps) {
         )}
       >
         <p className="m-0 text-body-lg">{EMPTY_CASE_LIST}</p>
-        <OpenCaseButton onClick={onOpenCase} />
+        <OpenCaseButton ref={openButtonRef} onClick={onOpenCase} />
       </div>
     )
   }

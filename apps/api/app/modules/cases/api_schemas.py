@@ -10,6 +10,7 @@ from uuid import UUID
 
 from pydantic import Field
 
+from app.api.contacts import HrContactOut
 from app.api.schemas import CamelModel
 from app.modules.cases import texts
 from app.modules.cases.schemas import Category, Status
@@ -77,6 +78,8 @@ class CaseTextsOut(CamelModel):
     reply_by: date
     # The line shown in place of the case button when five cases are waiting.
     waiting_limit: str
+    # The HR team, for My cases: its limit line and a crisis panel have no conversation above them.
+    hr_contacts: list[HrContactOut]
 
 
 class CountsOut(CamelModel):
