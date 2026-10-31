@@ -224,8 +224,8 @@ conversation-page glitches are fixed with browser tests (stage 6).
 
 - **Report the questions the handbook couldn't answer.** The console lists them, so HR can see
   what to write next. The question text is user-written, so it's untrusted data, and it's redacted
-  for guard-flagged turns. Fold the "design notes" idea into the tour and the "How it's built" page
-  rather than adding a third explainer. (2026-10-06 design brainstorm.)
+  for guard-flagged turns. Fold the "design notes" idea into the tour
+  rather than adding another explainer ("How it's built" was dropped on 2026-10-31). (2026-10-06 design brainstorm.)
 
 - **Reach the judge's 85% bar.** Phase 4's fresh full run (2026-10-19,
   `evals/assistant/runs/20261019T152212Z-full.json`) passed the judge at 74% (66% to 80% over three

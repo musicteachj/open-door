@@ -1,7 +1,7 @@
 import React from 'react';
 import { Icon } from '../core/Icon.jsx';
 
-export function PersonaMenu({ personas = [], currentId, onSelect, onSignOut, signOutHref = '/', label = 'View as', note = 'Switching starts a new conversation.', className = '' }) {
+export function PersonaMenu({ personas = [], currentId, onSelect, onSignOut, signOutHref = '/', label = 'View as', note = 'Switching starts a new conversation.', extra, className = '' }) {
   const ref = React.useRef(null);
   React.useEffect(() => { const first = ref.current && ref.current.querySelector('[aria-checked="true"]'); if (first) first.focus(); }, []);
   const move = (e) => {
@@ -26,6 +26,7 @@ export function PersonaMenu({ personas = [], currentId, onSelect, onSignOut, sig
       })}
       {note && <p className="od-menu__note">{note}</p>}
       <div role="separator" className="od-menu__sep"></div>
+      {extra && <>{extra}<div role="separator" className="od-menu__sep"></div></>}
       <a role="menuitem" href={signOutHref} className="od-menu__item" onClick={(e) => { if (onSignOut) { e.preventDefault(); onSignOut(); } }}>
         <Icon name="log-out" size={16} style={{ color: 'var(--ink-muted)' }} />Sign out
       </a>

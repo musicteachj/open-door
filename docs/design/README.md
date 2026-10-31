@@ -43,7 +43,7 @@ prompts; the owner designs and approves each screen; Claude Code syncs it here w
 | Phase 4 | Conversation view, refusal, escalation stub, budget banner (designed, in `screens/07-conversation/`) |
 | Phase 5 | Time off, approvals queue, confirm cards in every state (designed, in `screens/08-time-off/`, `screens/09-approvals/`, and `screens/10-confirm-cards/`) |
 | Phase 6 | Escalation panel, confidential-case form, and "My cases"; HR case queue and case detail (designed, in `screens/11-escalation-cases/` and `screens/12-hr-cases/`) |
-| Phase 7 | AI Ops console, "How it's built", guided tour (to be designed in `screens/13-ai-ops-console/`, `screens/14-how-its-built/`, and `screens/15-guided-tour/`) |
+| Phase 7 | AI Ops console and the guided tour (designed, in `screens/13-ai-ops-console/` and `screens/15-guided-tour/`). "How it's built" (14) was dropped on 2026-10-31 |
 
 ## Folder format
 

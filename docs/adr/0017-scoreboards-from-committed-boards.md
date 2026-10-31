@@ -36,3 +36,9 @@ A run's figures appear only after its board is committed and `make scoreboard` i
 holds the two together. The boards are small, readable JSON, so a reviewer can trace each
 published figure to its run and commit. The README's section is generated: hand edits between the
 markers are overwritten.
+
+## Amendment (2026-10-31)
+
+The public "How it's built" page was dropped before any stage started. The decision stands: the
+generator still writes the README's section and the app's JSON, which the AI Ops console shows.
+The rejected "serve it from the database" alternative is still rejected for its first reason.

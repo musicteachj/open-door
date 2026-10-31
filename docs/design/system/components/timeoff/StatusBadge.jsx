@@ -12,7 +12,14 @@ const STATUS = {
   'case-finished': ['HR has finished its review', 'circle-check'],
   'case-new': ['New', 'dot'],
   'case-in-review': ['In review', 'file-search'],
-  'case-closed': ['Closed', 'circle-check']
+  'case-closed': ['Closed', 'circle-check'],
+  'outcome-answered': ['Answered', 'message-circle'],
+  'outcome-not-covered': ['Said the handbook doesn’t cover it', 'search-x'],
+  'outcome-refused': ['Refused by the model', 'ban'],
+  'outcome-stopped': ['Stopped by the person', 'circle-stop'],
+  'outcome-failed': ['Failed', 'circle-alert'],
+  'outcome-cap': ['Spending cap reached', 'gauge'],
+  'outcome-safety-unavailable': ['Safety check unavailable', 'shield-off']
 };
 
 export function StatusBadge({ status = 'waiting', className = '' }) {

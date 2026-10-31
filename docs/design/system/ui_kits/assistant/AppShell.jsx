@@ -19,7 +19,6 @@ export function AppShell({ current = 'ask', persona, children }) {
           {NAV.map((n) => <NavItem key={n.id} icon={n.icon} label={n.label} href={n.href} current={n.id === current} />)}
         </nav>
         <div className="kit-spacer"></div>
-        <div className="kit-built"><NavItem icon="code" label="How it's built" href="#built" /></div>
         <PersonaSwitcher name={persona.name} title={persona.title} />
       </aside>
       <main className="kit-main">{children}</main>

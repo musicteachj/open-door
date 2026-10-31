@@ -24,6 +24,8 @@ Sources: everything here was designed in this project. The decision record is `A
 - `components/feedback/`: Toast, Banner, FullPageMessage (plus .od-icon-btn and .od-text-link helpers).
 - `components/handbook/`: ApplicabilityBadge (with appliesLabel), AppliesMarker, LastUpdated, SectionRow and SectionGroup (plus the .od-sec-nav chapter navigator), CitedPassage, LinkBlock (State rules, Supplements), SourcesBlock, SearchResultRow, PassagePanel.
 - `components/timeoff/`: StatusBadge, SegmentedControl, ChoiceGroup, HoursStepper, DateField, DatePicker (with CalendarDay, longDate, shortDate), BalanceCard (plus .od-source-chip), RequestRow and RequestGroup, PreviewBlock, FormMessage.
+- `components/console/`: ConsoleTile, TurnTable (with SafetyLabel, InjectionTag), TracePanel, Scoreboard (with ScoreboardSetRow).
+- `components/tour/`: CoachMark (with TourRing), TourChip, TourEndCard, TourMenuItems (with TourStartDialog).
 - `ui_kits/assistant/`: app shell and assistant home for Priya.
 - `App Shell.dc.html`: screen 02, persona menu, switching, per-persona navigation, expiry banner.
 - `Global States.dc.html`: screen 05, session expired, not found, something went wrong.
@@ -33,6 +35,9 @@ Sources: everything here was designed in this project. The decision record is `A
 - `Conversation.dc.html`: screen 07, the conversation view (/ask): cited answers, source panel, streaming, feedback, escalation and crisis panels, errors, budget banners, composer notices. Screenshots and notes are in `screen-07-conversation/`.
 - `Time Off.dc.html`: screen 08, Time off (/time-off): balances, schedule, the request form and date picker, My requests, cancel, and page states. Screenshots and notes are in `screen-08-time-off/`; the standalone export is `screen-08-time-off/Time Off.html`.
 - `Landing.dc.html`: screen 01, Try Open Door (landing page with persona picker and its states).
+- `AI Ops Console.dc.html`: screen 13, the AI Ops console (/console, HR only): sandbox tiles, the turn list, the docked trace panel, and page states. Screenshots and notes are in `screen-13-ai-ops-console/`; components in `components/console/`.
+- `Scoreboard.dc.html`: the AI Ops console's eval scoreboard, made self-contained.
+- `Guided Tour.dc.html`: screen 15, the ten-step guided tour: coach marks, persona switching, leaving and resuming, the end card, and the persona menu's tour items. Screenshots and notes are in `screen-15-guided-tour/`; components in `components/tour/`.
 - `guidelines/`: foundation specimen cards (colors, type, spacing, radius, shadows, focus, logo, icons).
 - `assets/`: `logo-mark.svg` (32 px master), favicons (`favicon.svg`, `favicon-16.svg`, `favicon-16.png`, `favicon-32.png`, `apple-touch-icon.png` at 180, `icon-512.png`), `logo-explorations/` (round 1 candidates), `fonts/` (Instrument Sans, Geist Mono, self-hosted woff2).
 - `preview/loader.js`: preview-only helper so cards and kits render without a build.
@@ -74,7 +79,7 @@ Each component has `Name.jsx`, `Name.d.ts` (props contract) and `Name.prompt.md`
 - Disabled: #E7EBED fill with #87939A text. The Ask button stays enabled when the box is empty and moves focus to the box instead.
 - No gradients, textures, illustrations, cartoon people, confetti, or blur. Imagery is not part of the product UI.
 - Privacy: private fields the viewer can't see render as calm locked rows (muted lock plus who can see it), never blurred or redacted values, and never in warning colors.
-- Navigation per persona: everyone gets Ask, Time off, Directory, Handbook; managers add Approvals with a waiting count; HR adds Cases and Console; How it's built sits at the bottom.
+- Navigation per persona: everyone gets Ask, Time off, Directory, Handbook; managers add Approvals with a waiting count; HR adds Cases and Console; the persona switcher sits at the bottom.
 - Time off: balances read as a ledger that adds up to the figure, never a chart. Request statuses pair a glyph with the word (cinnamon clock for waiting, success check for approved, ink cross for denied, success clipboard for recorded, muted slash for canceled). Warnings in forms use the amber tint and never block; refusals use the red tint and disable submit. Open Door never asks why someone wants time off.
 - Approvals: one card per waiting PTO request with facts only (dates, amount, available after, sent, team coverage) and Approve and Deny. Never a score, ranking, warning color, or suggestion, and no bulk approve. Sick time is never decided. Approve and Deny carry equal weight: both secondary on the card, and each dialog confirms with the standard primary button. No red on the screen except real errors. No pronouns: "Zara will see it on the Time off page."
 - Confirm cards: the AI proposes, a person decides. Every time-off action in the conversation is a ConfirmCard under a one-line reply: engine facts, sources, "Proposed by the AI. Nothing happens until you confirm.", Confirm (primary on every variant) and Dismiss (never "Cancel", so it can't be mistaken for "Cancel time off"). Executed ends on a calm apricot line (`--apricot-tint`) and a status badge; every other ending says "Nothing was changed." and mutes the facts. Never "booked" or "done" while pending.
