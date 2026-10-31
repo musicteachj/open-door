@@ -32,6 +32,7 @@ from app.ai.replay import (
     summary_fingerprint,
 )
 from app.ai.scripted import ScriptedSummarizer
+from app.ai.summary_checks import unattributed
 from app.ai.text import neutralize
 from app.domain.cases import CATEGORY_LABELS
 
@@ -882,3 +883,137 @@ def test_an_employer_side_must_or_should_is_a_recommendation_even_when_reported(
 
 def test_the_company_should_have_paid_is_still_the_persons_complaint() -> None:
     assert summary_problem("They say the company should have paid them.", CLAUSE_WORDS) is None
+
+
+# --- Case and the reporting verbs (phase review) ---
+
+LOWER_WORDS = "sam yelled at me on tuesday. sam is a liar. he knows. it was 5 p.m. on friday."
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "the person says sam yelled at them on tuesday. sam is a liar and a bully who lies.",
+        "THE PERSON SAYS SAM YELLED AT THEM. SAM IS A LIAR AND A BULLY.",
+        "the person says sam yelled at them! sam acted badly? they say it was tuesday.",
+    ],
+)
+def test_a_summary_in_lowercase_or_capitals_is_checked_sentence_by_sentence(text: str) -> None:
+    assert unattributed(text) is True
+    assert summary_problem(text, LOWER_WORDS) == "unattributed"
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "the person says sam yelled at them on tuesday. they say it happened at 5 p.m. on friday.",
+        "they say Dr. lee was there. they say it took about 3.5 hours... then it stopped.",
+        "they say sam took bags, boxes, etc. and left. they say he left at 5 p.m. tuesday.",
+        "The person says Sam yelled at them. They say it was at 5 p.m. on Friday.",
+    ],
+)
+def test_lowercase_text_keeps_its_abbreviations_whole(text: str) -> None:
+    assert unattributed(text) is False
+
+
+def test_they_know_is_not_reported_speech() -> None:
+    assert unattributed("They know Sam stole the money.") is True
+    assert unattributed("The person knows Sam stole the money.") is True
+    assert unattributed("They say Sam stole the money.") is False
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        'the person says "help." sam took the money from the till.',
+        "the person says “help.” sam took the money from the till.",
+        "the person says 'help.' sam took the money from the till.",
+        f"the person says {chr(0x2018)}help.{chr(0x2019)} sam took the money from the till.",
+        "the person says sam yelled at Bob. sam is a liar.",
+        "The person says Sam yelled at Bob. sam is a liar.",
+    ],
+)
+def test_a_stop_and_closing_quote_before_lowercase_still_ends_a_sentence(text: str) -> None:
+    assert unattributed(text) is True
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "They say the U.S. office is closed on Fridays.",
+        "They say it happened in Jan. and again in March.",
+        "They say it happened in Sept. and again in Oct.",
+        "They say the office on Main St. is closed.",
+        "They say Acme Inc. is where it happened.",
+        "They say Tom Lee Jr. was there.",
+        "They say the reference No. is on the form.",
+        "They say the office on Park Ave. is closed.",
+    ],
+)
+def test_common_abbreviations_before_a_lowercase_word_do_not_end_a_sentence(text: str) -> None:
+    assert unattributed(text) is False
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "The person says they met the dr. sam stole the money.",
+        "The person says they met the mr. sam stole the money.",
+    ],
+)
+def test_a_lowercase_title_does_not_hide_the_next_sentence(text: str) -> None:
+    assert unattributed(text) is True
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "They say Dr. Patel saw it.",
+        "The person says their Ph.D. advisor ignored them.",
+        "They say their M.D. friend saw it.",
+        "They say the U.S. office is closed.",
+        "They say they left at 5 p.m. then came back, e.g. on Friday, i.e. late.",
+    ],
+)
+def test_titles_and_dotted_abbreviations_keep_one_sentence(text: str) -> None:
+    assert unattributed(text) is False
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "They report it.so. he hit them.",
+        "They say they met Jo.He stole money.",
+        "The person says it was Ed.He is a thief.",
+    ],
+)
+def test_two_letter_words_joined_by_a_stop_still_end_a_sentence(text: str) -> None:
+    # Only single letters joined by dots ("U.S.") or "Ph.D." count as one token.
+    assert unattributed(text) is True
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "They say the file report.pdf was deleted.",
+        "The person says the page at example.com was down.",
+    ],
+)
+def test_a_stop_glued_to_a_lowercase_word_keeps_one_sentence(text: str) -> None:
+    # A file name or a domain stays whole. The cost, recorded in the plan: lowercase text with no
+    # space after a stop ("fine.sam hit them") is one clause too.
+    assert unattributed(text) is False
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "They say it was Sam vs. Alex in the lot.",
+        "They say it was sam vs. alex in the lot.",
+        "They say it happened at 5 a.m. Friday, e.g., on Friday, i.e., late.",
+        "They say Sam, a.k.a., Bob, was there.",
+        "They say the Ph.D., M.D., and U.S. staff saw it.",
+    ],
+)
+def test_vs_and_dotted_abbreviations_never_end_a_sentence(text: str) -> None:
+    assert unattributed(text) is False

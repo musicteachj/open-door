@@ -1,5 +1,6 @@
 // How the case components show dates. A reply-by date is a calendar date and never moves with a
 // time zone. A sent or status time is a UTC timestamp, shown in the viewer's location's zone.
+import { calendarDayIn } from '@/components/timeoff/dates'
 import { formatterFor } from '@/lib/time'
 
 const DAY = { weekday: 'short', month: 'short', day: 'numeric' } as const
@@ -29,9 +30,7 @@ export function dateTimeInZone(timestamp: string, timeZone: string): string {
 
 /** The calendar day of a timestamp in `timeZone`, as a key to compare two timestamps by. */
 export function dayKeyInZone(timestamp: string, timeZone: string): string {
-  return formatterFor(timeZone, { year: 'numeric', month: '2-digit', day: '2-digit' }).format(
-    new Date(timestamp),
-  )
+  return calendarDayIn(timestamp, timeZone)
 }
 
 // claude-opus-5-5, claude-opus-5, and the dated ids (claude-sonnet-4-20250514). A date is dropped.

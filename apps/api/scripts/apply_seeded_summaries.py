@@ -67,6 +67,10 @@ def read_run(path: Path) -> dict[str, SeededSummary]:
             problems.append(f"{key}: the summary fails the check ({found_problem})")
         else:
             found[key] = SeededSummary(text, model, version)
+    # A run that lacks a seeded case would silently drop that case's approved summary.
+    problems += [
+        f"{key}: the run has no summary for this seeded case" for key in words if key not in entries
+    ]
     if problems:
         raise ApplyError("\n".join(problems))
     return found

@@ -168,7 +168,17 @@ function PrivateSection({
   givenName: string
   isYou: boolean
 }) {
-  const details = useGetPersonPrivate(personId)
+  // The read is audited (the API writes `person_private.read` on every call), so only a visit
+  // reads it: not a window gaining focus, a reconnect, or a staleness timer. Each visit to the
+  // page reads it afresh.
+  const details = useGetPersonPrivate(personId, {
+    query: {
+      staleTime: Infinity,
+      refetchOnMount: 'always',
+      refetchOnWindowFocus: false,
+      refetchOnReconnect: false,
+    },
+  })
   // The status stays mounted through every state, so it announces a change, not its arrival.
   return (
     <>

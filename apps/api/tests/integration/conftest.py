@@ -526,7 +526,7 @@ def make_tenant(app_engine: AsyncEngine, created_tenant_ids: list[UUID]) -> Make
         location = Location(
             id=uuid4(),
             tenant_id=tenant_id,
-            code="DEN",
+            code="den",
             name="Denver HQ",
             city="Denver",
             state="CO",

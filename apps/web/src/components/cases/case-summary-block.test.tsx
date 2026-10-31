@@ -85,6 +85,12 @@ describe('CaseSummaryBlock', () => {
     expect(onRetry).toHaveBeenCalledTimes(1)
   })
 
+  it('failed: no Try again when retrying is not allowed (a closed case)', () => {
+    render(<CaseSummaryBlock state="failed" onRetry={() => {}} canRetry={false} />)
+    expect(screen.getByText('No AI summary. Read the person’s words below.')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Try again' })).toBeNull()
+  })
+
   it('failed: Try again is busy and does nothing while retrying', async () => {
     const onRetry = vi.fn<() => void>()
     render(<CaseSummaryBlock state="failed" onRetry={onRetry} retrying />)

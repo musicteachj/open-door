@@ -11,6 +11,7 @@ import {
 } from '@/api/generated'
 import type { WordsState } from '@/components/cases/case-words-reveal'
 import {
+  RETRY_OFFERED_AFTER_MS,
   summaryRetryKind,
   summaryStateOf,
   type SummaryState,
@@ -20,11 +21,22 @@ import { ApiError } from '@/lib/api-fetch'
 /** How often the page looks again while a summary is being written, and how often its clock ticks. */
 export const readTiming = { pollMs: 4000, tickMs: 15_000 }
 
-/** How long a summary the server was asked to write again is waited for before offering a retry. */
-const REWRITE_WAIT_MS = 150_000
+/**
+ * How long a summary is waited for before "Try again" is offered: the same moment the block turns
+ * failed (`summaryStateOf`), so polling stops exactly when the retry shows.
+ */
+const REWRITE_WAIT_MS = RETRY_OFFERED_AFTER_MS
+
+/**
+ * The read says there is no such case: a 404, or a 422 for an address that is not a case ID at all
+ * (`/cases/abc`, or a link the model wrote). Both are the Not found page, not an error.
+ */
+export function isNoSuchCase(error: unknown): boolean {
+  return error instanceof ApiError && (error.status === 404 || error.status === 422)
+}
 
 type Fetched = { caseId: string; summary: CaseSummaryOut | null; failed: boolean }
-type Rewrite = { startedAt: number; from: string | null }
+type Rewrite = { startedAtMs: number; from: string | null }
 
 /**
  * A case's detail: its metadata (a query: not audited, fine in the cache), and the two audited
@@ -47,8 +59,7 @@ export function useCaseDetail(caseId: string, personId: string) {
 
   const query = useGetCase(caseId, {
     query: {
-      throwOnError: (error, q) =>
-        q.state.data === undefined && !(error instanceof ApiError && error.status === 404),
+      throwOnError: (error, q) => q.state.data === undefined && !isNoSuchCase(error),
       refetchInterval: (q) =>
         wantsPoll(q.state.data, rewriteRef.current) ? readTiming.pollMs : false,
     },
@@ -96,7 +107,7 @@ export function useCaseDetail(caseId: string, personId: string) {
   const rewriting =
     rewrite !== null &&
     (detail?.summary?.createdAt ?? null) === rewrite.from &&
-    now.getTime() - rewrite.startedAt < REWRITE_WAIT_MS
+    now.getTime() - rewrite.startedAtMs < REWRITE_WAIT_MS
   const state: SummaryState | null = !detail
     ? null
     : rewriting
@@ -136,8 +147,16 @@ export function useCaseDetail(caseId: string, personId: string) {
         setRetrying(false)
         return
       }
+      // The server also refuses for a closed case, and that does not pass: look again before
+      // waiting on a summary that will never be written.
+      const fresh = await query.refetch()
+      if (fresh.data?.status === 'closed') {
+        retryBusy.current = false
+        setRetrying(false)
+        return
+      }
     }
-    setRewrite({ startedAt: Date.now(), from: detail.summary?.createdAt ?? null })
+    setRewrite({ startedAtMs: Date.now(), from: detail.summary?.createdAt ?? null })
     setNow(new Date())
     retryBusy.current = false
     setRetrying(false)
@@ -189,6 +208,11 @@ export function useCaseDetail(caseId: string, personId: string) {
       text: mine?.summary?.text ?? undefined,
       writtenAt: mine?.summary?.createdAt ?? undefined,
       model: mine?.summary?.model ?? undefined,
+      /**
+       * "Try again" is offered. Not for a closed case that has no summary: the server writes no
+       * new one for it. A summary that exists but failed to load can still be read again.
+       */
+      canRetry: detail?.status !== 'closed' || (mine?.failed ?? false),
       retrying,
       retry,
     },
@@ -219,7 +243,7 @@ function wantsPoll(detail: CaseDetailOut | undefined, rewrite: Rewrite | null): 
   if (rewrite !== null) {
     return (
       (detail.summary?.createdAt ?? null) === rewrite.from &&
-      Date.now() - rewrite.startedAt < REWRITE_WAIT_MS
+      Date.now() - rewrite.startedAtMs < REWRITE_WAIT_MS
     )
   }
   return (

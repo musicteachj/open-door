@@ -30,7 +30,6 @@ ORIGIN_PATTERN = re.compile(r"(https?)://[a-z0-9.-]+(?::([0-9]{1,5}))?")
 # Browsers leave the default port out of the Origin header, so it can never appear in APP_ORIGIN.
 DEFAULT_PORTS = {"http": 80, "https": 443}
 
-
 # The settings whose empty or blank value in the environment is ignored, so that the value in .env
 # is used. A shell can export a key as an empty string (a claude agent shell exports
 # ANTHROPIC_API_KEY that way), and that would otherwise shadow .env for every entry point: alembic,
@@ -131,13 +130,20 @@ class Settings(BaseSettings):
             file_secret_settings,
         )
 
-    @field_validator(
-        "voyage_api_key",
-        "anthropic_api_key",
-        "encryption_keyring",
-        "encryption_keyring_file",
-        mode="before",
-    )
+    @model_validator(mode="before")
+    @classmethod
+    def blank_keyring_file_is_unset(cls, data: Any) -> Any:
+        # A blank ENCRYPTION_KEYRING_FILE= in .env counts as unset, and unset means the default
+        # path (a file that is simply None, set in code, stays None). Dropping the blank here, from
+        # the raw input, keeps the field out of `model_fields_set`, so the two-keyrings check below
+        # needs no marker that a copy or a rebuild from a dump could lose.
+        if isinstance(data, dict):
+            value = data.get("encryption_keyring_file")
+            if isinstance(value, str) and not value.strip():
+                return {k: v for k, v in data.items() if k != "encryption_keyring_file"}
+        return data
+
+    @field_validator("voyage_api_key", "anthropic_api_key", "encryption_keyring", mode="before")
     @classmethod
     def empty_key_is_none(cls, value: object) -> object:
         # An empty value written in .env itself means no key. (An empty one in the environment never
@@ -148,7 +154,9 @@ class Settings(BaseSettings):
 
     @model_validator(mode="after")
     def refuse_two_keyrings(self) -> Self:
-        # The file has a default, so only a file someone set counts as set.
+        # The file has a default, so only a file someone set counts as set. A blank value was
+        # dropped as unset and is not a second keyring, but an explicit path is, even when it
+        # spells the default.
         file_is_set = (
             "encryption_keyring_file" in self.model_fields_set
             and self.encryption_keyring_file is not None

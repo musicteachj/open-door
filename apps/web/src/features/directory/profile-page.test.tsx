@@ -181,6 +181,31 @@ describe('private details for everyone else', () => {
     expect(api.privateRequests).toEqual([])
   })
 
+  it('reads the private details once per visit: a window gaining focus or the network returning reads nothing', async () => {
+    const { api } = await openProfile('dana', LEO.id)
+    await profileHeading(leoName)
+    await within(privateDetails()).findByText(privateDetailsOf(LEO).phone)
+    expect(api.privateRequests).toEqual([LEO.id])
+
+    act(() => {
+      window.dispatchEvent(new Event('focus'))
+      window.dispatchEvent(new Event('visibilitychange'))
+      window.dispatchEvent(new Event('online'))
+    })
+    await new Promise((resolve) => setTimeout(resolve, 100))
+    expect(api.privateRequests).toEqual([LEO.id])
+  })
+
+  it('reads the private details again on a new visit to the page', async () => {
+    const { api, router } = await openProfile('dana', LEO.id)
+    await profileHeading(leoName)
+    await within(privateDetails()).findByText(privateDetailsOf(LEO).phone)
+    await act(() => router.navigate('/directory'))
+    await act(() => router.navigate(`/directory/${LEO.id}`))
+    await profileHeading(leoName)
+    await waitFor(() => expect(api.privateRequests).toEqual([LEO.id, LEO.id]))
+  })
+
   it('makes no private request after switching to someone else, and clears the values HR saw', async () => {
     const { user, api, router } = await openProfile('dana', LEO.id)
     await profileHeading(leoName)

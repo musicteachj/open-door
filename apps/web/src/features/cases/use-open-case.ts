@@ -25,7 +25,7 @@ type Options = {
  * Sends one case for a form. Only one send runs at a time: a ref ignores a second press made
  * before the page has drawn "Sending…" (the form reuses one `submissionId`, and the server would
  * return the same case, but there is no reason to ask twice). Whatever happens, the case lists and
- * the conversation are read again; the server's answer is never written into the cache.
+ * the conversation are read again (without holding the send pending); the server's answer is never written into the cache.
  *
  * What went wrong is told to the form: the server's own refusals of the words (`refusal`), the
  * waiting limit (`onLimit`), a send the server already holds (`onAlreadySent`), and everything else as `sendFailed`, which keeps the words and offers
@@ -73,12 +73,11 @@ export function useSendCase({ turnId, onSent, onLimit, onAlreadySent }: Options)
         }
         setSendFailed(true)
       },
-      onSettled: async () => {
-        try {
-          await invalidateAfterSend(queryClient)
-        } finally {
-          busy.current = false
-        }
+      onSettled: () => {
+        // Not awaited: the mutation must stop being pending when the answer is in, or the form
+        // stays disabled (and a refusal cannot move focus into it) until the lists are read again.
+        busy.current = false
+        void invalidateAfterSend(queryClient)
       },
     },
   })

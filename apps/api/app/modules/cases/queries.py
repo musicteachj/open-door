@@ -13,7 +13,7 @@ from typing import Any, NamedTuple
 from uuid import UUID
 from zoneinfo import ZoneInfo
 
-from sqlalchemy import ColumnElement, Date, case, cast, func, insert, select, tuple_
+from sqlalchemy import ColumnElement, Date, and_, case, cast, func, insert, select, tuple_
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.ai.guard import FLAGGED_CATEGORIES
@@ -47,14 +47,16 @@ async def lock_person(db: AsyncSession, tenant_id: UUID, person_id: UUID) -> Non
     await lock_tenant_scoped(db, CASE_PERSON_NS, tenant_id, person_id)
 
 
+def _is_hq_location(tenant_id: UUID) -> ColumnElement[bool]:
+    """Denver HQ's location in the sandbox: the seed's exact code (codes are unique
+    case-sensitively, so no case folding)."""
+    return and_(Location.tenant_id == tenant_id, Location.code == HQ_LOCATION_CODE)
+
+
 async def _hq_location(db: AsyncSession, tenant_id: UUID) -> Any:
     """Denver HQ's location row (its ID and zone) in the sandbox, or None."""
     return (
-        await db.execute(
-            select(Location.id, Location.timezone).where(
-                Location.tenant_id == tenant_id, func.lower(Location.code) == HQ_LOCATION_CODE
-            )
-        )
+        await db.execute(select(Location.id, Location.timezone).where(_is_hq_location(tenant_id)))
     ).one_or_none()
 
 
@@ -448,9 +450,7 @@ async def counts(
     seeded data). HR's own cases are left out: they cannot act on them.
     """
     hq_zone = func.coalesce(
-        select(Location.timezone)
-        .where(Location.tenant_id == tenant_id, func.lower(Location.code) == HQ_LOCATION_CODE)
-        .scalar_subquery(),
+        select(Location.timezone).where(_is_hq_location(tenant_id)).scalar_subquery(),
         HQ_TIMEZONE,
     )
     due_by: Any = cast(func.timezone(hq_zone, func.now()), Date) if today is None else today

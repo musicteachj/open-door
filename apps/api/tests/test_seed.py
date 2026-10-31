@@ -968,4 +968,9 @@ def test_the_cases_sit_in_the_cases_table_apart_from_the_sealed_columns() -> Non
         "text_ciphertext",
     }
     event_columns = set(Base.metadata.tables["case_events"].columns.keys())
-    assert {f.name for f in fields(CaseEventRow)} | {"tenant_id", "case_id"} == event_columns
+    # `written_by_hr` is stamped by a trigger (the seed sets no person, so it counts with HR).
+    assert {f.name for f in fields(CaseEventRow)} | {
+        "tenant_id",
+        "case_id",
+        "written_by_hr",
+    } == event_columns

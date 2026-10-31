@@ -1,4 +1,4 @@
-import { useLayoutEffect, useRef } from 'react'
+import { useEffect, useLayoutEffect, useRef } from 'react'
 import type { CaseOpenedOut } from '@/api/generated'
 import { useGetCaseTexts, useListMyCases } from '@/api/generated'
 import { useMe } from '@/app/useMe'
@@ -61,14 +61,22 @@ function OfferedPanel({
   const mine = useListMyCases()
   const slot = useCaseSlots((s) => s.slots[turnId])
   const setSlot = useCaseSlots((s) => s.set)
+  const markShown = useCaseSlots((s) => s.markShown)
   const clearSlot = useCaseSlots((s) => s.clear)
   const buttonRef = useRef<HTMLButtonElement>(null)
   const returnFocus = useRef(false)
 
+  // A refusal for the limit holds the line only until the list is read again; after that the
+  // list's own count decides (a case may have been answered meanwhile).
+  const readAt = useRef(0)
+  useLayoutEffect(() => {
+    readAt.current = mine.dataUpdatedAt
+  })
+
   const send = useSendCase({
     turnId,
     onSent: (sent) => setSlot(turnId, { phase: 'sent', sent }),
-    onLimit: () => setSlot(turnId, { phase: 'limit' }),
+    onLimit: () => setSlot(turnId, { phase: 'limit', readAt: readAt.current }),
     // The conversation read again carries the case, and its saved turn shows the sent line.
     onAlreadySent: () => clearSlot(turnId),
   })
@@ -87,17 +95,29 @@ function OfferedPanel({
   const sentLink = isHr ? null : MY_CASES_LINK
   const limitLink = isHr ? null : YOUR_CASES_LINK
 
+  // Focus and the crisis announcement happen once per send: the slot records that they did.
+  const arrived = slot?.shown !== true
   let caseArea = null
   let crisisText: string | null = null
+  let slotShown = false
   if (slot?.phase === 'sent') {
     caseArea = (
-      <CaseSent variant="panel" state="sent" sentLine={slot.sent.sentLine} link={sentLink} />
+      <CaseSent
+        key="sent"
+        variant="panel"
+        state="sent"
+        sentLine={slot.sent.sentLine}
+        link={sentLink}
+        focusOnMount={arrived}
+      />
     )
     crisisText = slot.sent.crisisText
+    slotShown = true
   } else if (caseOpened !== null) {
     // A reload: the same line from the saved turn, which does not take focus.
     caseArea = (
       <CaseSent
+        key="sent"
         variant="panel"
         state="sent"
         sentLine={caseOpened.sentLine}
@@ -105,16 +125,26 @@ function OfferedPanel({
         focusOnMount={false}
       />
     )
-  } else if (slot?.phase === 'limit' && limitLine) {
+  } else if (slot?.phase === 'limit' && limitLine && slot.readAt === mine.dataUpdatedAt) {
     caseArea = (
-      <CaseSent variant="panel" state="limit" limitLine={limitLine} link={limitLink} focusOnMount />
+      <CaseSent
+        key="limit"
+        variant="panel"
+        state="limit"
+        limitLine={limitLine}
+        link={limitLink}
+        focusOnMount={arrived}
+      />
     )
+    slotShown = true
   } else if (slot?.phase === 'open' && texts.data) {
+    slotShown = true
     caseArea = (
       <CaseForm
         variant="panel"
         bullets={texts.data.bullets}
         prefill={question}
+        focusHeadingOnMount={arrived}
         sending={send.sending}
         sendFailed={send.sendFailed}
         refusal={send.refusal}
@@ -127,8 +157,18 @@ function OfferedPanel({
       />
     )
   } else if (waiting >= WAITING_CASE_LIMIT && limitLine) {
-    caseArea = <CaseSent variant="panel" state="limit" limitLine={limitLine} link={limitLink} />
+    caseArea = (
+      <CaseSent key="limit" variant="panel" state="limit" limitLine={limitLine} link={limitLink} />
+    )
   }
+
+  // Once what the slot shows has been drawn, it counts as arrived.
+  // It flips the flag in the store itself, so a slot changed since this render is not overwritten.
+  const phase = slot?.phase
+  const alreadyShown = slot?.shown === true
+  useEffect(() => {
+    if (phase !== undefined && slotShown && !alreadyShown) markShown(turnId, phase)
+  }, [phase, slotShown, alreadyShown, markShown, turnId])
 
   return (
     <>
@@ -148,7 +188,7 @@ function OfferedPanel({
           kind="crisis"
           message={crisisText}
           contacts={panel.contacts}
-          announceOnMount
+          announceOnMount={arrived}
         />
       )}
     </>

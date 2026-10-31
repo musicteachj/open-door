@@ -11,7 +11,7 @@ const SERVER_RETRY_AFTER_MS = 2 * 60_000
  * this reads the browser's, so a fast client clock would offer a retry the server refuses.
  */
 const CLOCK_MARGIN_MS = 30_000
-const RETRY_OFFERED_AFTER_MS = SERVER_RETRY_AFTER_MS + CLOCK_MARGIN_MS
+export const RETRY_OFFERED_AFTER_MS = SERVER_RETRY_AFTER_MS + CLOCK_MARGIN_MS
 
 /**
  * Which state the summary block is in, from the detail's metadata and the summary as fetched
