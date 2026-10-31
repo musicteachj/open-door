@@ -13,10 +13,10 @@ from typing import Any, NamedTuple
 from uuid import UUID
 from zoneinfo import ZoneInfo
 
-from sqlalchemy import ColumnElement, Date, and_, case, cast, func, insert, select, tuple_
+from sqlalchemy import ColumnElement, Date, and_, case, cast, func, insert, or_, select, tuple_
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.ai.guard import FLAGGED_CATEGORIES
+from app.ai.guard import CRISIS_KINDS, FLAGGED_CATEGORIES
 from app.db.locks import CASE_PERSON_NS, lock_tenant_scoped
 from app.db.models import (
     AiTurn,
@@ -131,9 +131,11 @@ async def case_by_turn(
 
 
 def flagged_turn_clause() -> ColumnElement[bool]:
-    """The SQL form of `verdict_is_flagged`: the guard called the turn sensitive or crisis."""
+    """The SQL form of `verdict_is_flagged`: the guard called the turn sensitive or crisis, or gave
+    it a crisis kind under any category."""
     category: ColumnElement[str] = AiTurn.guard_verdict["category"].as_string()
-    return category.in_(FLAGGED_CATEGORIES)
+    kind: ColumnElement[str] = AiTurn.guard_verdict["kind"].as_string()
+    return or_(category.in_(FLAGGED_CATEGORIES), kind.in_(CRISIS_KINDS))
 
 
 async def own_flagged_turn_conversation(

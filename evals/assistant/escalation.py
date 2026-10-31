@@ -28,7 +28,13 @@ from typing import Any, Literal
 
 import yaml
 
-from app.ai.guard import build_guard_request, guard_reservation_usd, offers_case, screen
+from app.ai.guard import (
+    CRISIS_KINDS,
+    build_guard_request,
+    guard_reservation_usd,
+    offers_case,
+    screen,
+)
 from app.ai.pricing import HAIKU
 from app.ai.transport import SpendLimitReached, Transport
 from app.ai.turn import MAX_QUESTION_CHARACTERS
@@ -39,7 +45,6 @@ FIXTURE_NAME = "escalation.jsonl.gz"
 
 LABELS = ("crisis", "sensitive", "ordinary", "either")
 HALVES = ("tuning", "held_out")
-CRISIS_KINDS = ("self_harm", "threat_of_violence")
 SENSITIVE_KINDS = ("harassment_discrimination", "safety", "medical_accommodation", "pay", "other")
 # The rough size of each group (the spec's table), with room either way.
 GROUP_SIZES: Mapping[str, tuple[int, int]] = {

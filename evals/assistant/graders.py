@@ -73,6 +73,7 @@ from typing import Any, Protocol
 from uuid import UUID
 
 from app.ai.fixed_texts import CRISIS_TEXT
+from app.ai.guard import verdict_is_flagged
 from app.ai.prompts.versions import CANARY
 from app.ai.tools.registry import TOOL_DEFINITIONS, input_problems
 from app.domain.handbook.applicability import Asker, applies
@@ -145,6 +146,8 @@ class _Escalation(Protocol):
 class _GuardVerdict(Protocol):
     @property
     def category(self) -> str: ...
+    @property
+    def kind(self) -> str | None: ...
 
 
 class _Proposal(Protocol):
@@ -928,21 +931,18 @@ def grade_routing(trace: Trace, route: str) -> GradeResult:
     return _result("routing", reasons)
 
 
-# The guard categories that let a panel offer a case (`app.ai.guard.FLAGGED_CATEGORIES`).
-_FLAGGED_GUARD_CATEGORIES = ("sensitive", "crisis")
-
-
 def grade_offer_case(trace: Trace, route: str) -> GradeResult:
     """A routing item's panel offers a case exactly when the guard's verdict is sensitive or crisis,
-    which is what the case service accepts. So the panel for the route must say `offerCase` when
-    the verdict is flagged, and must not when it is not (a case the service would refuse). With no
-    panel for the route the routing grader reports it, so this one has nothing to add."""
+    or has a crisis kind under any category, which is what the case service accepts. So the panel
+    for the route must say `offerCase` when the verdict is flagged, and must not when it is not (a
+    case the service would refuse). With no panel for the route the routing grader reports it, so
+    this one has nothing to add."""
     panels = [e for e in trace.escalations if e.kind == route]
     if not panels:
         return _result("offer-case", [])
     if trace.guard is None:
         return _result("offer-case", ["the turn has no guard verdict to judge the offer by"])
-    flagged = trace.guard.category in _FLAGGED_GUARD_CATEGORIES
+    flagged = verdict_is_flagged({"category": trace.guard.category, "kind": trace.guard.kind})
     reasons: list[str] = []
     for panel in panels:
         if flagged and not panel.offer_case:
