@@ -15,7 +15,7 @@ flag set from the actor, as the session dependency does).
 
 import logging
 from datetime import date, datetime, timedelta
-from typing import Final, NamedTuple, Protocol
+from typing import Final, Literal, NamedTuple, Protocol
 from uuid import UUID, uuid4
 
 from sqlalchemy import insert, select, update
@@ -488,17 +488,28 @@ async def case_detail(db: AsyncSession, actor: Actor, case_id: UUID) -> CaseDeta
     )
 
 
-def _summary_state(latest: CaseSummary | None, *, crisis: bool = False) -> SummaryState:
+def _summary_outcome(
+    latest: CaseSummary | None, *, crisis: bool
+) -> tuple[Literal["none", "written", "failed"], str | None]:
+    """What a case's newest summary row amounts to, and the reason when it failed. The one place
+    that a crisis case never shows a written summary, whatever the newest row is: two retries that
+    interleave can stamp a written row after the crisis one (`created_at` is the transaction's
+    start)."""
     if latest is None:
-        return SummaryState("none")
+        return "none", None
     if crisis:
-        # A crisis case never shows a written summary, whatever the newest row is: two retries
-        # that interleave can stamp a written row after the crisis one (`created_at` is the
-        # transaction's start).
-        return SummaryState("failed", "crisis", latest.created_at)
-    return SummaryState(
-        "written" if latest.status == "written" else "failed", latest.reason, latest.created_at
-    )
+        return "failed", "crisis"
+    if latest.status == "failed" or latest.ciphertext is None:
+        return "failed", latest.reason
+    return "written", None
+
+
+def _summary_state(latest: CaseSummary | None, *, crisis: bool = False) -> SummaryState:
+    state, reason = _summary_outcome(latest, crisis=crisis)
+    if state == "none":
+        return SummaryState("none")
+    assert latest is not None  # noqa: S101  # only "none" comes from no row
+    return SummaryState(state, reason, latest.created_at)
 
 
 # --- audited reads ---
@@ -546,20 +557,24 @@ async def case_summary_for(
     are written in this transaction, whatever the summary's state."""
     case = await _readable(db, actor, case_id, Action.CASE_READ_SUMMARY)
     latest = await queries.newest_summary(db, case.tenant_id, case.id)
-    if latest is None:
+    state, reason = _summary_outcome(latest, crisis=case.screening == "crisis")
+    if state == "none":
         read = SummaryRead("none")
-    elif case.screening == "crisis":
-        # Never opened for a crisis case, whatever the newest row is (see `_summary_state`).
-        read = SummaryRead("failed", reason="crisis", created_at=latest.created_at)
-    elif latest.status == "failed" or latest.ciphertext is None:
+    elif state == "failed":
+        assert latest is not None  # noqa: S101  # only "none" comes from no row
+        # A crisis case's row says nothing about the model: the summary was never opened.
+        crisis = reason == "crisis"
         read = SummaryRead(
             "failed",
-            reason=latest.reason,
-            model=latest.model,
-            prompt_version=latest.prompt_version,
+            reason=reason,
+            model=None if crisis else latest.model,
+            prompt_version=None if crisis else latest.prompt_version,
             created_at=latest.created_at,
         )
     else:
+        # "written" means the row has its ciphertext (`_summary_outcome` checked).
+        assert latest is not None  # noqa: S101
+        assert latest.ciphertext is not None  # noqa: S101
         place = Place(SUMMARIES_TABLE, SUMMARY_COLUMN, case.tenant_id, latest.id)
         words = open_(_case_key(keys, case), latest.ciphertext, place=place).decode()
         read = SummaryRead(
@@ -759,9 +774,12 @@ async def record_summary(
     return True
 
 
-async def screening_of(db: AsyncSession, case_id: UUID) -> str | None:
-    """The case's label as the session sees it now (HR's session sees every case in the sandbox)."""
-    return await db.scalar(select(Case.screening).where(Case.id == case_id))
+async def screening_of(db: AsyncSession, tenant_id: UUID, case_id: UUID) -> str | None:
+    """The case's label as the session sees it now (HR's session sees every case in the sandbox).
+    Like every case query it names the sandbox, on top of row-level security."""
+    return await db.scalar(
+        select(Case.screening).where(Case.tenant_id == tenant_id, Case.id == case_id)
+    )
 
 
 async def record_screening(db: AsyncSession, case_id: UUID, verdict: str, *, actor: Actor) -> bool:
@@ -809,7 +827,8 @@ async def plan_summary_retry(
     db: AsyncSession, keys: KeyProvider, actor: Actor, case_id: UUID
 ) -> SummaryRetry:
     """HR's retry of the summary, checked: HR only, never their own case, and only when the newest
-    summary failed (not for a crisis) or none exists 2 minutes after opening. Else a 409.
+    summary failed (not for a crisis) or none exists 2 minutes after opening, and never on a closed
+    case. Else a 409.
 
     The words are opened as a system read for the background task: no `text_read` and no
     `case.text.read`, since HR has not read them. The retry is audited as `case.summary.retried`
@@ -834,7 +853,7 @@ async def plan_summary_retry(
         allowed = now - case.created_at >= RETRY_AFTER
     else:
         allowed = latest.status == "failed" and latest.reason != "crisis"
-    if case.screening == "crisis" or not allowed:
+    if case.screening == "crisis" or case.status == "closed" or not allowed:
         raise ProblemError(409, "summary-retry-refused", texts.SUMMARY_RETRY_REFUSED_TEXT)
     # Recorded here, in the request's own transaction: the background job can be canceled by a
     # shutdown before it records its summary event.

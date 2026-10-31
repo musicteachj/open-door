@@ -189,6 +189,11 @@ conversation-page glitches are fixed with browser tests (stage 6).
 
 ## Phase 7: AI Ops console, reviewer experience, model decision
 
+- **Tell HR the right route for a case.** The guard's topic note (`TOPIC_NOTE` in
+  `app/ai/guard.py`) and the assistant prompt's case paragraph point everyone to "the My cases
+  page", but HR has no My cases page (the owner's rule: HR gets no route to it). The answer's link
+  is already plain text for HR. Make the wording role-aware; it changes what the model reads, so
+  do it with Phase 7's next full paid run. (Phase 6 phase review.)
 - **Rename the bare `amount` key in the time-off tool results.** `timeoff_results.py` sends
   `"amount": label(...)` (and the same key in the draw, check, and card results), against the rule
   that units live in the field name; it holds a label, so `amountLabel` fits. Renaming it changes

@@ -219,6 +219,15 @@ class AuditEvent(Base):
         Index(None, "tenant_id", "actor_person_id"),
         # For the key to the proposal: deleting a proposal looks here for events that name it.
         Index(None, "tenant_id", "proposal_id"),
+        # A case's summary-retry rows (the retry throttle reads them under a row lock). Partial,
+        # so no other audit insert maintains it.
+        Index(
+            "ix_audit_events_target_action",
+            "tenant_id",
+            "target_id",
+            "occurred_at",
+            postgresql_where=text("action = 'case.summary.retried'"),
+        ),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, server_default=func.gen_random_uuid())
@@ -952,6 +961,24 @@ class CaseEvent(Base):
         # A case's timeline, oldest first, and the key to the case.
         Index(None, "tenant_id", "case_id", "occurred_at"),
         Index(None, "tenant_id", "actor_person_id"),
+        # Code running as the person adds one `opened` and one summary event per case (migration
+        # 0015); HR's rows are not held to it.
+        Index(
+            "uq_case_events_one_opened_not_by_hr_per_case",
+            "tenant_id",
+            "case_id",
+            unique=True,
+            postgresql_where=text("kind = 'opened' AND NOT written_by_hr"),
+        ),
+        Index(
+            "uq_case_events_one_summary_not_by_hr_per_case",
+            "tenant_id",
+            "case_id",
+            unique=True,
+            postgresql_where=text(
+                "kind IN ('summary_written', 'summary_failed') AND NOT written_by_hr"
+            ),
+        ),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, server_default=func.gen_random_uuid())
@@ -964,3 +991,5 @@ class CaseEvent(Base):
     kind: Mapped[str]
     from_status: Mapped[str | None]
     to_status: Mapped[str | None]
+    # Stamped by a trigger from the HR flag of the transaction, whatever an insert says.
+    written_by_hr: Mapped[bool] = mapped_column(server_default=false())

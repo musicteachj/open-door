@@ -181,7 +181,7 @@ async def _after_screening(db: AsyncSession, job: SummaryJob, found: JobResult) 
         return found.summary
     if await service.record_screening(db, job.case_id, found.screening, actor=job.actor):
         return found.summary
-    current = await service.screening_of(db, job.case_id)
+    current = await service.screening_of(db, job.actor.tenant_id, job.case_id)
     if current == "crisis":
         return SummaryFailed("crisis")
     if found.screening == "crisis":

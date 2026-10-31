@@ -24,6 +24,7 @@ from tests.integration.test_turn import (
     Env,
     PlanTransport,
     _leave_the_daily_ledger_as_found,  # noqa: F401
+    guard_result,
     make_env,
     text_plan,
     tool_use_plan,
@@ -32,6 +33,8 @@ from tests.integration.test_turn_proposals import book, context_of, only_proposa
 
 pytestmark = pytest.mark.integration
 
+# The scripted guard calls every message in these tests sensitive, as a real case has one flagged.
+SENSITIVE = guard_result("sensitive", "pay")
 REPLY_BY = date(2026, 10, 28)
 LINE = (
     "Since the last message: the person opened a confidential case with HR (workplace safety). "
@@ -87,7 +90,9 @@ async def case_entries(env: Env) -> list[str]:
 async def test_a_case_opened_from_this_conversation_is_told_to_the_next_turn_once(
     app_engine: AsyncEngine, seeded_sandbox: SeedCompany
 ) -> None:
-    transport = PlanTransport(text_plan("Ok."), text_plan("Two."), text_plan("Three."))
+    transport = PlanTransport(
+        text_plan("Ok."), text_plan("Two."), text_plan("Three."), guard_result=SENSITIVE
+    )
     env = await make_env(app_engine, seeded_sandbox, transport=transport)
     await env.ask("Someone keeps leaving a wet floor near my station.")
     case_id = await open_case(
@@ -109,7 +114,9 @@ async def test_the_line_comes_from_structured_data_only(
     app_engine: AsyncEngine, seeded_sandbox: SeedCompany
 ) -> None:
     env = await make_env(
-        app_engine, seeded_sandbox, transport=PlanTransport(text_plan("Ok."), text_plan("Two."))
+        app_engine,
+        seeded_sandbox,
+        transport=PlanTransport(text_plan("Ok."), text_plan("Two."), guard_result=SENSITIVE),
     )
     await env.ask("My manager made an age comment.")
     await open_case(
@@ -167,6 +174,7 @@ async def test_a_turn_that_failed_in_between_does_not_swallow_the_line(
         lambda request, number: [ModelUnavailable("down", status_code=529)],
         text_plan("Three."),
         text_plan("Four."),
+        guard_result=SENSITIVE,
     )
     env = await make_env(app_engine, seeded_sandbox, transport=transport)
     await env.ask("Hello.")
@@ -192,7 +200,9 @@ async def case_ids(env: Env) -> list[UUID]:
 async def test_a_card_outcome_and_an_opened_case_share_one_line(
     app_engine: AsyncEngine, seeded_sandbox: SeedCompany
 ) -> None:
-    transport = PlanTransport(tool_use_plan(book()), text_plan("Ok."), text_plan("Fine."))
+    transport = PlanTransport(
+        tool_use_plan(book()), text_plan("Ok."), text_plan("Fine."), guard_result=SENSITIVE
+    )
     env = await make_env(app_engine, seeded_sandbox, transport=transport)
     await env.ask("Please book Friday off.")
     row = await only_proposal(env)

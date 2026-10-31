@@ -73,8 +73,26 @@ GOOD = {
 }
 
 
+def a_full_run() -> dict[str, dict[str, str]]:
+    """All four seeded cases: GOOD for two, the recorded summaries for the others."""
+    others = {
+        key: {"text": summary.text, "model": summary.model, "promptVersion": summary.prompt_version}
+        for key, summary in SEEDED_SUMMARIES.items()
+        if key not in GOOD
+    }
+    return {**GOOD, **others}
+
+
+def test_the_script_refuses_a_run_missing_a_seeded_case(tmp_path: Path) -> None:
+    run = write_run(tmp_path / "run.json", GOOD)
+
+    with pytest.raises(apply.ApplyError, match="aaliyah-edwards"):
+        apply.read_run(run)
+    assert apply.main([str(run), "--check"]) != 0
+
+
 def test_the_script_renders_the_summaries_as_a_block_the_seed_can_hold(tmp_path: Path) -> None:
-    block = apply.render_block(apply.read_run(write_run(tmp_path / "run.json", GOOD)))
+    block = apply.render_block(apply.read_run(write_run(tmp_path / "run.json", a_full_run())))
 
     namespace: dict[str, object] = {}
     exec(  # noqa: S102
@@ -95,7 +113,7 @@ def test_the_script_rewrites_only_the_marked_block(tmp_path: Path) -> None:
     copy = tmp_path / "seed_data.py"
     copy.write_text(source, encoding="utf-8")
 
-    changed = apply.apply(write_run(tmp_path / "run.json", GOOD), copy)
+    changed = apply.apply(write_run(tmp_path / "run.json", a_full_run()), copy)
 
     assert changed is True
     after = copy.read_text(encoding="utf-8")

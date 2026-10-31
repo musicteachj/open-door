@@ -112,7 +112,8 @@ function Home({
     if (focusComposerOnMount) focusComposerIfLost()
   }, [focusComposerOnMount])
   // The home has no answers to cite. A passage left open from the conversation that was just
-  // replaced (or from a stale link) closes, by replacing the address, with no history step.
+  // replaced (or from a stale link) closes: by going back when the panel pushed its own history
+  // entry, otherwise by replacing the address.
   const { clear: clearSource } = useSourceUrl()
   useEffect(() => {
     forgetOpener()

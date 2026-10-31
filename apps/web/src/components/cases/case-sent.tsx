@@ -1,5 +1,5 @@
 import { Lock } from 'lucide-react'
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router'
 import type { HrContactOut, SentLineOut } from '@/api/generated'
 import { APP_LINK } from '@/components/assistant/link-class'
@@ -58,7 +58,10 @@ function CaseSent(props: CaseSentProps) {
   const { variant, link, className } = props
   const ref = useRef<HTMLOutputElement>(null)
   const sent = props.state === 'sent'
-  const takesFocus = props.state === 'sent' ? (props.focusOnMount ?? true) : !!props.focusOnMount
+  // Decided when the line appears, so the tab stop does not vanish under focus when it is spent.
+  const [takesFocus] = useState(() =>
+    props.state === 'sent' ? (props.focusOnMount ?? true) : !!props.focusOnMount,
+  )
   useEffect(() => {
     if (takesFocus) ref.current?.focus()
     // Once, when the line appears.

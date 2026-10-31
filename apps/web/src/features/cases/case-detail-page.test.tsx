@@ -14,6 +14,8 @@ import { detailOf, installFakeCases } from '@/test/fake-cases'
 import { problemResponse } from '@/test/fake-assistant'
 import { meFor } from '@/test/fixtures'
 import { renderApp } from '@/test/render-app'
+import { server } from '@/test/msw'
+import { http } from 'msw'
 import { readTiming } from './use-case-reads'
 
 const announceMock = vi.hoisted(() => vi.fn<(text: string, politeness?: string) => void>())
@@ -93,6 +95,24 @@ describe('the detail: who can see it', () => {
     expect(
       await screen.findByRole('heading', { level: 1, name: "We couldn't find that page." }),
     ).toBeVisible()
+  })
+})
+
+describe('the detail: an address that is not a case ID', () => {
+  it('shows Not found when the API refuses the ID itself (422), not the error page', async () => {
+    installFakeApi('dana')
+    const fake = installFakeCases()
+    server.use(
+      http.get(`${window.location.origin}/api/v1/cases/:id`, () =>
+        problemResponse(422, 'about:blank', 'Not a UUID'),
+      ),
+    )
+    renderApp({ at: '/cases/latest' })
+    expect(
+      await screen.findByRole('heading', { level: 1, name: "We couldn't find that page." }),
+    ).toBeVisible()
+    expect(screen.queryByText('Something went wrong')).toBeNull()
+    expect(fake.calls.summary).toEqual([])
   })
 })
 
@@ -320,6 +340,19 @@ describe('the summary', () => {
     expect(await screen.findByRole('button', { name: 'Try again' })).toBeVisible()
   })
 
+  it('offers no Try again on a closed case with no summary', async () => {
+    const old = '2026-10-20T10:00:00Z'
+    const c: DemoCase = {
+      ...PRIYA_CASE,
+      status: 'closed',
+      sentAt: old,
+      entries: [timelineEntry('opened', old)],
+    }
+    open(c, { summaryState: { summary: { status: 'none' } } })
+    expect(await screen.findByText('No AI summary. Read the person’s words below.')).toBeVisible()
+    expect(screen.queryByRole('button', { name: 'Try again' })).toBeNull()
+  })
+
   it('writes a new summary on Try again, and stays pending when the server refuses', async () => {
     const old = '2026-10-20T10:00:00Z'
     const c: DemoCase = { ...PRIYA_CASE, sentAt: old, entries: [timelineEntry('opened', old)] }
@@ -331,6 +364,26 @@ describe('the summary', () => {
     expect(await screen.findByText('Writing the summary…')).toBeVisible()
     expect(fake.calls.rewrites).toEqual([c.id])
     expect(fake.calls.summary).toEqual([])
+  })
+
+  it('does not wait for a retry the server refused because the case is closed', async () => {
+    readTiming.pollMs = 20
+    const old = '2026-10-20T10:00:00Z'
+    const c: DemoCase = { ...PRIYA_CASE, sentAt: old, entries: [timelineEntry('opened', old)] }
+    const { user, fake } = open(c, {
+      summaryState: { summary: { status: 'failed', reason: 'model-error', createdAt: old } },
+    })
+    // Another HR person closed the case after this page read it: the 409 is permanent.
+    fake.onRewrite((id) => {
+      fake.details[id] = { ...fake.details[id]!, status: 'closed' }
+      return problemResponse(409, 'summary-retry-refused', 'The case is closed.')
+    })
+    await user.click(await screen.findByRole('button', { name: 'Try again' }))
+    await waitFor(() => expect(screen.queryByRole('button', { name: 'Try again' })).toBeNull())
+    expect(screen.queryByText('Writing the summary…')).toBeNull()
+    const looked = fake.calls.detail.length
+    await act(() => new Promise((resolve) => setTimeout(resolve, 200)))
+    expect(fake.calls.detail.length).toBe(looked)
   })
 
   it('shows the new summary after Try again once the metadata says it is written', async () => {
@@ -356,6 +409,18 @@ describe('the summary', () => {
     const before = fake.calls.summary.length
     await user.click(retry)
     await waitFor(() => expect(fake.calls.summary.length).toBe(before + 1))
+    expect(fake.calls.rewrites).toEqual([])
+  })
+
+  it('keeps Try again on a closed case whose existing summary failed to load, and re-reads it', async () => {
+    const closed: DemoCase = { ...PRIYA_CASE, status: 'closed' }
+    const { user, fake } = open(closed, { summary: { problem: 500 } })
+    const retry = await screen.findByRole('button', { name: 'Try again' })
+    const before = fake.calls.summary.length
+    fake.summaries[closed.id] = WRITTEN
+    await user.click(retry)
+    expect(await screen.findByText(WRITTEN.text!)).toBeVisible()
+    expect(fake.calls.summary.length).toBe(before + 1)
     expect(fake.calls.rewrites).toEqual([])
   })
 })

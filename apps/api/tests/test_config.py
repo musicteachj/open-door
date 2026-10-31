@@ -1,3 +1,4 @@
+from copy import deepcopy
 from decimal import Decimal
 from pathlib import Path
 from typing import Any
@@ -282,6 +283,44 @@ def test_the_keyring_file_defaults_to_the_development_path_and_no_keyring_is_set
     assert settings.encryption_keyring_file.get_secret_value() == ".keys/keyring"
 
 
+def test_a_blank_keyring_file_in_dotenv_counts_as_unset(tmp_path: Path) -> None:
+    env_file = tmp_path / ".env"
+    env_file.write_text(f"DATABASE_URL={APP_URL}\nENCRYPTION_KEYRING_FILE=\n", encoding="utf-8")
+
+    settings = Settings(_env_file=env_file)
+
+    assert settings.encryption_keyring_file is not None
+    assert settings.encryption_keyring_file.get_secret_value() == ".keys/keyring"
+
+
+def test_a_blank_keyring_file_beside_an_inline_keyring_is_not_two_keyrings(tmp_path: Path) -> None:
+    env_file = tmp_path / ".env"
+    env_file.write_text(
+        f"DATABASE_URL={APP_URL}\nENCRYPTION_KEYRING=k1:abc\nENCRYPTION_KEYRING_FILE=\n",
+        encoding="utf-8",
+    )
+
+    settings = Settings(_env_file=env_file)
+
+    assert settings.encryption_keyring is not None
+
+
+def test_settings_rebuilt_from_a_copy_of_their_dump_are_not_refused(tmp_path: Path) -> None:
+    env_file = tmp_path / ".env"
+    env_file.write_text(
+        f"DATABASE_URL={APP_URL}\nENCRYPTION_KEYRING=k1:abc\nENCRYPTION_KEYRING_FILE=\n",
+        encoding="utf-8",
+    )
+    settings = Settings(_env_file=env_file)
+
+    # A copy shares no object with the settings, so nothing can tell a blank file by identity.
+    rebuilt = Settings.model_validate(deepcopy(settings.model_dump(exclude_unset=True)))
+
+    assert rebuilt.encryption_keyring is not None
+    assert rebuilt.encryption_keyring_file is not None
+    assert rebuilt.encryption_keyring_file.get_secret_value() == ".keys/keyring"
+
+
 def test_the_keyring_settings_read_the_environment(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("DATABASE_URL", APP_URL)
     monkeypatch.setenv("ENCRYPTION_KEYRING", "k1:abc")
@@ -315,6 +354,29 @@ def test_setting_both_the_keyring_and_the_keyring_file_is_refused() -> None:
             encryption_keyring_file="/tmp/ring",  # noqa: S108
         )
     assert "topsecretid" not in str(excinfo.value)
+
+
+def test_an_explicit_keyring_file_that_spells_the_default_beside_a_keyring_is_refused() -> None:
+    with pytest.raises(ValidationError, match="not both"):
+        Settings(
+            _env_file=None,
+            database_url=APP_URL,
+            encryption_keyring="k1:abc",
+            encryption_keyring_file=".keys/keyring",
+        )
+
+
+def test_an_explicit_default_keyring_file_in_dotenv_beside_a_keyring_is_refused(
+    tmp_path: Path,
+) -> None:
+    env_file = tmp_path / ".env"
+    env_file.write_text(
+        f"DATABASE_URL={APP_URL}\nENCRYPTION_KEYRING=k1:abc\n"
+        "ENCRYPTION_KEYRING_FILE=.keys/keyring\n",
+        encoding="utf-8",
+    )
+    with pytest.raises(ValidationError, match="not both"):
+        Settings(_env_file=env_file)
 
 
 def test_both_set_in_the_environment_is_refused(monkeypatch: pytest.MonkeyPatch) -> None:

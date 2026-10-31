@@ -20,6 +20,8 @@ type CaseSummaryBlockProps = {
   timeZone?: string
   /** "Try again", for `failed`. */
   onRetry?: () => void
+  /** "Try again" is offered. Off for a closed case: the server writes no new summary for one. */
+  canRetry?: boolean
   /** A retry is in flight: the button is busy and does nothing. */
   retrying?: boolean
   className?: string
@@ -38,6 +40,7 @@ function CaseSummaryBlock({
   model,
   timeZone = 'UTC',
   onRetry,
+  canRetry = true,
   retrying = false,
   className,
 }: CaseSummaryBlockProps) {
@@ -86,10 +89,12 @@ function CaseSummaryBlock({
         {state === 'failed' && (
           <div className="flex flex-wrap items-center gap-4">
             <p className="m-0 min-w-60 flex-1">{detailCopy.summaryFailed}</p>
-            <Button variant="secondary" size="sm" loading={retrying} onClick={onRetry}>
-              {!retrying && <RotateCcw aria-hidden="true" className="size-3.5" />}
-              {detailCopy.tryAgain}
-            </Button>
+            {canRetry && (
+              <Button variant="secondary" size="sm" loading={retrying} onClick={onRetry}>
+                {!retrying && <RotateCcw aria-hidden="true" className="size-3.5" />}
+                {detailCopy.tryAgain}
+              </Button>
+            )}
           </div>
         )}
         {state === 'crisis' && <p className="m-0">{detailCopy.summaryCrisis}</p>}

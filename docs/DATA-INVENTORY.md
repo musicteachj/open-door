@@ -155,7 +155,9 @@ Append-only: the API can add and read events but never change or delete them. Vi
 within its own sandbox, with two exceptions from Phase 6 (migration 0013), enforced by a
 restrictive Postgres rule: a row whose `target_type` is `case` is visible to HR only, and an
 `escalation.offered` row is visible to its actor and HR only. Before that, any transaction in the
-sandbox could read every row. Anyone can still add such a row, since an insert reads nothing back.
+sandbox could read every row. Anyone can still add such a row, since an insert reads nothing back. A partial index on
+(`tenant_id`, `target_id`, `occurred_at`), only for `case.summary.retried` rows, serves the lookup
+of a case's last summary retry (migration 0015); it holds no data the table does not.
 No endpoint shows them yet. Deleted with the sandbox, which is the demo
 choice described above.
 
@@ -371,6 +373,7 @@ one. The case service (`app/modules/cases/`) is the only writer, and the only co
 | `id`, `tenant_id`, `case_id`, `actor_person_id`, `occurred_at` | IDs: the event, its sandbox and case, and who did it (null for the system, such as a background summary); and when | The case's timeline. |
 | `kind` | `opened`, `summary_written`, `summary_failed`, `viewed`, `text_read`, or `status_changed` | HR's reading of the words is recorded as `text_read`, and HR may change a status only after it. |
 | `from_status`, `to_status` | Set only for a status change | The timeline. |
+| `written_by_hr` | Whether HR wrote the row on someone else's case (HR on their own case counts as the person, and the seed, which sets no person, is not HR), stamped by a trigger. Two partial unique indexes hold the rows where it is false to one `opened` and one summary event per case, and the trigger refuses any event from the person's session after the case's first 10 minutes (migration 0015) | How the database limits what code running as the person may put on HR's timeline, since the person cannot read it to count. |
 
 A case event holds no text.
 

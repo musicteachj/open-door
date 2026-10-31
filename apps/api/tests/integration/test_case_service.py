@@ -691,6 +691,29 @@ async def test_the_reply_by_date_uses_both_years_of_denvers_holidays(env: Env) -
         assert await queries.reply_by_at(db, env.tenant.id, late) == date(2026, 10, 27)
 
 
+async def test_denver_hq_is_the_location_whose_code_is_exactly_the_seeds(env: Env) -> None:
+    # Location codes are unique case-sensitively, so "DEN" can sit beside the seed's "den". Only
+    # the seed's counts as HQ: a second row must neither be picked nor make the lookup ambiguous.
+    async with tenant_session(env.engine, TenantContext(env.tenant.id, None)) as session:
+        session.add(
+            Location(
+                id=uuid4(),
+                tenant_id=env.tenant.id,
+                code="DEN",
+                name="Not HQ",
+                city="Chicago",
+                state="IL",
+                timezone="America/Chicago",
+            )
+        )
+
+    async with acting(env.engine, env.tenant.id, env.dana) as (db, actor):
+        zone, _ = await queries.hq_zone_and_holidays(db, env.tenant.id, date(2026, 10, 1))
+        await service.counts(db, actor)
+
+    assert zone == ZoneInfo("America/Denver")
+
+
 # --- the person's list ---
 
 
@@ -1609,6 +1632,17 @@ async def test_a_retry_is_refused_for_a_crisis_case(env: Env) -> None:
     assert (refused.status_code, refused.code) == (409, "summary-retry-refused")
 
 
+async def test_a_retry_is_refused_for_a_closed_case(env: Env) -> None:
+    # A failed summary on a finished matter would otherwise be retried, spending the budget.
+    case_id = await seed_case(env, env.leo, screening="ordinary", words=WORDS, status="closed")
+    async with acting(env.engine, env.tenant.id, env.dana) as (db, actor):
+        await service.record_summary(db, env.keys, case_id, SummaryFailed("timeout"), actor=actor)
+
+    refused = await problem(plan(env, case_id))
+
+    assert (refused.status_code, refused.code) == (409, "summary-retry-refused")
+
+
 async def test_a_retry_uses_the_screening_as_it_is_under_the_lock(
     env: Env, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -1761,9 +1795,10 @@ async def test_a_second_screening_write_loses_the_race_and_says_so(env: Env) -> 
         first = await service.record_screening(db, case_id, "crisis", actor=actor)
     async with acting(env.engine, env.tenant.id, env.dana) as (db, actor):
         second = await service.record_screening(db, case_id, "ordinary", actor=actor)
-        current = await service.screening_of(db, case_id)
+        current = await service.screening_of(db, env.tenant.id, case_id)
+        elsewhere = await service.screening_of(db, uuid4(), case_id)
 
-    assert (first, second, current) == (True, False, "crisis")
+    assert (first, second, current, elsewhere) == (True, False, "crisis", None)
 
 
 async def test_a_written_summary_waits_for_a_crisis_another_retry_has_not_committed(

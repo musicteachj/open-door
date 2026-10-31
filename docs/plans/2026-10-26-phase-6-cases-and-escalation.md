@@ -1695,6 +1695,100 @@ Branched off `dev` at `8d2e46d`. No paid AI calls.
   run made every later run fail on a duplicate key; it now draws a fresh small ID and a fresh large
   one each run.
 
+### The phase review (`fix/phase-6-review`, 2026-10-30)
+
+After Stage 6 merged (#84), the whole phase was reviewed against its base `3b605da`: three
+`/code-review high` runs, one per area (the case backend and its migrations; encryption, the
+assistant, and config; the web app), on application code, migrations, scripts, and config only
+(tests, generated files, eval tooling and fixtures, the gallery, and docs were reviewed with their
+stages), and one Fable 5.1 security reviewer briefed with the spec's security seams.
+
+- **The security reviewer found nothing high or medium** and proved each seam with a small
+  experiment: who sees a case (every route, tool, count, and audit row), encryption, case text
+  kept from the model, logs, audit, and the query cache, the audited reads, the write rules and
+  triggers, the screening, and the web's role-aware links, CSRF header, and persona reset. Two
+  lows, both fixed: the directory's private-details read (an audited read since Stage 3) sat in
+  the query cache and was read again on a window focus; HR could retry a summary on a closed case.
+- **Mediums found by the code reviews, all fixed test first:**
+  - The `case_events` insert trigger let code running as the person add a failed-summary or a
+    second "opened" event to their own case at any time (migration 0015 holds those events to
+    the rules the summary rows already follow).
+  - The summary's program checks let an all-lowercase summary through unread (sentences only
+    split before a capital), and counted the factive "they know X" as reported speech. On the
+    owner's OK, the checks were tightened and the case-summary set re-run (below).
+  - In the chat panel: a waiting-limit refusal stuck for the session even after the person had
+    fewer than five cases waiting; coming back to `/ask` moved focus to the old sent line and
+    announced the crisis panel again; after a server refusal, focus couldn't reach the words box
+    because the send was still pending.
+- **Deferred to Phase 7 (the owner's call):** the guard's topic note and the assistant prompt tell
+  everyone to use "the My cases page", which HR doesn't have. The answer's link is already plain
+  text for HR. Changing either needs a full paid run, so it waits for Phase 7's next one, beside
+  the bare `amount` key.
+- **Lows fixed:** a seeded-summary script that dropped a case missing from its run file; one
+  exact-match helper for Denver HQ's location; a tenant filter on the screening read; one place
+  that decides "a crisis case never shows a written summary"; an index for the summary retry's
+  audit lookup (migration 0015); a blank `ENCRYPTION_KEYRING_FILE` now means the default file;
+  `make eval-live` takes `FIXTURES_DIR` for tuning into a scratch folder, and its case-summary cost
+  comment matches the rule (about $0.75); and in the web app, a case ID that isn't a UUID shows
+  Not found, the date helpers share one cached formatter, the summary's poll and "Try again"
+  share one constant, a millisecond field names its unit, and a stale comment on the home page.
+- **The case-summary run** (on the owner's OK, 2026-10-30): `runs/20261030T213352Z-case-summary`,
+  $0.52. The tightened checks passed every live summary in all three trials (22 of 22 each; the
+  longest 163 words), and the judge rated all 22 faithful, neutral, with no recommendation, and
+  keeping the person's uncertainty, in every trial. Trial 1's four seeded summaries came back word
+  for word as the approved ones, so `seed_data.py` is unchanged, and the summary prompt didn't
+  change, so the recorded fixture still replays. (The seeded-summary script writes single quotes;
+  `ruff format` puts them back.)
+- **`/code-review medium` on the fix branch, round 1:** fixed, test first, the mediums in the
+  tightened checks: a lowercase claim after a quoted sentence still slipped through (a stop and a
+  closing quote before a lowercase word now ends a sentence), and abbreviations missing from the
+  list ("U.S.", "Jan.", "Inc.") cut a valid sentence (dotted tokens and a fixed list of capitalized
+  abbreviations no longer end one; a short name like "Bob." still does). Since the checks changed
+  after the paid run, all 66 of its live summaries were checked again offline against the final
+  checks: none refused, so no second run. Also: the per-turn pre-check added in the review cost
+  more than the lookup it saved and was reverted; an explicitly set keyring file beside an inline
+  keyring is refused again; the summary reads branch on one outcome; the checks' docstring lists
+  exactly what they exempt. Recorded, no change: after a waiting-limit refusal in chat, the list's
+  own count decides once it's read again, so if it disagrees with the server's the limit line
+  gives way to a button the server will refuse again (they count the same statuses).
+- **Round 2:** fixed, test first, the mediums: migration 0015 let HR's own case skip the new
+  event limits (it now marks an event as HR's exactly as 0013 marks a summary: HR acting on
+  someone else's case; the seed's rows are held to one of each, without the window); a lowercase
+  "dr." still hid a claim from the checks (titles now match only capitalized). Lows fixed: "Ph.D."
+  and "M.D." no longer cut a sentence; the audit index is now a partial index on the retry rows
+  alone; the two-keyrings check reads the raw input instead of an object's identity. The paid
+  run's 66 summaries still pass the final checks.
+- **Round 3:** fixed, test first, the mediums: 0015's backfill ran under forced row security, so
+  on a database whose owner isn't a superuser it would update nothing (it now runs inside the same
+  NO FORCE / FORCE bracket as 0011 to 0013, and stamps HR's earlier rows of every kind, as the
+  trigger does); a retry refused because the case had been closed left the summary block waiting
+  2.5 minutes (the page reads the case again and doesn't wait for a closed one); the panel's "shown"
+  flag could overwrite a newer slot (a store update that flips only the flag). The last round on
+  the summary checks' net: a stop glued to a lowercase word now ends a sentence, dotted
+  abbreviations must look like one ("it.so." no longer hides a boundary), and "vs." is back. A
+  low: a sent line and a limit line no longer share one element's focus decision. Recorded:
+  the net now cuts a glued stop like "example.com" too (a summary with an address is refused
+  anyway), and the limit line's list re-read (a repeat). The local migration test can show the
+  bracket's order and results, not its effect for a non-superuser owner (as Stage 1 recorded).
+- **Round 4:** round 3's two changes to the net had regressed: "Jo.He stole money." passed (two
+  capitalized letters counted as an abbreviation), and a file name ("report.pdf") cut a valid
+  summary. Fixed test first by narrowing dotted tokens to single letters (plus "Ph.D.") and
+  restoring `dev`'s rule that a glued stop ends a sentence only before a capital. Recorded, the
+  net's known limits (the judge still reads every summary, and no live summary in the phase's runs
+  came near them): lowercase text with no space after a stop ("fine.sam hit them") is one clause;
+  a lowercase claim after a listed abbreviation ("No. he hit them") joins its sentence. Dismissed:
+  "they know X" refused (the owner-approved change). Recorded: 0015's trigger reads the case for
+  every event, the seed's included (one indexed lookup).
+- **Round 5:** nothing high or medium; the review loop stopped here. A dotted token now hides its
+  internal dots only when it ends with its own stop (a low, tidy). Recorded, no change: a listed
+  abbreviation or "etc." before a lowercase claim still joins the sentence, and lowercase text
+  after a closing quote ("go home." they went) is cut (both the net's recorded limits); "plan
+  B.I hit Sam" isn't cut, as on `dev`; 0015 now refuses an event HR writes on their own case after
+  its first 10 minutes as a database error (no code path does it, since the service refuses HR's
+  own case first); a sandbox seeded before 0015 has HR's seeded rows marked by their actor, so they
+  read true where a fresh seed's read false (sandboxes last a day). The repeated limit-line item
+  didn't count.
+
 ## Backlog
 
 Findings and ideas left for later go to [`../BACKLOG.md`](../BACKLOG.md), with the reason.

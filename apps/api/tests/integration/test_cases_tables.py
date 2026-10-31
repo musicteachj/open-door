@@ -30,6 +30,9 @@ from tests.integration.test_cleanup import rows_left
 pytestmark = pytest.mark.integration
 
 MIGRATION = Path(__file__).resolve().parents[2] / "migrations/versions/0013_cases.py"
+MIGRATION_0015 = (
+    Path(__file__).resolve().parents[2] / "migrations/versions/0015_case_event_limits.py"
+)
 CASE_TABLES = ("cases", "case_summaries", "case_events")
 
 
@@ -182,6 +185,7 @@ async def test_the_three_tables_have_the_specs_columns(app_engine: AsyncEngine) 
             "case_id",
             "occurred_at",
             "kind",
+            "written_by_hr",
             null=("actor_person_id", "from_status", "to_status"),
         ),
     }
@@ -985,11 +989,63 @@ async def test_the_person_adds_their_own_three_kinds_of_event(
 ) -> None:
     tenant = await make_tenant()
 
+    # A fresh case, as the open transaction makes it: each kind once, in its first 10 minutes.
     async with as_person(tenant, tenant.employee_id) as session:
-        await insert_event(
-            session, tenant, tenant.case_id, kind, actor_person_id=tenant.employee_id
+        fresh = await insert_case(session, tenant, tenant.employee_id)
+        await insert_event(session, tenant, fresh, kind, actor_person_id=tenant.employee_id)
+
+
+@pytest.mark.parametrize("kind", ["opened", "summary_written", "summary_failed"])
+async def test_the_person_cannot_repeat_an_event_or_add_it_late(
+    make_tenant: MakeTenant, kind: str
+) -> None:
+    tenant = await make_tenant()
+    async with as_person(tenant, None) as session:
+        stale = await insert_case(
+            session,
+            tenant,
+            tenant.employee_id,
+            created_at=datetime.now(UTC) - timedelta(minutes=11),
         )
-        await insert_event(session, tenant, tenant.case_id, kind)  # the system's, with no actor
+    async with as_person(tenant, tenant.employee_id) as session:
+        fresh = await insert_case(session, tenant, tenant.employee_id)
+        await insert_event(session, tenant, fresh, kind)
+
+    # A second one on the same case, and a first one on a case past its first 10 minutes.
+    for case_id in (fresh, stale):
+        with pytest.raises(IntegrityError if case_id == fresh else DBAPIError) as raised:
+            async with as_person(tenant, tenant.employee_id) as session:
+                await insert_event(session, tenant, case_id, kind)
+        assert sqlstate(raised.value) in {"OD003", "23505"}
+
+
+async def test_the_person_gets_one_summary_event_of_either_kind(make_tenant: MakeTenant) -> None:
+    tenant = await make_tenant()
+    async with as_person(tenant, tenant.employee_id) as session:
+        fresh = await insert_case(session, tenant, tenant.employee_id)
+        await insert_event(session, tenant, fresh, "summary_failed")
+
+    with pytest.raises(IntegrityError) as raised:
+        async with as_person(tenant, tenant.employee_id) as session:
+            await insert_event(session, tenant, fresh, "summary_written")
+
+    assert sqlstate(raised.value) == "23505"
+
+
+async def test_the_open_paths_each_keep_their_events(make_tenant: MakeTenant) -> None:
+    """Opened plus the summary_failed of a crisis or unscreened case, in one transaction; then
+    HR's retries on top, as many as they like."""
+    tenant = await make_tenant()
+    async with as_person(tenant, tenant.employee_id) as session:
+        fresh = await insert_case(session, tenant, tenant.employee_id, screening="crisis")
+        await insert_event(session, tenant, fresh, "opened", actor_person_id=tenant.employee_id)
+        await insert_event(session, tenant, fresh, "summary_failed")
+    async with as_person(tenant, tenant.hr_id, hr=True) as session:
+        for kind in ("summary_failed", "summary_written", "summary_written"):
+            await insert_event(session, tenant, fresh, kind, actor_person_id=tenant.hr_id)
+        recorded = await count(session, "case_events", case_id=fresh)
+        by_hr = await count(session, "case_events", case_id=fresh, written_by_hr=True)
+    assert (recorded, by_hr) == (5, 3)
 
 
 @pytest.mark.parametrize("kind", ["viewed", "text_read"])
@@ -1054,6 +1110,73 @@ async def test_hr_adds_any_kind_of_event(make_tenant: MakeTenant) -> None:
             from_status="new",
             to_status="in_review",
         )
+
+
+async def test_hr_on_their_own_case_is_held_to_the_persons_event_limits(
+    make_tenant: MakeTenant,
+) -> None:
+    tenant = await make_tenant()
+    async with as_person(tenant, None) as session:
+        stale = await insert_case(
+            session,
+            tenant,
+            tenant.hr_id,
+            created_at=datetime.now(UTC) - timedelta(minutes=11),
+        )
+    async with as_person(tenant, tenant.hr_id, hr=True) as session:
+        own = await insert_case(session, tenant, tenant.hr_id)
+        await insert_event(session, tenant, own, "opened")
+        flagged = await scalar(
+            session, "SELECT written_by_hr FROM case_events WHERE case_id = :id", id=own
+        )
+    assert flagged is False
+
+    # A second `opened` or summary event pair, as the person could not add.
+    with pytest.raises(IntegrityError, match="uq_case_events_one_opened_not_by_hr_per_case"):
+        async with as_person(tenant, tenant.hr_id, hr=True) as session:
+            await insert_event(session, tenant, own, "opened")
+    async with as_person(tenant, tenant.hr_id, hr=True) as session:
+        await insert_event(session, tenant, own, "summary_written")
+    with pytest.raises(IntegrityError, match="uq_case_events_one_summary_not_by_hr_per_case"):
+        async with as_person(tenant, tenant.hr_id, hr=True) as session:
+            await insert_event(session, tenant, own, "summary_failed")
+    # A late event, and a kind only HR may add elsewhere.
+    for kind in ("opened", "summary_written", "text_read"):
+        with pytest.raises(DBAPIError) as raised:
+            async with as_person(tenant, tenant.hr_id, hr=True) as session:
+                await insert_event(session, tenant, stale, kind)
+        assert sqlstate(raised.value) == "OD003"
+
+
+async def test_hr_on_someone_elses_case_adds_events_without_limit(
+    make_tenant: MakeTenant,
+) -> None:
+    tenant = await make_tenant()
+    async with as_person(tenant, tenant.hr_id, hr=True) as session:
+        for kind in ("opened", "opened", "summary_written", "summary_failed", "summary_written"):
+            await insert_event(session, tenant, tenant.case_id, kind)
+        by_hr = await count(session, "case_events", case_id=tenant.case_id, written_by_hr=True)
+    assert by_hr == 5
+
+
+async def test_a_seeded_event_is_not_by_hr(
+    make_tenant: MakeTenant,
+) -> None:
+    tenant = await make_tenant()
+    old = datetime.now(UTC) - timedelta(days=3)
+    async with as_person(tenant, None) as session:
+        case_id = await insert_case(
+            session, tenant, tenant.colleague_id, created_at=old, status_changed_at=old
+        )
+        for kind in ("opened", "summary_written"):
+            await insert_event(session, tenant, case_id, kind, occurred_at=old)
+    async with as_person(tenant, tenant.hr_id, hr=True) as session:
+        flags = await scalar(
+            session,
+            "SELECT array_agg(written_by_hr) FROM case_events WHERE case_id = :id",
+            id=case_id,
+        )
+    assert flags == [False, False]
 
 
 # --- Seeding: no person set ---
@@ -1301,7 +1424,10 @@ async def test_every_event_kind_without_statuses_is_accepted(
     tenant = await make_tenant()
 
     async with as_person(tenant, None) as session:
-        await insert_event(session, tenant, tenant.case_id, kind)
+        # A new case: the sample one already has its `opened` from the seed, and the seed's rows
+        # are held to one per case like the person's.
+        case_id = await insert_case(session, tenant, tenant.colleague_id)
+        await insert_event(session, tenant, case_id, kind)
 
 
 @pytest.mark.parametrize(
@@ -1481,8 +1607,8 @@ async def test_a_sandbox_delete_removes_its_cases(
     assert all(after[table] == 0 for table in CASE_TABLES)
 
 
-def load_migration() -> ModuleType:
-    spec = importlib.util.spec_from_file_location("migration_0013", MIGRATION)
+def load_migration(path: Path = MIGRATION) -> ModuleType:
+    spec = importlib.util.spec_from_file_location(f"migration_{path.stem}", path)
     assert spec is not None
     assert spec.loader is not None
     module = importlib.util.module_from_spec(spec)
@@ -1536,3 +1662,97 @@ async def test_the_downgrade_deletes_non_turn_spending_before_it_restores_the_tu
             await transaction.rollback()
 
     assert (nullable, purposes, forced) == ("NO", 0, True)
+
+
+async def test_the_0015_backfill_runs_inside_the_force_bracket_and_stamps_hr_rows_of_every_kind(
+    owner_engine: AsyncEngine, make_tenant: MakeTenant
+) -> None:
+    """The backfill's statements are bracketed by NO FORCE and FORCE on both tables it touches
+    (the development and CI owner is a superuser, which skips row-level security, so this test
+    cannot show the difference for a non-superuser owner; it proves the order). Inside, it stamps
+    the trigger's definition on every kind: HR acting on someone else's case is true, else false."""
+    statements: tuple[str, ...] = load_migration(MIGRATION_0015).BACKFILL_STATEMENTS
+    assert [s.split()[0:5] for s in statements[:2]] == [
+        ["ALTER", "TABLE", "case_events", "NO", "FORCE"],
+        ["ALTER", "TABLE", "cases", "NO", "FORCE"],
+    ]
+    assert statements[2].lstrip().startswith("UPDATE case_events")
+    assert [s.split()[0:5] for s in statements[3:]] == [
+        ["ALTER", "TABLE", "case_events", "FORCE", "ROW"],
+        ["ALTER", "TABLE", "cases", "FORCE", "ROW"],
+    ]
+
+    tenant = await make_tenant()
+    base = datetime.now(UTC) - timedelta(days=3)
+    async with as_person(tenant, None) as session:
+        case_id = await insert_case(session, tenant, tenant.employee_id, created_at=base)
+        rows: list[tuple[str, UUID | None]] = [
+            ("opened", tenant.employee_id),
+            ("summary_written", None),
+            ("viewed", tenant.hr_id),
+            ("text_read", tenant.hr_id),
+            ("status_changed", tenant.hr_id),
+            ("viewed", None),
+        ]
+        ids: list[UUID] = []
+        for offset, (kind, actor) in enumerate(rows):
+            extra = (
+                {"from_status": "new", "to_status": "in_review"} if kind == "status_changed" else {}
+            )
+            ids.append(
+                await insert_event(
+                    session,
+                    tenant,
+                    case_id,
+                    kind,
+                    actor_person_id=actor,
+                    occurred_at=base + timedelta(minutes=offset),
+                    **extra,
+                )
+            )
+
+    async with owner_engine.connect() as connection:
+        transaction = await connection.begin()
+        try:
+            # A second `opened` by the person, as only a row made before the index could be.
+            await connection.exec_driver_sql(
+                "DROP INDEX uq_case_events_one_opened_not_by_hr_per_case"
+            )
+            later = uuid4()
+            await connection.execute(
+                text(
+                    "INSERT INTO case_events (id, tenant_id, case_id, kind, actor_person_id,"
+                    " occurred_at) VALUES (:id, :tenant, :case, 'opened', :actor, :at)"
+                ),
+                {
+                    "id": later,
+                    "tenant": tenant.id,
+                    "case": case_id,
+                    "actor": tenant.employee_id,
+                    "at": base + timedelta(minutes=9),
+                },
+            )
+            ids.append(later)
+            for statement in statements:
+                await connection.exec_driver_sql(statement)
+            flags: Any = dict(
+                (
+                    await connection.execute(
+                        text("SELECT id, written_by_hr FROM case_events WHERE case_id = :id"),
+                        {"id": case_id},
+                    )
+                ).all()
+            )
+            forced: Any = (
+                await connection.execute(
+                    text(
+                        "SELECT bool_and(relforcerowsecurity) FROM pg_class"
+                        " WHERE relname IN ('cases', 'case_events')"
+                    )
+                )
+            ).scalar_one()
+        finally:
+            await transaction.rollback()
+
+    assert [flags[i] for i in ids] == [False, False, True, True, True, False, True]
+    assert forced is True

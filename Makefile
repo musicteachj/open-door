@@ -69,7 +69,7 @@ eval-offline: ## Replay the recorded assistant evals (needs `make db`); no netwo
 	cd $(API) && uv run python ../../evals/assistant/run.py --mode offline --set escalation --check
 	cd $(API) && uv run python ../../evals/assistant/run.py --mode offline --set case-summary --check
 
-# SET=case-summary (3 trials of the case summarizer and its judge, about $1.80, cap $3).
+# SET=case-summary (3 trials of the case summarizer and its judge, about $0.75, cap $3).
 # PAID. Without YES=1 (exactly 1: YES=0 or YES=no still only prints) it prints the set, the item count, the estimated cost, and the cap, and calls
 # nothing. SET=smoke (about $0.65, cap $2), SET=full (about $14, cap $16), or SET=effort (the smoke
 # items at medium effort, about $1.75, cap $2; its recordings go to a git-ignored folder, and
@@ -78,14 +78,16 @@ eval-offline: ## Replay the recorded assistant evals (needs `make db`); no netwo
 # (SET=full only) also drops the old recordings no item asked for, and implies FRESH=1: with
 # `SET=full FRESH=1 PRUNE=1` the whole fixture set is replaced. Each run writes its scoreboard and
 # traces into the git-ignored evals/assistant/runs/. The key is read from apps/api/.env (an empty
-# one exported in the shell is ignored). One run at a time; don't start it in the middle of `make check`.
+# one exported in the shell is ignored). FIXTURES_DIR=<folder> records into that folder instead (the
+# escalation tuning half goes to a scratch folder this way: `SET=escalation HALF=tuning FIXTURES_DIR=...`).
+# One run at a time; don't start it in the middle of `make check`.
 SET ?= smoke
 STAMP := $(shell date -u +%Y%m%dT%H%M%SZ)
 RUNS := ../../evals/assistant/runs
-eval-live: ## PAID: record the assistant evals. SET=smoke|full|effort|escalation|case-summary, YES=1 to run, COMPARE=<scoreboard.json>, HALF=tuning|held_out (escalation)
+eval-live: ## PAID: record the assistant evals. SET=smoke|full|effort|escalation|case-summary, YES=1 to run, COMPARE=<scoreboard.json>, HALF=tuning|held_out (escalation), FIXTURES_DIR=<scratch folder to record into>
 	cd $(API) && uv run python ../../evals/assistant/run.py --mode live --set $(SET) \
 		$(if $(HALF),--half $(HALF)) \
-		$(if $(filter effort,$(SET)),--fixtures-dir ../../evals/assistant/fixtures-effort) \
+		$(if $(FIXTURES_DIR),--fixtures-dir $(abspath $(FIXTURES_DIR)),$(if $(filter effort,$(SET)),--fixtures-dir ../../evals/assistant/fixtures-effort)) \
 		$(if $(COMPARE),--compare $(abspath $(COMPARE))) \
 		--json $(RUNS)/$(STAMP)-$(SET).json --traces $(RUNS)/$(STAMP)-$(SET)-traces.json \
 		$(if $(or $(filter 1,$(FRESH)),$(filter 1,$(PRUNE))),--fresh) \

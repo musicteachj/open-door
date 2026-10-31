@@ -8,8 +8,10 @@ they refuse is stored as `failed` with the reason `checks`, and HR reads the per
 **Attribution.** A summary may only report: every clause must begin as a report does ("The person
 says...", "They ask...", "According to the person,..."), so a claim in the summarizer's own voice
 ("Sam acted inappropriately.") is refused. The summary is cut into clauses at a sentence end
-(a stop, "!" or "?" before a capital letter, with or without a space, or a line break), a
-semicolon, a dash, a colon, or an opening parenthesis. Each clause must be attributed on its own.
+(a stop, "!" or "?" before a capital letter, directly before a letter, or, after a space, before
+a lowercase word; a stop and a
+closing quote before a lowercase word; or a line break), a semicolon, a dash, a colon, or an
+opening parenthesis. Each clause must be attributed on its own.
 A comma never starts a clause: ", but", ", so", ", which", and ", and" continue the sentence, so
 they inherit its attribution, and what they say in their own voice is left to the judgment words
 below. Exceptions, each small and plain:
@@ -22,8 +24,15 @@ below. Exceptions, each small and plain:
 - a colon clause with no finite verb, after an attributed clause, is the list of what they report
   ("They report two incidents: one on Tuesday and one in Building 2."), and a quoted colon clause is
   the person's quote;
-- "Dr.", "Mr.", "Mrs.", "Ms.", "Prof.", and "p.m." or "a.m." before a weekday, a month, a time, or
-  a lowercase word do not end a sentence (a single initial or "St." can end one, so it is cut).
+- a stop that belongs to an abbreviation does not end a sentence when a lowercase word follows:
+  "Dr.", "Mr.", "Mrs.", "Ms.", "Mx.", "Prof.", lowercase "vs." (before anything), single letters
+  joined by dots ("U.S.", "a.k.a."; not "it.so." or "Jo.He"), "Ph.D.", "e.g.", "i.e.", "etc.",
+  "approx.", a capitalized month ("Jan." to "Dec.", except May, and "Sept."), "Inc.", "Ltd.",
+  "Co.", "Corp.", "Jr.", "Sr.", "No.", "St.", "Ave.",
+  "Mt.", "Dept.", "Gov.", "Sen.", "Rep.", and "p.m." or "a.m." before a weekday, a month, a time,
+  or a lowercase word. The list is explicit: a name ("Bob.") or a single initial before a
+  lowercase word still ends a sentence, and "St." or an initial before a capital is cut too. A
+  stop glued to the next word ends a sentence only before a capital, so "report.pdf" stays whole.
 
 **Judgment words.** As a second net, text outside quotation marks is refused if it holds a word
 that judges or recommends (credible, warrants, deserves, clearly, at fault, "HR should", and the
@@ -43,7 +52,7 @@ _REPORTING_VERBS: Final = (
     r"says?|said|writes?|wrote|describes?|described|reports?|reported|recalls?|recalled"
     r"|remembers?|remembered|thinks?|thought|believes?|believed|adds?|added|explains?|explained"
     r"|mentions?|mentioned|states?|stated|asks?|asked|notes?|noted|recounts?|recounted"
-    r"|wants?|wanted|would like|knows?|feels?|felt|claims?|claimed|alleges?|alleged"
+    r"|wants?|wanted|would like|feels?|felt|claims?|claimed|alleges?|alleged"
     r"|(?:has|have|had) (?:asked|told|reported|said|written|noted)"
     r"|(?:is|are) (?:not sure|unsure)"
 )
@@ -53,6 +62,8 @@ _LEAD_IN: Final = r"(?:(?:in|on|at|during|after|before|since)\s+(?:[^\s,]+\s+){0
 _ATTRIBUTED = re.compile(
     rf"^{_CONNECTOR}{_LEAD_IN}{_CONNECTOR}"
     r"(?:according to (?:the person|the employee|the writer|them)\b"
+    # Not knowing is the person's own uncertainty; knowing is a claim stated as fact.
+    rf"|{_SUBJECT}\s+(?:do|does|did)\s+not\s+know\b"
     rf"|{_SUBJECT}\s+(?:(?:also|then|later|still|first|further|additionally)\s+)?"
     rf"(?:(?:do|does|did)\s+not\s+)?(?:{_REPORTING_VERBS})\b)",
     re.IGNORECASE,
@@ -77,7 +88,10 @@ _QUOTED = re.compile('"[^"]*"|' + _LDQ + "[^" + _RDQ + "]*" + _RDQ)
 # Only titles that never end a sentence keep their period. A single capital ("Building B.") and
 # "St." can end one, so they are cut there: a name with an initial is refused, and the cost is that
 # HR reads the person's own words.
-_TITLE = re.compile(r"\b(?:Dr|Mr|Mrs|Ms|Mx|Prof|vs)\.", re.IGNORECASE)
+# Capitalized only: a lowercase "dr." or "mr." before a lowercase word is just a stop, so lowercase
+# text cannot hide the next sentence behind one. The one lowercase exception, "vs", never ends a
+# sentence (exact case, so "VS." and "Vs." are not covered).
+_TITLE = re.compile(r"\b(?:Dr|Mr|Mrs|Ms|Mx|Prof|vs)\.")
 _DAYS_AND_MONTHS: Final = (
     "monday|tuesday|wednesday|thursday|friday|saturday|sunday|january|february|march|april|may"
     "|june|july|august|september|october|november|december"
@@ -85,9 +99,36 @@ _DAYS_AND_MONTHS: Final = (
 # "p.m." or "a.m." keeps its periods before a weekday, a month, a time, or a lowercase word. The
 # lookahead is case-sensitive: any other capital starts a new sentence.
 _CLOCK = re.compile(rf"\b(?i:[ap]\.m\.)(?=\s+(?:(?i:{_DAYS_AND_MONTHS})\b|\d|[a-z]))")
+# Abbreviations keep their period before a lowercase word. Three kinds: a token of single letters
+# joined by dots ("U.S.", "e.g.", "a.k.a."), or "Ph.D."; "etc." and "approx." (any case); and a
+# short list of
+# capitalized ones (months, "Inc.", "Jr.", "St.", ...). The list is explicit on purpose: a name
+# such as "Bob." before a lowercase word still ends a sentence, so lowercase text can't hide an
+# unattributed claim behind a short capitalized word.
+_CAPITALIZED_ABBREVIATIONS: Final = (
+    "Jan|Feb|Mar|Apr|Jun|Jul|Aug|Sept|Sep|Oct|Nov|Dec|Inc|Ltd|Co|Corp|Jr|Sr|No|St|Ave|Mt|Dept"
+    "|Gov|Sen|Rep"
+)
+# A dotted token: single letters joined by dots, or "Ph.D". Two-letter words joined by a stop
+# ("it.so.", "Jo.He") are ordinary words, so they hide nothing.
+_DOTTED_FORM: Final = r"(?:Ph\.D|[A-Za-z](?:\.[A-Za-z])+)"
+# The internal dots of such a token ("a.k.a", "e.g", "U.S") are hidden when it ends with its own
+# stop.
+_DOTTED = re.compile(rf"\b{_DOTTED_FORM}(?=\.)")
+_ABBREVIATION = re.compile(
+    rf"\b(?:{_DOTTED_FORM}|(?i:etc|approx))\.(?=\s+[a-z])"
+    rf"|\b(?:{_CAPITALIZED_ABBREVIATIONS})\.(?=\s+[a-z])"
+)
 _SENTENCE_END = re.compile(
     "(?<=[.!?])[\"'" + _RDQ + _RSQ + ")\\]]*\\s+(?=[A-Z0-9\"'" + _LDQ + _LSQ + "(\\[])"
+    # A stop, "!" or "?" before a lowercase word ends a sentence too, so lowercase text is cut the
+    # same way; an ellipsis ("wait... then") does not.
+    "|(?<=[^.][.!?])[)\\]]*\\s+(?=[a-z])"
+    # So does a stop inside a closing quote ('"help." sam took...'); "why?" and left" continues.
+    "|(?<=[^.]\\.)[\"'" + _RDQ + _RSQ + ")\\]]+\\s+(?=[a-z])"
     "|\\n+"
+    # A stop glued to the next word ends a sentence only before a capital, so a file name or a
+    # domain ("report.pdf") stays whole.
     "|(?<=[a-z0-9\"'" + _RDQ + _RSQ + ")][.!?])(?=[A-Z])"
 )
 _CLAUSE_BREAK = re.compile(
@@ -128,6 +169,8 @@ def clauses_of(summary: str) -> list[tuple[str, str, bool]]:
     masked = _QUOTED.sub(_hide_quoted, summary)
     masked = _TITLE.sub(_hide, masked)
     masked = _CLOCK.sub(_hide, masked)
+    masked = _ABBREVIATION.sub(_hide, masked)
+    masked = _DOTTED.sub(_hide, masked)
     found: list[tuple[str, str, bool]] = []
     for sentence in _SENTENCE_END.split(masked):
         if not sentence.strip():

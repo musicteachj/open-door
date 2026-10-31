@@ -2,6 +2,7 @@ import { act, screen, waitFor, within } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { CaseStatusOut, EscalationOut, PersonaKey } from '@/api/generated'
 import { MY_CASES, SENT_LINE, WAITING_LIMIT } from '@/app/gallery/fixtures/cases'
+import { announce } from '@/lib/announce'
 import { useChatStore } from '@/features/chat/store'
 import { resetIdentity } from '@/lib/identity'
 import { DANA } from '@/test/assistant-fixtures'
@@ -15,7 +16,7 @@ import {
 } from '@/test/fake-assistant'
 import { CASE_TEXTS, installFakeCases, statusView } from '@/test/fake-cases'
 import { server } from '@/test/msw'
-import { http, HttpResponse } from 'msw'
+import { delay, http, HttpResponse } from 'msw'
 import { renderApp } from '@/test/render-app'
 import { useCaseSlots } from './case-slots'
 
@@ -198,15 +199,39 @@ describe('sending from the panel', () => {
   })
 
   it('shows the limit line when the server says five are waiting, with a link for a person', async () => {
-    const { user } = open('priya', [flagged()], {
+    const { user, fake } = open('priya', [flagged()], {
       openProblem: { status: 409, type: 'case-waiting-limit', detail: 'Five waiting.' },
     })
-    await sendFrom(user)
+    // The server refuses because five are waiting, and the list read again says so.
+    await user.click(await button())
+    await user.click(await screen.findByRole('radio', { name: 'Harassment or discrimination' }))
+    fake.state.mine = Array.from({ length: 5 }, (_, i) => statusView({ id: `w-${i}` }))
+    await user.click(sendButton())
     expect(await screen.findByText(WAITING_LIMIT)).toBeInTheDocument()
     expect(screen.getByRole('link', { name: 'View your cases' })).toHaveAttribute(
       'href',
       '/my-cases',
     )
+  })
+
+  it('offers the button again once the list read after a refusal shows fewer than five waiting', async () => {
+    const { user } = open('priya', [flagged()], {
+      openProblem: { status: 409, type: 'case-waiting-limit', detail: 'Five waiting.' },
+    })
+    await user.click(await button())
+    await user.click(await screen.findByRole('radio', { name: 'Harassment or discrimination' }))
+    // The list read after the refusal is slow, so the refusal alone holds the line meanwhile.
+    server.use(
+      http.get(`${window.location.origin}/api/v1/cases/mine`, async () => {
+        await delay(150)
+        return HttpResponse.json({ items: [] })
+      }),
+    )
+    await user.click(sendButton())
+    expect(await screen.findByText(WAITING_LIMIT)).toBeInTheDocument()
+    // Then the list shows fewer than five: the line goes, and the button is back.
+    expect(await button()).toBeVisible()
+    expect(screen.queryByText(WAITING_LIMIT)).toBeNull()
   })
 
   it('shows the personal-data refusal on the words, and keeps them', async () => {
@@ -217,6 +242,31 @@ describe('sending from the panel', () => {
     expect(await screen.findByText(/Social Security or card number/)).toBeInTheDocument()
     expect(await words()).toHaveValue(QUESTION)
     expect(await words()).toHaveFocus()
+  })
+
+  it('ends a refusal with focus in the words box and the button ready, though the lists are slow to read again', async () => {
+    const { user } = open('priya', [flagged()], {
+      openProblem: { status: 422, type: 'case-personal-data', detail: 'No numbers.' },
+    })
+    await user.click(await button())
+    await user.click(await screen.findByRole('radio', { name: 'Harassment or discrimination' }))
+    // From here the case lists answer only when released.
+    let release!: () => void
+    const held = new Promise<void>((resolve) => (release = resolve))
+    server.use(
+      http.get(`${window.location.origin}/api/v1/cases/mine`, async () => {
+        await held
+        return HttpResponse.json({ items: [] })
+      }),
+    )
+    await user.click(sendButton())
+    expect(await screen.findByText(/Social Security or card number/)).toBeInTheDocument()
+    try {
+      await waitFor(() => expect(screen.getByRole('textbox', { name: 'Your words' })).toHaveFocus())
+      expect(screen.getByRole('button', { name: 'Send to HR' })).toBeEnabled()
+    } finally {
+      release()
+    }
   })
 
   it('says the case was not sent after any other failure, and Try again can send', async () => {
@@ -426,6 +476,75 @@ describe('a form opened again, and texts that did not load', () => {
     expect(screen.queryByRole('button', { name: 'Open a confidential case' })).toBeNull()
     release()
     expect(await button()).toBeVisible()
+  })
+})
+
+describe('coming back to the conversation after a send', () => {
+  const sentLineOf = () => screen.getByText(/^Sent to HR/).closest('output')
+
+  it('shows the sent line and the crisis panel again without moving focus or announcing again', async () => {
+    const { user, router } = open('priya', [flagged()], { crisisText: CRISIS_TEXT })
+    await sendFrom(user)
+    await screen.findByRole('region', { name: 'Reach a person right now' })
+    expect(sentLineOf()).toHaveFocus()
+    expect(announce).toHaveBeenCalledWith('Reach a person right now', 'assertive')
+    vi.mocked(announce).mockClear()
+
+    await router.navigate('/my-cases')
+    await screen.findByRole('heading', { level: 1 })
+    await router.navigate('/ask')
+    await screen.findByRole('region', { name: 'Reach a person right now' })
+    expect(sentLineOf()).not.toHaveFocus()
+    expect(announce).not.toHaveBeenCalled()
+  })
+
+  it('does not pull focus to a limit line shown before', async () => {
+    const { user, router } = open('priya', [flagged()], {
+      openProblem: { status: 409, type: 'case-waiting-limit', detail: 'Five waiting.' },
+      mine: Array.from({ length: 5 }, (_, i) => statusView({ id: `w-${i}`, status: 'new' })),
+    })
+    useCaseSlots.getState().set('t-1', { phase: 'open' })
+    await words()
+    await user.click(await screen.findByRole('radio', { name: 'Workplace safety' }))
+    await user.click(sendButton())
+    const line = await screen.findByText(WAITING_LIMIT)
+    expect(line.closest('output')).toHaveFocus()
+    await router.navigate('/my-cases')
+    await screen.findByRole('heading', { level: 1 })
+    await router.navigate('/ask')
+    expect((await screen.findByText(WAITING_LIMIT)).closest('output')).not.toHaveFocus()
+  })
+
+  it('lets a limit line that replaces a quiet sent line decide about focus for itself', async () => {
+    const { queryClient } = open('priya')
+    useCaseSlots.getState().set('t-1', {
+      phase: 'sent',
+      sent: { sentLine: SENT_LINE, crisisText: null },
+      shown: true,
+    } as never)
+    const sent = await screen.findByText(`${SENT_LINE.lead} ${SENT_LINE.pointer}`)
+    expect(sent.closest('output')).not.toHaveFocus()
+
+    const readAt = queryClient.getQueryState(['/api/v1/cases/mine'])!.dataUpdatedAt
+    act(() => useCaseSlots.getState().set('t-1', { phase: 'limit', readAt }))
+    // A new line that has not been shown before takes focus, though the sent line it replaced did not.
+    expect((await screen.findByText(WAITING_LIMIT)).closest('output')).toHaveFocus()
+  })
+
+  it('does not move focus into a form that is open when the person returns', async () => {
+    const { user, router } = open('priya')
+    await user.click(await button())
+    await words()
+    expect(
+      screen.getByRole('heading', { level: 3, name: 'Open a confidential case' }),
+    ).toHaveFocus()
+    await router.navigate('/my-cases')
+    await screen.findByRole('heading', { level: 1 })
+    await router.navigate('/ask')
+    await words()
+    expect(
+      screen.getByRole('heading', { level: 3, name: 'Open a confidential case' }),
+    ).not.toHaveFocus()
   })
 })
 

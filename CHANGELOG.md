@@ -375,6 +375,9 @@ version (`0.x.y` while the app is being built, `1.0.0` when it is complete).
 
 ### Changed
 
+- **A case lookup index** (Phase 6, phase review). A new partial index on the audit log, only for
+  summary-retry rows, serves the summary retry's throttle lookup without slowing other audit writes.
+
 - **`GET /cases/texts` also returns the HR contacts** (`hrContacts`), so My cases shows them
   without reading the conversation (Phase 6, stage 6). The case timeline orders events
   written at the same moment with `opened` first.
@@ -433,6 +436,27 @@ version (`0.x.y` while the app is being built, `1.0.0` when it is complete).
 
 ### Fixed
 
+- **Phase 6 review fixes, API** (Phase 6, phase review).
+  - HR can no longer retry the summary of a closed case, which spent AI budget on a finished matter.
+  - A blank `ENCRYPTION_KEYRING_FILE=` in `.env` now falls back to the default keyring path instead
+    of stopping the API from starting.
+  - `apply_seeded_summaries.py` refuses a run that lacks any of the four seeded cases, instead of
+    silently dropping that case's approved summary.
+  - Denver HQ is found by the seed's exact location code, in one place, instead of by a
+    case-folded match in two.
+  - The summary job's screening read now names the sandbox like every other case query, and the
+    summary read and the queue share one rule for "a crisis case never shows a written summary".
+  - **The case-summary checks** now cut sentences at a stop before a lowercase word too (and at a
+    stop and a closing quote before one), so an all-lowercase summary is checked sentence by
+    sentence instead of passing as one attributed clause, and a lowercase "dr." no longer hides a
+    break. "Know" and "knows" are no longer reporting verbs, so "They know Sam stole the money." is
+    refused as a claim in the summarizer's own voice. Dotted abbreviations ("U.S.", "e.g.",
+    "Ph.D."), "vs.", and a listed set such as "Jan.", "Inc.", "Jr.", and "St." don't end a
+    sentence, and a stop glued to the next word ends one only before a capital, so "report.pdf"
+    stays whole. Every summary from the case-summary run on 2026-10-30 passes the final checks.
+  - `make eval-live` takes `FIXTURES_DIR=<folder>` so the escalation tuning half can be recorded
+    into a scratch folder, and its case-summary cost note now says about $0.75.
+
 - **The approvals accessibility browser test no longer times out on GitHub's CI** (Phase 6,
   stage 6). The component gallery grew with the case states, and the scan of the "deciding"
   dialog, which closes itself after 4 seconds, held the page's clock and moved it forward a
@@ -475,8 +499,29 @@ version (`0.x.y` while the app is being built, `1.0.0` when it is complete).
   test that a shutdown waits for a turn still starting canceled the request after a fixed 0.3
   seconds, which on a loaded machine could land before the start began, so it failed now and
   then without testing anything. It now cancels once the slow start is under way.
-
-### Security
+- **Phase 6 review fixes, web** (Phase 6, phase review).
+  - After a "five cases waiting" refusal, the chat panel offers "Open a confidential case" again
+    once the case list, read again, shows fewer than five waiting, as My cases already did.
+  - Going to another page and back to the conversation no longer moves focus to the old sent line
+    or form, and no longer announces the crisis panel a second time: they happen once per send.
+  - A refused send (personal data, empty words) leaves focus in the words box and the button
+    reading "Send to HR" at once, instead of waiting for the lists to be read again.
+  - An address that isn't a case ID (`/cases/abc`) shows Not found, not the error page.
+  - On a closed case, "Try again" no longer asks for a new summary (it can still read an existing
+    one again), and a retry the server refuses because the case was just closed doesn't leave the
+    summary waiting.
+  - The directory's private details are read once per visit: a window gaining focus or a
+    reconnect no longer reads them again and adds an audit row no action caused.
+  - Smaller cleanups: one shared calendar-day helper, one constant for when a summary's wait ends,
+    and two corrected names and comments.
+- **The events the person's own session may add to a case are now limited** (Phase 6, phase review,
+  migration 0015). Code running as the person could add a `summary_failed` or a second `opened`
+  event to their case days later, and HR's timeline would show it. Now every such event must come
+  in the case's first 10 minutes, and a person's session may add at most one `opened` and one
+  summary event per case (HR's retries on other people's cases are not limited, but HR on their own
+  case is held to the same limits as anyone). Each event row records whether HR wrote it on someone
+  else's case (`written_by_hr`) so the database can tell, since the person cannot read the timeline
+  to count it.
 
 - **Audited reads need the CSRF header** (Phase 6, stage 3). Reading a person's private details,
   a case's summary, or a person's words now requires the `X-CSRF-Token` header, which no link,

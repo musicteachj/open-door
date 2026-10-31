@@ -21,7 +21,7 @@ import { PageSandboxIndicator } from '@/features/shell/page-sandbox-indicator'
 import { useShellToast } from '@/features/shell/toast-store'
 import { ApiError } from '@/lib/api-fetch'
 import { invalidateCases } from './invalidate'
-import { useCaseDetail } from './use-case-reads'
+import { isNoSuchCase, useCaseDetail } from './use-case-reads'
 
 // A case at /cases/:caseId, from docs/design/screens/12-hr-cases, for HR. The person's directory
 // card, the AI summary, the words (hidden until HR opens them), the status actions, and the
@@ -51,7 +51,7 @@ function CaseDetail({ caseId, me }: { caseId: string; me: SignedInMe }) {
   const returnTo = useRef<FocusTarget>('start')
   const change = useChangeCaseStatus()
 
-  if (reads.query.error instanceof ApiError && reads.query.error.status === 404) {
+  if (isNoSuchCase(reads.query.error)) {
     return <NotFound />
   }
 
@@ -197,6 +197,7 @@ function Body({
               model={summary.model}
               timeZone={timeZone}
               retrying={summary.retrying}
+              canRetry={summary.canRetry}
               onRetry={() => void summary.retry()}
             />
           )}
