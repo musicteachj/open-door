@@ -10,6 +10,23 @@ version (`0.x.y` while the app is being built, `1.0.0` when it is complete).
 
 ## [Unreleased]
 
+### Added
+
+- **The Phase 7 screens** (Phase 7, design). Screen 13 (the AI Ops console: the tiles, the turn
+  list with its date-only row for a flagged turn, the trace panel, and the eval scoreboard) and
+  screen 15 (the guided tour: the coach marks, the persona switches, leaving and resuming, and the
+  end card) are designed in Claude Design and approved, with each screen's build decisions and
+  acceptance criteria in its notes. The design system gains the console and tour components; no
+  new tokens.
+
+### Changed
+
+- **"How it's built" is dropped** (Phase 7, design). The public page planned for Phase 7 would
+  have repeated the README, which carries the rules, the stack, and (from Stage 2) the
+  scoreboard, and the owner's site links the code. The spec, the plan, the roadmap, the brief, and
+  ADR 0017 record the change; the landing's link and the nav item are removed in Stage 6 instead
+  of turned on, and the tour ends on the console.
+
 ## [0.6.0] - 2026-10-31
 
 Phase 6: cases and escalation. When the safety check calls a message sensitive or a crisis, the

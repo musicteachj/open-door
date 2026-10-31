@@ -194,3 +194,43 @@ New icons: `file-search` (in review), `eye-off`, `shield` (the crisis fact), and
 read-recording line). Screens 11 and 12's notes have the build decisions that change what these
 show.
 
+
+## Console components
+
+Added by the design system for the AI Ops console (screen 13, Phase 7). The source is in
+[`system/components/console/`](system/components/console/), drawn in
+[`system/AI Ops Console.dc.html`](<system/AI Ops Console.dc.html>). The scoreboard is also a
+self-contained component in [`system/Scoreboard.dc.html`](system/Scoreboard.dc.html).
+
+| Component | Variants | States | Designed |
+|---|---|---|---|
+| Console tile | figure, figure with a target, counts list, nearest sections | default, small sample, above target (neutral), no turns yet, loading | [x] |
+| Turn table | timed row, flagged row | default, hover, focus, selected, loading, empty | [x] |
+| Safety check label | Ordinary, with the "Possible prompt injection" tag | default (not interactive) | [x] |
+| Status badge (outcome values) | Answered, Said the handbook doesn't cover it, Refused by the model, Stopped by the person, Failed, Spending cap reached, Safety check unavailable | default (not interactive) | [x] |
+| Trace panel | answered, card, injection, refused, fallback, failed tool | open | [x] |
+| Scoreboard | set row with figures, placeholder set row, history of full runs | default (not interactive) | [x] |
+
+New icons: `shield-check` (the safety check), `shield-off` (Safety check unavailable),
+`circle-stop` (Stopped by the person), `gauge` (Spending cap reached), and `search-x` (Said the
+handbook doesn't cover it). No new tokens. Screen 13's notes have the build decisions that change
+what these show.
+
+## Tour components
+
+Added by the design system for the guided tour (screen 15, Phase 7). The source is in
+[`system/components/tour/`](system/components/tour/), drawn in
+[`system/Guided Tour.dc.html`](<system/Guided Tour.dc.html>).
+
+| Component | Variants | States | Designed |
+|---|---|---|---|
+| Coach mark | with one chip, with two chips, no chips; pointer below, above, or beside | before the result (Skip), after it (Next), missing line, step 1 without Back | [x] |
+| Tour chip | | default, hover, focus, sent | [x] |
+| Target ring | | default (not interactive) | [x] |
+| Tour end card | | default | [x] |
+| Tour menu items (in the persona menu) | take the tour; resume with the step and start over | default, hover, focus | [x] |
+| Start the tour dialog | | open, Cancel focused | [x] |
+| Landing tour button | | default, starting | [x] |
+
+The persona menu gains an optional slot between the personas and "Sign out" for the tour items.
+No new tokens or icons. Screen 15's notes have the build decisions that change what these show.

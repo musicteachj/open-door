@@ -243,9 +243,8 @@ the design never needs a temporary version.
     and location only, a trace panel (the safety check's verdict, tools, sections retrieved and
     cited, the card offered, tokens, cost, timings), a redacted row for a flagged turn, and the
     eval scoreboard with its history.
-14. **"How it's built"** (public). The architecture diagram, the seven rules the AI never breaks,
-    the scoreboard, the model decision, the standards followed, design notes, and what it is not.
-    No code links of any kind.
+14. **"How it's built"** (dropped on 2026-10-31). The README carries the rules, the stack, and
+    the scoreboard, and the owner's site links the code. No code links of any kind in the app.
 15. **Guided tour.** The landing's "Take the 2-minute tour", coach marks with one-click prompts
     across the personas, and the end card.
 
@@ -294,7 +293,8 @@ Claude Design proposed enhancements after the Phase 2 screens. These are settled
 - **New screens, in their phases:**
   - in Phase 5, team coverage beside a manager's approval: context only, never advice;
   - in Phase 7, the console's report of questions the handbook couldn't answer;
-  - in Phase 7, the "design notes" idea, folded into the tour and the "How it's built" page.
+  - in Phase 7, the "design notes" idea, folded into the tour (the "How it's built" page it was
+    also meant for was dropped).
 - **Keyboard shortcuts** (`/` to focus the composer, ⌘K to jump to a page) are backlogged for
   Phase 8.
 
@@ -331,7 +331,7 @@ design of screens 11 and 12:
 ## Decisions from the Phase 7 planning (2026-10-31)
 
 The [Phase 7 spec](../specs/2026-10-31-phase-7-ai-ops-reviewer-model.md) has the detail. For the
-design of screens 13 to 15:
+design of screens 13 and 15 (screen 14 was dropped):
 
 - **The console never says who asked or what they wrote.** A turn shows "Employee · Oakland, CA",
   never a name, and no question or answer text. A turn the safety check flagged is a row with only
@@ -339,11 +339,11 @@ design of screens 13 to 15:
   It opens no trace.
 - **Every figure shows its sample size,** and "Small sample" under 20 turns. A figure above its
   target (time to first token 3 s, safety check 800 ms) is a neutral fact, not an alert.
-- **The scoreboard is one component** on the console and on "How it's built": each set's headline
+- **The scoreboard is one component** on the console: each set's headline
   figure with its lowest trial, the full run's history, and the plain lines that CI replays
   recordings (it doesn't test the model) and that the sets are small.
-- **"How it's built" is public and links nowhere outside the app:** no code, GitHub, or document
-  links. The owner's own website links the code.
+- **The app links nowhere outside itself:** no code, GitHub, or document links. The owner's own
+  website links the code. ("How it's built" was dropped on 2026-10-31.)
 - **The tour starts a new sandbox** and walks ten steps across Priya, Mateo, Marcus, and Dana. A
   coach mark points at a part of the page, with the step count, the text, a prompt chip, Back,
   Next, Skip, and Leave. If the live answer doesn't show what a step expected (a card, a panel),

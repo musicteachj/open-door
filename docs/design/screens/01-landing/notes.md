@@ -12,6 +12,9 @@ rendered from that file.
 Explain the product in a few seconds to a recruiter or hiring manager, then get them into a
 private sandbox as one of the four personas with a single click.
 
+**"How it's built" was dropped in Phase 7 (2026-10-31).** The screenshots below still show it;
+the build leaves it out.
+
 ## Layout
 
 One 1168 px column on the porcelain background, top to bottom:

@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="styles.css">
+<style>body{margin:0;background:var(--surface-raised);font-family:'Instrument Sans',system-ui,sans-serif;-webkit-font-smoothing:antialiased}a{color:#59256A}a:hover{color:#461B54}</style>
+</helmet>
+<section aria-labelledby="{{ uid }}-h" data-scoreboard="true" style="font-family:var(--font-sans);color:var(--ink);min-width:0">
+  <h2 id="{{ uid }}-h" style="margin:0;font-size:var(--text-h2);line-height:var(--leading-h2);font-weight:600">Eval scoreboard</h2>
+  <p style="margin:6px 0 0;font-size:14px;line-height:22px;color:var(--ink-muted);text-wrap:pretty">Assistant <code style="font-family:var(--font-mono);font-size:13px;color:var(--ink)">claude-opus-5-5</code> · safety check <code style="font-family:var(--font-mono);font-size:13px;color:var(--ink)">claude-haiku-5-5</code> · judge <code style="font-family:var(--font-mono);font-size:13px;color:var(--ink)">claude-sonnet-5-5</code></p>
+  <p style="margin:2px 0 0;font-size:14px;line-height:22px;color:var(--ink-muted)">Three trials per set unless noted.</p>
+
+  <div style="position:relative;margin-top:20px;overflow-x:auto;overflow-y:hidden">
+  <table style="width:100%;min-width:640px;border-collapse:collapse;table-layout:fixed;font-variant-numeric:tabular-nums">
+    <caption style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)">Eval sets</caption>
+    <colgroup><col style="width:22%"><col style="width:20%"><col style="width:16%"><col style="width:42%"></colgroup>
+    <thead><tr style="border-bottom:1px solid var(--border)">
+      <th scope="col" style="padding:10px 12px;text-align:left;font-size:13px;line-height:20px;font-weight:400;color:var(--ink-muted)">Set</th>
+      <th scope="col" style="padding:10px 12px;text-align:left;font-size:13px;line-height:20px;font-weight:400;color:var(--ink-muted)">Result</th>
+      <th scope="col" style="padding:10px 12px;text-align:left;font-size:13px;line-height:20px;font-weight:400;color:var(--ink-muted)">Lowest trial</th>
+      <th scope="col" style="padding:10px 12px;text-align:left;font-size:13px;line-height:20px;font-weight:400;color:var(--ink-muted)">Other figures</th>
+    </tr></thead>
+    <tbody>
+      <tr style="border-bottom:1px solid var(--border-subtle);vertical-align:top">
+        <th scope="row" style="padding:16px 12px;text-align:left;font-weight:400"><span style="display:block;font-size:15px;line-height:22px;font-weight:600">Retrieval</span><span style="display:block;font-size:13px;line-height:20px;color:var(--ink-muted)">Handbook 2026.11.1</span></th>
+        <td style="padding:16px 12px"><span style="display:block;font-size:24px;line-height:30px;font-weight:600;letter-spacing:-0.01em">100%</span><span style="display:block;font-size:13px;line-height:20px;color:var(--ink-muted)">Hit rate at 5</span></td>
+        <td style="padding:16px 12px;font-size:14px;line-height:22px;color:var(--ink-muted);text-wrap:pretty">No trials: retrieval is exact.</td>
+        <td style="padding:16px 12px;font-size:14px;line-height:22px;text-wrap:pretty">Every negative passed.</td>
+      </tr>
+      <tr style="border-bottom:1px solid var(--border-subtle);vertical-align:top">
+        <th scope="row" style="padding:16px 12px;text-align:left;font-weight:400"><span style="display:block;font-size:15px;line-height:22px;font-weight:600">Policy Q&amp;A</span><span style="display:block;font-size:13px;line-height:20px;color:var(--ink-muted)">Full run, Oct 29</span></th>
+        <td style="padding:16px 12px"><span style="display:block;font-size:24px;line-height:30px;font-weight:600;letter-spacing:-0.01em">97%</span><span style="display:block;font-size:13px;line-height:20px;color:var(--ink-muted)">Program checks</span></td>
+        <td style="padding:16px 12px;font-size:15px;line-height:30px">96%</td>
+        <td style="padding:16px 12px;font-size:14px;line-height:22px;text-wrap:pretty">Unanswerable 93%, lowest 90%</td>
+      </tr>
+      <tr style="border-bottom:1px solid var(--border-subtle);vertical-align:top">
+        <th scope="row" style="padding:16px 12px;text-align:left;font-weight:400"><span style="display:block;font-size:15px;line-height:22px;font-weight:600">Answer quality</span><span style="display:block;font-size:13px;line-height:20px;color:var(--ink-muted)">Oct 29</span></th>
+        <td style="padding:16px 12px"><span style="display:block;font-size:24px;line-height:30px;font-weight:600;letter-spacing:-0.01em">68%</span><span style="display:block;font-size:13px;line-height:20px;color:var(--ink-muted)">Judge pass rate</span></td>
+        <td style="padding:16px 12px;font-size:15px;line-height:30px">65%</td>
+        <td style="padding:16px 12px;font-size:14px;line-height:22px;text-wrap:pretty"><span style="display:block">Target 85%</span><span style="display:block">18 uncited claims</span><span style="display:block">Judge agreement with the hand grades 89.7%</span></td>
+      </tr>
+      <tr style="border-bottom:1px solid var(--border-subtle);vertical-align:top">
+        <th scope="row" style="padding:16px 12px;text-align:left;font-weight:400"><span style="display:block;font-size:15px;line-height:22px;font-weight:600">Red team</span><span style="display:block;font-size:13px;line-height:20px;color:var(--ink-muted)">Oct 29</span></th>
+        <td style="padding:16px 12px"><span style="display:block;font-size:24px;line-height:30px;font-weight:600;letter-spacing:-0.01em">100%</span><span style="display:block;font-size:13px;line-height:20px;color:var(--ink-muted)">In every trial</span></td>
+        <td style="padding:16px 12px;font-size:15px;line-height:30px">100%</td>
+        <td style="padding:16px 12px;font-size:14px;line-height:22px;text-wrap:pretty">All six groups at 100%: actions, cases, injection, private details, prompt extraction, routing.</td>
+      </tr>
+      <tr style="border-bottom:1px solid var(--border-subtle);vertical-align:top">
+        <th scope="row" style="padding:16px 12px;text-align:left;font-weight:400"><span style="display:block;font-size:15px;line-height:22px;font-weight:600">Actions</span><span style="display:block;font-size:13px;line-height:20px;color:var(--ink-muted)">Oct 29</span></th>
+        <td style="padding:16px 12px"><span style="display:block;font-size:24px;line-height:30px;font-weight:600;letter-spacing:-0.01em">99%</span><span style="display:block;font-size:13px;line-height:20px;color:var(--ink-muted)">Pass rate</span></td>
+        <td style="padding:16px 12px;font-size:15px;line-height:30px">97%</td>
+        <td style="padding:16px 12px;font-size:14px;line-height:22px;text-wrap:pretty">Numbers match the engine 100%</td>
+      </tr>
+      <tr style="border-bottom:1px solid var(--border-subtle);vertical-align:top">
+        <th scope="row" style="padding:16px 12px;text-align:left;font-weight:400"><span style="display:block;font-size:15px;line-height:22px;font-weight:600">Fairness</span></th>
+        <td colSpan="3" style="padding:16px 12px;font-size:14px;line-height:22px;color:var(--ink-muted)">New in Phase 7. Not measured yet.</td>
+      </tr>
+      <tr style="border-bottom:1px solid var(--border-subtle);vertical-align:top">
+        <th scope="row" style="padding:16px 12px;text-align:left;font-weight:400"><span style="display:block;font-size:15px;line-height:22px;font-weight:600">Escalation</span><span style="display:block;font-size:13px;line-height:20px;color:var(--ink-muted)">Oct 27</span></th>
+        <td style="padding:16px 12px"><span style="display:block;font-size:24px;line-height:30px;font-weight:600;letter-spacing:-0.01em">100%</span><span style="display:block;font-size:13px;line-height:20px;color:var(--ink-muted)">Crisis recall</span></td>
+        <td style="padding:16px 12px;font-size:15px;line-height:30px">100%</td>
+        <td style="padding:16px 12px;font-size:14px;line-height:22px;text-wrap:pretty"><span style="display:block">Sensitive recall 100%</span><span style="display:block">Ordinary questions offered no case 100%</span></td>
+      </tr>
+      <tr style="border-bottom:1px solid var(--border-subtle);vertical-align:top">
+        <th scope="row" style="padding:16px 12px;text-align:left;font-weight:400"><span style="display:block;font-size:15px;line-height:22px;font-weight:600">Case summary</span><span style="display:block;font-size:13px;line-height:20px;color:var(--ink-muted)">Oct 30</span></th>
+        <td style="padding:16px 12px"><span style="display:block;font-size:24px;line-height:30px;font-weight:600;letter-spacing:-0.01em">22 of 22</span><span style="display:block;font-size:13px;line-height:20px;color:var(--ink-muted)">Passed every check</span></td>
+        <td style="padding:16px 12px;font-size:15px;line-height:30px">22 of 22</td>
+        <td style="padding:16px 12px;font-size:14px;line-height:22px;text-wrap:pretty">Judge: 22 of 22 faithful and neutral.</td>
+      </tr>
+    </tbody>
+  </table>
+  </div>
+
+  <h3 id="{{ uid }}-hist" style="margin:40px 0 0;font-size:15px;line-height:22px;font-weight:600">History of full runs</h3>
+  <div style="position:relative;margin-top:12px;overflow-x:auto;overflow-y:hidden">
+  <table aria-labelledby="{{ uid }}-hist" style="width:100%;min-width:640px;border-collapse:collapse;table-layout:fixed;font-size:14px;line-height:20px;font-variant-numeric:tabular-nums">
+    <colgroup><col style="width:22%"><col style="width:11%"><col style="width:14%"><col style="width:12%"><col style="width:11%"><col style="width:11%"><col style="width:19%"></colgroup>
+    <thead><tr style="border-bottom:1px solid var(--border)">
+      <th scope="col" style="padding:10px 12px;text-align:left;font-size:13px;font-weight:400;color:var(--ink-muted)">Date</th>
+      <th scope="col" style="padding:10px 12px;text-align:right;font-size:13px;font-weight:400;color:var(--ink-muted)">Q&amp;A</th>
+      <th scope="col" style="padding:10px 12px;text-align:right;font-size:13px;font-weight:400;color:var(--ink-muted)">Unanswerable</th>
+      <th scope="col" style="padding:10px 12px;text-align:right;font-size:13px;font-weight:400;color:var(--ink-muted)">Red team</th>
+      <th scope="col" style="padding:10px 12px;text-align:right;font-size:13px;font-weight:400;color:var(--ink-muted)">Actions</th>
+      <th scope="col" style="padding:10px 12px;text-align:right;font-size:13px;font-weight:400;color:var(--ink-muted)">Judge</th>
+      <th scope="col" style="padding:10px 12px;text-align:right;font-size:13px;font-weight:400;color:var(--ink-muted)">Cost</th>
+    </tr></thead>
+    <tbody>
+      <tr style="border-bottom:1px solid var(--border-subtle)"><th scope="row" style="padding:12px;text-align:left;font-weight:400;white-space:nowrap">Thu, Oct 29, 8:23 AM</th><td style="padding:12px;text-align:right">97%</td><td style="padding:12px;text-align:right">93%</td><td style="padding:12px;text-align:right">100%</td><td style="padding:12px;text-align:right">99%</td><td style="padding:12px;text-align:right">68%</td><td style="padding:12px;text-align:right">$10.93</td></tr>
+      <tr style="border-bottom:1px solid var(--border-subtle)"><th scope="row" style="padding:12px;text-align:left;font-weight:400;white-space:nowrap">Sun, Oct 25, 10:04 AM</th><td style="padding:12px;text-align:right">100%</td><td style="padding:12px;text-align:right">100%</td><td style="padding:12px;text-align:right">97%</td><td style="padding:12px;text-align:right">96%</td><td style="padding:12px;text-align:right">72%</td><td style="padding:12px;text-align:right">$10.39</td></tr>
+      <tr style="border-bottom:1px solid var(--border-subtle)"><th scope="row" style="padding:12px;text-align:left;font-weight:400;white-space:nowrap">Sun, Oct 25, 8:43 AM</th><td style="padding:12px;text-align:right">99%</td><td style="padding:12px;text-align:right">100%</td><td style="padding:12px;text-align:right">96%</td><td style="padding:12px;text-align:right">99%</td><td style="padding:12px;text-align:right">67%</td><td style="padding:12px;text-align:right">$10.31</td></tr>
+      <tr style="border-bottom:1px solid var(--border-subtle)"><th scope="row" style="padding:12px;text-align:left;font-weight:400;white-space:nowrap">Mon, Oct 19, 9:22 AM</th><td style="padding:12px;text-align:right">100%</td><td style="padding:12px;text-align:right">100%</td><td style="padding:12px;text-align:right">100%</td><td style="padding:12px;text-align:right;color:var(--ink-muted)"><span aria-hidden="true">–</span><span style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)">Not in the set</span></td><td style="padding:12px;text-align:right">74%</td><td style="padding:12px;text-align:right">$8.02</td></tr>
+      <tr style="border-bottom:1px solid var(--border-subtle)"><th scope="row" style="padding:12px;text-align:left;font-weight:400;white-space:nowrap">Sun, Oct 18, 11:21 AM</th><td style="padding:12px;text-align:right">98%</td><td style="padding:12px;text-align:right">97%</td><td style="padding:12px;text-align:right">98%</td><td style="padding:12px;text-align:right;color:var(--ink-muted)"><span aria-hidden="true">–</span><span style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)">Not in the set</span></td><td style="padding:12px;text-align:right">67%</td><td style="padding:12px;text-align:right">$6.78</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <p style="margin:10px 0 0;padding:0 12px;font-size:13px;line-height:20px;color:var(--ink-muted)">Actions joined the full set on Oct 25.</p>
+
+  <div style="display:flex;flex-direction:column;gap:6px;max-width:760px;margin-top:28px;padding-top:16px;border-top:1px solid var(--border-subtle)">
+    <p style="margin:0;font-size:14px;line-height:22px;color:var(--ink);text-wrap:pretty">These figures come from recorded eval runs. CI replays the recordings on every change, so it checks the app's handling, not the model.</p>
+    <p style="margin:0;font-size:14px;line-height:22px;color:var(--ink);text-wrap:pretty">The sets are small (166 items in the full set), so a single item can move a figure by more than a point.</p>
+  </div>
+</section>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:1080,&quot;height&quot;:1100},&quot;uid&quot;:{&quot;editor&quot;:&quot;text&quot;,&quot;default&quot;:&quot;sb&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Ids&quot;}}">class Component extends DCLogic {
+  renderVals() { return { uid: this.props.uid ?? 'sb' }; }
+}</script>
+</body>
+</html>

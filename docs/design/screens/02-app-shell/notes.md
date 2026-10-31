@@ -10,6 +10,9 @@ rendered from that file. The shell's regions (sidebar, content sheet, right rail
 [`../03-assistant-home/notes.md`](../03-assistant-home/notes.md). This screen adds the persona
 menu, switching, the navigation for each persona, and the expiry banner.
 
+**"How it's built" was dropped in Phase 7 (2026-10-31).** The screenshots below still show it;
+the build leaves it out.
+
 ## Purpose
 
 Let a visitor move around the app, see which persona they are exploring as, switch to another one,
