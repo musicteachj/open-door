@@ -159,7 +159,7 @@ has its test in the task named.
 
 - **Before Stage 3's Task 24** (the first live run):
   1. an Anthropic API key in `apps/api/.env` as `ANTHROPIC_API_KEY`
-  2. a $25 monthly spend limit in the Claude Console (Settings, Billing, "Spend limits")
+  2. a spend limit in the Claude Console (Settings, Billing, "Spend limits")
   3. Voyage is already set up from Phase 3
 - **In Stage 2's PR:** the owner edits and approves the crisis text. In Stage 3, the owner grades
   the hand-grade file (about 45–60 minutes).
@@ -1440,7 +1440,7 @@ the installed `anthropic` 1.13.0.
   reservation, by up to one attempt at the fallback model's price. Reserving for two attempts
   on every call would halve how many questions fit under the sandbox cap, for a safety
   decline that HR questions should almost never trigger. The settle records the real cost, and
-  the Console's monthly limit is the hard backstop.
+  the Console's spend limit is the hard backstop.
 - **Dismissed, with the reason:**
   - **"Sonnet 5.5 cache reads cost $0.20."** The pricing page says $0.10, as pinned.
   - **"Keeping the declined model's text before a fallback duplicates the answer."** The API
@@ -1882,7 +1882,7 @@ and mutation-proved. Only Batch D called Anthropic or Voyage.
 - **Offline replay covers the smoke set** until Stage 6's full run records the rest; then
   `make eval-offline` and CI switch to `--set full`.
 
-**The live runs (Task 24), with the owner, 2026-10-16.** The owner confirmed the $25 monthly
+**The live runs (Task 24), with the owner, 2026-10-16.** The owner confirmed the spend
 limit in the Claude Console and allowed `make eval-live` in the permission settings.
 
 | Run | Cost | Result |
@@ -1944,7 +1944,7 @@ the design:
 - **Dismissed, with the reason:** the double fingerprint in the observing wrapper (every round;
   negligible beside a model call, and it keeps the observer independent of what it wraps); "the
   live run's spend is removed from the daily cap" (round 8; deliberate: the daily cap guards the
-  demo's day, evals run only against the dev database, and the Console's monthly limit is the
+  demo's day, evals run only against the dev database, and the Console's spend limit is the
   backstop for eval spend).
 - **Recorded as low, not fixed:** the judge reads each cited section's text back out of the
   flattened tool-result text (it holds for today's handbook; backlogged); `_preflight` seeds and

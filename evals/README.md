@@ -286,8 +286,7 @@ runner checks that the judge's most expensive possible answer (8,000 tokens at S
 price, plus its input) still fits; if not, the answer is left unjudged, listed as "not judged",
 and the run is partial.
 
-The development AI budget is $25 a month across Anthropic and Voyage (see `CLAUDE.md`), so size the
-runs to fit: about four smoke runs, the effort comparison, and one full run.
+Every live run needs the owner's OK, with its estimate and its cap (see `CLAUDE.md`).
 
 ### Re-recording
 

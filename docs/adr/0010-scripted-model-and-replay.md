@@ -4,7 +4,7 @@ Status: Accepted · Date: 2026-10-14
 
 ## Context
 
-No paid AI call may run on a push or a pull request, and the development budget is $25 a month.
+No paid AI call may run on a push or a pull request, and every paid run needs the owner's OK.
 The browser tests, UI work, and the reverse-proxy check need answers that stream realistically,
 cost nothing, and never change, including slow, failing, and refused answers. The offline evals
 need to replay what the real model actually did, so the graders and the plumbing are tested on

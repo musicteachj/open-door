@@ -175,8 +175,8 @@ the owner's explicit agreement first.
 - **Model IDs are pinned.** A new model is adopted only after an eval comparison.
 - **No paid AI calls on push or PR.** CI replays recorded fixtures. Live evals are a manual
   workflow with a budget cap.
-- **The development AI budget is $25/month**, across Anthropic and Voyage. Use the fake transport
-  for UI and most development work. Size live eval runs to fit.
+- **Every paid run needs the owner's OK,** with its estimate and its cap. Use the fake transport
+  for UI and most development work.
 - **Tool results that contain user-written text are untrusted data.** Turns that process them get no
   proposal tools.
 
@@ -201,8 +201,9 @@ The handbook is fictional company policy and is labeled as demo content, not leg
 - **`docs/design/` is the visual source of truth.** The owner designs in Claude Design and hands off
   screenshots plus `notes.md` guidelines. Where they disagree with any palette in the plan, the
   design wins.
-- **A phase's UI stage does not start until its screens are in `docs/design/`.** Backend stages do
-  not wait.
+- **A phase with new screens is designed right after its planning.** The planning writes the
+  Claude Design prompts, the owner designs and approves the screens, and they are synced into
+  `docs/design/`. No build stage starts until then, backend stages included.
 - **Use theme tokens, never raw hex, in components.**
 
 ---

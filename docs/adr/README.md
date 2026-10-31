@@ -21,6 +21,8 @@ records are never rewritten.
 | [0013](0013-proposals-in-the-turn.md) | A proposal ends its turn normally, and its outcome reaches the next turn's context | Accepted | 2026-10-20 |
 | [0014](0014-cases-opened-by-the-person.md) | A case is opened by the person from the HR panel, not proposed by the model | Accepted | 2026-10-26 |
 | [0015](0015-envelope-encryption.md) | Case text and conversation text are encrypted in the API, with a data key per record | Accepted | 2026-10-26 |
+| [0016](0016-console-rows-redacted-at-write.md) | The console reads its own rows, redacted when written, with no person ID | Accepted | 2026-10-31 |
+| [0017](0017-scoreboards-from-committed-boards.md) | Scoreboards are generated from committed run boards | Accepted | 2026-10-31 |
 
 New records copy this shape:
 

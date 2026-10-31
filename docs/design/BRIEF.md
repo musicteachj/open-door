@@ -237,12 +237,17 @@ the design never needs a temporary version.
     detail shows the AI summary with the person's own words hidden until HR reveals them.
 
 **Phase 7:**
-13. **AI Ops console.** A turn list, trace detail (guard verdict, tools, passages, citations,
-    tokens, cost, latency), metric tiles (time to first token, cost per conversation, escalation
-    rate), and the eval scoreboard.
-14. **"How it's built".** Architecture diagram, the seven rules the AI never breaks, the live eval
-    scoreboard, the standards followed, and a "request code access" link.
-15. **Guided-tour overlay.** Step-by-step coach marks with one-click prompts.
+13. **AI Ops console** (HR only). Metric tiles (time to first token, safety check time, cost per
+    answered question, escalation rate, refusals and fallbacks, "said the handbook doesn't cover
+    it", cards confirmed, possible prompt injections), a turn list that names the asker by role
+    and location only, a trace panel (the safety check's verdict, tools, sections retrieved and
+    cited, the card offered, tokens, cost, timings), a redacted row for a flagged turn, and the
+    eval scoreboard with its history.
+14. **"How it's built"** (public). The architecture diagram, the seven rules the AI never breaks,
+    the scoreboard, the model decision, the standards followed, design notes, and what it is not.
+    No code links of any kind.
+15. **Guided tour.** The landing's "Take the 2-minute tour", coach marks with one-click prompts
+    across the personas, and the end card.
 
 **Brand assets (any time):** logo (an open-door motif is an obvious start, but keep it subtle),
 favicon, and a social-share image.
@@ -320,6 +325,29 @@ design of screens 11 and 12:
   The status actions stay disabled until HR has read the words.
 - **Confidential without being scary,** as above: a lock and a quiet tint, never an alert style.
   An overdue reply and the crisis fact are facts in neutral styling, not warnings.
+
+---
+
+## Decisions from the Phase 7 planning (2026-10-31)
+
+The [Phase 7 spec](../specs/2026-10-31-phase-7-ai-ops-reviewer-model.md) has the detail. For the
+design of screens 13 to 15:
+
+- **The console never says who asked or what they wrote.** A turn shows "Employee · Oakland, CA",
+  never a name, and no question or answer text. A turn the safety check flagged is a row with only
+  its date and its counts: "Flagged by the safety check. Details are hidden to protect the person."
+  It opens no trace.
+- **Every figure shows its sample size,** and "Small sample" under 20 turns. A figure above its
+  target (time to first token 3 s, safety check 800 ms) is a neutral fact, not an alert.
+- **The scoreboard is one component** on the console and on "How it's built": each set's headline
+  figure with its lowest trial, the full run's history, and the plain lines that CI replays
+  recordings (it doesn't test the model) and that the sets are small.
+- **"How it's built" is public and links nowhere outside the app:** no code, GitHub, or document
+  links. The owner's own website links the code.
+- **The tour starts a new sandbox** and walks ten steps across Priya, Mateo, Marcus, and Dana. A
+  coach mark points at a part of the page, with the step count, the text, a prompt chip, Back,
+  Next, Skip, and Leave. If the live answer doesn't show what a step expected (a card, a panel),
+  the step says what would have appeared and still offers Next.
 
 ---
 

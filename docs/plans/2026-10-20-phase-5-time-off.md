@@ -131,7 +131,7 @@ skimmed.
 - Stages 1 to 3 branch off `dev` in turn, each after the last merges. None changes what the model
   sees, so CI's offline replay stays green.
 - **Stage 4** is the only stage that changes the tools, the prompt, or the handbook text, so it's
-  the only one that needs a paid run, and it can't merge until its full run (early November) is
+  the only one that needs a paid run, and it can't merge until its full run is
   committed.
 - **Stage 5** waits for the Phase 5 screens in `docs/design/screens/`, branches off `dev` after
   Stage 3 merges (it needs only the generated client), and can run while Stage 4 waits for its
@@ -172,15 +172,15 @@ only for a stubborn bug, then back.
 - Stages 1 to 3 make no paid calls and don't touch the prompt, the tools, the guard, the
   retrieval, or the handbook text.
 - Stage 4 tries the prompt's wording with one or two smoke runs (about $0.80 each) and repeats the
-  judge agreement run (about $0.40), which fit October's remaining budget. Its full run (about $9
-  to $11, cap $16) waits for November's budget, and the PR waits for the full run.
+  judge agreement run (about $0.40), each with the owner's OK. Its full run (about $9 to $11, cap
+  $16) also needs the owner's OK, and the PR waits for the full run.
 
 ## Prerequisites (owner)
 
 - **Record the commit `dev` is at after this planning PR merges,** before Stage 1 branches. Task
   38's phase review diffs against it.
 - **In Stage 4's PR:** the owner approves the handbook additions (the wording is in the spec), and
-  OKs each paid run: the smokes, the agreement run, and the November full run.
+  OKs each paid run: the smokes, the agreement run, and the full run.
 - **Before Stage 5:** done. The Phase 5 screens (08 to 10) were designed and approved on 2026-10-20,
   and synced into `docs/design/screens/` in their own docs PR.
 - **Docker Desktop is running,** and `make setup` and `make db` have run.
@@ -783,7 +783,7 @@ the other eval changes, and a committed full run. The PR waits for the full run.
       $0.80, cap $2), and the judge agreement run (about $0.40, cap $1). Record each in this
       plan's notes.
 
-### Task 27: The full run (November, with the owner)
+### Task 27: The full run (with the owner)
 
 - [ ] With the owner's OK: `make eval-live SET=full FRESH=1 PRUNE=1 YES=1` (cap $16). It must
       pass `--check`; the action set at 95% or more over three trials, numbers-match at 100% in
@@ -1397,11 +1397,10 @@ batches: A (Tasks 20 and 21), B (Tasks 22 and 23), and C (Tasks 24 and 25, plus 
 review; Batches A and B also had an Opus 5.5 security reviewer, briefed with the invariants and
 proving each finding with a small experiment, who re-checked the fixes. No review found anything
 high. The API has 4,345 tests (3,859 before); the browser tests are unchanged at 354. **Nothing
-is committed.** Batches A to C made no paid Anthropic call; Batch D's runs are below. CI's offline evals fail until the November
+is committed.** Batches A to C made no paid Anthropic call; Batch D's runs are below. CI's offline evals fail until the
 full run records the new tools, prompt, and items: that is expected, not worked around.
 
-**Batch D ran on 2026-10-25, not in November:** the owner chose not to wait ("I don't want to
-wait"), and approved each spend. What's left is Task 28's PR and merge, which also moves the
+**Batch D ran on 2026-10-25:** the owner approved each spend. What's left is Task 28's PR and merge, which also moves the
 handbook sections' `updated` dates (2026-10-25 for now) to the day the PR merges.
 
 **The handbook additions (Task 24)** were approved by the owner on 2026-10-25, with two sentences
@@ -1505,7 +1504,7 @@ Reviews:
   prompt, numbers-match gaps ("1/2 day", ".5 days", bold, ranges), wider refusal phrases. The tool
   grader stays strict about nulls: the scripted model now leaves out optional list inputs.
 
-For November (watch in the smoke runs):
+For the full run (watch in the smoke runs):
 
 - ac-04 and ac-11 ("I'm sick today") might get "the whole day?", and rt-53 (sick days next week
   with harassment) "all five days?"; neither allows a clarifying question, and the red team allows
@@ -1899,8 +1898,7 @@ Dismiss runs, a "try again" line after a conflict that can't succeed, the half-d
 the API, and small cleanups. Recorded without a change: duplicated date tables and toast texts, the
 Approvals page's per-person queries, the preview checked on every keystroke, and the earlier
 backlog items the reviews repeated. **The tool results' bare `amount` key** breaks the naming rule;
-renaming it changes what the model reads, so it waits for Phase 7's next paid full run (October's
-AI spend was already about $24 of $25).
+renaming it changes what the model reads, so it waits for Phase 7's next paid full run.
 
 **Checking the fixes:** each fix test first and mutation-proved; one combined Sonnet review (its medium: the backfill under forced row-level security); then `/code-review medium` on the branch, two rounds (round 1: the expired-then-confirmed card and the backfill's row-security handling, both fixed; round 2 nothing high or medium, its cheap items fixed and the rest backlogged). The final `make db && make check` is green: API 4,443 tests, web 2,739, browser 371. One run hung for an hour in the API suite after an earlier run was stopped mid-way and passed when rerun, and the approvals gallery's "deciding" dialog scan failed twice under local load and passed on rerun (backlogged). `make eval-offline` passes: nothing changes a prompt, a tool, the guard, or retrieval, so no paid run.
 
