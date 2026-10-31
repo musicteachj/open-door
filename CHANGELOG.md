@@ -10,6 +10,25 @@ version (`0.x.y` while the app is being built, `1.0.0` when it is complete).
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-10-31
+
+Phase 6: cases and escalation. When the safety check calls a message sensitive or a crisis, the
+HR panel offers a confidential case: the person sends their own words, which the safety check
+screens again, and a crisis gets the fixed crisis text. Case text and every conversation's text
+are stored encrypted (AES-256-GCM, a data key per record, wrapped by a local keyring). An AI with
+no tools writes HR a neutral summary, checked by program before HR sees it and labeled as the AI's;
+HR reads the person's own words only by revealing them, every read is audited and listed in the
+case's timeline, and HR can change a case's status only after reading the words. People see their
+cases' status on My cases; HR works from a queue and a case detail, and never acts on their own
+case. Managers never see a case. The full live eval run of 2026-10-29 ($10.93) scored the red team
+at 100%, actions at 99%, and the engine's figures at 100%, with every program-graded Q&A and
+unanswerable check passing once two grader misreads were fixed, and the judge at 68% (a Phase 7
+item). The new escalation set routed every crisis and sensitive message right and offered no case
+for ordinary ones in all three trials, and every case summary passed its checks and the judge's
+faithful and neutral lines. The phase closed with a whole-phase review (three `/code-review high`
+runs and a Fable 5.1 security review that proved every seam holding), a release review, and their
+fixes.
+
 ### Added
 
 - **The case pages: the form in chat, My cases, HR's queue and case detail, and their place in
@@ -436,6 +455,11 @@ version (`0.x.y` while the app is being built, `1.0.0` when it is complete).
 
 ### Fixed
 
+- **Every crisis panel now offers a confidential case** (Phase 6, release review). The safety check
+  can route a message to the crisis panel because of its topic (self-harm or a threat of violence)
+  even when it called the message ordinary. Such a panel showed no "Open a confidential case"
+  button, and the server would have refused a case from that turn. A turn now counts as flagged
+  whenever it gets a panel, in the stream, on reload, in the case check, and in the evals' grader.
 - **Phase 6 review fixes, API** (Phase 6, phase review).
   - HR can no longer retry the summary of a closed case, which spent AI budget on a finished matter.
   - A blank `ENCRYPTION_KEYRING_FILE=` in `.env` now falls back to the default keyring path instead

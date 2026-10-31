@@ -189,6 +189,11 @@ conversation-page glitches are fixed with browser tests (stage 6).
 
 ## Phase 7: AI Ops console, reviewer experience, model decision
 
+- **`list_cases` shows HR the oldest cases first when the list is cut.** The tool takes the queue's
+  first page (new cases by reply-by, then the rest oldest first) and drops HR's own, so for `closed`
+  or `in_review` with more than 20 cases the model sees the oldest 20 and none from this week.
+  Changing the tool's results changes what the model reads, so do it with Phase 7's next full run.
+  (v0.6.0 release review.)
 - **Tell HR the right route for a case.** The guard's topic note (`TOPIC_NOTE` in
   `app/ai/guard.py`) and the assistant prompt's case paragraph point everyone to "the My cases
   page", but HR has no My cases page (the owner's rule: HR gets no route to it). The answer's link
@@ -257,6 +262,23 @@ conversation-page glitches are fixed with browser tests (stage 6).
 
 ## Phase 8: hardening and deploy-readiness
 
+- **A case refusal that can't succeed still offers "Try again".** `use-open-case.ts` maps the
+  waiting limit, a repeated submission, personal data, and empty words; any other refusal (a 404
+  `case-turn-not-found`, a 422 `case-words-too-long` or `case-invalid`) shows "Your case wasn't
+  sent. Please try again.", and every retry fails the same way. Give those a line that points to
+  My cases or the HR contacts instead. (v0.6.0 release review.)
+- **A repeated send of the same words reads the case twice and isn't audited.** `_repeat` in the
+  case service unwraps the key and decrypts the stored words to compare them, once outside and once
+  under the lock, and a second submission from another tab with the same words is folded into the
+  first case with no audit row saying so. (v0.6.0 release review.)
+- **A summary retry lost to a restart blocks the next one for a minute.** The retry commits
+  `case.summary.retried` and then runs the summary in a background task; if the API stops before
+  it runs, the in-flight window refuses HR's next retry for 60 seconds with nothing to say the job
+  was lost. (v0.6.0 release review.)
+- **The reply-by date and next year's holidays.** `reply_by_at` reads HQ's holidays from the
+  sandbox's table in a 21-day window; a case sent in late December in a sandbox with no rows for
+  the next year would get a reply-by date on a closed day. Check the seed always writes the next
+  year's holidays, or read them from the calendar. (v0.6.0 release review.)
 - **Tie the CSRF header to the audited read itself.** Audited reads require `X-CSRF-Token` through
   a dependency each route opts into (`AuditedReadDep`), so a future audited route that forgets it
   could be started by a plain navigation from an HR partner's browser, and no test would fail.

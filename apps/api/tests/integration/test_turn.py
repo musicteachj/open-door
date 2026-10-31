@@ -593,8 +593,8 @@ async def test_contradictory_guard_verdicts_route_safer(
     )
     events = await crisis.ask("hello")
     assert [e.kind for e in of_type(events, Escalation)] == ["crisis"]
-    # A crisis kind under an ordinary category is not a flagged turn: no case is offered.
-    assert [e.offer_case for e in of_type(events, Escalation)] == [False]
+    # A crisis kind under an ordinary category is a flagged turn: the panel offers a case.
+    assert [e.offer_case for e in of_type(events, Escalation)] == [True]
     assert crisis.transport.requests == []
     assert (await crisis.last_turn()).status == "crisis"
 

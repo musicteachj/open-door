@@ -1254,8 +1254,8 @@ def crisis_note(message: str = CRISIS_TEXT, *, offer_case: bool = True) -> Any:
     return run.EscalationNote("crisis", message, offer_case)
 
 
-def guard_of(category: str) -> Any:
-    return run.GuardVerdict(category, None, False)
+def guard_of(category: str, kind: str | None = None) -> Any:
+    return run.GuardVerdict(category, kind, False)
 
 
 def test_a_crisis_with_the_fixed_text_and_no_model_call_passes() -> None:
@@ -1441,6 +1441,15 @@ def test_a_flagged_panel_that_does_not_offer_a_case_fails(
     assert result.name == "offer-case"
     assert result.passed is False
     assert "does not offer a case" in result.reasons[0]
+
+
+def test_a_crisis_kind_under_an_ordinary_category_must_offer_a_case() -> None:
+    guard = guard_of("ordinary", "self_harm")
+    offered = trace_for(escalations=(crisis_note(),), guard=guard)
+    not_offered = trace_for(escalations=(crisis_note(offer_case=False),), guard=guard)
+
+    assert graders.grade_offer_case(offered, "crisis").passed is True
+    assert graders.grade_offer_case(not_offered, "crisis").passed is False
 
 
 def test_a_panel_that_offers_a_case_the_service_would_refuse_fails() -> None:

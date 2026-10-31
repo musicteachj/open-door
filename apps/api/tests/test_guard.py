@@ -414,6 +414,24 @@ def test_one_predicate_decides_the_escalation(
     assert escalation_for_verdict(category, kind) == expected
 
 
+@pytest.mark.parametrize("kind", ["self_harm", "threat_of_violence"])
+def test_a_crisis_kind_under_an_ordinary_category_is_a_flagged_turn(kind: str) -> None:
+    verdict = {"category": "ordinary", "kind": kind}
+
+    assert verdict_is_flagged(verdict) is True
+    assert offers_case("crisis", verdict) is True
+
+
+@pytest.mark.parametrize("kind", [None, "pay", "other"])
+def test_an_ordinary_verdict_with_no_crisis_kind_is_not_flagged(kind: str | None) -> None:
+    assert verdict_is_flagged({"category": "ordinary", "kind": kind}) is False
+
+
+def test_a_missing_verdict_or_kind_is_not_flagged() -> None:
+    assert verdict_is_flagged({"category": "ordinary"}) is False
+    assert verdict_is_flagged(None) is False
+
+
 def test_the_predicate_agrees_with_the_screen_and_the_offer() -> None:
     for category in ("ordinary", "sensitive", "crisis"):
         for kind in (None, "pay", "other", "self_harm", "threat_of_violence"):
@@ -423,9 +441,9 @@ def test_the_predicate_agrees_with_the_screen_and_the_offer() -> None:
                 assert offered  # the panel always offers a case
             if escalation is None:
                 assert not offered
-            # A crisis kind under an ordinary category is a crisis route with no case offer.
-            if escalation == "crisis":
-                assert offered is (category != "ordinary")
+            # Any escalation, a crisis kind under an ordinary category included, offers a case.
+            if escalation is not None:
+                assert offered
 
 
 def test_the_sensitive_note_says_what_the_spec_requires() -> None:
