@@ -287,10 +287,15 @@ async def seed_case(
 
 
 async def flagged_turn(
-    env: Env, person_id: UUID, category: str | None, *, status: str = "completed"
+    env: Env,
+    person_id: UUID,
+    category: str | None,
+    *,
+    status: str = "completed",
+    kind: str | None = None,
 ) -> UUID:
-    """A turn of the person's with the given guard category (None for no verdict)."""
-    verdict = None if category is None else {"category": category, "kind": None}
+    """A turn of the person's with the given guard category and kind (None for no verdict)."""
+    verdict = None if category is None else {"category": category, "kind": kind}
     turn_id = uuid4()
     async with tenant_session(env.engine, TenantContext(env.tenant.id, person_id)) as db:
         rows = await write_assistant_rows(db, env.tenant.id, person_id)
@@ -634,12 +639,27 @@ async def test_a_turn_that_is_not_yours_or_not_flagged_or_unknown_is_one_problem
     assert await case_rows(env, env.leo) == []
 
 
-async def test_a_flagged_turn_is_sensitive_or_crisis_at_any_status(env: Env) -> None:
+async def test_a_sensitive_or_crisis_turn_is_flagged_at_any_status(env: Env) -> None:
     sensitive = await flagged_turn(env, env.leo, "sensitive", status="failed")
     crisis = await flagged_turn(env, env.leo, "crisis", status="crisis")
 
     assert (await send(env, env.leo, turn_id=sensitive)).created is True
     assert (await send(env, env.leo, turn_id=crisis)).created is True
+
+
+@pytest.mark.parametrize("kind", ["self_harm", "threat_of_violence"])
+async def test_a_crisis_kind_under_an_ordinary_category_is_a_flagged_turn(
+    env: Env, kind: str
+) -> None:
+    """The crisis route's safety bias: its panel offers a case, so the service accepts the turn."""
+    mine = await flagged_turn(env, env.leo, "ordinary", status="crisis", kind=kind)
+    others = await flagged_turn(env, env.rae, "ordinary", status="crisis", kind=kind)
+    plain = await flagged_turn(env, env.leo, "ordinary", kind="pay")
+
+    assert (await send(env, env.leo, turn_id=mine)).created is True
+    for turn in (others, plain):
+        refused = await problem(send(env, env.leo, turn_id=turn))
+        assert refused.code == "case-turn-not-found"
 
 
 async def test_a_foreign_key_failure_on_the_turn_is_the_same_problem(

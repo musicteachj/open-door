@@ -437,7 +437,7 @@ async def test_the_reloads_escalation_offers_a_case_only_for_a_flagged_verdict(
         "sensitive failed": True,
         "sensitive stopped": True,
         "crisis": True,
-        "crisis kind under ordinary": False,
+        "crisis kind under ordinary": True,
         "crisis with no verdict": False,
         "unavailable": False,
         # The panel follows the category (Phase 6, stage 4): an ordinary verdict with a topic shows

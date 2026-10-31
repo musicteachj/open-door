@@ -161,7 +161,8 @@ flagged message ─▶ answer (sensitive) or crisis text ─▶ HR panel ─▶ 
    ─▶ AI summary written in the background (not for a crisis verdict)
 ```
 
-- **A flagged turn** is one whose stored guard verdict has `category` sensitive or crisis, whatever
+- **A flagged turn** is one whose stored guard verdict has `category` sensitive or crisis, or a
+  crisis `kind` under any category (the crisis route's safety bias), whatever
   its status (completed, stopped, or failed), since Phase 4 shows the panel for all of them.
 - **The `escalation` event's `offerCase` is true** for sensitive and crisis, and false for
   `unavailable` and a budget stop (the message was never screened). Those panels instead show a

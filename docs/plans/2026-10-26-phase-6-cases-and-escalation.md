@@ -527,7 +527,8 @@ Known:
 - **Rows the person can't read** (`case_events` `opened`) are inserted with Core `insert()`, IDs
   from Python, and no `RETURNING`: Postgres checks `RETURNING` against the `SELECT` rule.
 - **A flagged turn** is one whose `guard_verdict.category` is sensitive or crisis, any status;
-  share one predicate with the display (Task 19).
+  share one predicate with the display (Task 19). (The release review added a crisis `kind` under
+  any category: see "The release review" below.)
 - **Screening reuses the guard** with the words as the new message and no previous answer, through
   the sandbox's budget (`purpose` `case_screen`). Stages 2 and 3 run it only through the scripted
   guard; it uses the guard prompt of the day until Stage 4 moves it.
@@ -1222,7 +1223,8 @@ near the plan's estimate of 1,100, plus the generated client and schema.
   to Stage 4 (above).
 - **`offerCase`** is `offers_case(kind, verdict)` in `guard.py`, built on `verdict_is_flagged`:
   true only for a sensitive or crisis escalation whose verdict's category is flagged, at any
-  status, so the panel never offers a case the service would refuse. **`caseOpened`** comes from
+  status, so the panel never offers a case the service would refuse. (Since the release review, a
+  crisis `kind` under any category counts as flagged too.) **`caseOpened`** comes from
   one query per conversation, filtered by sandbox and person.
 - **Tests after code:** most of Task 15's tests were written after the code; 25 mutants, each
   killed by a test, stand in for watching them fail first.
@@ -1788,6 +1790,19 @@ stages), and one Fable 5.1 security reviewer briefed with the spec's security se
   own case first); a sandbox seeded before 0015 has HR's seeded rows marked by their actor, so they
   read true where a fresh seed's read false (sandboxes last a day). The repeated limit-line item
   didn't count.
+
+### The release review (`chore/release-0.6.0`, 2026-10-31)
+
+`/code-review medium` on what `dev` brings to `main` (application code). One real finding, fixed
+on the owner's call: a message the safety check called ordinary but with a crisis kind (self-harm,
+a threat of violence) gets the crisis route, as a safety bias, but the "flagged turn" rule looked
+at the category alone, so that crisis panel offered no case and the service would have refused one.
+A crisis kind now counts as flagged in the Python rule, its SQL form, and the eval grader (the
+spec's "flagged turn" line says so too); no recorded trace has that verdict, so every offline replay
+is unchanged. The other findings are in the backlog: a refusal that can't succeed still offers
+"Try again"; a repeated send decrypts twice and isn't audited; a retry lost to a restart blocks
+the next for a minute; the reply-by date and next year's holidays; and `list_cases` showing the
+oldest cases when cut (it changes what the model reads, so Phase 7).
 
 ## Backlog
 
