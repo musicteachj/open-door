@@ -681,7 +681,7 @@ every seam holding, a release review, and their fixes.
   no result holds a random ID, a denial note, or team coverage. A name the model passes is matched
   only among people the asker may read, and a refusal names no one else. The tool set moves to
   `2026-11.1`, so older conversations offer a new one, and the recorded evals must be re-recorded
-  (the November full run) before CI's offline replay is green again.
+  (the stage's full run) before CI's offline replay is green again.
 - **The assistant's cards in the turn** (Phase 5, stage 4). When a proposal tool stores a confirm
   card, the turn now sends a `proposal` event right after that tool's `tool.finished`, with the same
   shape as the conversation read's proposals. One response makes at most one card: a second
@@ -722,7 +722,7 @@ every seam holding, a release review, and their fixes.
   (`JUDGE_VERSION` 2026-10.3). The eval sandbox now counts back from October 15, 2026, and the
   harness adds two requests of Priya's after the seed (one to cancel, one for Marcus to decide),
   through a new public `insert_time_off_requests` in the sandbox seed (the demo's seed adds none).
-  Offline replay is red for every item until the November full run records them.
+  Offline replay is red for every item until the stage's full run records them.
 - **The time-off, approvals, and confirm-card components, and the alert dialog** (Phase 5,
   stage 5). The pieces the time-off request form, the balance and request lists, the Approvals
   page, and the assistant's confirm card are built from, each in every state and shown in the

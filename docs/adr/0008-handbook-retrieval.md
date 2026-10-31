@@ -11,7 +11,7 @@ kid has the flu?" is answered by a passage about caring for a family member. Exa
 too: "FMLA" or "COMPS Order" should land on the section that names them.
 
 The handbook is small (a few hundred passages) and versioned, and each sandbox pins a version. CI
-may make no paid AI call, and the development budget is $25 a month.
+may make no paid AI call, and every paid run needs the owner's OK.
 
 ## Decision
 
