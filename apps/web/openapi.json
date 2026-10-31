@@ -2066,6 +2066,710 @@
           }
         }
       }
+    },
+    "/api/v1/cases": {
+      "post": {
+        "tags": [
+          "cases"
+        ],
+        "summary": "Open a confidential case in the person's own words",
+        "operationId": "openCase",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OpenCaseBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseSentOut"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "The submission already had a case: the same one."
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Unprocessable Content",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "cases"
+        ],
+        "summary": "HR's queue of cases, a page at a time: no words",
+        "operationId": "listCases",
+        "parameters": [
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/QueueFilter"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Status"
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 512
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/QueuePageOut"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Unprocessable Content",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/cases/mine": {
+      "get": {
+        "tags": [
+          "cases"
+        ],
+        "summary": "The signed-in person's own cases: status and dates, never the words",
+        "operationId": "listMyCases",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseListOut"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Unprocessable Content",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/cases/texts": {
+      "get": {
+        "tags": [
+          "cases"
+        ],
+        "summary": "The case form's fixed texts, with today's reply-by date",
+        "operationId": "getCaseTexts",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseTextsOut"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Unprocessable Content",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/cases/counts": {
+      "get": {
+        "tags": [
+          "cases"
+        ],
+        "summary": "HR's new cases and the ones due for a reply, for the nav and the home card",
+        "operationId": "getCaseCounts",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CountsOut"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Unprocessable Content",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/cases/{case_id}": {
+      "get": {
+        "tags": [
+          "cases"
+        ],
+        "summary": "One case's metadata for HR: no words, and not an audited read",
+        "operationId": "getCase",
+        "parameters": [
+          {
+            "name": "case_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Case Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseDetailOut"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Unprocessable Content",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/cases/{case_id}/summary": {
+      "get": {
+        "tags": [
+          "cases"
+        ],
+        "summary": "A case's AI summary, for HR. An audited read; needs the CSRF header.",
+        "operationId": "getCaseSummary",
+        "parameters": [
+          {
+            "name": "case_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Case Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseSummaryOut"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Unprocessable Content",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "cases"
+        ],
+        "summary": "Try the AI summary again (HR only, never their own case): written in the background",
+        "operationId": "retryCaseSummary",
+        "parameters": [
+          {
+            "name": "case_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Case Id"
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "description": "The retry was scheduled.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SummaryRetryOut"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Unprocessable Content",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/cases/{case_id}/text": {
+      "get": {
+        "tags": [
+          "cases"
+        ],
+        "summary": "A case's words, for HR. An audited read; needs the CSRF header.",
+        "operationId": "getCaseText",
+        "parameters": [
+          {
+            "name": "case_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Case Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseTextOut"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Unprocessable Content",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/cases/{case_id}/status": {
+      "post": {
+        "tags": [
+          "cases"
+        ],
+        "summary": "Move a case on, after reading its words (HR only, never their own case)",
+        "operationId": "changeCaseStatus",
+        "parameters": [
+          {
+            "name": "case_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Case Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StatusBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseStatusOut"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Unprocessable Content",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -2428,6 +3132,420 @@
           }
         }
       },
+      "CaseDetailOut": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "category": {
+            "$ref": "#/components/schemas/Category"
+          },
+          "status": {
+            "$ref": "#/components/schemas/Status"
+          },
+          "sentAt": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Sentat"
+          },
+          "replyBy": {
+            "type": "string",
+            "format": "date",
+            "title": "Replyby"
+          },
+          "statusChangedAt": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Statuschangedat"
+          },
+          "screening": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Screening"
+          },
+          "isOwn": {
+            "type": "boolean",
+            "title": "Isown"
+          },
+          "personId": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Personid"
+          },
+          "givenName": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Givenname"
+          },
+          "familyName": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Familyname"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          },
+          "departmentName": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Departmentname"
+          },
+          "locationName": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Locationname"
+          },
+          "workEmail": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Workemail"
+          },
+          "summary": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SummaryStateOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "timeline": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/TimelineEntryOut"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Timeline"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "category",
+          "status",
+          "sentAt",
+          "replyBy",
+          "statusChangedAt",
+          "screening",
+          "isOwn",
+          "personId",
+          "givenName",
+          "familyName",
+          "title",
+          "departmentName",
+          "locationName",
+          "workEmail",
+          "summary",
+          "timeline"
+        ],
+        "title": "CaseDetailOut",
+        "description": "The detail page's metadata. No words and no summary text."
+      },
+      "CaseListOut": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/CaseStatusOut"
+            },
+            "type": "array",
+            "title": "Items"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items"
+        ],
+        "title": "CaseListOut"
+      },
+      "CaseOpenedOut": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "new",
+              "in_review",
+              "closed"
+            ],
+            "title": "Status"
+          },
+          "replyBy": {
+            "type": "string",
+            "format": "date",
+            "title": "Replyby"
+          },
+          "sentLine": {
+            "$ref": "#/components/schemas/SentLineOut"
+          }
+        },
+        "type": "object",
+        "required": [
+          "status",
+          "replyBy",
+          "sentLine"
+        ],
+        "title": "CaseOpenedOut",
+        "description": "The case the person opened from a turn: enough to show the sent state after a reload. Never\nthe words, and not the screening label."
+      },
+      "CaseSentOut": {
+        "properties": {
+          "case": {
+            "$ref": "#/components/schemas/CaseStatusOut"
+          },
+          "sentLine": {
+            "$ref": "#/components/schemas/SentLineOut"
+          },
+          "created": {
+            "type": "boolean",
+            "title": "Created"
+          },
+          "crisisText": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Crisistext"
+          }
+        },
+        "type": "object",
+        "required": [
+          "case",
+          "sentLine",
+          "created",
+          "crisisText"
+        ],
+        "title": "CaseSentOut"
+      },
+      "CaseStatusOut": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "category": {
+            "$ref": "#/components/schemas/Category"
+          },
+          "status": {
+            "$ref": "#/components/schemas/Status"
+          },
+          "sentAt": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Sentat"
+          },
+          "replyBy": {
+            "type": "string",
+            "format": "date",
+            "title": "Replyby"
+          },
+          "statusChangedAt": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Statuschangedat"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "category",
+          "status",
+          "sentAt",
+          "replyBy",
+          "statusChangedAt"
+        ],
+        "title": "CaseStatusOut",
+        "description": "What the person who opened a case sees: no words, no screening label."
+      },
+      "CaseSummaryOut": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "none",
+              "written",
+              "failed"
+            ],
+            "title": "Status"
+          },
+          "text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Text"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          },
+          "model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model"
+          },
+          "promptVersion": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Promptversion"
+          },
+          "createdAt": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Createdat"
+          }
+        },
+        "type": "object",
+        "required": [
+          "status"
+        ],
+        "title": "CaseSummaryOut"
+      },
+      "CaseTextOut": {
+        "properties": {
+          "text": {
+            "type": "string",
+            "title": "Text"
+          }
+        },
+        "type": "object",
+        "required": [
+          "text"
+        ],
+        "title": "CaseTextOut"
+      },
+      "CaseTextsOut": {
+        "properties": {
+          "bullets": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Bullets"
+          },
+          "replyBy": {
+            "type": "string",
+            "format": "date",
+            "title": "Replyby"
+          },
+          "waitingLimit": {
+            "type": "string",
+            "title": "Waitinglimit"
+          },
+          "hrContacts": {
+            "items": {
+              "$ref": "#/components/schemas/HrContactOut"
+            },
+            "type": "array",
+            "title": "Hrcontacts"
+          }
+        },
+        "type": "object",
+        "required": [
+          "bullets",
+          "replyBy",
+          "waitingLimit",
+          "hrContacts"
+        ],
+        "title": "CaseTextsOut",
+        "description": "The form's fixed bullets, with today's reply-by date filled in."
+      },
+      "Category": {
+        "type": "string",
+        "enum": [
+          "harassment_discrimination",
+          "safety",
+          "medical_accommodation",
+          "pay",
+          "other"
+        ]
+      },
       "CheckOut": {
         "properties": {
           "ok": {
@@ -2657,6 +3775,24 @@
           "outdated"
         ],
         "title": "ConversationOut"
+      },
+      "CountsOut": {
+        "properties": {
+          "new": {
+            "type": "integer",
+            "title": "New"
+          },
+          "replyDue": {
+            "type": "integer",
+            "title": "Replydue"
+          }
+        },
+        "type": "object",
+        "required": [
+          "new",
+          "replyDue"
+        ],
+        "title": "CountsOut"
       },
       "CoverageDayOut": {
         "properties": {
@@ -3146,13 +4282,18 @@
             },
             "type": "array",
             "title": "Hrcontact"
+          },
+          "offerCase": {
+            "type": "boolean",
+            "title": "Offercase"
           }
         },
         "type": "object",
         "required": [
           "kind",
           "message",
-          "hrContact"
+          "hrContact",
+          "offerCase"
         ],
         "title": "EscalationOut",
         "description": "The fixed text the stream's `escalation` event had, and the HR team to reach."
@@ -3742,6 +4883,42 @@
         "type": "object",
         "title": "NewSandboxRequest"
       },
+      "OpenCaseBody": {
+        "properties": {
+          "submissionId": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Submissionid"
+          },
+          "category": {
+            "$ref": "#/components/schemas/Category"
+          },
+          "text": {
+            "type": "string",
+            "maxLength": 20000,
+            "title": "Text"
+          },
+          "turnId": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Turnid"
+          }
+        },
+        "type": "object",
+        "required": [
+          "submissionId",
+          "category",
+          "text"
+        ],
+        "title": "OpenCaseBody"
+      },
       "ParagraphPassage": {
         "properties": {
           "type": {
@@ -4236,6 +5413,126 @@
           "nextEarningLabel"
         ],
         "title": "PtoBalanceOut"
+      },
+      "QueueFilter": {
+        "type": "string",
+        "enum": [
+          "open",
+          "new",
+          "in_review",
+          "closed"
+        ]
+      },
+      "QueueItemOut": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "category": {
+            "$ref": "#/components/schemas/Category"
+          },
+          "personId": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Personid"
+          },
+          "givenName": {
+            "type": "string",
+            "title": "Givenname"
+          },
+          "familyName": {
+            "type": "string",
+            "title": "Familyname"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "locationName": {
+            "type": "string",
+            "title": "Locationname"
+          },
+          "sentAt": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Sentat"
+          },
+          "replyBy": {
+            "type": "string",
+            "format": "date",
+            "title": "Replyby"
+          },
+          "status": {
+            "$ref": "#/components/schemas/Status"
+          },
+          "statusChangedAt": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Statuschangedat"
+          },
+          "crisis": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Crisis"
+          },
+          "isOwn": {
+            "type": "boolean",
+            "title": "Isown"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "category",
+          "personId",
+          "givenName",
+          "familyName",
+          "title",
+          "locationName",
+          "sentAt",
+          "replyBy",
+          "status",
+          "statusChangedAt",
+          "crisis",
+          "isOwn"
+        ],
+        "title": "QueueItemOut"
+      },
+      "QueuePageOut": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/QueueItemOut"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "nextCursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Nextcursor"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items",
+          "nextCursor"
+        ],
+        "title": "QueuePageOut"
       },
       "RequestCard": {
         "properties": {
@@ -4965,6 +6262,25 @@
         ],
         "title": "Segment"
       },
+      "SentLineOut": {
+        "properties": {
+          "lead": {
+            "type": "string",
+            "title": "Lead"
+          },
+          "pointer": {
+            "type": "string",
+            "title": "Pointer"
+          }
+        },
+        "type": "object",
+        "required": [
+          "lead",
+          "pointer"
+        ],
+        "title": "SentLineOut",
+        "description": "The owner-approved sent line in two parts, both cut from its hashed template. The page shows\nthem as one line, with its own link between the pointer and the page it names."
+      },
       "SickYearOut": {
         "properties": {
           "year": {
@@ -5037,6 +6353,26 @@
         ],
         "title": "SkippedDay"
       },
+      "Status": {
+        "type": "string",
+        "enum": [
+          "new",
+          "in_review",
+          "closed"
+        ]
+      },
+      "StatusBody": {
+        "properties": {
+          "to": {
+            "$ref": "#/components/schemas/Status"
+          }
+        },
+        "type": "object",
+        "required": [
+          "to"
+        ],
+        "title": "StatusBody"
+      },
       "SummaryOut": {
         "properties": {
           "ptoAvailableMinutes": {
@@ -5089,6 +6425,62 @@
         ],
         "title": "SummaryOut"
       },
+      "SummaryRetryOut": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "const": "writing",
+            "title": "Status"
+          }
+        },
+        "type": "object",
+        "required": [
+          "status"
+        ],
+        "title": "SummaryRetryOut",
+        "description": "The retry's answer: the summary is being written.\n\nRefused with a 409 when the newest summary was written or is a crisis note, or when the case\nis under 2 minutes old with no summary."
+      },
+      "SummaryStateOut": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "none",
+              "written",
+              "failed"
+            ],
+            "title": "Status"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          },
+          "createdAt": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Createdat"
+          }
+        },
+        "type": "object",
+        "required": [
+          "status"
+        ],
+        "title": "SummaryStateOut"
+      },
       "TenantInfo": {
         "properties": {
           "id": {
@@ -5108,6 +6500,84 @@
           "expiresAt"
         ],
         "title": "TenantInfo"
+      },
+      "TimelineEntryOut": {
+        "properties": {
+          "kind": {
+            "type": "string",
+            "title": "Kind"
+          },
+          "occurredAt": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Occurredat"
+          },
+          "actorPersonId": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Actorpersonid"
+          },
+          "actorGivenName": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Actorgivenname"
+          },
+          "actorFamilyName": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Actorfamilyname"
+          },
+          "fromStatus": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Status"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "toStatus": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Status"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "kind",
+          "occurredAt",
+          "actorPersonId",
+          "actorGivenName",
+          "actorFamilyName",
+          "fromStatus",
+          "toStatus"
+        ],
+        "title": "TimelineEntryOut"
       },
       "ToolCallOut": {
         "properties": {
@@ -5228,6 +6698,16 @@
               }
             ]
           },
+          "caseOpened": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CaseOpenedOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "notFound": {
             "type": "boolean",
             "title": "Notfound"
@@ -5301,6 +6781,7 @@
           "incomplete",
           "error",
           "escalation",
+          "caseOpened",
           "notFound",
           "guard",
           "toolCalls",

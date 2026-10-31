@@ -1,9 +1,11 @@
 import { CircleAlert, Phone, RotateCcw, Users } from 'lucide-react'
-import { useEffect, useId, type ReactNode } from 'react'
+import { useEffect, useId, type ReactNode, type Ref } from 'react'
 import { Link } from 'react-router'
 import type { HrContactOut } from '@/api/generated'
 import { handbookPath } from '@/components/handbook/labels'
 import { Button } from '@/components/ui/button'
+import type { PageLink } from '@/lib/page-link'
+import { OpenCaseButton } from '@/components/cases/open-case-button'
 import { announce } from '@/lib/announce'
 import { cn } from '@/lib/utils'
 import { linkifyEmergency, parseCrisisText } from './crisis-text'
@@ -29,6 +31,23 @@ type EscalationPanelProps = {
    * assertive. Defaults to false.
    */
   announceOnMount?: boolean
+  /**
+   * The event's `offerCase`: the guard called the turn sensitive or crisis, so the panel may offer
+   * "Open a confidential case". Without it there is no button and no case area. Never on the
+   * unavailable panel, which shows "Write to HR" instead.
+   */
+  offerCase?: boolean
+  /** Pressing the case button. Open the form by setting `caseArea`. */
+  onOpenCase?: () => void
+  /** The case button, so the caller can return focus to it when the form closes ("Not now"). */
+  openCaseRef?: Ref<HTMLButtonElement>
+  /**
+   * What replaces the case button: the form band, the sent line, or the limit line. It is rendered
+   * at the foot of the panel, full width and outside the padded body, so its tint reaches the edges.
+   */
+  caseArea?: ReactNode
+  /** Adds "Write to HR" after the contacts of the unavailable panel. */
+  writeToHr?: PageLink | null
   className?: string
 }
 
@@ -95,11 +114,19 @@ function EscalationPanel({
   contacts,
   onTryAgain,
   announceOnMount = false,
+  offerCase = false,
+  onOpenCase,
+  openCaseRef,
+  caseArea,
+  writeToHr = null,
   className,
 }: EscalationPanelProps) {
   const headerId = useId()
   const band = BANDS[kind]
   const header = band.header
+  const offering = offerCase && kind !== 'unavailable'
+  // Not `!= null`: a page may pass `sent && <CaseSent />`, which is `false` before it is sent.
+  const hasCaseArea = Boolean(caseArea)
   useEffect(() => {
     if (announceOnMount) announce(header, kind === 'crisis' ? 'assertive' : 'polite')
     // Once, when the panel arrives. A later change of the flag or the header is not an arrival.
@@ -140,7 +167,7 @@ function EscalationPanel({
             </Button>
           </div>
         )}
-        <HrContacts contacts={contacts} />
+        <HrContacts contacts={contacts} writeToHr={kind === 'unavailable' ? writeToHr : null} />
         {kind === 'sensitive' && (
           <Link
             to={handbookPath('7.2')}
@@ -149,7 +176,17 @@ function EscalationPanel({
             {conversationCopy.sensitiveLink}
           </Link>
         )}
+        {offering && !hasCaseArea && (
+          <div>
+            <OpenCaseButton
+              ref={openCaseRef}
+              variant={kind === 'crisis' ? 'secondary' : 'primary'}
+              onClick={onOpenCase}
+            />
+          </div>
+        )}
       </div>
+      {offering && hasCaseArea && caseArea}
     </section>
   )
 }

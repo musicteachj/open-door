@@ -53,6 +53,21 @@ describe('NavItem', () => {
     expect(badge).toHaveClass('bg-primary', 'text-on-primary', 'rounded-full')
   })
 
+  it('can name the count with another word and show that word in the badge ("3 new")', () => {
+    renderWithRouter(
+      <NavItem
+        icon={MessageCircle}
+        label="Cases"
+        to="/cases"
+        count={3}
+        countWord="new"
+        wordInBadge
+      />,
+    )
+    const link = screen.getByRole('link', { name: 'Cases, 3 new' })
+    expect(link.querySelector('[data-slot="nav-count"]')).toHaveTextContent('3 new')
+  })
+
   it('shows no badge for no count, or a count of zero', () => {
     renderWithRouter(<NavItem icon={MessageCircle} label="Approvals" to="/approvals" count={0} />)
     const link = screen.getByRole('link', { name: 'Approvals' })

@@ -247,7 +247,7 @@ describe('the page', () => {
     await screen.findByRole('link', { name: 'Sep 12 Handbook updated. Open Handbook' })
     await screen.findByRole('link', { name: '92 hours PTO available. Open Time off' })
     const seen: string[] = []
-    for (let i = 0; i < 14; i++) {
+    for (let i = 0; i < 15; i++) {
       await user.tab()
       const el = document.activeElement as HTMLElement
       seen.push(`${el.tagName.toLowerCase()}:${el.getAttribute('aria-label') ?? el.textContent}`)
@@ -255,6 +255,7 @@ describe('the page', () => {
     expect(seen).toEqual([
       'a:Ask',
       'a:Time off',
+      'a:My cases',
       'a:Directory',
       'a:Handbook',
       'button:Switch persona. Current: Priya Raman, Visual Merchandiser',

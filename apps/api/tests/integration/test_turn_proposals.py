@@ -246,10 +246,12 @@ async def test_a_completed_turn_stored_as_its_question_alone_cancels_its_card(
 ) -> None:
     real = append_messages
 
-    async def refuse_the_whole_turn(db: Any, conversation_id: Any, turn_id: Any, batch: Any) -> Any:
+    async def refuse_the_whole_turn(
+        db: Any, conversation_id: Any, turn_id: Any, batch: Any, cipher: Any
+    ) -> Any:
         if len(batch) > 1:
             raise RuntimeError("the full write fails")
-        return await real(db, conversation_id, turn_id, batch)
+        return await real(db, conversation_id, turn_id, batch, cipher)
 
     monkeypatch.setattr(turn_module, "append_messages", refuse_the_whole_turn)
     env = await make_env(
@@ -733,7 +735,7 @@ async def test_a_confirm_that_began_before_a_turn_but_committed_after_its_read_i
     async for _ in run.events():
         pass
     turns = await env.turns()
-    assert (await only_proposal(env)).ended_at < turns[1].started_at  # type: ignore[operator]
+    assert (await only_proposal(env)).ended_at < turns[1].started_at
 
     await env.ask("And now?")
     await env.ask("Anything else?")

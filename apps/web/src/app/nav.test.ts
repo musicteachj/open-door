@@ -14,6 +14,7 @@ describe('NAV_ITEMS', () => {
     expect(NAV_ITEMS.map((i) => [i.label, i.roles])).toEqual([
       ['Ask', 'everyone'],
       ['Time off', 'everyone'],
+      ['My cases', 'notHr'],
       ['Directory', 'everyone'],
       ['Handbook', 'everyone'],
       ['Approvals', 'manager'],
@@ -27,6 +28,7 @@ describe('NAV_ITEMS', () => {
     expect(NAV_ITEMS.map((i) => i.to)).toEqual([
       '/ask',
       '/time-off',
+      '/my-cases',
       '/directory',
       '/handbook',
       '/approvals',
@@ -37,13 +39,15 @@ describe('NAV_ITEMS', () => {
     for (const item of NAV_ITEMS) expect(item.icon).toBeTruthy()
   })
 
-  it('has only Ask, Time off, Directory, Handbook, and Approvals available in Phase 5', () => {
+  it('has everything but Console and How it is built available in Phase 6', () => {
     expect(NAV_ITEMS.filter((i) => i.available).map((i) => i.label)).toEqual([
       'Ask',
       'Time off',
+      'My cases',
       'Directory',
       'Handbook',
       'Approvals',
+      'Cases',
     ])
   })
 
@@ -55,31 +59,34 @@ describe('NAV_ITEMS', () => {
 })
 
 describe('navFor with every item available (the 02 notes)', () => {
-  const everyone = ['Ask', 'Time off', 'Directory', 'Handbook']
   const built = "How it's built"
+  const person = ['Ask', 'Time off', 'My cases', 'Directory', 'Handbook']
   it.each([
-    ['Priya', priya, [...everyone, built]],
-    ['Mateo', mateo, [...everyone, built]],
-    ['Marcus', marcus, [...everyone, 'Approvals', built]],
-    ['Dana', dana, [...everyone, 'Cases', 'Console', built]],
+    ['Priya', priya, [...person, built]],
+    ['Mateo', mateo, [...person, built]],
+    ['Marcus', marcus, [...person, 'Approvals', built]],
+    ['Dana', dana, ['Ask', 'Time off', 'Directory', 'Handbook', 'Cases', 'Console', built]],
   ])('%s', (_name, me, expected) => {
     expect(labels(navFor(me, allAvailable))).toEqual(expected)
   })
 })
 
-describe('navFor in Phase 5', () => {
-  const everyone = ['Ask', 'Time off', 'Directory', 'Handbook']
+describe('navFor in Phase 6', () => {
+  const person = ['Ask', 'Time off', 'My cases', 'Directory', 'Handbook']
 
   it.each([
     ['Priya', priya],
     ['Mateo', mateo],
-    ['Dana', dana],
-  ])('%s sees Ask, Time off, Directory, and Handbook, and no Approvals', (_name, me) => {
-    expect(labels(navFor(me))).toEqual(everyone)
+  ])('%s sees My cases after Time off, and no Approvals or Cases', (_name, me) => {
+    expect(labels(navFor(me))).toEqual(person)
   })
 
   it('shows Approvals to a manager, after Handbook', () => {
-    expect(labels(navFor(marcus))).toEqual([...everyone, 'Approvals'])
+    expect(labels(navFor(marcus))).toEqual([...person, 'Approvals'])
+  })
+
+  it('gives HR no My cases, and Cases after Handbook (Console is not built yet)', () => {
+    expect(labels(navFor(dana))).toEqual(['Ask', 'Time off', 'Directory', 'Handbook', 'Cases'])
   })
 
   it('hides Approvals again for the employee a manager switches to', () => {

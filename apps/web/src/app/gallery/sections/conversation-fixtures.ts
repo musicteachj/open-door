@@ -33,8 +33,9 @@ export const CRISIS_TEXT = `I'm an AI assistant, and what you wrote sounds serio
 You don't have to go through this alone.`
 
 export const SENSITIVE_TEXT =
-  'A person on the HR team should help with this, and they handle it confidentially. ' +
-  'Their contact details are below.'
+  'This sounds like something a person on the HR team should help with. You can open a ' +
+  "confidential case below. Only the HR team can open it in Open Door, never your manager, and it's " +
+  'stored encrypted. HR replies within 2 business days. Their contact details are below.'
 
 export const UNAVAILABLE_TEXT =
   "I'm an AI assistant, and I can't answer right now. Please try again in a moment. If you or " +

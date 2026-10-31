@@ -2,9 +2,9 @@
 // string, so the wording a screen reader hears is decided here and proved by labels.test.ts. They
 // come from the design's components (docs/design/system/components/) and the screens' notes.
 
-/** "Approvals, 1 waiting". A count of zero, or none, is just the label. */
-export function navItemLabel(label: string, count?: number): string {
-  return count ? `${label}, ${count} waiting` : label
+/** "Approvals, 1 waiting", "Cases, 3 new". A count of zero, or none, is just the label. */
+export function navItemLabel(label: string, count?: number, word = 'waiting'): string {
+  return count ? `${label}, ${count} ${word}` : label
 }
 
 /**

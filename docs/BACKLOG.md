@@ -183,39 +183,22 @@ the conversation read after a turn ends.
 
 ## Phase 6: cases and escalation
 
-- **Small conversation-page glitches the v0.4.0 release review left alone.** When a
-  remembered conversation turns out to be gone (a 404 on send), the page drops to "Loading…" while
-  it reloads, and the composer loses focus. And "Start a new conversation" with a source panel open
-  replaces the panel's history entry, leaving a Back step that changes nothing. The release review
-  tried fixes for both, and each brought new edge cases (a stale Forward step, a conversation id
-  missed on a send that created it), so they were reverted. Also: "Start a new conversation"
-  clicked after a send has already begun still lets that send go to the old conversation, and a
-  second Enter while a send waits for the new conversation is dropped without a word. Fix them with
-  the page's next real change, with browser tests. (v0.4.0 release review. Phase 5 stage 6 added the
-  confirm card to the page without touching these paths, so they move to Phase 6, whose escalation
-  panel and confidential-case confirm change the conversation page next.)
-- **The hand-off says only what's true.** Before the person writes anything, say:
-  - only HR sees it, never managers;
-  - it's encrypted;
-  - when to expect a reply;
-  - the AI writes HR a neutral summary.
-
-  Never say "the AI won't read it": the guard reads every message, and `summarize_case` is
-  AI-written. (2026-10-06 design brainstorm.)
-- **Encrypt case narratives.** They are the most sensitive text the app will hold.
-  Source: [the Phase 1 spec](specs/2026-10-03-phase-1-tenancy-identity-permissions.md#later-phases).
-
-- **Require a header no navigation can send on audited reads.** A read of `/api/` whose
-  `Sec-Fetch-Site` says it came from another site is refused, so another site can't make an HR
-  partner's browser perform an audited read. Two cases still pass: a browser too old to send the
-  header (Safari before 16.4, for example), and a navigation the user starts themselves, which
-  sends `none`. Before case reads are audited, require the `X-CSRF-Token` header on audited reads
-  too, since no navigation can send it. Today an attacker would also need a person's ID. Seeded
-  IDs are derived from the sandbox's random tenant ID, which is shown only inside that sandbox.
-  (Stage 4 security review.)
+All three items were closed in Phase 6: the hand-off's texts say only what's true (the panel and
+form texts approved in stage 4), case text is encrypted (stages 1 and 2), and the four
+conversation-page glitches are fixed with browser tests (stage 6).
 
 ## Phase 7: AI Ops console, reviewer experience, model decision
 
+- **`list_cases` shows HR the oldest cases first when the list is cut.** The tool takes the queue's
+  first page (new cases by reply-by, then the rest oldest first) and drops HR's own, so for `closed`
+  or `in_review` with more than 20 cases the model sees the oldest 20 and none from this week.
+  Changing the tool's results changes what the model reads, so do it with Phase 7's next full run.
+  (v0.6.0 release review.)
+- **Tell HR the right route for a case.** The guard's topic note (`TOPIC_NOTE` in
+  `app/ai/guard.py`) and the assistant prompt's case paragraph point everyone to "the My cases
+  page", but HR has no My cases page (the owner's rule: HR gets no route to it). The answer's link
+  is already plain text for HR. Make the wording role-aware; it changes what the model reads, so
+  do it with Phase 7's next full paid run. (Phase 6 phase review.)
 - **Rename the bare `amount` key in the time-off tool results.** `timeoff_results.py` sends
   `"amount": label(...)` (and the same key in the draw, check, and card results), against the rule
   that units live in the field name; it holds a label, so `amountLabel` fits. Renaming it changes
@@ -278,6 +261,53 @@ the conversation read after a turn ends.
   database, so neither has mattered yet. (Phase 4 phase review.)
 
 ## Phase 8: hardening and deploy-readiness
+
+- **A case refusal that can't succeed still offers "Try again".** `use-open-case.ts` maps the
+  waiting limit, a repeated submission, personal data, and empty words; any other refusal (a 404
+  `case-turn-not-found`, a 422 `case-words-too-long` or `case-invalid`) shows "Your case wasn't
+  sent. Please try again.", and every retry fails the same way. Give those a line that points to
+  My cases or the HR contacts instead. (v0.6.0 release review.)
+- **A repeated send of the same words reads the case twice and isn't audited.** `_repeat` in the
+  case service unwraps the key and decrypts the stored words to compare them, once outside and once
+  under the lock, and a second submission from another tab with the same words is folded into the
+  first case with no audit row saying so. (v0.6.0 release review.)
+- **A summary retry lost to a restart blocks the next one for a minute.** The retry commits
+  `case.summary.retried` and then runs the summary in a background task; if the API stops before
+  it runs, the in-flight window refuses HR's next retry for 60 seconds with nothing to say the job
+  was lost. (v0.6.0 release review.)
+- **The reply-by date and next year's holidays.** `reply_by_at` reads HQ's holidays from the
+  sandbox's table in a 21-day window; a case sent in late December in a sandbox with no rows for
+  the next year would get a reply-by date on a closed day. Check the seed always writes the next
+  year's holidays, or read them from the calendar. (v0.6.0 release review.)
+- **Tie the CSRF header to the audited read itself.** Audited reads require `X-CSRF-Token` through
+  a dependency each route opts into (`AuditedReadDep`), so a future audited route that forgets it
+  could be started by a plain navigation from an HR partner's browser, and no test would fail.
+  Since the web client now sends the header on every `/api/` request, either require it on every
+  signed-in `/api/` request, or have the audited-read services check that the request carried it.
+  (Phase 6 stage 3, `/code-review medium` round 4.)
+
+- **The sticky composer can cover "Show your work".** At a 900-pixel-high window, with a tall HR
+  panel above it, the conversation page's sticky composer partly covers the "Show your work"
+  toggle, and axe's target-size rule flags it, so Stage 6's case tests scan the panel only. Check
+  it in the accessibility audit: scroll padding under the last turn, or a test of the toggle's
+  visible area. (Phase 6 stage 6.)
+- **A second route for a concern about the HR team.** A case goes only to HR, so a person whose
+  concern is about someone in HR has no other way in through Open Door; today the handbook's
+  contacts are the only route. A later phase could add a named second reviewer outside HR for
+  such cases. (Phase 6 spec.)
+- **Encrypt the time-off denial note.** `time_off_requests.decision_note` is a manager's own
+  words and stays readable in Phase 6, which encrypts only conversation and case text (ADR 0015).
+  Seal it with a data key for the request, as the conversation store does. (Phase 6 spec.)
+- **One stored value that won't decrypt breaks the conversation for good.** Its owner's
+  `GET /conversations/current` and `GET /budget` return a 500 from then on, since "current" is the
+  newest conversation. Only a damaged row or a lost key causes it. Let the person start a new
+  conversation from that state, or mark the conversation unreadable. (Phase 6 stage 1 security
+  review.)
+- **Encryption binds each message to its row, not to its order.** Someone who can write to the
+  database could reorder a conversation's messages, or cut tool-call entries off the end of a
+  turn's list, and they would still decrypt. That access is outside the threat model. If it ever
+  isn't, bind `position` and the list's length into the associated data. And if a second
+  ciphertext format is added, bind the version byte too. (Phase 6 stage 1 security review.)
 
 - **The per-turn check for untold card outcomes grows with the conversation.** Each turn start
   reads every card in the conversation and checks each against every stored context's

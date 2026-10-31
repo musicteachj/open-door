@@ -9,6 +9,11 @@
 .od-badge--approved svg, .od-badge--recorded svg { color: var(--success); }
 .od-badge--denied svg { color: var(--ink); }
 .od-badge--canceled, .od-badge--canceled svg { color: var(--ink-muted); }
+.od-badge--case-sent svg { color: var(--marker); }
+.od-badge--case-reviewing svg { color: var(--primary); }
+.od-badge--case-finished svg { color: var(--ink); }
+.od-badge--case-in-review svg { color: var(--primary); }
+.od-badge--case-closed svg { color: var(--ink); }
 
 .od-field { display: flex; flex-direction: column; gap: var(--space-2); font-family: var(--font-sans); }
 .od-field-label { font-size: var(--text-ui); line-height: var(--leading-ui); font-weight: var(--weight-semibold); color: var(--ink); }

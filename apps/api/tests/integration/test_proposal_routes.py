@@ -25,7 +25,7 @@ from app.ai.fixed_texts import STILL_ANSWERING_TEXT
 from app.domain.timeoff.evaluate import NewRequest
 from app.modules.assistant.routes import PROPOSAL_CONFLICT_TEXTS
 from app.modules.timeoff.texts import refusal_text
-from tests.integration.conftest import Browser, OpenBrowser, audit_events
+from tests.integration.conftest import Browser, OpenBrowser, audit_events, turn_row
 from tests.integration.test_proposals import (
     Chat,
     age,
@@ -911,20 +911,12 @@ async def test_the_proposals_are_read_in_one_statement_however_many_turns_have_c
     )
     # Two more turns in the same conversation, each with a card of its own.
     for offset in (40, 50):
-        from app.db.models import AiTurn
         from app.db.tenancy import TenantContext, tenant_session
 
         turn_id = uuid4()
         async with tenant_session(world.engine, TenantContext(world.tenant_id, person)) as db:
             db.add(
-                AiTurn(
-                    id=turn_id,
-                    tenant_id=world.tenant_id,
-                    person_id=person,
-                    conversation_id=chat.conversation_id,
-                    question="And another?",
-                    status="running",
-                )
+                await turn_row(db, chat.conversation_id, turn_id, "And another?", status="running")
             )
         more = Chat(chat.conversation_id, turn_id, world.tenant_id, person, "completed")
         await propose_request(

@@ -1,6 +1,7 @@
 import { screen, within } from '@testing-library/react'
 import { MemoryRouter } from 'react-router'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { WRITE_TO_HR_LINK } from '@/components/cases/labels'
 import { DANA } from '@/test/assistant-fixtures'
 import { renderWithRouter } from '@/test/render-with-router'
 import { EscalationPanel, type EscalationPanelProps } from './escalation-panel'
@@ -9,7 +10,7 @@ const announceMock = vi.hoisted(() => vi.fn<(text: string, politeness?: string) 
 vi.mock('@/lib/announce', () => ({ announce: announceMock, resetAnnouncer: () => {} }))
 
 const SENSITIVE_MESSAGE =
-  'A person on the HR team should help with this, and they handle it confidentially. Their contact details are below.'
+  "This sounds like something a person on the HR team should help with. You can open a confidential case below. Only the HR team can open it in Open Door, never your manager, and it's stored encrypted. HR replies within 2 business days. Their contact details are below."
 const UNAVAILABLE_MESSAGE =
   "I'm an AI assistant, and I can't answer right now. Please try again in a moment. If you or someone else is in danger, call 911, or call or text 988 to reach the 988 Suicide & Crisis Lifeline. For anything else that can't wait, the HR team can help directly. Their contact details are below."
 const CRISIS_MESSAGE = `I'm an AI assistant, and what you wrote sounds serious.
@@ -252,5 +253,20 @@ describe('EscalationPanel: its arrival is announced', () => {
   it('never puts the fixed message in the announcement', () => {
     renderPanel({ kind: 'unavailable', announceOnMount: true })
     expect(announceMock.mock.calls[0]![0]).not.toContain('try again in a moment')
+  })
+})
+
+describe('EscalationPanel: Write to HR', () => {
+  it('shows the link on the unavailable panel only when asked', () => {
+    const { unmount } = renderPanel({ kind: 'unavailable' })
+    expect(screen.queryByRole('link', { name: 'Write to HR' })).not.toBeInTheDocument()
+    unmount()
+    renderPanel({ kind: 'unavailable', writeToHr: WRITE_TO_HR_LINK })
+    expect(screen.getByRole('link', { name: 'Write to HR' })).toHaveAttribute('href', '/my-cases')
+  })
+
+  it('never shows it on the sensitive or crisis panel', () => {
+    renderPanel({ kind: 'sensitive', writeToHr: WRITE_TO_HR_LINK })
+    expect(screen.queryByRole('link', { name: 'Write to HR' })).not.toBeInTheDocument()
   })
 })

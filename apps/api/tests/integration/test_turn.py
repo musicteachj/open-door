@@ -22,7 +22,7 @@ from uuid import UUID, uuid5
 import anyio
 import anyio.lowlevel
 import pytest
-from sqlalchemy import select
+from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 from app.ai import turn as turn_module
@@ -33,6 +33,7 @@ from app.ai.conversations import (
     Pins,
     TurnRunning,
     append_messages,
+    conversation_cipher,
     create_conversation,
     start_turn,
 )
@@ -44,7 +45,13 @@ from app.ai.fixed_texts import (
     SENSITIVE_TEXT,
     UNAVAILABLE_TEXT,
 )
-from app.ai.guard import INJECTION_NOTE, build_guard_request, guard_reservation_usd
+from app.ai.guard import (
+    INJECTION_NOTE,
+    SENSITIVE_NOTE,
+    TOPIC_NOTE,
+    build_guard_request,
+    guard_reservation_usd,
+)
 from app.ai.pricing import IterationUsage, Usage, estimate_input_tokens, turn_call_cost
 from app.ai.prompts.versions import CANARY, PROMPT_VERSION, TOOLSET_VERSION
 from app.ai.scripted import DECLINE_TEXT, MODEL_USAGE, WORKING_NOTE_TEXT, ScriptedTransport
@@ -88,6 +95,7 @@ from app.ai.turn import (
     run_turn,
     start_turn_run,
 )
+from app.core.encryption import DecryptionFailed
 from app.db.models import AiConversation, AiMessage, AiSpend, AiTurn, HandbookVersion
 from app.db.tenancy import TenantContext, tenant_session
 from app.domain.handbook.applicability import Asker
@@ -97,7 +105,14 @@ from app.modules.handbook.search import pinned_version_id
 from app.modules.identity.actor import load_actor
 from app.modules.people.queries import get_me
 from app.modules.sandbox.seed import SeedCompany
-from tests.integration.conftest import audit_events
+from tests.integration.conftest import (
+    TEST_KEYS,
+    OpenMessage,
+    OpenTurn,
+    audit_events,
+    open_messages,
+    open_turns,
+)
 from tests.integration.test_budget import daily_ids, daily_sum, delete_daily_rows_except
 
 pytestmark = pytest.mark.integration
@@ -273,18 +288,18 @@ class Env:
             )
         ]
 
-    async def turns(self) -> list[AiTurn]:
+    async def turns(self) -> list[OpenTurn]:
         async with tenant_session(self.engine, self.ctx) as db:
             query = select(AiTurn).order_by(AiTurn.started_at, AiTurn.id)
-            return list((await db.scalars(query)).all())
+            return await open_turns(db, list((await db.scalars(query)).all()))
 
-    async def last_turn(self) -> AiTurn:
+    async def last_turn(self) -> OpenTurn:
         return (await self.turns())[-1]
 
-    async def messages(self) -> list[AiMessage]:
+    async def messages(self) -> list[OpenMessage]:
         async with tenant_session(self.engine, self.ctx) as db:
             query = select(AiMessage).order_by(AiMessage.position)
-            return list((await db.scalars(query)).all())
+            return await open_messages(db, list((await db.scalars(query)).all()))
 
     async def spend_kinds(self, turn_id: UUID) -> Counter[str]:
         async with tenant_session(self.engine, self.ctx) as db:
@@ -319,7 +334,7 @@ async def make_env(
         label = (
             await db.scalars(select(HandbookVersion.label).where(HandbookVersion.id == version_id))
         ).one()
-        conversation = await create_conversation(db, actor, pins)
+        conversation = await create_conversation(db, actor, pins, TEST_KEYS)
     recording = (
         transport
         if isinstance(transport, Recording)
@@ -336,6 +351,7 @@ async def make_env(
         asker=asker,
         version_id=version_id,
         handbook_label=label,
+        keys=TEST_KEYS,
     )
     return Env(engine, deps, conversation, recording)
 
@@ -344,11 +360,11 @@ def of_type[T](events: Sequence[TurnEvent], kind: type[T]) -> list[T]:
     return [event for event in events if isinstance(event, kind)]
 
 
-def roles(rows: Sequence[AiMessage]) -> list[str]:
+def roles(rows: Sequence[OpenMessage]) -> list[str]:
     return [row.role for row in rows]
 
 
-def assert_stored_history_is_placed_correctly(rows: Sequence[AiMessage]) -> None:
+def assert_stored_history_is_placed_correctly(rows: Sequence[OpenMessage]) -> None:
     """A stored system message follows a user message and is followed by an assistant message."""
     kinds = roles(rows)
     for index, role in enumerate(kinds):
@@ -485,7 +501,7 @@ async def test_a_crisis_ends_the_turn_with_fixed_text_and_never_calls_the_model(
 
     escalation = of_type(events, Escalation)
     assert [(e.kind, e.message, e.offer_case) for e in escalation] == [
-        ("crisis", CRISIS_TEXT, False)
+        ("crisis", CRISIS_TEXT, True)
     ]
     assert [c.name for c in escalation[0].hr_contact] == ["Dana Whitfield"]
     assert not of_type(events, TurnCompleted)
@@ -510,6 +526,8 @@ async def test_a_sensitive_message_is_answered_then_escalated_and_audited(
     sensitive = events[escalation_at]
     assert isinstance(sensitive, Escalation)
     assert (sensitive.kind, sensitive.message) == ("sensitive", SENSITIVE_TEXT)
+    # The guard's category is sensitive, so a case may be opened from this turn.
+    assert sensitive.offer_case is True
     turn = await env.last_turn()
     assert turn.status == "completed"
     # The operator note reaches the model in the context message.
@@ -533,6 +551,8 @@ async def test_a_guard_that_is_down_says_so_and_never_calls_the_model(
 
     escalation = of_type(events, Escalation)
     assert [(e.kind, e.message) for e in escalation] == [("unavailable", UNAVAILABLE_TEXT)]
+    # The message was never screened, so there is nothing to open a case from.
+    assert [e.offer_case for e in escalation] == [False]
     assert env.transport.requests == []
     assert await env.messages() == []
     assert (await env.last_turn()).status == "guard_unavailable"
@@ -573,6 +593,8 @@ async def test_contradictory_guard_verdicts_route_safer(
     )
     events = await crisis.ask("hello")
     assert [e.kind for e in of_type(events, Escalation)] == ["crisis"]
+    # A crisis kind under an ordinary category is a flagged turn: the panel offers a case.
+    assert [e.offer_case for e in of_type(events, Escalation)] == [True]
     assert crisis.transport.requests == []
     assert (await crisis.last_turn()).status == "crisis"
 
@@ -583,9 +605,14 @@ async def test_contradictory_guard_verdicts_route_safer(
         transport=PlanTransport(text_plan(), guard_result=guard_result("ordinary", "pay")),
     )
     events = await sensitive.ask("hello")
-    assert [e.kind for e in of_type(events, Escalation)] == ["sensitive"]
+    # The panel follows the category (Phase 6, stage 4): an ordinary message with a topic gets no
+    # panel, but the model still reads a "don't counsel" note that names no panel.
+    assert of_type(events, Escalation) == []
     assert isinstance(events[-1], TurnCompleted)
     assert len(sensitive.transport.requests) == 1
+    sent = json.dumps(sensitive.transport.requests[0].messages, default=str)
+    assert TOPIC_NOTE in sent
+    assert SENSITIVE_NOTE not in sent
 
 
 # --- Stop reasons -----------------------------------------------------------------------------
@@ -1205,7 +1232,7 @@ def test_the_turn_deadline_is_below_the_abandoned_turn_rule() -> None:
     assert TURN_DEADLINE < ABANDONED_AFTER
 
 
-async def stopped_turn_checks(env: Env, seen: list[TurnEvent]) -> AiTurn:
+async def stopped_turn_checks(env: Env, seen: list[TurnEvent]) -> OpenTurn:
     turn = await env.last_turn()
     assert turn.status == "stopped"
     assert turn.ended_at is not None
@@ -1345,9 +1372,11 @@ async def test_a_completed_turn_with_several_rounds_is_stored_whole_in_one_appen
     appends: list[int] = []
     real = append_messages
 
-    async def counting(db: Any, conversation_id: UUID, turn_id: UUID, batch: Any) -> None:
+    async def counting(
+        db: Any, conversation_id: UUID, turn_id: UUID, batch: Any, cipher: Any
+    ) -> None:
         appends.append(len(batch))
-        await real(db, conversation_id, turn_id, batch)
+        await real(db, conversation_id, turn_id, batch, cipher)
 
     monkeypatch.setattr("app.ai.turn.append_messages", counting)
     transport = PlanTransport(search_plan(), search_plan(), text_plan("Done.", cite=True))
@@ -1432,6 +1461,8 @@ async def test_the_trace_records_how_the_turn_went(
         "propose_time_off_request",
         "propose_time_off_decision",
         "propose_cancel_time_off",
+        "get_my_cases",
+        "list_cases",
     ]
 
 
@@ -1486,7 +1517,12 @@ async def test_a_second_turn_while_one_runs_is_refused(
 ) -> None:
     env = await make_env(app_engine, seeded_sandbox)
     async with tenant_session(app_engine, env.ctx) as db:
-        await start_turn(db, env.conversation, "already going")
+        await start_turn(
+            db,
+            env.conversation,
+            "already going",
+            conversation_cipher(TEST_KEYS, env.conversation),
+        )
     with pytest.raises(TurnRunning):
         await env.ask()
     assert env.transport.guard_requests == []
@@ -1717,6 +1753,8 @@ async def test_a_sensitive_turn_that_fails_still_routes_to_hr(
     escalation = events[-1]
     assert isinstance(escalation, Escalation)
     assert (escalation.kind, escalation.message) == ("sensitive", SENSITIVE_TEXT)
+    # Whatever the ending, a sensitive verdict offers a case.
+    assert escalation.offer_case is True
     audit = [
         e
         for e in await audit_events(app_engine, seeded_sandbox.tenant_id)
@@ -1933,10 +1971,10 @@ async def test_a_refused_whole_turn_append_falls_back_to_storing_the_question(
 ) -> None:
     real = append_messages
 
-    async def picky(db: Any, conversation_id: UUID, turn_id: UUID, batch: Any) -> None:
+    async def picky(db: Any, conversation_id: UUID, turn_id: UUID, batch: Any, cipher: Any) -> None:
         if len(batch) > 1:
             raise ValueError("refused")
-        await real(db, conversation_id, turn_id, batch)
+        await real(db, conversation_id, turn_id, batch, cipher)
 
     monkeypatch.setattr("app.ai.turn.append_messages", picky)
     env = await make_env(app_engine, seeded_sandbox)
@@ -2398,7 +2436,12 @@ async def test_the_up_front_checks_raise_when_the_turn_is_started_not_when_it_is
         )
 
     async with tenant_session(app_engine, env.ctx) as db:
-        await start_turn(db, env.conversation, "already going")
+        await start_turn(
+            db,
+            env.conversation,
+            "already going",
+            conversation_cipher(TEST_KEYS, env.conversation),
+        )
     with pytest.raises(TurnRunning):
         await start_turn_run(env.deps, conversation=env.conversation, question=SICK, now=NOW)
 
@@ -3563,3 +3606,147 @@ async def test_a_lone_surrogate_in_a_tool_round_completes_the_turn(
     stored = await env.messages()
     assert "ud83d" not in json.dumps([row.content for row in stored])
     assert stored[-1].content == [{"type": "text", "text": "Done \ufffd"}]
+
+
+# --- Encrypted text (Phase 6, stage 1) --------------------------------------------------------
+
+
+class CountingKeys:
+    """A key provider that counts its calls, standing in for the app's."""
+
+    def __init__(self) -> None:
+        self.unwraps = 0
+        self.wraps = 0
+
+    def wrap(self, data_key: bytes, *, aad: bytes) -> tuple[str, bytes]:
+        self.wraps += 1
+        return TEST_KEYS.wrap(data_key, aad=aad)
+
+    def unwrap(self, key_id: str, wrapped: bytes, *, aad: bytes) -> bytes:
+        self.unwraps += 1
+        return TEST_KEYS.unwrap(key_id, wrapped, aad=aad)
+
+
+async def test_a_turn_unwraps_the_conversations_key_once_not_once_per_message(
+    app_engine: AsyncEngine, seeded_sandbox: SeedCompany
+) -> None:
+    transport = PlanTransport(search_plan(), search_plan(), text_plan("Done.", cite=True))
+    env = await make_env(app_engine, seeded_sandbox, transport=transport)
+    keys = CountingKeys()
+    env.deps = dataclasses.replace(env.deps, keys=keys)
+
+    events = await env.ask()
+
+    assert isinstance(events[-1], TurnCompleted)
+    # Seven messages, two tool rounds, the question, the answer, and the history read at the start:
+    # one unwrap serves all of it.
+    assert len(await env.messages()) == 7
+    assert keys.unwraps == 1
+    assert keys.wraps == 0  # Only a new conversation wraps a key.
+
+
+async def test_a_turn_handed_its_admitted_key_unwraps_nothing(
+    app_engine: AsyncEngine, seeded_sandbox: SeedCompany
+) -> None:
+    env = await make_env(app_engine, seeded_sandbox)
+    keys = CountingKeys()
+    env.deps = dataclasses.replace(env.deps, keys=keys)
+    cipher = conversation_cipher(TEST_KEYS, env.conversation)
+
+    run = await start_turn_run(
+        env.deps, conversation=env.conversation, question=SICK, now=NOW, cipher=cipher
+    )
+    async for _ in run.events():
+        pass
+
+    assert keys.unwraps == 0
+
+
+async def test_a_second_turn_in_the_conversation_unwraps_again_and_reads_the_first_back(
+    app_engine: AsyncEngine, seeded_sandbox: SeedCompany
+) -> None:
+    env = await make_env(app_engine, seeded_sandbox)
+    keys = CountingKeys()
+    env.deps = dataclasses.replace(env.deps, keys=keys)
+
+    await env.ask()
+    await env.ask("And what about vacation?")
+
+    assert keys.unwraps == 2
+    first, second = await env.turns()
+    assert (first.question, second.question) == (SICK, "And what about vacation?")
+    assert [row.role for row in await env.messages()][:2] == ["user", "system"]
+
+
+async def test_nothing_a_person_wrote_or_was_told_is_stored_readable(
+    app_engine: AsyncEngine, owner_engine: AsyncEngine, seeded_sandbox: SeedCompany
+) -> None:
+    question = "How much paid sick leave do I get, and does my manager have to approve it?"
+    transport = PlanTransport(search_plan(), text_plan("You get 40 hours of sick leave."))
+    env = await make_env(app_engine, seeded_sandbox, transport=transport)
+    await env.ask(question)
+    crisis_words = "I want to hurt myself"
+    await env.ask(crisis_words)
+    turns = await env.turns()
+    assert [t.status for t in turns] == ["completed", "crisis"]
+    # What the person sees: the answer and the tool's input summary.
+    summary = turns[0].tool_calls[0]["inputSummary"]
+    assert summary
+    assert turns[0].answer_text == "You get 40 hours of sick leave."
+
+    async with owner_engine.connect() as connection:
+        stored: list[str] = []
+        for table in ("ai_messages", "ai_turns", "ai_feedback"):
+            query = text(
+                f"SELECT row_to_json(t)::text FROM {table} t WHERE conversation_id = :c"  # noqa: S608
+                if table != "ai_feedback"
+                else "SELECT row_to_json(f)::text FROM ai_feedback f"
+                " JOIN ai_turns t ON t.id = f.turn_id WHERE t.conversation_id = :c"
+            )
+            rows = await connection.execute(query, {"c": env.conversation.id})
+            stored.extend(rows.scalars().all())
+    everything = "\n".join(stored)
+
+    assert everything
+    for plaintext in (
+        question,
+        "paid sick leave",
+        "40 hours",
+        crisis_words,
+        summary,
+        "search_result",  # A message's block types are part of the sealed JSON too.
+        "tool_use",
+    ):
+        assert plaintext not in everything
+    # The readable parts of the trace are still readable for the console.
+    assert '"name": "search_handbook"' in everything
+
+
+async def test_a_previous_answer_that_does_not_open_leaves_no_new_turn_behind(
+    app_engine: AsyncEngine, owner_engine: AsyncEngine, seeded_sandbox: SeedCompany
+) -> None:
+    env = await make_env(app_engine, seeded_sandbox, persona="priya")
+    await env.ask()
+    # Swap in a ciphertext that belongs to another column, with the freeze trigger off.
+    async with owner_engine.begin() as connection:
+        await connection.execute(
+            text("ALTER TABLE ai_turns DISABLE TRIGGER refuse_finished_turn_update")
+        )
+        try:
+            await connection.execute(
+                text("UPDATE ai_turns SET answer_ciphertext = question_ciphertext")
+            )
+        finally:
+            await connection.execute(
+                text("ALTER TABLE ai_turns ENABLE TRIGGER refuse_finished_turn_update")
+            )
+
+    with pytest.raises(DecryptionFailed):
+        await start_turn_run(
+            env.deps, conversation=env.conversation, question="And for my kids?", now=NOW
+        )
+
+    # No second turn, and nothing left running.
+    async with tenant_session(env.engine, env.ctx) as db:
+        statuses = list(await db.scalars(select(AiTurn.status).order_by(AiTurn.started_at)))
+    assert statuses == ["completed"]

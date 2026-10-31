@@ -8,7 +8,7 @@ from collections.abc import Mapping, Sequence
 from datetime import datetime
 from typing import Any, Literal, NamedTuple
 
-from app.ai.conversations import is_abandoned
+from app.ai.conversations import TurnText, is_abandoned
 from app.ai.fixed_texts import (
     CRISIS_TEXT,
     ERROR_TEXTS,
@@ -16,14 +16,16 @@ from app.ai.fixed_texts import (
     UNAVAILABLE_TEXT,
     HrContact,
 )
+from app.ai.guard import escalation_for_verdict, offers_case
 from app.ai.proposals import ProposalOut
+from app.api.contacts import hr_contact_out
 from app.db.models import AiFeedback, AiTurn
 from app.modules.assistant.schemas import (
+    CaseOpenedOut,
     CitationOut,
     EscalationOut,
     FeedbackOut,
     GuardOut,
-    HrContactOut,
     SectionOut,
     ToolCallOut,
     TurnErrorOut,
@@ -61,7 +63,8 @@ def escalation_kind(
     if error_code == GUARD_ERROR_CODE:
         return "unavailable"
     if guard_verdict is not None and (
-        guard_verdict.get("category") == "sensitive" or guard_verdict.get("kind") is not None
+        escalation_for_verdict(guard_verdict.get("category"), guard_verdict.get("kind"))
+        == "sensitive"
     ):
         return "sensitive"
     return None
@@ -146,12 +149,6 @@ def needs_hr_contact(turns: Sequence[Shown]) -> bool:
     return any(t.kind is not None or t.not_found for t in turns)
 
 
-def hr_contact_out(contacts: Sequence[HrContact]) -> list[HrContactOut]:
-    """The contacts as the conversation read shows them, built from the event's own form
-    (`HrContact.to_json`), so the two can't drift apart."""
-    return [HrContactOut.model_validate(c.to_json()) for c in contacts]
-
-
 def sections_out(
     sections: Sequence[Mapping[str, Any]],
     section_names: Mapping[str, tuple[str | None, str | None]],
@@ -177,22 +174,26 @@ def sections_out(
 
 def turn_out(
     turn: AiTurn,
+    text: TurnText,
     shows: Shown,
     feedback: AiFeedback | None,
+    reason: str | None,
     hr_contact: Sequence[HrContact],
     section_names: Mapping[str, tuple[str | None, str | None]],
     proposals: Sequence[ProposalOut] = (),
+    case_opened: CaseOpenedOut | None = None,
 ) -> TurnOut:
-    """`shows` is what `shown` worked out for the turn. `section_names` maps a section ID to its
-    (title, group name), from the conversation's stored sources. A section it doesn't hold is shown
-    without them."""
+    """`text` is the turn's encrypted text, opened (`open_turn`), and `reason` the feedback's
+    (`open_reason`). `shows` is what `shown` worked out for the turn. `section_names` maps a
+    section ID to its (title, group name), from the conversation's stored sources. A section it
+    doesn't hold is shown without them."""
     status, error_code, kind = shows.status, shows.error_code, shows.kind
     verdict = turn.guard_verdict
     return TurnOut(
         id=turn.id,
-        question=turn.question,
+        question=text.question,
         status=status,
-        answer_text=turn.answer_text,
+        answer_text=text.answer,
         citations=[CitationOut.model_validate(c) for c in turn.citations],
         incomplete=status == "completed" and error_code == MAX_TOKENS_CODE,
         error=error_for(status, error_code),
@@ -202,7 +203,9 @@ def turn_out(
             kind=kind,
             message=_ESCALATION_TEXTS[kind],
             hr_contact=hr_contact_out(hr_contact),
+            offer_case=offers_case(kind, verdict),
         ),
+        case_opened=case_opened,
         not_found=shows.not_found,
         guard=None
         if verdict is None
@@ -214,12 +217,10 @@ def turn_out(
                 ok=t["ok"],
                 duration_ms=t["durationMs"],
             )
-            for t in turn.tool_calls
+            for t in text.tool_calls
         ],
         sections=sections_out(turn.sections_retrieved, section_names),
-        feedback=None
-        if feedback is None
-        else FeedbackOut(helpful=feedback.helpful, reason=feedback.reason),
+        feedback=None if feedback is None else FeedbackOut(helpful=feedback.helpful, reason=reason),
         proposals=list(proposals),
         started_at=turn.started_at,
         ended_at=turn.ended_at,

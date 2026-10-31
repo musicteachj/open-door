@@ -29,10 +29,16 @@ CRISIS_TEXT_AUTHOR: Final = "James Littlefield (owner)"
 CRISIS_TEXT_APPROVED_ON: str | None = "2026-10-15"
 CRISIS_TEXT_SHA256: str | None = "99234f819d1e54f0f68a15cff8663a17577706246e555f7566044f81748a34a2"
 
+# The sensitive panel's text (spec, "The fixed texts"). The owner approved it on 2026-10-28, like
+# the crisis text. Changing a word means approving it again.
 SENSITIVE_TEXT: Final = (
-    "A person on the HR team should help with this, and they handle it confidentially. "
-    "Their contact details are below."
+    "This sounds like something a person on the HR team should help with. You can open a "
+    "confidential case below. Only the HR team can open it in Open Door, never your manager, and "
+    "it's stored encrypted. HR replies within 2 business days. Their contact details are below."
 )
+SENSITIVE_TEXT_AUTHOR: Final = "James Littlefield (owner)"
+SENSITIVE_TEXT_APPROVED_ON: str | None = "2026-10-28"
+SENSITIVE_TEXT_SHA256: Final = "d6b57b10262b7db85139a83f8f46a18bb759c1a2ab8ede4d69b486d6d3177887"
 
 # Approved by the owner like the crisis text: a failed guard can't tell a crisis from anything else
 # (ADR 0009), so this text also gives 911 and 988. Changing a word means approving it again.

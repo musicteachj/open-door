@@ -10,10 +10,11 @@ from dataclasses import dataclass
 from datetime import date, datetime
 from uuid import UUID
 
-from sqlalchemy import ColumnElement, SQLColumnExpression, func, select, text
+from sqlalchemy import ColumnElement, SQLColumnExpression, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import aliased
 
+from app.db.locks import TIMEOFF_PERSON_NS, lock_tenant_scoped
 from app.db.models import (
     HandbookSection,
     Holiday,
@@ -26,25 +27,17 @@ from app.db.models import (
 from app.domain.timeoff.model import Opening, Request, Schedule
 from app.domain.timeoff.model import Person as EnginePerson
 
-# The two-integer form of pg_advisory_xact_lock takes a namespace and a key. 4401 and 4402 are the
-# AI budget's (app/ai/budget.py). This one is a person's time-off balance. The key is the tenant
-# and the person together, so two sandboxes never wait for each other.
-TIMEOFF_PERSON_NS = 4403
-TAKE_PERSON_LOCK = text(
-    f"SELECT pg_advisory_xact_lock({TIMEOFF_PERSON_NS},"
-    " hashtext(CAST(:tenant_id AS text) || ':' || CAST(:person_id AS text)))"
-)
-
 
 async def lock_person(db: AsyncSession, tenant_id: UUID, person_id: UUID) -> None:
-    """Take the person's balance lock until the transaction ends.
+    """Take the person's balance lock until the transaction ends (namespace 4403, listed with the
+    others in app/db/locks.py).
 
     Every write that can change what a person has available takes it BEFORE it reads their
     requests, so two writes for one person run one after the other, and the second sees the
     first. It is a transaction-scoped lock (released at commit or rollback), so it stays correct
     behind a connection pooler. Taking it again in the same transaction does nothing.
     """
-    await db.execute(TAKE_PERSON_LOCK, {"tenant_id": str(tenant_id), "person_id": str(person_id)})
+    await lock_tenant_scoped(db, TIMEOFF_PERSON_NS, tenant_id, person_id)
 
 
 @dataclass(frozen=True, slots=True)

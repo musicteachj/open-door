@@ -13,20 +13,31 @@ the history is worked out by hand.
 """
 
 import random
-from collections.abc import Iterator, Mapping, Sequence
+from collections.abc import Callable, Iterator, Mapping, Sequence
 from dataclasses import dataclass, fields
 from datetime import UTC, date, datetime, time, timedelta
 from typing import cast
 from uuid import UUID, uuid5
+from zoneinfo import ZoneInfo
 
-from sqlalchemy import Insert, Text, bindparam, func, insert, select
+from sqlalchemy import Insert, Text, bindparam, func, insert, select, text
 from sqlalchemy import cast as sql_cast
 from sqlalchemy.dialects.postgresql import ARRAY
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.encryption import KeyProvider
+
 # Importing the models puts their tables on Base.metadata.
 from app.db import models  # noqa: F401
 from app.db.base import Base
+from app.db.models import Case, CaseEvent, CaseSummary
+from app.domain.cases import (
+    HQ_TIMEZONE,
+    add_business_days,
+    hq_closed_days,
+    is_business_day,
+    reply_by,
+)
 from app.domain.holidays import holidays_for
 from app.domain.timeoff.charges import charge_days
 from app.domain.timeoff.counting import count_days
@@ -44,9 +55,11 @@ from app.domain.timeoff.model import Person as EnginePerson
 from app.domain.timeoff.model import Request as EngineRequest
 from app.domain.timeoff.pto import MONTHLY_RATE_MINUTES, pto_balance
 from app.domain.timeoff.sick import sick_years
+from app.modules.cases.service import seal_case_words, seal_summary_text
 from app.modules.sandbox.seed_data import (
     ATLANTA_FAMILY_NAMES,
     ATLANTA_GIVEN_NAMES,
+    CASES,
     FAMILY_NAMES,
     GIVEN_NAMES,
     LAST_WEEK_PTO_SEAT,
@@ -55,13 +68,19 @@ from app.modules.sandbox.seed_data import (
     PENDING_REQUEST_SEAT,
     PERSONAL_EMAIL_DOMAIN,
     SEED,
+    SEEDED_SUMMARIES,
+    SEEDED_SUMMARY_MODEL,
+    SEEDED_SUMMARY_PLACEHOLDER,
+    SEEDED_SUMMARY_PROMPT_VERSION,
     STREET_NAMES,
     STREET_TYPES,
+    SUMMARY_DELAY_MINUTES,
     TIME_OFF_STREAM,
     WORK_EMAIL_DOMAIN,
     LocationSpec,
     PersonSpec,
     Position,
+    SeededSummary,
 )
 
 # Everyone drawn from the seed is 22 to 63 years old, was hired at 19 or older, and joined between
@@ -214,6 +233,43 @@ ROW_TYPES: dict[str, type[Row]] = {
 
 
 @dataclass(frozen=True, slots=True)
+class CaseEventRow:
+    """One step in a seeded case's timeline, as case_events holds it."""
+
+    id: UUID
+    actor_person_id: UUID | None
+    occurred_at: datetime
+    kind: str
+    from_status: str | None
+    to_status: str | None
+
+
+@dataclass(frozen=True, slots=True)
+class CaseRow:
+    """A seeded case with its words and summary in plaintext. They are not a row type: the words
+    and summary are sealed when `insert_company` writes them, so no field here is a plain column
+    of `cases` (the text is `text_ciphertext` there, and the summary is its own table's row)."""
+
+    id: UUID
+    tenant_id: UUID
+    person_id: UUID
+    submission_id: UUID
+    category: str
+    status: str
+    screening: str
+    reply_by: date
+    created_at: datetime
+    status_changed_at: datetime
+    text: str
+    summary_id: UUID
+    summary_text: str
+    summary_created_at: datetime
+    summary_model: str
+    summary_prompt_version: str
+    events: tuple[CaseEventRow, ...]
+
+
+@dataclass(frozen=True, slots=True)
 class SeedCompany:
     """One sandbox's seed rows. The fields after the first two are named after their tables."""
 
@@ -226,6 +282,8 @@ class SeedCompany:
     holidays: tuple[HolidayRow, ...]
     time_off_openings: tuple[OpeningRow, ...]
     time_off_requests: tuple[RequestRow, ...]
+    # Last, with a default, since they come from fixed entries and not the seed's draws.
+    cases: tuple[CaseRow, ...] = ()
 
 
 class _Draws:
@@ -271,8 +329,7 @@ class _Seat:
 def build_company(tenant_id: UUID, anchor_date: date) -> SeedCompany:
     """Build one sandbox's company in memory. Pure: equal arguments always give equal rows."""
 
-    def make_id(kind: str, key: str) -> UUID:
-        return uuid5(tenant_id, f"{kind}:{key}")
+    make_id = _id_maker(tenant_id)
 
     draws = _Draws(SEED)
     # Each location opened later has its own stream, so the draws of the original three are the
@@ -345,21 +402,23 @@ def build_company(tenant_id: UUID, anchor_date: date) -> SeedCompany:
         tenant_id, anchor_date, seats, people, holidays, _Draws(SEED + TIME_OFF_STREAM)
     )
 
+    locations = tuple(
+        LocationRow(
+            make_id("location", spec.code),
+            tenant_id,
+            spec.code,
+            spec.name,
+            spec.city,
+            spec.state,
+            spec.timezone,
+        )
+        for spec in LOCATIONS
+    )
+
     return SeedCompany(
         tenant_id=tenant_id,
         anchor_date=anchor_date,
-        locations=tuple(
-            LocationRow(
-                make_id("location", spec.code),
-                tenant_id,
-                spec.code,
-                spec.name,
-                spec.city,
-                spec.state,
-                spec.timezone,
-            )
-            for spec in LOCATIONS
-        ),
+        locations=locations,
         departments=tuple(
             DepartmentRow(make_id("department", name), tenant_id, name)
             for name in dict.fromkeys(department for department, _ in ORG)
@@ -369,6 +428,7 @@ def build_company(tenant_id: UUID, anchor_date: date) -> SeedCompany:
         holidays=holidays,
         time_off_openings=tuple(openings),
         time_off_requests=tuple(requests),
+        cases=_cases(tenant_id, anchor_date, people, locations),
     )
 
 
@@ -389,6 +449,134 @@ def _seats() -> Iterator[_Seat]:
                 else:
                     weekdays = position.weekdays
                 yield _Seat(key, department, location, position, weekdays)
+
+
+def _id_maker(tenant_id: UUID) -> Callable[[str, str], UUID]:
+    """Makes an ID from a kind and a key: the same sandbox and key always give the same ID."""
+
+    def make_id(kind: str, key: str) -> UUID:
+        return uuid5(tenant_id, f"{kind}:{key}")
+
+    return make_id
+
+
+class _Calendar:
+    """Denver HQ's business days around the anchor date: weekdays that aren't HQ holidays, the
+    same calendar a case's reply-by date counts on."""
+
+    def __init__(self, anchor_date: date) -> None:
+        self.holidays = hq_closed_days(*range(anchor_date.year - 1, anchor_date.year + 2))
+
+    def is_open(self, day: date) -> bool:
+        return is_business_day(day, self.holidays)
+
+    def on_or_before(self, day: date) -> date:
+        while not self.is_open(day):
+            day -= timedelta(days=1)
+        return day
+
+
+def _cases(
+    tenant_id: UUID,
+    anchor_date: date,
+    people: Sequence[PersonRow],
+    locations: Sequence[LocationRow],
+) -> tuple[CaseRow, ...]:
+    """The seeded cases, from fixed entries (no draws, so nothing else moves).
+
+    Each is sent a number of business days before the anchor date, counted back from the anchor's
+    own day, or from the last business day before it when the anchor falls on a weekend or an HQ
+    holiday. So the case sent two business days back has its reply due on the anchor date, or on a
+    closed day the last business day, which is then already due. All times are fixed Denver local
+    times, so they are stable, backdated, and in order.
+    """
+    zone = ZoneInfo(HQ_TIMEZONE)
+    calendar = _Calendar(anchor_date)
+    today = calendar.on_or_before(anchor_date)
+    by_name = {(person.given_name, person.family_name): person for person in people}
+    hr = next(person for person in people if person.persona_key == "dana")
+    location_codes = {location.id: location.code for location in locations}
+    rows = []
+
+    def at(day: date, local: time) -> datetime:
+        return datetime.combine(day, local, tzinfo=zone).astimezone(UTC)
+
+    make_id = _id_maker(tenant_id)
+
+    for spec in CASES:
+        person = by_name[(spec.given_name, spec.family_name)]
+        if person.title != spec.title or location_codes[person.location_id] != spec.location_code:
+            msg = f"The seeded case {spec.key!r} names someone the seed company no longer has"
+            raise ValueError(msg)
+        sent_day = add_business_days(today, -spec.business_days_before_anchor, calendar.holidays)
+        sent_at = at(sent_day, spec.sent_at)
+        events = [
+            CaseEventRow(
+                make_id("case-event", f"{spec.key}:opened"),
+                person.id,
+                sent_at,
+                "opened",
+                None,
+                None,
+            ),
+            CaseEventRow(
+                make_id("case-event", f"{spec.key}:summary_written"),
+                None,
+                sent_at + timedelta(minutes=SUMMARY_DELAY_MINUTES),
+                "summary_written",
+                None,
+                None,
+            ),
+        ]
+        status = "new"
+        status_changed_at = sent_at
+        for number, step in enumerate(spec.steps, start=1):
+            happened = at(
+                add_business_days(sent_day, step.business_days_later, calendar.holidays), step.at
+            )
+            before = status
+            if step.kind == "status_changed":
+                assert step.to_status is not None  # noqa: S101
+                status, status_changed_at = step.to_status, happened
+            events.append(
+                CaseEventRow(
+                    make_id("case-event", f"{spec.key}:{number}:{step.kind}"),
+                    hr.id,
+                    happened,
+                    step.kind,
+                    before if step.kind == "status_changed" else None,
+                    step.to_status,
+                )
+            )
+        if status != spec.status:
+            msg = f"The seeded case {spec.key!r} ends {status!r}, not {spec.status!r}"
+            raise ValueError(msg)
+        # A recorded real summary if there is one, else the placeholder.
+        summary = SEEDED_SUMMARIES.get(spec.key) or SeededSummary(
+            SEEDED_SUMMARY_PLACEHOLDER, SEEDED_SUMMARY_MODEL, SEEDED_SUMMARY_PROMPT_VERSION
+        )
+        rows.append(
+            CaseRow(
+                id=make_id("case", spec.key),
+                tenant_id=tenant_id,
+                person_id=person.id,
+                submission_id=make_id("case-submission", spec.key),
+                category=spec.category,
+                status=status,
+                screening=spec.screening,
+                reply_by=reply_by(sent_at, zone, calendar.holidays),
+                created_at=sent_at,
+                status_changed_at=status_changed_at,
+                text=spec.text,
+                summary_id=make_id("case-summary", spec.key),
+                summary_text=summary.text,
+                summary_created_at=sent_at + timedelta(minutes=SUMMARY_DELAY_MINUTES),
+                summary_model=summary.model,
+                summary_prompt_version=summary.prompt_version,
+                events=tuple(events),
+            )
+        )
+    return tuple(rows)
 
 
 def _someone(draws: _Draws, given_name: str, family_name: str) -> PersonSpec:
@@ -649,7 +837,9 @@ class _History:
         )
 
 
-async def insert_company(session: AsyncSession, company: SeedCompany) -> None:
+async def insert_company(
+    session: AsyncSession, company: SeedCompany, keys: KeyProvider | None = None
+) -> None:
     """Write the company into its sandbox, inside the caller's transaction.
 
     The session must be scoped to the company's tenant (see app/db/tenancy.py), or row-level
@@ -661,9 +851,102 @@ async def insert_company(session: AsyncSession, company: SeedCompany) -> None:
     A column that is itself an array (a person's weekdays) can't go in as an array of arrays, since
     unnest would flatten it into one long column. Each person's value goes in as one text literal,
     like '{3,4,5,6,7}', and the SELECT casts it back to the column's type.
+
+    The cases go in last, sealed with `keys`: their words and summaries are plaintext in `company`
+    and ciphertext in the database. See `_insert_cases`. `keys` may be left out only for a company
+    with no cases (the eval sandbox's).
     """
     for table_name in ROW_TYPES:
         await _insert_rows(session, table_name, getattr(company, table_name))
+    await _insert_cases(session, company.cases, keys)
+
+
+async def _insert_cases(
+    session: AsyncSession, cases: Sequence[CaseRow], keys: KeyProvider | None
+) -> None:
+    """Write the seeded cases, their summaries, and their timelines.
+
+    A case comes from someone other than the sandbox's visitor, with times in the past, and with
+    Dana's reads in its timeline. The database lets that through only when no person is set
+    (migration 0013), so `app.person_id` is cleared for these inserts and put back afterward,
+    because sandbox creation carries on as the visitor in this same transaction. The HR flag is
+    never set. Nobody can read these rows back with no person, so they are Core inserts with the
+    IDs made here and no RETURNING, which Postgres checks against the read rule.
+    """
+    if not cases:
+        return
+    if keys is None:
+        msg = "Seeding cases needs the encryption keys"
+        raise ValueError(msg)
+    sealed = {case.id: seal_case_words(keys, case.tenant_id, case.id, case.text) for case in cases}
+    previous: str | None = (await session.execute(READ_PERSON)).scalar_one()
+    await session.execute(SET_PERSON, {"person_id": ""})
+    await session.execute(
+        insert(Case).values(
+            [
+                {
+                    "id": case.id,
+                    "tenant_id": case.tenant_id,
+                    "person_id": case.person_id,
+                    "submission_id": case.submission_id,
+                    "category": case.category,
+                    "status": case.status,
+                    "status_changed_at": case.status_changed_at,
+                    "created_at": case.created_at,
+                    "reply_by": case.reply_by,
+                    "screening": case.screening,
+                    "key_id": sealed[case.id].key_id,
+                    "wrapped_key": sealed[case.id].wrapped_key,
+                    "text_ciphertext": sealed[case.id].text_ciphertext,
+                }
+                for case in cases
+            ]
+        )
+    )
+    await session.execute(
+        insert(CaseSummary).values(
+            [
+                {
+                    "id": case.summary_id,
+                    "tenant_id": case.tenant_id,
+                    "case_id": case.id,
+                    "status": "written",
+                    "ciphertext": seal_summary_text(
+                        sealed[case.id].data_key,
+                        case.tenant_id,
+                        case.summary_id,
+                        case.summary_text,
+                    ),
+                    "model": case.summary_model,
+                    "prompt_version": case.summary_prompt_version,
+                    "created_at": case.summary_created_at,
+                }
+                for case in cases
+            ]
+        )
+    )
+    await session.execute(
+        insert(CaseEvent).values(
+            [
+                {
+                    "id": event.id,
+                    "tenant_id": case.tenant_id,
+                    "case_id": case.id,
+                    "actor_person_id": event.actor_person_id,
+                    "occurred_at": event.occurred_at,
+                    "kind": event.kind,
+                    "from_status": event.from_status,
+                    "to_status": event.to_status,
+                }
+                for case in cases
+                for event in case.events
+            ]
+        )
+    )
+    # Put back only after the inserts succeed. If one fails, Postgres has aborted the transaction,
+    # so nothing can run as no-person afterward, and a restore here would raise
+    # InFailedSQLTransaction and hide the insert's own error.
+    await session.execute(SET_PERSON, {"person_id": previous or ""})
 
 
 async def insert_time_off_requests(session: AsyncSession, rows: Sequence[RequestRow]) -> None:
@@ -686,6 +969,10 @@ async def _insert_rows(session: AsyncSession, table_name: str, rows: Sequence[Ro
         for field in fields(row_type)
     }
     await session.execute(_INSERTS[table_name], values)
+
+
+READ_PERSON = text("SELECT current_setting('app.person_id', true)")
+SET_PERSON = text("SELECT set_config('app.person_id', :person_id, true)")
 
 
 def _array_literal(items: Sequence[int]) -> str:

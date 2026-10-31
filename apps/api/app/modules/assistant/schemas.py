@@ -7,7 +7,7 @@ counts (the prompt cache is shared across the account, so a cache hit could hint
 visitor asked the same thing).
 """
 
-from datetime import datetime
+from datetime import date, datetime
 from typing import Annotated, Literal
 from uuid import UUID
 
@@ -15,7 +15,9 @@ from pydantic import AfterValidator, ConfigDict, Field, StringConstraints
 
 from app.ai.conversations import FEEDBACK_REASON_MAX_CHARACTERS
 from app.ai.proposals import ProposalOut
+from app.api.contacts import HrContactOut
 from app.api.schemas import CamelModel
+from app.modules.cases.api_schemas import SentLineOut
 
 
 def is_storable(text: str) -> bool:
@@ -86,19 +88,24 @@ class TurnErrorOut(CamelModel):
     message: str
 
 
-class HrContactOut(CamelModel):
-    name: str
-    work_email: str
-    job_title: str | None
-    location_name: str | None
-
-
 class EscalationOut(CamelModel):
     """The fixed text the stream's `escalation` event had, and the HR team to reach."""
 
     kind: Literal["sensitive", "crisis", "unavailable"]
     message: str
     hr_contact: list[HrContactOut]
+    # The panel may offer "Open a confidential case": the guard called the turn sensitive or crisis.
+    offer_case: bool
+
+
+class CaseOpenedOut(CamelModel):
+    """The case the person opened from a turn: enough to show the sent state after a reload. Never
+    the words, and not the screening label."""
+
+    status: Literal["new", "in_review", "closed"]
+    reply_by: date
+    # The fixed sent line for the case's own reply-by date and the caller's role.
+    sent_line: SentLineOut
 
 
 class TurnOut(CamelModel):
@@ -111,6 +118,8 @@ class TurnOut(CamelModel):
     incomplete: bool
     error: TurnErrorOut | None
     escalation: EscalationOut | None
+    # The person's own case opened from this turn, if any.
+    case_opened: CaseOpenedOut | None
     # The turn searched the handbook and found nothing to cite: the page offers the HR team, whose
     # contacts are in the conversation's `hrContacts`.
     not_found: bool

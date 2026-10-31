@@ -97,6 +97,11 @@ export type ChatState = {
   conversationId: string | null
   /** Why the last send did not go, shown under the box. The draft is kept. */
   sendError: string | null
+  /**
+   * A send is waiting for "Start a new conversation" to finish creating the conversation it will
+   * go to. The composer shows its busy state meanwhile, so a second Enter is not a silent no-op.
+   */
+  waitingToSend: boolean
   /** The personal-data text, set while the draft holds a number the check refuses. */
   warning: string | null
   /** The send was refused because the conversation can't continue: offer a new one. */
@@ -123,6 +128,7 @@ const EMPTY = {
   settling: [],
   conversationId: null,
   sendError: null,
+  waitingToSend: false,
   warning: null,
   offerNewConversation: false,
 } as const

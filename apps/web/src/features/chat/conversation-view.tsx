@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, type MouseEvent } from 'react'
 import type { CitationOut, ConversationOut, HrContactOut, TurnOut } from '@/api/generated'
+import { AnswerViewerContext } from '@/components/assistant/answer-viewer'
 import { Composer } from '@/components/assistant/composer'
 import { ConversationHeader, RetentionLine } from '@/components/assistant/conversation-header'
 import { conversationCopy } from '@/components/assistant/labels'
 import { PageSandboxIndicator } from '@/features/shell/page-sandbox-indicator'
 import { useShellLayout } from '@/features/shell/shell-layout-store'
+import { useAnswerViewer, useWriteToHrLink } from '@/features/cases/use-write-to-hr'
 import { BudgetStop } from './budget-stop'
 import { forgetOpener, rememberOpener, returnFocusToOpener } from './source-opener'
 import { useSourceUrl } from './source-url'
@@ -158,6 +160,8 @@ export function ConversationView({
   )
   const hrContacts = conversation?.hrContacts ?? NO_CONTACTS
   const budgetStop = banner !== null
+  const writeToHr = useWriteToHrLink()
+  const viewer = useAnswerViewer()
   const context: TurnContext = useMemo(
     () => ({
       hrContacts,
@@ -165,8 +169,9 @@ export function ConversationView({
       onOpenSource,
       onAskAgain: (question) => void send(question, 'again'),
       budgetStop,
+      writeToHr,
     }),
-    [hrContacts, renderMarker, onOpenSource, send, budgetStop],
+    [hrContacts, renderMarker, onOpenSource, send, budgetStop, writeToHr],
   )
 
   // The long-conversation notice offers a new conversation. It follows the conversation's own
@@ -180,53 +185,57 @@ export function ConversationView({
 
   return (
     <OpenSourceContext value={openKey}>
-      <div
-        data-slot="conversation-view"
-        className="flex min-w-0 flex-1 flex-col px-10 max-[760px]:px-4"
-      >
-        {banner !== null && <BudgetStop banner={banner} />}
-        <div className="sticky top-0 z-10 w-full max-w-content bg-surface-raised pt-5 pb-6 max-[760px]:pt-4 max-[760px]:pb-4">
-          <ConversationHeader onNewConversation={composer.startNewConversation}>
-            <PageSandboxIndicator everyWidth />
-          </ConversationHeader>
-        </div>
-        {/* Notes the pressed marker or chip. A click handler on a container, not a control. */}
-        {/* oxlint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions */}
+      <AnswerViewerContext value={viewer}>
         <div
-          data-slot="conversation-thread"
-          onClickCapture={notePressed}
-          className="flex w-full max-w-content min-w-0 flex-1 flex-col gap-6 pb-6"
+          data-slot="conversation-view"
+          className="flex min-w-0 flex-1 flex-col px-10 max-[760px]:px-4"
         >
-          {turns.map((turn) => (
-            <StoredTurn key={turn.id} turn={turn} context={context} />
-          ))}
-          {settling.map(({ turn, phase: settledPhase }) => (
-            <LiveTurnView
-              key={`settling-${turn.turnId}`}
-              live={turn}
-              phase={settledPhase}
-              context={context}
-              settling
+          {banner !== null && <BudgetStop banner={banner} writeToHr={writeToHr} />}
+          <div className="sticky top-0 z-10 w-full max-w-content bg-surface-raised pt-5 pb-6 max-[760px]:pt-4 max-[760px]:pb-4">
+            <ConversationHeader onNewConversation={composer.startNewConversation}>
+              <PageSandboxIndicator everyWidth />
+            </ConversationHeader>
+          </div>
+          {/* Notes the pressed marker or chip. A click handler on a container, not a control. */}
+          {/* oxlint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions */}
+          <div
+            data-slot="conversation-thread"
+            onClickCapture={notePressed}
+            className="flex w-full max-w-content min-w-0 flex-1 flex-col gap-6 pb-6"
+          >
+            {turns.map((turn) => (
+              <StoredTurn key={turn.id} turn={turn} context={context} />
+            ))}
+            {settling.map(({ turn, phase: settledPhase }) => (
+              <LiveTurnView
+                key={`settling-${turn.turnId}`}
+                live={turn}
+                phase={settledPhase}
+                context={context}
+                settling
+              />
+            ))}
+            {live !== null && (
+              <LiveTurnView key="live" live={live} phase={phase} context={context} />
+            )}
+            <div ref={end} data-slot="thread-end" aria-hidden="true" />
+          </div>
+          <div
+            ref={dock}
+            data-slot="composer-dock"
+            className="sticky bottom-0 z-10 flex w-full max-w-content flex-col gap-3 bg-surface-raised pt-2 pb-5 max-[760px]:pb-4"
+          >
+            <Composer
+              {...composer.props}
+              variant="docked"
+              placeholder={conversationCopy.followUpPlaceholder}
+              longConversation={longConversation}
+              onNewConversation={composer.startNewConversation}
             />
-          ))}
-          {live !== null && <LiveTurnView key="live" live={live} phase={phase} context={context} />}
-          <div ref={end} data-slot="thread-end" aria-hidden="true" />
+            <RetentionLine className="sm:hidden" />
+          </div>
         </div>
-        <div
-          ref={dock}
-          data-slot="composer-dock"
-          className="sticky bottom-0 z-10 flex w-full max-w-content flex-col gap-3 bg-surface-raised pt-2 pb-5 max-[760px]:pb-4"
-        >
-          <Composer
-            {...composer.props}
-            variant="docked"
-            placeholder={conversationCopy.followUpPlaceholder}
-            longConversation={longConversation}
-            onNewConversation={composer.startNewConversation}
-          />
-          <RetentionLine className="sm:hidden" />
-        </div>
-      </div>
+      </AnswerViewerContext>
     </OpenSourceContext>
   )
 }

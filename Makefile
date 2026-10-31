@@ -14,16 +14,21 @@ ZIZMOR := zizmor@1.30.1
 GITLEAKS := ghcr.io/gitleaks/gitleaks:v8.30.1
 
 .DEFAULT_GOAL := help
-.PHONY: help setup db db-stop migrate bootstrap-db ingest embed eval-retrieval eval-offline eval-live migrations-roundtrip dev dev-api dev-web openapi check check-api check-web e2e proxy-check captures check-docs check-workflows audit
+.PHONY: help setup keyring db db-stop migrate bootstrap-db ingest embed eval-retrieval eval-offline eval-live migrations-roundtrip dev dev-api dev-web openapi check check-api check-web e2e proxy-check captures check-docs check-workflows audit
 
 help: ## List the available commands
 	@grep -E '^[a-zA-Z_-]+:.*## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*## "}; {printf "  %-22s %s\n", $$1, $$2}'
 
-setup: ## Install dependencies and git hooks; create apps/api/.env if it's missing
+setup: ## Install dependencies and git hooks; create apps/api/.env and the encryption keyring if missing
 	cd $(API) && uv sync
 	cd $(WEB) && npm ci
 	uvx pre-commit install
 	@test -f $(API)/.env || (cp $(API)/.env.example $(API)/.env && echo "Created $(API)/.env")
+	$(MAKE) keyring
+
+# Never overwrites: replacing the keyring would make every encrypted row unreadable.
+keyring: ## Write apps/api/.keys/keyring (mode 600) if it is missing; the API won't start without one
+	cd $(API) && uv run python scripts/make_keyring.py
 
 db: ## Start the development Postgres, apply migrations, create the login users, then load the handbook
 	docker compose up --detach --wait db
@@ -57,24 +62,32 @@ eval-retrieval: ## Score handbook search against the labeled questions (needs `m
 # it needs no key and no network. A prompt, tool, or retrieval change makes a request miss its
 # recording: re-record with `make eval-live SET=full YES=1` (a smoke run re-records only its own
 # items, and this replays the full set). One run at a time.
+# The escalation set (the guard alone, no database) and the case-summary set replay too; until a
+# set's recording is committed it says "not recorded yet" and passes.
 eval-offline: ## Replay the recorded assistant evals (needs `make db`); no network. See evals/README.md
 	cd $(API) && uv run python ../../evals/assistant/run.py --mode offline --set full --check
+	cd $(API) && uv run python ../../evals/assistant/run.py --mode offline --set escalation --check
+	cd $(API) && uv run python ../../evals/assistant/run.py --mode offline --set case-summary --check
 
+# SET=case-summary (3 trials of the case summarizer and its judge, about $0.75, cap $3).
 # PAID. Without YES=1 (exactly 1: YES=0 or YES=no still only prints) it prints the set, the item count, the estimated cost, and the cap, and calls
 # nothing. SET=smoke (about $0.65, cap $2), SET=full (about $14, cap $16), or SET=effort (the smoke
-# items at medium effort, about $1.50, cap $2; its recordings go to a git-ignored folder, and
+# items at medium effort, about $1.75, cap $2; its recordings go to a git-ignored folder, and
 # COMPARE=<a low-effort scoreboard> prints the two side by side). A run reuses the recordings it
 # already has and calls only requests that changed. FRESH=1 calls everything live again. PRUNE=1
 # (SET=full only) also drops the old recordings no item asked for, and implies FRESH=1: with
 # `SET=full FRESH=1 PRUNE=1` the whole fixture set is replaced. Each run writes its scoreboard and
 # traces into the git-ignored evals/assistant/runs/. The key is read from apps/api/.env (an empty
-# one exported in the shell is ignored). One run at a time; don't start it in the middle of `make check`.
+# one exported in the shell is ignored). FIXTURES_DIR=<folder> records into that folder instead (the
+# escalation tuning half goes to a scratch folder this way: `SET=escalation HALF=tuning FIXTURES_DIR=...`).
+# One run at a time; don't start it in the middle of `make check`.
 SET ?= smoke
 STAMP := $(shell date -u +%Y%m%dT%H%M%SZ)
 RUNS := ../../evals/assistant/runs
-eval-live: ## PAID: record the assistant evals. SET=smoke|full|effort, YES=1 to run, COMPARE=<scoreboard.json>
+eval-live: ## PAID: record the assistant evals. SET=smoke|full|effort|escalation|case-summary, YES=1 to run, COMPARE=<scoreboard.json>, HALF=tuning|held_out (escalation), FIXTURES_DIR=<scratch folder to record into>
 	cd $(API) && uv run python ../../evals/assistant/run.py --mode live --set $(SET) \
-		$(if $(filter effort,$(SET)),--fixtures-dir ../../evals/assistant/fixtures-effort) \
+		$(if $(HALF),--half $(HALF)) \
+		$(if $(FIXTURES_DIR),--fixtures-dir $(abspath $(FIXTURES_DIR)),$(if $(filter effort,$(SET)),--fixtures-dir ../../evals/assistant/fixtures-effort)) \
 		$(if $(COMPARE),--compare $(abspath $(COMPARE))) \
 		--json $(RUNS)/$(STAMP)-$(SET).json --traces $(RUNS)/$(STAMP)-$(SET)-traces.json \
 		$(if $(or $(filter 1,$(FRESH)),$(filter 1,$(PRUNE))),--fresh) \

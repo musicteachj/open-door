@@ -284,6 +284,160 @@ export interface DecideCard {
 
 export type Card = RequestCard | DecideCard | CancelCard
 
+export type Category = (typeof Category)[keyof typeof Category]
+
+export const Category = {
+  harassment_discrimination: 'harassment_discrimination',
+  safety: 'safety',
+  medical_accommodation: 'medical_accommodation',
+  pay: 'pay',
+  other: 'other',
+} as const
+
+export type Status = (typeof Status)[keyof typeof Status]
+
+export const Status = {
+  new: 'new',
+  in_review: 'in_review',
+  closed: 'closed',
+} as const
+
+export type SummaryStateOutStatus =
+  (typeof SummaryStateOutStatus)[keyof typeof SummaryStateOutStatus]
+
+export const SummaryStateOutStatus = {
+  none: 'none',
+  written: 'written',
+  failed: 'failed',
+} as const
+
+export interface SummaryStateOut {
+  status: SummaryStateOutStatus
+  reason?: string | null
+  createdAt?: string | null
+}
+
+export interface TimelineEntryOut {
+  kind: string
+  occurredAt: string
+  actorPersonId: string | null
+  actorGivenName: string | null
+  actorFamilyName: string | null
+  fromStatus: Status | null
+  toStatus: Status | null
+}
+
+/**
+ * The detail page's metadata. No words and no summary text.
+ */
+export interface CaseDetailOut {
+  id: string
+  category: Category
+  status: Status
+  sentAt: string
+  replyBy: string
+  statusChangedAt: string
+  screening: string | null
+  isOwn: boolean
+  personId: string
+  givenName: string | null
+  familyName: string | null
+  title: string | null
+  departmentName: string | null
+  locationName: string | null
+  workEmail: string | null
+  summary: SummaryStateOut | null
+  timeline: TimelineEntryOut[] | null
+}
+
+/**
+ * What the person who opened a case sees: no words, no screening label.
+ */
+export interface CaseStatusOut {
+  id: string
+  category: Category
+  status: Status
+  sentAt: string
+  replyBy: string
+  statusChangedAt: string
+}
+
+export interface CaseListOut {
+  items: CaseStatusOut[]
+}
+
+export type CaseOpenedOutStatus = (typeof CaseOpenedOutStatus)[keyof typeof CaseOpenedOutStatus]
+
+export const CaseOpenedOutStatus = {
+  new: 'new',
+  in_review: 'in_review',
+  closed: 'closed',
+} as const
+
+/**
+ * The owner-approved sent line in two parts, both cut from its hashed template. The page shows
+ * them as one line, with its own link between the pointer and the page it names.
+ */
+export interface SentLineOut {
+  lead: string
+  pointer: string
+}
+
+/**
+ * The case the person opened from a turn: enough to show the sent state after a reload. Never
+ * the words, and not the screening label.
+ */
+export interface CaseOpenedOut {
+  status: CaseOpenedOutStatus
+  replyBy: string
+  sentLine: SentLineOut
+}
+
+export interface CaseSentOut {
+  case: CaseStatusOut
+  sentLine: SentLineOut
+  created: boolean
+  crisisText: string | null
+}
+
+export type CaseSummaryOutStatus = (typeof CaseSummaryOutStatus)[keyof typeof CaseSummaryOutStatus]
+
+export const CaseSummaryOutStatus = {
+  none: 'none',
+  written: 'written',
+  failed: 'failed',
+} as const
+
+export interface CaseSummaryOut {
+  status: CaseSummaryOutStatus
+  text?: string | null
+  reason?: string | null
+  model?: string | null
+  promptVersion?: string | null
+  createdAt?: string | null
+}
+
+export interface CaseTextOut {
+  text: string
+}
+
+export interface HrContactOut {
+  name: string
+  workEmail: string
+  jobTitle: string | null
+  locationName: string | null
+}
+
+/**
+ * The form's fixed bullets, with today's reply-by date filled in.
+ */
+export interface CaseTextsOut {
+  bullets: string[]
+  replyBy: string
+  waitingLimit: string
+  hrContacts: HrContactOut[]
+}
+
 export interface ProblemOut {
   code: string
   text: string
@@ -357,13 +511,6 @@ export const EscalationOutKind = {
   unavailable: 'unavailable',
 } as const
 
-export interface HrContactOut {
-  name: string
-  workEmail: string
-  jobTitle: string | null
-  locationName: string | null
-}
-
 /**
  * The fixed text the stream's `escalation` event had, and the HR team to reach.
  */
@@ -371,6 +518,7 @@ export interface EscalationOut {
   kind: EscalationOutKind
   message: string
   hrContact: HrContactOut[]
+  offerCase: boolean
 }
 
 export type GuardOutCategory = (typeof GuardOutCategory)[keyof typeof GuardOutCategory]
@@ -457,6 +605,7 @@ export interface TurnOut {
   incomplete: boolean
   error: TurnErrorOut | null
   escalation: EscalationOut | null
+  caseOpened: CaseOpenedOut | null
   notFound: boolean
   guard: GuardOut | null
   toolCalls: ToolCallOut[]
@@ -476,6 +625,11 @@ export interface ConversationOut {
   longHistory: boolean
   historyTooLong: boolean
   outdated: boolean
+}
+
+export interface CountsOut {
+  new: number
+  replyDue: number
 }
 
 /**
@@ -708,6 +862,14 @@ export interface NewSandboxRequest {
   persona?: PersonaKey
 }
 
+export interface OpenCaseBody {
+  submissionId: string
+  category: Category
+  /** @maxLength 20000 */
+  text: string
+  turnId?: string | null
+}
+
 export interface ParagraphPassage {
   type: 'passage'
   id: string
@@ -758,6 +920,36 @@ export interface Problem {
   requestId?: string | null
   errors?: FieldError[] | null
   currentStatus?: string | null
+}
+
+export type QueueFilter = (typeof QueueFilter)[keyof typeof QueueFilter]
+
+export const QueueFilter = {
+  open: 'open',
+  new: 'new',
+  in_review: 'in_review',
+  closed: 'closed',
+} as const
+
+export interface QueueItemOut {
+  id: string
+  category: Category
+  personId: string
+  givenName: string
+  familyName: string
+  title: string
+  locationName: string
+  sentAt: string
+  replyBy: string
+  status: Status
+  statusChangedAt: string
+  crisis: boolean | null
+  isOwn: boolean
+}
+
+export interface QueuePageOut {
+  items: QueueItemOut[]
+  nextCursor: string | null
 }
 
 export type RequestOutStatus = (typeof RequestOutStatus)[keyof typeof RequestOutStatus]
@@ -875,6 +1067,10 @@ export interface SectionDetail {
   next: SectionLink | null
 }
 
+export interface StatusBody {
+  to: Status
+}
+
 export interface SummaryOut {
   ptoAvailableMinutes: number
   ptoAvailableLabel: string
@@ -883,6 +1079,17 @@ export interface SummaryOut {
   waitingCount: number | null
   today: string
 }
+
+/**
+ * The retry's answer: the summary is being written.
+ *
+ * Refused with a 409 when the newest summary was written or is a crisis note, or when the case
+ * is under 2 minutes old with no summary.
+ */
+export const SummaryRetryOutValue = {
+  status: 'writing',
+} as const
+export type SummaryRetryOut = typeof SummaryRetryOutValue
 
 export interface TurnIn {
   /** @maxLength 20000 */
@@ -948,6 +1155,11 @@ export type GetTimeOffCalendarParams = {
    * First day of the holidays to list. Without it, the earliest day sick time may start, which is as far back as the form's date picker reaches.
    */
   from?: string | null
+}
+
+export type ListCasesParams = {
+  status?: QueueFilter | null
+  cursor?: string | null
 }
 
 type SecondParameter<T extends (...args: never) => unknown> = Parameters<T>[1]
@@ -4355,4 +4567,1142 @@ export function useGetTimeOffSummary<
   }
 
   return withQueryKey(query, queryOptions.queryKey)
+}
+
+export const getOpenCaseUrl = () => {
+  return `/api/v1/cases`
+}
+
+/**
+ * @summary Open a confidential case in the person's own words
+ */
+export const openCase = async (
+  openCaseBody: OpenCaseBody,
+  options?: Parameters<typeof apiFetch>[1],
+): Promise<void | CaseSentOut> => {
+  const getHeaders = (
+    h?: NonNullable<RequestInit['headers']>,
+  ): Record<string, string | readonly string[]> => {
+    if (!h) return {}
+    if (h instanceof Headers) return Object.fromEntries(h.entries())
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(
+          h as Iterable<Iterable<string>>,
+          (entry) => Array.from(entry) as [string, string],
+        ),
+      )
+    }
+    const headers: Record<string, string | readonly string[]> = {}
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value
+    }
+    return headers
+  }
+  return apiFetch<void | CaseSentOut>(getOpenCaseUrl(), {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(openCaseBody),
+  })
+}
+
+export const getOpenCaseMutationKey = () => ['openCase'] as const
+
+export const getOpenCaseMutationOptions = <
+  TError = ErrorType<Problem>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof openCase>>,
+    TError,
+    OpenCaseMutationVariables,
+    TContext
+  >
+  request?: SecondParameter<typeof apiFetch>
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof openCase>>,
+  TError,
+  OpenCaseMutationVariables,
+  TContext
+> => {
+  const mutationKey = getOpenCaseMutationKey()
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined }
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof openCase>>,
+    OpenCaseMutationVariables
+  > = (props) => {
+    const { data } = props ?? {}
+
+    return openCase(data, requestOptions)
+  }
+
+  return { mutationFn, ...mutationOptions }
+}
+
+export type OpenCaseMutationResult = NonNullable<Awaited<ReturnType<typeof openCase>>>
+export type OpenCaseMutationBody = OpenCaseBody
+export type OpenCaseMutationError = ErrorType<Problem>
+export type OpenCaseMutationVariables = { data: OpenCaseBody }
+
+/**
+ * @summary Open a confidential case in the person's own words
+ */
+export const useOpenCase = <TError = ErrorType<Problem>, TContext = unknown>(
+  options?: {
+    mutation?: UseMutationOptions<
+      Awaited<ReturnType<typeof openCase>>,
+      TError,
+      OpenCaseMutationVariables,
+      TContext
+    >
+    request?: SecondParameter<typeof apiFetch>
+  },
+  queryClient?: QueryClient,
+): UseMutationResult<
+  Awaited<ReturnType<typeof openCase>>,
+  TError,
+  OpenCaseMutationVariables,
+  TContext
+> => {
+  return useMutation(getOpenCaseMutationOptions(options), queryClient)
+}
+
+export const getListCasesUrl = (params?: ListCasesParams) => {
+  const normalizedParams = new URLSearchParams()
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  })
+
+  const stringifiedParams = normalizedParams.toString()
+
+  return stringifiedParams.length > 0 ? `/api/v1/cases?${stringifiedParams}` : `/api/v1/cases`
+}
+
+/**
+ * @summary HR's queue of cases, a page at a time: no words
+ */
+export const listCases = async (
+  params?: ListCasesParams,
+  options?: Parameters<typeof apiFetch>[1],
+): Promise<QueuePageOut> => {
+  return apiFetch<QueuePageOut>(getListCasesUrl(params), {
+    ...options,
+    method: 'GET',
+  })
+}
+
+export const getListCasesQueryKey = (params?: ListCasesParams) => {
+  return [`/api/v1/cases`, ...(params ? [params] : [])] as const
+}
+
+export const getListCasesQueryOptions = <
+  TData = Awaited<ReturnType<typeof listCases>>,
+  TError = ErrorType<Problem>,
+>(
+  params?: ListCasesParams,
+  options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof listCases>>, TError, TData>>
+    request?: SecondParameter<typeof apiFetch>
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {}
+
+  const queryKey = queryOptions?.queryKey ?? getListCasesQueryKey(params)
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof listCases>>> = ({ signal }) =>
+    listCases(params, { signal, ...requestOptions })
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof listCases>>,
+    TError,
+    TData
+  > & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type ListCasesQueryResult = NonNullable<Awaited<ReturnType<typeof listCases>>>
+export type ListCasesQueryError = ErrorType<Problem>
+
+export function useListCases<
+  TData = Awaited<ReturnType<typeof listCases>>,
+  TError = ErrorType<Problem>,
+>(
+  params: undefined | ListCasesParams,
+  options: {
+    query: Partial<UseQueryOptions<Awaited<ReturnType<typeof listCases>>, TError, TData>> &
+      Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof listCases>>,
+          TError,
+          Awaited<ReturnType<typeof listCases>>
+        >,
+        'initialData'
+      >
+    request?: SecondParameter<typeof apiFetch>
+  },
+  queryClient?: QueryClient,
+): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useListCases<
+  TData = Awaited<ReturnType<typeof listCases>>,
+  TError = ErrorType<Problem>,
+>(
+  params?: ListCasesParams,
+  options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof listCases>>, TError, TData>> &
+      Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof listCases>>,
+          TError,
+          Awaited<ReturnType<typeof listCases>>
+        >,
+        'initialData'
+      >
+    request?: SecondParameter<typeof apiFetch>
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useListCases<
+  TData = Awaited<ReturnType<typeof listCases>>,
+  TError = ErrorType<Problem>,
+>(
+  params?: ListCasesParams,
+  options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof listCases>>, TError, TData>>
+    request?: SecondParameter<typeof apiFetch>
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary HR's queue of cases, a page at a time: no words
+ */
+
+export function useListCases<
+  TData = Awaited<ReturnType<typeof listCases>>,
+  TError = ErrorType<Problem>,
+>(
+  params?: ListCasesParams,
+  options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof listCases>>, TError, TData>>
+    request?: SecondParameter<typeof apiFetch>
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+  const queryOptions = getListCasesQueryOptions(params, options)
+
+  const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
+    queryKey: DataTag<QueryKey, TData, TError>
+  }
+
+  return withQueryKey(query, queryOptions.queryKey)
+}
+
+export const getListMyCasesUrl = () => {
+  return `/api/v1/cases/mine`
+}
+
+/**
+ * @summary The signed-in person's own cases: status and dates, never the words
+ */
+export const listMyCases = async (
+  options?: Parameters<typeof apiFetch>[1],
+): Promise<CaseListOut> => {
+  return apiFetch<CaseListOut>(getListMyCasesUrl(), {
+    ...options,
+    method: 'GET',
+  })
+}
+
+export const getListMyCasesQueryKey = () => {
+  return [`/api/v1/cases/mine`] as const
+}
+
+export const getListMyCasesQueryOptions = <
+  TData = Awaited<ReturnType<typeof listMyCases>>,
+  TError = ErrorType<Problem>,
+>(options?: {
+  query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof listMyCases>>, TError, TData>>
+  request?: SecondParameter<typeof apiFetch>
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {}
+
+  const queryKey = queryOptions?.queryKey ?? getListMyCasesQueryKey()
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof listMyCases>>> = ({ signal }) =>
+    listMyCases({ signal, ...requestOptions })
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof listMyCases>>,
+    TError,
+    TData
+  > & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type ListMyCasesQueryResult = NonNullable<Awaited<ReturnType<typeof listMyCases>>>
+export type ListMyCasesQueryError = ErrorType<Problem>
+
+export function useListMyCases<
+  TData = Awaited<ReturnType<typeof listMyCases>>,
+  TError = ErrorType<Problem>,
+>(
+  options: {
+    query: Partial<UseQueryOptions<Awaited<ReturnType<typeof listMyCases>>, TError, TData>> &
+      Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof listMyCases>>,
+          TError,
+          Awaited<ReturnType<typeof listMyCases>>
+        >,
+        'initialData'
+      >
+    request?: SecondParameter<typeof apiFetch>
+  },
+  queryClient?: QueryClient,
+): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useListMyCases<
+  TData = Awaited<ReturnType<typeof listMyCases>>,
+  TError = ErrorType<Problem>,
+>(
+  options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof listMyCases>>, TError, TData>> &
+      Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof listMyCases>>,
+          TError,
+          Awaited<ReturnType<typeof listMyCases>>
+        >,
+        'initialData'
+      >
+    request?: SecondParameter<typeof apiFetch>
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useListMyCases<
+  TData = Awaited<ReturnType<typeof listMyCases>>,
+  TError = ErrorType<Problem>,
+>(
+  options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof listMyCases>>, TError, TData>>
+    request?: SecondParameter<typeof apiFetch>
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary The signed-in person's own cases: status and dates, never the words
+ */
+
+export function useListMyCases<
+  TData = Awaited<ReturnType<typeof listMyCases>>,
+  TError = ErrorType<Problem>,
+>(
+  options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof listMyCases>>, TError, TData>>
+    request?: SecondParameter<typeof apiFetch>
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+  const queryOptions = getListMyCasesQueryOptions(options)
+
+  const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
+    queryKey: DataTag<QueryKey, TData, TError>
+  }
+
+  return withQueryKey(query, queryOptions.queryKey)
+}
+
+export const getGetCaseTextsUrl = () => {
+  return `/api/v1/cases/texts`
+}
+
+/**
+ * @summary The case form's fixed texts, with today's reply-by date
+ */
+export const getCaseTexts = async (
+  options?: Parameters<typeof apiFetch>[1],
+): Promise<CaseTextsOut> => {
+  return apiFetch<CaseTextsOut>(getGetCaseTextsUrl(), {
+    ...options,
+    method: 'GET',
+  })
+}
+
+export const getGetCaseTextsQueryKey = () => {
+  return [`/api/v1/cases/texts`] as const
+}
+
+export const getGetCaseTextsQueryOptions = <
+  TData = Awaited<ReturnType<typeof getCaseTexts>>,
+  TError = ErrorType<Problem>,
+>(options?: {
+  query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof getCaseTexts>>, TError, TData>>
+  request?: SecondParameter<typeof apiFetch>
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {}
+
+  const queryKey = queryOptions?.queryKey ?? getGetCaseTextsQueryKey()
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getCaseTexts>>> = ({ signal }) =>
+    getCaseTexts({ signal, ...requestOptions })
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getCaseTexts>>,
+    TError,
+    TData
+  > & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type GetCaseTextsQueryResult = NonNullable<Awaited<ReturnType<typeof getCaseTexts>>>
+export type GetCaseTextsQueryError = ErrorType<Problem>
+
+export function useGetCaseTexts<
+  TData = Awaited<ReturnType<typeof getCaseTexts>>,
+  TError = ErrorType<Problem>,
+>(
+  options: {
+    query: Partial<UseQueryOptions<Awaited<ReturnType<typeof getCaseTexts>>, TError, TData>> &
+      Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getCaseTexts>>,
+          TError,
+          Awaited<ReturnType<typeof getCaseTexts>>
+        >,
+        'initialData'
+      >
+    request?: SecondParameter<typeof apiFetch>
+  },
+  queryClient?: QueryClient,
+): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetCaseTexts<
+  TData = Awaited<ReturnType<typeof getCaseTexts>>,
+  TError = ErrorType<Problem>,
+>(
+  options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof getCaseTexts>>, TError, TData>> &
+      Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getCaseTexts>>,
+          TError,
+          Awaited<ReturnType<typeof getCaseTexts>>
+        >,
+        'initialData'
+      >
+    request?: SecondParameter<typeof apiFetch>
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetCaseTexts<
+  TData = Awaited<ReturnType<typeof getCaseTexts>>,
+  TError = ErrorType<Problem>,
+>(
+  options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof getCaseTexts>>, TError, TData>>
+    request?: SecondParameter<typeof apiFetch>
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary The case form's fixed texts, with today's reply-by date
+ */
+
+export function useGetCaseTexts<
+  TData = Awaited<ReturnType<typeof getCaseTexts>>,
+  TError = ErrorType<Problem>,
+>(
+  options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof getCaseTexts>>, TError, TData>>
+    request?: SecondParameter<typeof apiFetch>
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+  const queryOptions = getGetCaseTextsQueryOptions(options)
+
+  const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
+    queryKey: DataTag<QueryKey, TData, TError>
+  }
+
+  return withQueryKey(query, queryOptions.queryKey)
+}
+
+export const getGetCaseCountsUrl = () => {
+  return `/api/v1/cases/counts`
+}
+
+/**
+ * @summary HR's new cases and the ones due for a reply, for the nav and the home card
+ */
+export const getCaseCounts = async (
+  options?: Parameters<typeof apiFetch>[1],
+): Promise<CountsOut> => {
+  return apiFetch<CountsOut>(getGetCaseCountsUrl(), {
+    ...options,
+    method: 'GET',
+  })
+}
+
+export const getGetCaseCountsQueryKey = () => {
+  return [`/api/v1/cases/counts`] as const
+}
+
+export const getGetCaseCountsQueryOptions = <
+  TData = Awaited<ReturnType<typeof getCaseCounts>>,
+  TError = ErrorType<Problem>,
+>(options?: {
+  query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof getCaseCounts>>, TError, TData>>
+  request?: SecondParameter<typeof apiFetch>
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {}
+
+  const queryKey = queryOptions?.queryKey ?? getGetCaseCountsQueryKey()
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getCaseCounts>>> = ({ signal }) =>
+    getCaseCounts({ signal, ...requestOptions })
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getCaseCounts>>,
+    TError,
+    TData
+  > & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type GetCaseCountsQueryResult = NonNullable<Awaited<ReturnType<typeof getCaseCounts>>>
+export type GetCaseCountsQueryError = ErrorType<Problem>
+
+export function useGetCaseCounts<
+  TData = Awaited<ReturnType<typeof getCaseCounts>>,
+  TError = ErrorType<Problem>,
+>(
+  options: {
+    query: Partial<UseQueryOptions<Awaited<ReturnType<typeof getCaseCounts>>, TError, TData>> &
+      Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getCaseCounts>>,
+          TError,
+          Awaited<ReturnType<typeof getCaseCounts>>
+        >,
+        'initialData'
+      >
+    request?: SecondParameter<typeof apiFetch>
+  },
+  queryClient?: QueryClient,
+): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetCaseCounts<
+  TData = Awaited<ReturnType<typeof getCaseCounts>>,
+  TError = ErrorType<Problem>,
+>(
+  options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof getCaseCounts>>, TError, TData>> &
+      Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getCaseCounts>>,
+          TError,
+          Awaited<ReturnType<typeof getCaseCounts>>
+        >,
+        'initialData'
+      >
+    request?: SecondParameter<typeof apiFetch>
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetCaseCounts<
+  TData = Awaited<ReturnType<typeof getCaseCounts>>,
+  TError = ErrorType<Problem>,
+>(
+  options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof getCaseCounts>>, TError, TData>>
+    request?: SecondParameter<typeof apiFetch>
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary HR's new cases and the ones due for a reply, for the nav and the home card
+ */
+
+export function useGetCaseCounts<
+  TData = Awaited<ReturnType<typeof getCaseCounts>>,
+  TError = ErrorType<Problem>,
+>(
+  options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof getCaseCounts>>, TError, TData>>
+    request?: SecondParameter<typeof apiFetch>
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+  const queryOptions = getGetCaseCountsQueryOptions(options)
+
+  const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
+    queryKey: DataTag<QueryKey, TData, TError>
+  }
+
+  return withQueryKey(query, queryOptions.queryKey)
+}
+
+export const getGetCaseUrl = (caseId: string) => {
+  return `/api/v1/cases/${caseId}`
+}
+
+/**
+ * @summary One case's metadata for HR: no words, and not an audited read
+ */
+export const getCase = async (
+  caseId: string,
+  options?: Parameters<typeof apiFetch>[1],
+): Promise<CaseDetailOut> => {
+  return apiFetch<CaseDetailOut>(getGetCaseUrl(caseId), {
+    ...options,
+    method: 'GET',
+  })
+}
+
+export const getGetCaseQueryKey = (caseId: string) => {
+  return [`/api/v1/cases/${caseId}`] as const
+}
+
+export const getGetCaseQueryOptions = <
+  TData = Awaited<ReturnType<typeof getCase>>,
+  TError = ErrorType<Problem>,
+>(
+  caseId: string,
+  options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof getCase>>, TError, TData>>
+    request?: SecondParameter<typeof apiFetch>
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {}
+
+  const queryKey = queryOptions?.queryKey ?? getGetCaseQueryKey(caseId)
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getCase>>> = ({ signal }) =>
+    getCase(caseId, { signal, ...requestOptions })
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: caseId !== null && caseId !== undefined,
+    ...queryOptions,
+  } as UseQueryOptions<Awaited<ReturnType<typeof getCase>>, TError, TData> & {
+    queryKey: DataTag<QueryKey, TData, TError>
+  }
+}
+
+export type GetCaseQueryResult = NonNullable<Awaited<ReturnType<typeof getCase>>>
+export type GetCaseQueryError = ErrorType<Problem>
+
+export function useGetCase<
+  TData = Awaited<ReturnType<typeof getCase>>,
+  TError = ErrorType<Problem>,
+>(
+  caseId: string,
+  options: {
+    query: Partial<UseQueryOptions<Awaited<ReturnType<typeof getCase>>, TError, TData>> &
+      Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getCase>>,
+          TError,
+          Awaited<ReturnType<typeof getCase>>
+        >,
+        'initialData'
+      >
+    request?: SecondParameter<typeof apiFetch>
+  },
+  queryClient?: QueryClient,
+): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetCase<
+  TData = Awaited<ReturnType<typeof getCase>>,
+  TError = ErrorType<Problem>,
+>(
+  caseId: string,
+  options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof getCase>>, TError, TData>> &
+      Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getCase>>,
+          TError,
+          Awaited<ReturnType<typeof getCase>>
+        >,
+        'initialData'
+      >
+    request?: SecondParameter<typeof apiFetch>
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetCase<
+  TData = Awaited<ReturnType<typeof getCase>>,
+  TError = ErrorType<Problem>,
+>(
+  caseId: string,
+  options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof getCase>>, TError, TData>>
+    request?: SecondParameter<typeof apiFetch>
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary One case's metadata for HR: no words, and not an audited read
+ */
+
+export function useGetCase<
+  TData = Awaited<ReturnType<typeof getCase>>,
+  TError = ErrorType<Problem>,
+>(
+  caseId: string,
+  options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof getCase>>, TError, TData>>
+    request?: SecondParameter<typeof apiFetch>
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+  const queryOptions = getGetCaseQueryOptions(caseId, options)
+
+  const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
+    queryKey: DataTag<QueryKey, TData, TError>
+  }
+
+  return withQueryKey(query, queryOptions.queryKey)
+}
+
+export const getGetCaseSummaryUrl = (caseId: string) => {
+  return `/api/v1/cases/${caseId}/summary`
+}
+
+/**
+ * @summary A case's AI summary, for HR. An audited read; needs the CSRF header.
+ */
+export const getCaseSummary = async (
+  caseId: string,
+  options?: Parameters<typeof apiFetch>[1],
+): Promise<CaseSummaryOut> => {
+  return apiFetch<CaseSummaryOut>(getGetCaseSummaryUrl(caseId), {
+    ...options,
+    method: 'GET',
+  })
+}
+
+export const getGetCaseSummaryQueryKey = (caseId: string) => {
+  return [`/api/v1/cases/${caseId}/summary`] as const
+}
+
+export const getGetCaseSummaryQueryOptions = <
+  TData = Awaited<ReturnType<typeof getCaseSummary>>,
+  TError = ErrorType<Problem>,
+>(
+  caseId: string,
+  options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof getCaseSummary>>, TError, TData>>
+    request?: SecondParameter<typeof apiFetch>
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {}
+
+  const queryKey = queryOptions?.queryKey ?? getGetCaseSummaryQueryKey(caseId)
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getCaseSummary>>> = ({ signal }) =>
+    getCaseSummary(caseId, { signal, ...requestOptions })
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: caseId !== null && caseId !== undefined,
+    ...queryOptions,
+  } as UseQueryOptions<Awaited<ReturnType<typeof getCaseSummary>>, TError, TData> & {
+    queryKey: DataTag<QueryKey, TData, TError>
+  }
+}
+
+export type GetCaseSummaryQueryResult = NonNullable<Awaited<ReturnType<typeof getCaseSummary>>>
+export type GetCaseSummaryQueryError = ErrorType<Problem>
+
+export function useGetCaseSummary<
+  TData = Awaited<ReturnType<typeof getCaseSummary>>,
+  TError = ErrorType<Problem>,
+>(
+  caseId: string,
+  options: {
+    query: Partial<UseQueryOptions<Awaited<ReturnType<typeof getCaseSummary>>, TError, TData>> &
+      Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getCaseSummary>>,
+          TError,
+          Awaited<ReturnType<typeof getCaseSummary>>
+        >,
+        'initialData'
+      >
+    request?: SecondParameter<typeof apiFetch>
+  },
+  queryClient?: QueryClient,
+): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetCaseSummary<
+  TData = Awaited<ReturnType<typeof getCaseSummary>>,
+  TError = ErrorType<Problem>,
+>(
+  caseId: string,
+  options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof getCaseSummary>>, TError, TData>> &
+      Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getCaseSummary>>,
+          TError,
+          Awaited<ReturnType<typeof getCaseSummary>>
+        >,
+        'initialData'
+      >
+    request?: SecondParameter<typeof apiFetch>
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetCaseSummary<
+  TData = Awaited<ReturnType<typeof getCaseSummary>>,
+  TError = ErrorType<Problem>,
+>(
+  caseId: string,
+  options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof getCaseSummary>>, TError, TData>>
+    request?: SecondParameter<typeof apiFetch>
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary A case's AI summary, for HR. An audited read; needs the CSRF header.
+ */
+
+export function useGetCaseSummary<
+  TData = Awaited<ReturnType<typeof getCaseSummary>>,
+  TError = ErrorType<Problem>,
+>(
+  caseId: string,
+  options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof getCaseSummary>>, TError, TData>>
+    request?: SecondParameter<typeof apiFetch>
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+  const queryOptions = getGetCaseSummaryQueryOptions(caseId, options)
+
+  const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
+    queryKey: DataTag<QueryKey, TData, TError>
+  }
+
+  return withQueryKey(query, queryOptions.queryKey)
+}
+
+export const getRetryCaseSummaryUrl = (caseId: string) => {
+  return `/api/v1/cases/${caseId}/summary`
+}
+
+/**
+ * @summary Try the AI summary again (HR only, never their own case): written in the background
+ */
+export const retryCaseSummary = async (
+  caseId: string,
+  options?: Parameters<typeof apiFetch>[1],
+): Promise<SummaryRetryOut> => {
+  return apiFetch<SummaryRetryOut>(getRetryCaseSummaryUrl(caseId), {
+    ...options,
+    method: 'POST',
+  })
+}
+
+export const getRetryCaseSummaryMutationKey = () => ['retryCaseSummary'] as const
+
+export const getRetryCaseSummaryMutationOptions = <
+  TError = ErrorType<Problem>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof retryCaseSummary>>,
+    TError,
+    RetryCaseSummaryMutationVariables,
+    TContext
+  >
+  request?: SecondParameter<typeof apiFetch>
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof retryCaseSummary>>,
+  TError,
+  RetryCaseSummaryMutationVariables,
+  TContext
+> => {
+  const mutationKey = getRetryCaseSummaryMutationKey()
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined }
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof retryCaseSummary>>,
+    RetryCaseSummaryMutationVariables
+  > = (props) => {
+    const { caseId } = props ?? {}
+
+    return retryCaseSummary(caseId, requestOptions)
+  }
+
+  return { mutationFn, ...mutationOptions }
+}
+
+export type RetryCaseSummaryMutationResult = NonNullable<
+  Awaited<ReturnType<typeof retryCaseSummary>>
+>
+
+export type RetryCaseSummaryMutationError = ErrorType<Problem>
+export type RetryCaseSummaryMutationVariables = { caseId: string }
+
+/**
+ * @summary Try the AI summary again (HR only, never their own case): written in the background
+ */
+export const useRetryCaseSummary = <TError = ErrorType<Problem>, TContext = unknown>(
+  options?: {
+    mutation?: UseMutationOptions<
+      Awaited<ReturnType<typeof retryCaseSummary>>,
+      TError,
+      RetryCaseSummaryMutationVariables,
+      TContext
+    >
+    request?: SecondParameter<typeof apiFetch>
+  },
+  queryClient?: QueryClient,
+): UseMutationResult<
+  Awaited<ReturnType<typeof retryCaseSummary>>,
+  TError,
+  RetryCaseSummaryMutationVariables,
+  TContext
+> => {
+  return useMutation(getRetryCaseSummaryMutationOptions(options), queryClient)
+}
+
+export const getGetCaseTextUrl = (caseId: string) => {
+  return `/api/v1/cases/${caseId}/text`
+}
+
+/**
+ * @summary A case's words, for HR. An audited read; needs the CSRF header.
+ */
+export const getCaseText = async (
+  caseId: string,
+  options?: Parameters<typeof apiFetch>[1],
+): Promise<CaseTextOut> => {
+  return apiFetch<CaseTextOut>(getGetCaseTextUrl(caseId), {
+    ...options,
+    method: 'GET',
+  })
+}
+
+export const getGetCaseTextQueryKey = (caseId: string) => {
+  return [`/api/v1/cases/${caseId}/text`] as const
+}
+
+export const getGetCaseTextQueryOptions = <
+  TData = Awaited<ReturnType<typeof getCaseText>>,
+  TError = ErrorType<Problem>,
+>(
+  caseId: string,
+  options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof getCaseText>>, TError, TData>>
+    request?: SecondParameter<typeof apiFetch>
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {}
+
+  const queryKey = queryOptions?.queryKey ?? getGetCaseTextQueryKey(caseId)
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getCaseText>>> = ({ signal }) =>
+    getCaseText(caseId, { signal, ...requestOptions })
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: caseId !== null && caseId !== undefined,
+    ...queryOptions,
+  } as UseQueryOptions<Awaited<ReturnType<typeof getCaseText>>, TError, TData> & {
+    queryKey: DataTag<QueryKey, TData, TError>
+  }
+}
+
+export type GetCaseTextQueryResult = NonNullable<Awaited<ReturnType<typeof getCaseText>>>
+export type GetCaseTextQueryError = ErrorType<Problem>
+
+export function useGetCaseText<
+  TData = Awaited<ReturnType<typeof getCaseText>>,
+  TError = ErrorType<Problem>,
+>(
+  caseId: string,
+  options: {
+    query: Partial<UseQueryOptions<Awaited<ReturnType<typeof getCaseText>>, TError, TData>> &
+      Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getCaseText>>,
+          TError,
+          Awaited<ReturnType<typeof getCaseText>>
+        >,
+        'initialData'
+      >
+    request?: SecondParameter<typeof apiFetch>
+  },
+  queryClient?: QueryClient,
+): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetCaseText<
+  TData = Awaited<ReturnType<typeof getCaseText>>,
+  TError = ErrorType<Problem>,
+>(
+  caseId: string,
+  options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof getCaseText>>, TError, TData>> &
+      Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getCaseText>>,
+          TError,
+          Awaited<ReturnType<typeof getCaseText>>
+        >,
+        'initialData'
+      >
+    request?: SecondParameter<typeof apiFetch>
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetCaseText<
+  TData = Awaited<ReturnType<typeof getCaseText>>,
+  TError = ErrorType<Problem>,
+>(
+  caseId: string,
+  options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof getCaseText>>, TError, TData>>
+    request?: SecondParameter<typeof apiFetch>
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary A case's words, for HR. An audited read; needs the CSRF header.
+ */
+
+export function useGetCaseText<
+  TData = Awaited<ReturnType<typeof getCaseText>>,
+  TError = ErrorType<Problem>,
+>(
+  caseId: string,
+  options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof getCaseText>>, TError, TData>>
+    request?: SecondParameter<typeof apiFetch>
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+  const queryOptions = getGetCaseTextQueryOptions(caseId, options)
+
+  const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
+    queryKey: DataTag<QueryKey, TData, TError>
+  }
+
+  return withQueryKey(query, queryOptions.queryKey)
+}
+
+export const getChangeCaseStatusUrl = (caseId: string) => {
+  return `/api/v1/cases/${caseId}/status`
+}
+
+/**
+ * @summary Move a case on, after reading its words (HR only, never their own case)
+ */
+export const changeCaseStatus = async (
+  caseId: string,
+  statusBody: StatusBody,
+  options?: Parameters<typeof apiFetch>[1],
+): Promise<CaseStatusOut> => {
+  const getHeaders = (
+    h?: NonNullable<RequestInit['headers']>,
+  ): Record<string, string | readonly string[]> => {
+    if (!h) return {}
+    if (h instanceof Headers) return Object.fromEntries(h.entries())
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(
+          h as Iterable<Iterable<string>>,
+          (entry) => Array.from(entry) as [string, string],
+        ),
+      )
+    }
+    const headers: Record<string, string | readonly string[]> = {}
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value
+    }
+    return headers
+  }
+  return apiFetch<CaseStatusOut>(getChangeCaseStatusUrl(caseId), {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(statusBody),
+  })
+}
+
+export const getChangeCaseStatusMutationKey = () => ['changeCaseStatus'] as const
+
+export const getChangeCaseStatusMutationOptions = <
+  TError = ErrorType<Problem>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof changeCaseStatus>>,
+    TError,
+    ChangeCaseStatusMutationVariables,
+    TContext
+  >
+  request?: SecondParameter<typeof apiFetch>
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof changeCaseStatus>>,
+  TError,
+  ChangeCaseStatusMutationVariables,
+  TContext
+> => {
+  const mutationKey = getChangeCaseStatusMutationKey()
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined }
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof changeCaseStatus>>,
+    ChangeCaseStatusMutationVariables
+  > = (props) => {
+    const { caseId, data } = props ?? {}
+
+    return changeCaseStatus(caseId, data, requestOptions)
+  }
+
+  return { mutationFn, ...mutationOptions }
+}
+
+export type ChangeCaseStatusMutationResult = NonNullable<
+  Awaited<ReturnType<typeof changeCaseStatus>>
+>
+export type ChangeCaseStatusMutationBody = StatusBody
+export type ChangeCaseStatusMutationError = ErrorType<Problem>
+export type ChangeCaseStatusMutationVariables = { caseId: string; data: StatusBody }
+
+/**
+ * @summary Move a case on, after reading its words (HR only, never their own case)
+ */
+export const useChangeCaseStatus = <TError = ErrorType<Problem>, TContext = unknown>(
+  options?: {
+    mutation?: UseMutationOptions<
+      Awaited<ReturnType<typeof changeCaseStatus>>,
+      TError,
+      ChangeCaseStatusMutationVariables,
+      TContext
+    >
+    request?: SecondParameter<typeof apiFetch>
+  },
+  queryClient?: QueryClient,
+): UseMutationResult<
+  Awaited<ReturnType<typeof changeCaseStatus>>,
+  TError,
+  ChangeCaseStatusMutationVariables,
+  TContext
+> => {
+  return useMutation(getChangeCaseStatusMutationOptions(options), queryClient)
 }

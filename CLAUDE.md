@@ -161,10 +161,16 @@ the owner's explicit agreement first.
 
 - **A change to a prompt, a tool description or schema, the guard, or the retrieval needs a full
   run before its PR** (`make eval-live SET=full FRESH=1 PRUNE=1 YES=1`, estimated at $14, cap $16;
-  with Phase 5's 153 items, the runs of 2026-10-25 cost $10.31 and $10.39). CI replays the full
-  set offline, and a smoke run re-records only its own items, so CI stays red until the full run is
-  committed. Use smoke runs (`make eval-live YES=1`, about $0.80, cap $2) to try wording before
-  that. Put the scoreboard change in the PR description.
+  with Phase 6's 166 items, the run of 2026-10-29 cost $10.93). CI replays the full set offline,
+  and a smoke run re-records only its own items, so CI stays red until the full run is committed.
+  Use smoke runs (`make eval-live YES=1`, about $0.95, cap $2) to try wording before that. Put the
+  scoreboard change in the PR description.
+  - **A change to the guard's prompt (`guard.md`) also re-records the escalation set**
+    (`make eval-live SET=escalation FRESH=1 YES=1`, about $0.05, cap $0.50). Tune on the tuning
+    half into a scratch folder (`HALF=tuning`, with `--fixtures-dir`), never on the held-out half.
+  - **A change to the case summary's prompt (`case_summary.md`) or its checks re-records the
+    case-summary set** (`make eval-live SET=case-summary YES=1`, about $0.75, cap $3), and the
+    seeded summaries are copied from that run (`scripts/apply_seeded_summaries.py`).
   **A release gets the full run too**, unless the last one already covers everything it ships.
 - **Model IDs are pinned.** A new model is adopted only after an eval comparison.
 - **No paid AI calls on push or PR.** CI replays recorded fixtures. Live evals are a manual
@@ -234,7 +240,8 @@ only: the app refuses it everywhere. Production refuses anything but `anthropic`
 Prerequisites: Node 24, uv, and Docker Desktop running.
 
 ```
-make setup      install dependencies; create apps/api/.env from .env.example
+make setup      install dependencies; create apps/api/.env from .env.example and the encryption keyring
+make keyring    write apps/api/.keys/keyring (mode 600) if missing; the API won't start without a keyring
 make db         start Postgres (127.0.0.1:5433), migrate, then create the login users
 make ingest     load and publish the handbook from handbook/ and its committed embeddings
 make embed      fetch missing embeddings from Voyage (needs VOYAGE_API_KEY); commit the cache

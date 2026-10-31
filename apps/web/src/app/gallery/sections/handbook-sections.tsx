@@ -150,7 +150,7 @@ const BLOCKS: SectionDetail['blocks'] = [
   list(
     'p4',
     true,
-    'Write to HR in Open Door. Your message opens a confidential case that only the HR team sees.',
+    "Open a confidential case in Open Door, from the assistant's HR panel or the My cases page, and send it. Only the HR team sees it. A message to the assistant alone doesn't reach HR.",
     'Send an email to the HR team.',
     'Ask for a private meeting with someone in HR, in person or by phone.',
   ),

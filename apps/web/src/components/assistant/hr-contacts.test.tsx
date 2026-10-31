@@ -1,6 +1,7 @@
 import { render, screen, within } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import { DANA } from '@/test/assistant-fixtures'
+import { renderWithRouter } from '@/test/render-with-router'
 import { HrContacts } from './hr-contacts'
 
 const rows = () =>
@@ -199,5 +200,28 @@ describe('HrContacts', () => {
     expect(root).not.toHaveClass('border')
     rerender(<HrContacts contacts={[DANA]} variant="card" />)
     expect(document.querySelector('[data-slot="hr-contacts"]')).toHaveClass('border', 'rounded-lg')
+  })
+})
+
+describe('HrContacts: Write to HR', () => {
+  it('has no link by default', () => {
+    render(<HrContacts contacts={[DANA]} />)
+    expect(screen.queryByRole('link', { name: 'Write to HR' })).not.toBeInTheDocument()
+  })
+
+  it('shows the link the caller passes, after the contacts, and none to /my-cases of its own', () => {
+    renderWithRouter(
+      <HrContacts contacts={[DANA]} writeToHr={{ to: '/elsewhere', label: 'Write to HR' }} />,
+    )
+    const link = screen.getByRole('link', { name: 'Write to HR' })
+    expect(link).toHaveAttribute('href', '/elsewhere')
+    const list = screen.getByRole('list', { name: 'HR contacts' })
+    expect(list.compareDocumentPosition(link) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  })
+
+  it('shows nothing for null', () => {
+    const { container } = renderWithRouter(<HrContacts contacts={[DANA]} writeToHr={null} />)
+    expect(screen.queryByRole('link', { name: 'Write to HR' })).toBeNull()
+    expect(container.innerHTML).not.toContain('/my-cases')
   })
 })

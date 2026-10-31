@@ -8,7 +8,7 @@ from uuid import UUID, uuid4
 import pytest
 
 from app import policy
-from app.policy import Action, Actor, PersonResource, TimeOffRequestResource, can
+from app.policy import Action, Actor, CaseResource, PersonResource, TimeOffRequestResource, can
 
 TENANT_ID = uuid4()
 EMPLOYEE_ID, COLLEAGUE_ID, MANAGER_ID, REPORT_ID, HR_ID, SKIP_ID = (uuid4() for _ in range(6))
@@ -45,6 +45,8 @@ TARGETS: dict[str, tuple[Actor, UUID]] = {
     "manager two levels up": (SKIP, REPORT_ID),
     "manager, for their own manager": (MANAGER, SKIP_ID),
     "HR, for anyone": (HR, COLLEAGUE_ID),
+    # HR's own record: for a case, HR's own case, which appears in their queue with no actions.
+    "HR, for their own": (HR, HR_ID),
 }
 MATRIX: dict[Action, dict[str, bool]] = {
     Action.DIRECTORY_READ: {
@@ -54,6 +56,7 @@ MATRIX: dict[Action, dict[str, bool]] = {
         "manager two levels up": True,
         "manager, for their own manager": True,
         "HR, for anyone": True,
+        "HR, for their own": True,
     },
     Action.PERSON_PRIVATE_READ: {
         "self": True,
@@ -62,6 +65,7 @@ MATRIX: dict[Action, dict[str, bool]] = {
         "manager two levels up": False,
         "manager, for their own manager": False,
         "HR, for anyone": True,
+        "HR, for their own": True,
     },
     Action.TIMEOFF_READ: {
         "self": True,
@@ -70,6 +74,7 @@ MATRIX: dict[Action, dict[str, bool]] = {
         "manager two levels up": True,
         "manager, for their own manager": False,
         "HR, for anyone": True,
+        "HR, for their own": True,
     },
     Action.TIMEOFF_REQUEST: {
         "self": True,
@@ -78,6 +83,7 @@ MATRIX: dict[Action, dict[str, bool]] = {
         "manager two levels up": False,
         "manager, for their own manager": False,
         "HR, for anyone": False,
+        "HR, for their own": True,
     },
     # The request is a pending PTO request of the target, starting after today.
     Action.TIMEOFF_DECIDE: {
@@ -87,6 +93,7 @@ MATRIX: dict[Action, dict[str, bool]] = {
         "manager two levels up": False,
         "manager, for their own manager": False,
         "HR, for anyone": False,
+        "HR, for their own": False,
     },
     # The request is the target's own pending request: only the person cancels it.
     Action.TIMEOFF_CANCEL: {
@@ -96,14 +103,88 @@ MATRIX: dict[Action, dict[str, bool]] = {
         "manager two levels up": False,
         "manager, for their own manager": False,
         "HR, for anyone": False,
+        "HR, for their own": True,
+    },
+    # Cases (Phase 6). Only the person who opened a case and HR read its status. HR alone lists the
+    # queue, and reads a summary or the words, and changes the status, on a case that isn't theirs.
+    # A manager gets nothing: a report's case is not theirs to see.
+    Action.CASE_OPEN: {
+        "self": True,
+        "another employee": False,
+        "manager, for a report": False,
+        "manager two levels up": False,
+        "manager, for their own manager": False,
+        "HR, for anyone": False,
+        "HR, for their own": True,
+    },
+    Action.CASE_READ_STATUS: {
+        "self": True,
+        "another employee": False,
+        "manager, for a report": False,
+        "manager two levels up": False,
+        "manager, for their own manager": False,
+        "HR, for anyone": True,
+        "HR, for their own": True,
+    },
+    Action.CASE_LIST: {
+        "self": False,
+        "another employee": False,
+        "manager, for a report": False,
+        "manager two levels up": False,
+        "manager, for their own manager": False,
+        "HR, for anyone": True,
+        "HR, for their own": True,
+    },
+    Action.CASE_READ_SUMMARY: {
+        "self": False,
+        "another employee": False,
+        "manager, for a report": False,
+        "manager two levels up": False,
+        "manager, for their own manager": False,
+        "HR, for anyone": True,
+        "HR, for their own": False,
+    },
+    Action.CASE_READ_TEXT: {
+        "self": False,
+        "another employee": False,
+        "manager, for a report": False,
+        "manager two levels up": False,
+        "manager, for their own manager": False,
+        "HR, for anyone": True,
+        "HR, for their own": False,
+    },
+    # The case is one whose words this actor has read.
+    Action.CASE_UPDATE_STATUS: {
+        "self": False,
+        "another employee": False,
+        "manager, for a report": False,
+        "manager two levels up": False,
+        "manager, for their own manager": False,
+        "HR, for anyone": True,
+        "HR, for their own": False,
     },
 }
 
 
-def resource_for(action: Action, person_id: UUID) -> PersonResource | TimeOffRequestResource:
-    """The resource a matrix row asks about: a person, or the person's pending PTO request."""
+CASE_ACTIONS = (
+    Action.CASE_OPEN,
+    Action.CASE_READ_STATUS,
+    Action.CASE_LIST,
+    Action.CASE_READ_SUMMARY,
+    Action.CASE_READ_TEXT,
+    Action.CASE_UPDATE_STATUS,
+)
+
+
+def resource_for(
+    action: Action, person_id: UUID
+) -> PersonResource | TimeOffRequestResource | CaseResource:
+    """The resource a matrix row asks about: a person, the person's pending PTO request, or the
+    person's new case, whose words the actor has read."""
     if action in {Action.TIMEOFF_DECIDE, Action.TIMEOFF_CANCEL}:
         return pto_request(person_id)
+    if action in CASE_ACTIONS and action not in {Action.CASE_OPEN, Action.CASE_LIST}:
+        return CaseResource(person_id, "new", words_read_by_actor=True)
     return PersonResource(person_id)
 
 
@@ -410,3 +491,100 @@ def test_a_request_resource_refuses_a_field_of_the_wrong_type(bad: dict[str, obj
 
     with pytest.raises(TypeError, match=next(iter(bad))):
         TimeOffRequestResource(**{**fields, **bad})
+
+
+# --- Cases ---
+
+
+def a_case(person_id: UUID, *, status: str = "new", read: bool = True) -> CaseResource:
+    return CaseResource(person_id, status, words_read_by_actor=read)
+
+
+@pytest.mark.parametrize("action", CASE_ACTIONS)
+@pytest.mark.parametrize("actor", [MANAGER, SKIP])
+def test_a_manager_is_refused_every_case_action_on_a_reports_case(
+    actor: Actor, action: Action
+) -> None:
+    # Direct and indirect, with the words read and not: a manager never sees a case.
+    for read in (True, False):
+        for status in ("new", "in_review", "closed"):
+            assert can(actor, action, a_case(REPORT_ID, status=status, read=read)) is False
+    assert can(actor, action, PersonResource(REPORT_ID)) is False
+
+
+@pytest.mark.parametrize("status", ["new", "in_review", "closed"])
+def test_the_person_reads_their_cases_status_and_nothing_else(status: str) -> None:
+    own = a_case(EMPLOYEE_ID, status=status)
+
+    assert can(EMPLOYEE, Action.CASE_READ_STATUS, own) is True
+    for action in (Action.CASE_READ_SUMMARY, Action.CASE_READ_TEXT, Action.CASE_UPDATE_STATUS):
+        assert can(EMPLOYEE, action, own) is False
+
+
+def test_hr_changes_a_status_only_after_reading_the_words() -> None:
+    assert can(HR, Action.CASE_UPDATE_STATUS, a_case(EMPLOYEE_ID, read=True)) is True
+    assert can(HR, Action.CASE_UPDATE_STATUS, a_case(EMPLOYEE_ID, read=False)) is False
+    # Reading the words themselves needs no earlier reading, or no one could start.
+    assert can(HR, Action.CASE_READ_TEXT, a_case(EMPLOYEE_ID, read=False)) is True
+    assert can(HR, Action.CASE_READ_SUMMARY, a_case(EMPLOYEE_ID, read=False)) is True
+
+
+def test_hr_never_reads_or_decides_their_own_case_but_sees_its_status() -> None:
+    own = a_case(HR_ID)
+
+    assert can(HR, Action.CASE_READ_STATUS, own) is True
+    for action in (Action.CASE_READ_SUMMARY, Action.CASE_READ_TEXT, Action.CASE_UPDATE_STATUS):
+        assert can(HR, action, own) is False
+
+
+def test_opening_a_case_is_only_for_oneself_and_takes_a_person() -> None:
+    assert can(EMPLOYEE, Action.CASE_OPEN, PersonResource(EMPLOYEE_ID)) is True
+    assert can(EMPLOYEE, Action.CASE_OPEN, PersonResource(COLLEAGUE_ID)) is False
+    # HR opens their own case like anyone, and no one opens one for another person.
+    assert can(HR, Action.CASE_OPEN, PersonResource(COLLEAGUE_ID)) is False
+    assert can(EMPLOYEE, Action.CASE_OPEN, a_case(EMPLOYEE_ID)) is False
+
+
+@pytest.mark.parametrize("action", CASE_ACTIONS)
+@pytest.mark.parametrize("resource", [None, "a case", {"person_id": EMPLOYEE_ID}, object()])
+def test_a_wrong_resource_type_is_denied_for_a_case_action_even_for_hr(
+    action: Action, resource: object
+) -> None:
+    assert can(HR, action, cast(CaseResource, resource)) is False
+
+
+@pytest.mark.parametrize("action", [Action.CASE_LIST, Action.CASE_OPEN])
+def test_a_case_resource_cannot_stand_in_for_a_person(action: Action) -> None:
+    assert can(HR, action, a_case(HR_ID)) is False
+
+
+@pytest.mark.parametrize(
+    "bad",
+    [
+        {"person_id": str(EMPLOYEE_ID)},
+        {"status": None},
+        {"status": 3},
+        {"words_read_by_actor": "yes"},
+        {"words_read_by_actor": 1},
+        {"words_read_by_actor": None},
+    ],
+)
+def test_a_case_resource_refuses_a_field_of_the_wrong_type(bad: dict[str, object]) -> None:
+    fields: dict[str, Any] = {
+        "person_id": EMPLOYEE_ID,
+        "status": "new",
+        "words_read_by_actor": True,
+    }
+
+    with pytest.raises(TypeError, match=next(iter(bad))):
+        CaseResource(**{**fields, **bad})
+
+
+def test_hr_who_is_not_flagged_hr_has_no_case_access() -> None:
+    not_hr = Actor(
+        HR_ID, TENANT_ID, is_hr_admin=False, report_ids=frozenset(), direct_report_ids=frozenset()
+    )
+
+    for action in (Action.CASE_READ_SUMMARY, Action.CASE_READ_TEXT, Action.CASE_UPDATE_STATUS):
+        assert can(not_hr, action, a_case(EMPLOYEE_ID)) is False
+    assert can(not_hr, Action.CASE_LIST, PersonResource(HR_ID)) is False

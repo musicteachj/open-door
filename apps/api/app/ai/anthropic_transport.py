@@ -21,6 +21,7 @@ from anthropic import (
     APIError,
     APIResponseValidationError,
     APIStatusError,
+    APITimeoutError,
     AsyncAnthropic,
     BadRequestError,
     Timeout,
@@ -35,7 +36,15 @@ from anthropic.types.beta import (
 from anthropic.types.beta.parsed_beta_message import ParsedBetaMessage
 from pydantic import SecretStr
 
+from app.ai.case_summary import (
+    SummaryAnswer,
+    SummaryRefused,
+    SummaryRequest,
+    SummaryUnavailable,
+    summary_api_kwargs,
+)
 from app.ai.pricing import IterationUsage, Usage, dearer_model
+from app.ai.prompts.versions import CASE_SUMMARY_PROMPT_VERSION
 from app.ai.transport import (
     GUARD_TIMEOUT_SECONDS,
     Finished,
@@ -188,6 +197,74 @@ class AnthropicTransport:
                 f"the guard's response could not be read ({type(error).__name__})"
             ) from error
         return parse_guard_output(answer, usage=usage, served_by=served_by)
+
+
+class AnthropicSummarizer:
+    """The case summary through the Anthropic SDK: one call, no tools, structured output.
+
+    It sends exactly `summary_api_kwargs(request)`, the plain data a replay fingerprints. Every
+    failure is a typed error with a fixed text: the SDK's message can quote the request, which holds
+    the person's words, so it stays on the chained cause and is never logged. A refusal or an answer
+    that cannot be used carries its usage (the model ran and was billed); a failure that reports
+    none carries `None`. A call the SDK gives up on as slow raises `TimeoutError` (the job
+    records it as `timeout`); the overall time limit is the caller's (`generate_summary`), the same
+    for every summarizer.
+    """
+
+    def __init__(self, client: AsyncAnthropic) -> None:
+        self.client = client
+
+    async def summarize(self, request: SummaryRequest) -> SummaryAnswer:
+        try:
+            # No time limit here: `generate_summary` bounds every summarizer with the same one.
+            response = await self.client.messages.create(**summary_api_kwargs(request))
+        except APITimeoutError as error:
+            # The SDK's own limit (a slow call): the job records it as `timeout`, not `transport`.
+            raise TimeoutError("the summary's call timed out") from error
+        except APIStatusError as error:
+            if isinstance(error, BadRequestError) and is_spend_limit(error.body):
+                raise SpendLimitReached(SPEND_LIMIT_TEXT) from error
+            raise SummaryUnavailable(
+                f"the summary's call failed (status {error.status_code}, {error.type})"
+            ) from error
+        except (APIError, httpx2.HTTPError, json.JSONDecodeError) as error:
+            raise SummaryUnavailable(
+                f"the summary's call failed ({type(error).__name__})"
+            ) from error
+        try:
+            usage = usage_from_sdk(response.usage)
+            stop_reason = response.stop_reason
+            served_by = response.model
+            text = "".join(block.text for block in response.content if block.type == "text")
+        except (AttributeError, TypeError) as error:
+            # A 200 that isn't a message at all (an error page): the SDK hands back the raw text.
+            raise SummaryUnavailable(
+                f"the summary's response could not be read ({type(error).__name__})"
+            ) from error
+        if stop_reason == "refusal":
+            raise SummaryRefused("the model declined to write the summary", usage=usage)
+        if stop_reason != "end_turn":
+            raise SummaryUnavailable(f"the summary stopped with {stop_reason!r}", usage=usage)
+        return SummaryAnswer(
+            text=_summary_text(text, usage), model=served_by,
+            prompt_version=CASE_SUMMARY_PROMPT_VERSION, usage=usage,
+        )  # fmt: skip
+
+
+def _summary_text(answer: str, usage: Usage) -> str:
+    """The `summary` string in the structured answer, or `SummaryUnavailable` when the answer is
+    not exactly `{"summary": <string>}`. Nothing of the answer goes into the error."""
+    try:
+        data = json.loads(answer)
+    except ValueError:
+        raise SummaryUnavailable("the summary's answer was not JSON", usage=usage) from None
+    if (
+        not isinstance(data, dict)
+        or set(data) != {"summary"}
+        or not isinstance(data["summary"], str)
+    ):
+        raise SummaryUnavailable("the summary's answer was not the expected shape", usage=usage)
+    return data["summary"]
 
 
 def _api_key(settings: Settings) -> SecretStr:

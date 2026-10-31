@@ -9,6 +9,10 @@ type NavItemProps = {
   to: string
   /** The number waiting, such as Approvals' requests. Zero or none shows no badge. */
   count?: number
+  /** What the count counts, in the link's name: "Approvals, 1 waiting", "Cases, 3 new". */
+  countWord?: string
+  /** Shows the word in the badge too ("3 new"), as the Cases item does. */
+  wordInBadge?: boolean
   /** Forces the current look. By default an item is current when the route is its page or below it. */
   current?: boolean
   className?: string
@@ -19,13 +23,22 @@ type NavItemProps = {
  * neutral-hover. The `ui` weight is 500, the unselected weight, so selected adds its own. A count
  * is in the link's name ("Approvals, 1 waiting") and shown as a badge. From NavItem.jsx.
  */
-function NavItem({ icon: Icon, label, to, count, current, className }: NavItemProps) {
+function NavItem({
+  icon: Icon,
+  label,
+  to,
+  count,
+  countWord = 'waiting',
+  wordInBadge = false,
+  current,
+  className,
+}: NavItemProps) {
   const matches = useMatch({ path: to, end: false }) !== null
   const isCurrent = current ?? matches
   return (
     <Link
       to={to}
-      aria-label={navItemLabel(label, count)}
+      aria-label={navItemLabel(label, count, countWord)}
       aria-current={isCurrent ? 'page' : undefined}
       data-slot="nav-item"
       className={cn(
@@ -44,7 +57,7 @@ function NavItem({ icon: Icon, label, to, count, current, className }: NavItemPr
           aria-hidden="true"
           className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-primary px-1.5 text-caption font-semibold text-on-primary tabular-nums"
         >
-          {count}
+          {wordInBadge ? `${count} ${countWord}` : count}
         </span>
       ) : null}
     </Link>

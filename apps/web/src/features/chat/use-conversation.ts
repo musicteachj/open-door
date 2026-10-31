@@ -210,12 +210,24 @@ let creating: { promise: Promise<string> } | null = null
 // is in flight is ignored, and a send waits for it (see `send`), so a question is not sent to the
 // old conversation only to be aborted when the new one begins.
 let startingNew: Promise<boolean> | null = null
-// A send is waiting for `startingNew`.
-let sendWaiting = false
+// How many times "Start a new conversation" has begun a conversation. A send that finds this
+// changed after it worked out where to go (a click came meanwhile) works it out again.
+let newConversations = 0
+// The read a 404 started, while it is on its way: the next send waits for it.
+let forgetting: Promise<unknown> | null = null
+// True from a 404 on the conversation until a read of the current one succeeds: the cache holds a
+// conversation that is gone, so a send reads again instead of using it. A background read that
+// fails is not this: a send may use what the cache has.
+let cachedIsGone = false
+// How many times the person has changed. A send that finds this changed after an await belongs
+// to the old person, and stops without touching anything.
+let identityGeneration = 0
 registerReset(() => {
+  identityGeneration++
+  cachedIsGone = false
+  forgetting = null
   creating = null
   startingNew = null
-  sendWaiting = false
 })
 
 /**
@@ -233,16 +245,24 @@ export function useConversationActions() {
     // The conversation the page showed, or the one the last send created and the read has not
     // caught up with yet. Without the read there is no way to know whether one exists.
     const known = useChatStore.getState().conversationId
+    if (known === null && forgetting !== null) await forgetting
     const cached = queryClient.getQueryData<ConversationOut | null>(
       getGetCurrentConversationQueryKey(),
     )
+    // After a 404 (`forgetConversation`) the cache holds a conversation that is gone until the
+    // read the 404 started lands: wait for that read, and only that one (a background read that
+    // fails must not fail a send that would have used the cache). Never send to the dead one.
+    const gone = known === null && cachedIsGone
     const current =
-      known !== null || cached !== undefined
+      known !== null || (cached !== undefined && !gone)
         ? (cached ?? null)
-        : await queryClient.ensureQueryData({
+        : await queryClient.fetchQuery({
             queryKey: getGetCurrentConversationQueryKey(),
             queryFn: ({ signal }) => getCurrentConversation({ signal }),
+            staleTime: cached === undefined ? Infinity : 0,
           })
+    // A read of the current conversation went through: the dead one is no longer in the cache.
+    if (gone) cachedIsGone = false
     return {
       conversationId: known ?? current?.id ?? null,
       // One creation at a time: a Stop and a new question while the first is still being created
@@ -263,9 +283,26 @@ export function useConversationActions() {
         return entry.promise
       },
       invalidateConversation: () => void invalidateConversation(queryClient),
-      // Not an invented value: the cached data goes, and the active read starts over.
-      forgetConversation: () =>
-        void queryClient.resetQueries({ queryKey: getGetCurrentConversationQueryKey() }),
+      // The conversation it was sent to is gone. The page keeps showing what it has (emptying the
+      // cache would drop the whole view to "Loading…" and take focus out of the composer) while
+      // the server is asked again. The next send waits for the answer (see `forgetting` above).
+      forgetConversation: () => {
+        const generation = identityGeneration
+        cachedIsGone = true
+        const refetch: Promise<unknown> = queryClient
+          .refetchQueries({ queryKey: getGetCurrentConversationQueryKey() })
+          .finally(() => {
+            if (generation !== identityGeneration) return
+            if (forgetting === refetch) forgetting = null
+            // Only an answer from the server clears it: a failed read leaves the dead one in the cache.
+            if (
+              queryClient.getQueryState(getGetCurrentConversationQueryKey())?.status === 'success'
+            ) {
+              cachedIsGone = false
+            }
+          })
+        forgetting = refetch
+      },
       onUnauthorized: () => void queryClient.invalidateQueries({ queryKey: getGetMeQueryKey() }),
       texts,
     }
@@ -273,32 +310,43 @@ export function useConversationActions() {
 
   const send = useCallback(
     async (question: string, origin?: SendOrigin) => {
-      // A new conversation is being created: the question goes to it, once it exists. A second
-      // send meanwhile is ignored, so it does not queue behind the first and be refused as "still
-      // answering" (its draft stays).
-      if (startingNew !== null) {
-        if (sendWaiting) return
-        sendWaiting = true
-        let created: boolean
-        try {
-          created = await startingNew
-        } finally {
-          sendWaiting = false
-        }
-        if (!created) {
-          // The conversation could not be created: not to the old one. The draft stays.
-          useChatStore.setState({ sendError: conversationCopy.sendFailed })
-          return
-        }
-      }
+      // The composer is busy (`waitingToSend`) from here until the question is handed to the
+      // store, so a second Enter is ignored and cannot start a competing send.
+      if (useChatStore.getState().waitingToSend) return
+      useChatStore.setState({ waitingToSend: true })
+      // A person change during any wait below ends this send without a word: the question was the
+      // old person's, and `waitingToSend` now belongs to the new person's own send.
+      const generation = identityGeneration
       let ready: SendDeps | null
       try {
-        ready = await deps()
-      } catch {
-        // The read that says whether there is a conversation failed. The composer calls `void
-        // send(...)`, so nobody would catch it: say the send failed, and keep the draft.
-        useChatStore.setState({ sendError: conversationCopy.sendFailed })
-        return
+        for (;;) {
+          // A new conversation is being created: the question goes to it, once it exists.
+          if (startingNew !== null) {
+            const created = await startingNew
+            if (generation !== identityGeneration) return
+            if (!created) {
+              // The conversation could not be created: not to the old one. The draft stays.
+              useChatStore.setState({ sendError: conversationCopy.sendFailed })
+              return
+            }
+          }
+          // A click can also come after this send began but before it knows where to go: then the
+          // question goes to the new conversation, not the old one, so it asks again.
+          const startsSeen = newConversations
+          try {
+            ready = await deps()
+          } catch {
+            if (generation !== identityGeneration) return
+            // The read that says whether there is a conversation failed. The composer calls `void
+            // send(...)`, so nobody would catch it: say the send failed, and keep the draft.
+            useChatStore.setState({ sendError: conversationCopy.sendFailed })
+            return
+          }
+          if (generation !== identityGeneration) return
+          if (startsSeen === newConversations && startingNew === null) break
+        }
+      } finally {
+        if (generation === identityGeneration) useChatStore.setState({ waitingToSend: false })
       }
       if (ready !== null) await useChatStore.getState().send(question, ready, origin)
     },
@@ -321,6 +369,7 @@ export function useConversationActions() {
     const starting: Promise<boolean> = createConversation()
       .then(async (created) => {
         useChatStore.getState().beginConversation(created.id)
+        newConversations++
         await invalidateConversation(queryClient)
         return true
       })

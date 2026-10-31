@@ -88,7 +88,7 @@ Marcus's):
   the same question getting a Texas answer)
 - **Marcus:** "What's waiting for my approval?", "Who on my team is off this week?", "How many sick
   days do I get?", "Who do I talk to about a concern?"
-- **Dana:** "Show me the open cases", "Summarize the newest case", "What does the handbook say
+- **Dana:** "Show me the open cases", "Which cases need a reply soon?", "What does the handbook say
   about reporting harassment?", "How has the assistant been doing this week?"
 
 **At-a-glance figures** in the mockups, such as "14 days PTO available" and "3 open cases", are

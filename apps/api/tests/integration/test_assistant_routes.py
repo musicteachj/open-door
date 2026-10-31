@@ -5,20 +5,20 @@ own functions, so these tests do not depend on the stream.
 """
 
 import json
+from collections.abc import Sequence
+from datetime import date
 from decimal import Decimal
 from typing import Any
 from uuid import UUID, uuid4
 
 import pytest
-from sqlalchemy import text
+from sqlalchemy import event, text
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 from app.ai.conversations import (
     CURRENT_PINS,
     TurnOutcome,
-    finish_turn,
     section_names,
-    start_turn,
 )
 from app.ai.fixed_texts import (
     BUDGET_DAILY_TEXT,
@@ -29,9 +29,18 @@ from app.ai.fixed_texts import (
     STILL_ANSWERING_TEXT,
     UNAVAILABLE_TEXT,
 )
-from app.db.models import AiConversation, AiMessage, AiSpend
-from app.db.tenancy import TenantContext, tenant_session
-from tests.integration.conftest import Browser, OpenBrowser, OpenBrowserWith
+from app.db.models import AiConversation, AiSpend
+from app.db.tenancy import TenantContext, set_is_hr, tenant_session
+from app.modules.cases import texts as case_texts
+from app.modules.cases.queries import cases_by_turn
+from tests.integration.conftest import (
+    Browser,
+    OpenBrowser,
+    OpenBrowserWith,
+    begin_turn,
+    end_turn,
+    message_row,
+)
 
 pytestmark = [
     pytest.mark.integration,
@@ -79,9 +88,9 @@ async def seed_turn(
     async with tenant_session(engine, TenantContext(tenant_id, person_id)) as db:
         conversation = await db.get(AiConversation, conversation_id)
         assert conversation is not None
-        turn = await start_turn(db, conversation, question)
+        turn = await begin_turn(db, conversation, question)
         if outcome is not None:
-            await finish_turn(db, turn.id, outcome)
+            await end_turn(db, conversation, turn.id, outcome)
         return turn.id
 
 
@@ -388,6 +397,217 @@ async def test_a_budget_stop_after_a_sensitive_verdict_still_shows_the_hr_escala
     assert early["escalation"] is None
 
 
+def verdict_of(category: str, kind: str | None = None) -> dict[str, Any]:
+    return {"category": category, "kind": kind, "injectionSuspected": False}
+
+
+async def test_the_reloads_escalation_offers_a_case_only_for_a_flagged_verdict(
+    browser: Browser, app_engine: AsyncEngine
+) -> None:
+    """The same rule as the stream's `offerCase` and the case service's flagged-turn check."""
+    tenant_id, person_id = sign_in(browser)
+    cid = UUID(new_conversation(browser)["id"])
+    outcomes = {
+        "sensitive completed": completed(guard_verdict=verdict_of("sensitive", "pay")),
+        "sensitive failed": TurnOutcome(
+            status="failed", error_code="model-unavailable", guard_verdict=verdict_of("sensitive")
+        ),
+        "sensitive stopped": TurnOutcome(
+            status="stopped", guard_verdict=verdict_of("sensitive", "pay")
+        ),
+        "crisis": TurnOutcome(status="crisis", guard_verdict=verdict_of("crisis", "self_harm")),
+        "crisis kind under ordinary": TurnOutcome(
+            status="crisis", guard_verdict=verdict_of("ordinary", "self_harm")
+        ),
+        "crisis with no verdict": TurnOutcome(status="crisis"),
+        "unavailable": TurnOutcome(status="guard_unavailable"),
+        "sensitive kind under ordinary": completed(guard_verdict=verdict_of("ordinary", "pay")),
+    }
+    for outcome in outcomes.values():
+        await seed_turn(app_engine, tenant_id, person_id, cid, outcome=outcome)
+
+    turns = browser.client.get(f"{BASE}/conversations/current").json()["turns"]
+
+    shown = {
+        label: None if turn["escalation"] is None else turn["escalation"]["offerCase"]
+        for label, turn in zip(outcomes, turns, strict=True)
+    }
+    assert shown == {
+        "sensitive completed": True,
+        "sensitive failed": True,
+        "sensitive stopped": True,
+        "crisis": True,
+        "crisis kind under ordinary": True,
+        "crisis with no verdict": False,
+        "unavailable": False,
+        # The panel follows the category (Phase 6, stage 4): an ordinary verdict with a topic shows
+        # no panel on reload, as its stream sent none.
+        "sensitive kind under ordinary": None,
+    }
+
+
+async def test_a_turn_with_a_case_shows_it_opened_and_only_to_its_owner(
+    open_browser: OpenBrowser, app_engine: AsyncEngine
+) -> None:
+    priya, mateo = open_browser(), open_browser()
+    cases: dict[str, str] = {}
+    for name, browser in (("priya", priya), ("mateo", mateo)):
+        tenant_id, person_id = sign_in(browser, name)
+        cid = UUID(new_conversation(browser)["id"])
+        flagged = await seed_turn(
+            app_engine,
+            tenant_id,
+            person_id,
+            cid,
+            outcome=completed(guard_verdict=verdict_of("sensitive")),
+        )
+        await seed_turn(app_engine, tenant_id, person_id, cid, outcome=completed())
+        if name == "priya":
+            sent = browser.client.post(
+                "/api/v1/cases",
+                json={
+                    "submissionId": str(uuid4()),
+                    "category": "pay",
+                    "text": "My pay was short.",
+                    "turnId": str(flagged),
+                },
+                headers=browser.csrf,
+            )
+            assert sent.status_code == 201, sent.text
+            cases[name] = sent.json()["case"]["replyBy"]
+
+    [opened, other] = priya.client.get(f"{BASE}/conversations/current").json()["turns"]
+    [theirs, _] = mateo.client.get(f"{BASE}/conversations/current").json()["turns"]
+
+    lead, pointer = case_texts.sent_state_parts(date.fromisoformat(cases["priya"]))
+    assert opened["caseOpened"] == {
+        "status": "new",
+        "replyBy": cases["priya"],
+        "sentLine": {"lead": lead, "pointer": pointer},
+    }
+    # The other turn of the conversation has no case, and neither does Mateo's own flagged turn.
+    assert other["caseOpened"] is None
+    assert theirs["caseOpened"] is None
+
+
+async def test_an_hr_persons_reloaded_turn_points_to_cases_not_my_cases(
+    open_browser: OpenBrowser, app_engine: AsyncEngine
+) -> None:
+    dana = open_browser()
+    tenant_id, person_id = sign_in(dana, "dana")
+    cid = UUID(new_conversation(dana)["id"])
+    flagged = await seed_turn(
+        app_engine,
+        tenant_id,
+        person_id,
+        cid,
+        outcome=completed(guard_verdict=verdict_of("sensitive")),
+    )
+    sent = dana.client.post(
+        "/api/v1/cases",
+        json={
+            "submissionId": str(uuid4()),
+            "category": "pay",
+            "text": "My pay was short.",
+            "turnId": str(flagged),
+        },
+        headers=dana.csrf,
+    )
+    assert sent.status_code == 201, sent.text
+
+    [turn] = dana.client.get(f"{BASE}/conversations/current").json()["turns"]
+
+    assert turn["caseOpened"]["sentLine"]["pointer"] == "You can see its status in Cases."
+
+
+async def test_the_cases_by_turn_query_filters_by_person_even_for_a_session_that_reads_all(
+    browser: Browser, app_engine: AsyncEngine
+) -> None:
+    # The keys tie a case to its opener's own turn, so no row can share another person's
+    # conversation. HR's session reads every case, so only the query's own filter keeps it out.
+    tenant_id, person_id = sign_in(browser)
+    cid = UUID(new_conversation(browser)["id"])
+    turn_id = await seed_turn(
+        app_engine,
+        tenant_id,
+        person_id,
+        cid,
+        outcome=completed(guard_verdict=verdict_of("sensitive")),
+    )
+    sent = browser.client.post(
+        "/api/v1/cases",
+        json={
+            "submissionId": str(uuid4()),
+            "category": "pay",
+            "text": "My pay was short.",
+            "turnId": str(turn_id),
+        },
+        headers=browser.csrf,
+    )
+    assert sent.status_code == 201, sent.text
+
+    async with tenant_session(app_engine, TenantContext(tenant_id, uuid4())) as db:
+        await set_is_hr(db, True)
+        theirs = await cases_by_turn(db, tenant_id, uuid4(), cid)
+        owners = await cases_by_turn(db, tenant_id, person_id, cid)
+
+    assert theirs == {}
+    assert list(owners) == [turn_id]
+    assert owners[turn_id]._fields == ("turn_id", "status", "reply_by")
+
+
+async def test_the_reload_reads_the_conversations_cases_in_one_query(
+    browser: Browser, app_engine: AsyncEngine
+) -> None:
+    tenant_id, person_id = sign_in(browser)
+    cid = UUID(new_conversation(browser)["id"])
+    for _ in range(4):
+        await seed_turn(app_engine, tenant_id, person_id, cid, outcome=completed())
+    statements: list[str] = []
+
+    def count(conn: Any, cursor: Any, statement: str, *rest: Any) -> None:
+        statements.append(statement)
+
+    engine = browser.client.app.state.engine.sync_engine  # type: ignore[attr-defined]
+    event.listen(engine, "before_cursor_execute", count)
+    try:
+        browser.client.get(f"{BASE}/conversations/current")
+    finally:
+        event.remove(engine, "before_cursor_execute", count)
+
+    # No turn was flagged, so no case can exist and none is looked up.
+    assert sum("FROM cases" in statement for statement in statements) == 0
+
+
+async def test_the_reload_reads_the_conversations_cases_in_one_query_when_a_turn_is_flagged(
+    browser: Browser, app_engine: AsyncEngine
+) -> None:
+    tenant_id, person_id = sign_in(browser)
+    cid = UUID(new_conversation(browser)["id"])
+    for _ in range(3):
+        await seed_turn(app_engine, tenant_id, person_id, cid, outcome=completed())
+    await seed_turn(
+        app_engine,
+        tenant_id,
+        person_id,
+        cid,
+        outcome=completed(guard_verdict=verdict_of("sensitive")),
+    )
+    statements: list[str] = []
+
+    def count(conn: Any, cursor: Any, statement: str, *rest: Any) -> None:
+        statements.append(statement)
+
+    engine = browser.client.app.state.engine.sync_engine  # type: ignore[attr-defined]
+    event.listen(engine, "before_cursor_execute", count)
+    try:
+        browser.client.get(f"{BASE}/conversations/current")
+    finally:
+        event.remove(engine, "before_cursor_execute", count)
+
+    assert sum("FROM cases" in statement for statement in statements) == 1
+
+
 async def test_a_running_turn_is_shown_as_running(
     browser: Browser, app_engine: AsyncEngine
 ) -> None:
@@ -594,12 +814,12 @@ async def add_history(
     characters: int,
 ) -> None:
     async with tenant_session(engine, TenantContext(tenant_id, person_id)) as db:
+        conversation = await db.get(AiConversation, conversation_id)
+        assert conversation is not None
         db.add(
-            AiMessage(
-                tenant_id=tenant_id,
-                person_id=person_id,
-                conversation_id=conversation_id,
-                turn_id=turn_id,
+            message_row(
+                conversation,
+                turn_id,
                 position=0,
                 role="user",
                 content=[{"type": "text", "text": "y" * characters}],
@@ -889,12 +1109,12 @@ async def seed_sources(
 ) -> None:
     """The `search_result` blocks the model was sent for a turn, as the store keeps them."""
     async with tenant_session(engine, TenantContext(tenant_id, person_id)) as db:
+        conversation = await db.get(AiConversation, conversation_id)
+        assert conversation is not None
         db.add(
-            AiMessage(
-                tenant_id=tenant_id,
-                person_id=person_id,
-                conversation_id=conversation_id,
-                turn_id=turn_id,
+            message_row(
+                conversation,
+                turn_id,
                 position=0,
                 role="user",
                 content=[{"type": "text", "text": "results"}],
@@ -980,13 +1200,13 @@ async def seed_source_messages(
 ) -> None:
     """One stored message per entry, each with the given `search_result` sources (or none)."""
     async with tenant_session(engine, TenantContext(tenant_id, person_id)) as db:
+        conversation = await db.get(AiConversation, conversation_id)
+        assert conversation is not None
         for position, sources in enumerate(messages):
             db.add(
-                AiMessage(
-                    tenant_id=tenant_id,
-                    person_id=person_id,
-                    conversation_id=conversation_id,
-                    turn_id=turn_id,
+                message_row(
+                    conversation,
+                    turn_id,
                     position=position,
                     role="user",
                     content=[{"type": "text", "text": "results"}],
@@ -1310,3 +1530,77 @@ def test_the_texts_are_the_words_the_two_problems_use(browser: Browser) -> None:
 
     assert (personal.status_code, personal.json()["type"]) == (422, "personal-data")
     assert personal.json()["detail"] == PERSONAL_DATA_TEXT
+
+
+# --- Encrypted text (Phase 6, stage 1) --------------------------------------------------------
+
+
+async def test_the_page_shows_decrypted_turns_and_a_turn_with_no_answer_as_empty(
+    browser: Browser, app_engine: AsyncEngine, owner_engine: AsyncEngine
+) -> None:
+    tenant_id, person_id = sign_in(browser)
+    cid = UUID(new_conversation(browser)["id"])
+    await seed_turn(
+        app_engine, tenant_id, person_id, cid, question="Ended turn?", outcome=completed()
+    )
+    # The second turn is still running, so it has no answer yet.
+    await seed_turn(app_engine, tenant_id, person_id, cid, question="Running turn?")
+
+    ended, running = browser.client.get(f"{BASE}/conversations/current").json()["turns"]
+
+    assert (ended["question"], ended["answerText"]) == (
+        "Ended turn?",
+        "You get 40 hours of paid sick leave.",
+    )
+    assert ended["toolCalls"][0]["inputSummary"] == "sick leave"
+    assert (running["question"], running["answerText"]) == ("Running turn?", "")
+    async with owner_engine.connect() as connection:
+        raw: Sequence[Any] = (
+            (
+                await connection.execute(
+                    text("SELECT row_to_json(t)::text FROM ai_turns t WHERE conversation_id = :c"),
+                    {"c": cid},
+                )
+            )
+            .scalars()
+            .all()
+        )
+    for plaintext in (
+        "Ended turn?",
+        "Running turn?",
+        "You get 40 hours",
+        'inputSummary": "sick leave',
+    ):
+        assert not any(plaintext in row for row in raw)
+
+
+async def test_a_feedback_reason_is_sealed_at_rest_and_shown_back_to_its_owner(
+    browser: Browser, app_engine: AsyncEngine, owner_engine: AsyncEngine
+) -> None:
+    tenant_id, person_id = sign_in(browser)
+    cid = UUID(new_conversation(browser)["id"])
+    turn_id = await seed_turn(app_engine, tenant_id, person_id, cid, outcome=completed())
+    reason = "It missed the part about my state"
+
+    posted = browser.client.post(
+        f"{BASE}/turns/{turn_id}/feedback",
+        json={"helpful": False, "reason": reason},
+        headers=browser.csrf,
+    )
+
+    assert posted.status_code == 201
+    assert posted.json()["reason"] == reason
+    async with owner_engine.connect() as connection:
+        [(ciphertext, whole_row)] = (
+            await connection.execute(
+                text(
+                    "SELECT reason_ciphertext, row_to_json(f)::text FROM ai_feedback f"
+                    " WHERE turn_id = :t"
+                ),
+                {"t": turn_id},
+            )
+        ).all()
+    assert reason.encode() not in bytes(ciphertext)
+    assert reason not in whole_row
+    [turn] = browser.client.get(f"{BASE}/conversations/current").json()["turns"]
+    assert turn["feedback"] == {"helpful": False, "reason": reason}

@@ -1,7 +1,7 @@
 """The tables. Migration 0003 creates the tenant tables, with their row-level security and grants.
 Migration 0004 adds the handbook tables, which are global and read-only to the API, migration
 0008 adds the assistant's tables, and migration 0009 adds the time-off tables and proposals at the
-end of this file.
+end of this file. Migration 0013 adds the three case tables after them.
 
 Every table except `tenants` and `sessions` is a tenant table: it has a tenant_id, and Postgres
 shows the API only the rows of the tenant its transaction is scoped to (see app/db/tenancy.py).
@@ -22,12 +22,12 @@ from typing import Any
 
 from pgvector.sqlalchemy import Vector
 from sqlalchemy import (
-    JSON,
     CheckConstraint,
     Computed,
     ForeignKey,
     ForeignKeyConstraint,
     Index,
+    LargeBinary,
     Numeric,
     SmallInteger,
     Text,
@@ -219,6 +219,15 @@ class AuditEvent(Base):
         Index(None, "tenant_id", "actor_person_id"),
         # For the key to the proposal: deleting a proposal looks here for events that name it.
         Index(None, "tenant_id", "proposal_id"),
+        # A case's summary-retry rows (the retry throttle reads them under a row lock). Partial,
+        # so no other audit insert maintains it.
+        Index(
+            "ix_audit_events_target_action",
+            "tenant_id",
+            "target_id",
+            "occurred_at",
+            postgresql_where=text("action = 'case.summary.retried'"),
+        ),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, server_default=func.gen_random_uuid())
@@ -352,6 +361,10 @@ class AiConversation(Base):
     effort: Mapped[str]
     prompt_version: Mapped[str]
     toolset_version: Mapped[str]
+    # This conversation's data key, wrapped by the key-encryption key named by key_id (ADR 0015,
+    # migration 0012). Every sealed value in the conversation's rows opens with it.
+    key_id: Mapped[str]
+    wrapped_key: Mapped[bytes] = mapped_column(LargeBinary)
 
 
 class AiTurn(Base):
@@ -397,14 +410,16 @@ class AiTurn(Base):
     tenant_id: Mapped[uuid.UUID] = mapped_column(ForeignKey(TENANT_FK, ondelete="CASCADE"))
     person_id: Mapped[uuid.UUID]
     conversation_id: Mapped[uuid.UUID]
-    question: Mapped[str]
+    # Sealed with the conversation's data key (migration 0012); so is the answer below.
+    question_ciphertext: Mapped[bytes] = mapped_column(LargeBinary)
     status: Mapped[str]
     # Set when status is `failed`: the stream's error code, such as `model-unavailable`.
     error_code: Mapped[str | None]
     started_at: Mapped[datetime] = mapped_column(server_default=func.now())
     ended_at: Mapped[datetime | None]
-    # What the person sees after a reload. A stopped turn keeps its partial answer here.
-    answer_text: Mapped[str] = mapped_column(server_default=text("''"))
+    # What the person sees after a reload. A stopped turn keeps its partial answer here. Null until
+    # the turn first saves an answer, and read as "".
+    answer_ciphertext: Mapped[bytes | None] = mapped_column(LargeBinary)
     citations: Mapped[list[dict[str, Any]]] = mapped_column(JSONB, server_default=text("'[]'"))
 
     # The trace, filled in when the turn ends (docs/specs/2026-10-14-phase-4-assistant-core.md,
@@ -412,7 +427,8 @@ class AiTurn(Base):
     # The guard's verdict, or null if the guard didn't run (a budget refusal, say).
     # none_as_null: Python None is SQL NULL, not the JSON value null, so `IS NULL` finds it.
     guard_verdict: Mapped[dict[str, Any] | None] = mapped_column(JSONB(none_as_null=True))
-    # [{name, inputSummary, ok, durationMs}], in call order.
+    # [{name, inputSummary, ok, durationMs}], in call order. Each inputSummary is the base64 of a
+    # sealed value (migration 0012); the names, results, and durations stay readable.
     tool_calls: Mapped[list[dict[str, Any]]] = mapped_column(JSONB, server_default=text("'[]'"))
     # The handbook sections the search tool returned, as [{sectionId, passageIds}].
     sections_retrieved: Mapped[list[dict[str, Any]]] = mapped_column(
@@ -442,9 +458,9 @@ class AiTurn(Base):
 class AiMessage(Base):
     """One message of the conversation's history, stored exactly as the Messages API takes it.
 
-    Insert-only. `content` is `json`, not `jsonb`: Postgres keeps `json` as the exact text it was
-    given, while `jsonb` reorders keys and drops whitespace. The model's thinking blocks are signed
-    over their exact bytes, so the history must go back to the API unchanged.
+    Insert-only. `content_ciphertext` seals the content's JSON text exactly as it was serialized, so
+    it opens to the same bytes: the model's thinking blocks are signed over their exact bytes, and
+    the history must go back to the API unchanged (ADR 0015, migration 0012).
     """
 
     __tablename__ = "ai_messages"
@@ -473,7 +489,7 @@ class AiMessage(Base):
     # The message's place in the conversation, from 0.
     position: Mapped[int]
     role: Mapped[str]
-    content: Mapped[list[dict[str, Any]]] = mapped_column(JSON)
+    content_ciphertext: Mapped[bytes] = mapped_column(LargeBinary)
     # One entry per `search_result` block in `content`, in block order, written with the message:
     # the section ID, the passage IDs of each text block, the title, the group name, the audience
     # label, the last-updated date, and the deep link. The block's own text can't give those back
@@ -498,7 +514,6 @@ class AiFeedback(Base):
             name="fk_ai_feedback_turn_owner",
         ),
         UniqueConstraint("tenant_id", "turn_id"),
-        CheckConstraint("char_length(reason) <= 500", name="reason_length"),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, server_default=func.gen_random_uuid())
@@ -506,7 +521,7 @@ class AiFeedback(Base):
     person_id: Mapped[uuid.UUID]
     turn_id: Mapped[uuid.UUID]
     helpful: Mapped[bool]
-    reason: Mapped[str | None]
+    reason_ciphertext: Mapped[bytes | None] = mapped_column(LargeBinary)
     created_at: Mapped[datetime] = mapped_column(server_default=func.now())
 
 
@@ -530,6 +545,10 @@ class AiSpend(Base):
         CheckConstraint("kind IN ('reserve', 'settle')", name="kind"),
         CheckConstraint("kind <> 'reserve' OR amount_usd >= 0", name="reserve_not_negative"),
         CheckConstraint("amount_usd BETWEEN -10 AND 10", name="amount_range"),
+        CheckConstraint("purpose IN ('turn', 'case_screen', 'case_summary')", name="purpose"),
+        # A turn's spending has its turn. A case's spending carries no case ID and no turn, so the
+        # sandbox-wide ledger tells no one which case was screened or summarized (migration 0013).
+        CheckConstraint("purpose <> 'turn' OR turn_id IS NOT NULL", name="turn_has_its_turn"),
         # The sum of a sandbox's rows, under the budget lock, uses the prefix (tenant_id). The whole
         # index serves the foreign key to the turn: deleting a turn looks here for its rows.
         Index(None, "tenant_id", "turn_id"),
@@ -537,7 +556,9 @@ class AiSpend(Base):
 
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, server_default=func.gen_random_uuid())
     tenant_id: Mapped[uuid.UUID] = mapped_column(ForeignKey(TENANT_FK, ondelete="CASCADE"))
-    turn_id: Mapped[uuid.UUID]
+    turn_id: Mapped[uuid.UUID | None]
+    # turn, case_screen, or case_summary. Only a turn's row has a turn_id.
+    purpose: Mapped[str] = mapped_column(server_default="turn")
     kind: Mapped[str]
     # A settle row is the actual cost minus the reservation, so it can be negative.
     amount_usd: Mapped[Decimal] = mapped_column(Numeric(12, 6))
@@ -782,3 +803,193 @@ class TimeOffRequest(Base):
     # never sent to a model.
     decision_note: Mapped[str | None]
     canceled_at: Mapped[datetime | None]
+
+
+class Case(Base):
+    """A matter a person sent to HR in their own words (Phase 6). Only they and HR can read it.
+
+    The words are ciphertext under the case's own data key (`key_id`, `wrapped_key`). A trigger
+    moves `status` one way and stamps `status_changed_at`. The API may add a case and change only
+    those two columns, HR alone and never on their own case, plus `screening`: HR's summary
+    retry writes it from `unscreened` to a real verdict, or raises `ordinary` or `sensitive` to
+    `crisis`, and nothing else moves (migration 0014). Rows are never deleted:
+    they go with their sandbox.
+    """
+
+    __tablename__ = "cases"
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "id"),
+        # One case per send: a double click or a second tab repeats the submission ID.
+        UniqueConstraint("tenant_id", "person_id", "submission_id"),
+        # One case per turn. person_id is in it, so a clash can never tell anyone that someone
+        # else's turn has a case.
+        Index(
+            "uq_cases_tenant_id_person_id_turn_id",
+            "tenant_id",
+            "person_id",
+            "turn_id",
+            unique=True,
+            postgresql_where=text("turn_id IS NOT NULL"),
+        ),
+        ForeignKeyConstraint(["tenant_id", "person_id"], ["people.tenant_id", "people.id"]),
+        # A turn, and its conversation, can only be the person's own: Postgres checks a foreign key
+        # without row-level security, so person_id is part of both keys.
+        ForeignKeyConstraint(
+            ["tenant_id", "turn_id", "person_id"],
+            ["ai_turns.tenant_id", "ai_turns.id", "ai_turns.person_id"],
+            name="fk_cases_turn_owner",
+        ),
+        ForeignKeyConstraint(
+            ["tenant_id", "conversation_id", "person_id"],
+            ["ai_conversations.tenant_id", "ai_conversations.id", "ai_conversations.person_id"],
+            name="fk_cases_conversation_owner",
+        ),
+        CheckConstraint(
+            "category IN ('harassment_discrimination', 'safety', 'medical_accommodation', 'pay',"
+            " 'other')",
+            name="category",
+        ),
+        CheckConstraint("status IN ('new', 'in_review', 'closed')", name="status"),
+        CheckConstraint(
+            "screening IN ('ordinary', 'sensitive', 'crisis', 'unscreened')", name="screening"
+        ),
+        # A case from a panel has its turn and conversation; one from "My cases" has neither.
+        CheckConstraint(
+            "(turn_id IS NULL) = (conversation_id IS NULL)", name="turn_and_conversation"
+        ),
+        # HR's queue: open cases first, then by date.
+        Index(None, "tenant_id", "status", "created_at"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, server_default=func.gen_random_uuid())
+    tenant_id: Mapped[uuid.UUID] = mapped_column(ForeignKey(TENANT_FK, ondelete="CASCADE"))
+    person_id: Mapped[uuid.UUID]
+    # The form's ID for this send.
+    submission_id: Mapped[uuid.UUID]
+    # harassment_discrimination, safety, medical_accommodation, pay, or other.
+    category: Mapped[str]
+    # new, in_review, or closed.
+    status: Mapped[str] = mapped_column(server_default="new")
+    status_changed_at: Mapped[datetime] = mapped_column(server_default=func.now())
+    # UTC. A trigger stamps it whenever a person is set; with none (the seed) it can backdate.
+    created_at: Mapped[datetime] = mapped_column(server_default=func.now())
+    # The date HR replies by, worked out by the service.
+    reply_by: Mapped[date]
+    # ordinary, sensitive, crisis, or unscreened: the guard's category for the words.
+    screening: Mapped[str]
+    conversation_id: Mapped[uuid.UUID | None]
+    turn_id: Mapped[uuid.UUID | None]
+    key_id: Mapped[str]
+    wrapped_key: Mapped[bytes] = mapped_column(LargeBinary)
+    text_ciphertext: Mapped[bytes] = mapped_column(LargeBinary)
+
+
+class CaseSummary(Base):
+    """The AI's summary of a case, or the note that it could not write one. Insert-only, and HR
+    alone can read it.
+
+    A retry adds a row, and the newest one counts. A trigger lets code running as the person add a
+    first summary to their own case in its first 10 minutes, and no more; `written_by_hr` is how
+    the database knows which rows those are.
+    """
+
+    __tablename__ = "case_summaries"
+    __table_args__ = (
+        ForeignKeyConstraint(["tenant_id", "case_id"], ["cases.tenant_id", "cases.id"]),
+        CheckConstraint("status IN ('written', 'failed')", name="status"),
+        CheckConstraint(
+            "reason IS NULL OR reason IN ('transport', 'refusal', 'timeout', 'budget', 'checks',"
+            " 'crisis', 'unscreened', 'screening-conflict')",
+            name="reason",
+        ),
+        # A written summary has its ciphertext and no reason; a failed one has a reason and none.
+        CheckConstraint(
+            "(status = 'written' AND ciphertext IS NOT NULL AND reason IS NULL)"
+            " OR (status = 'failed' AND ciphertext IS NULL AND reason IS NOT NULL)",
+            name="outcome",
+        ),
+        # At most one summary from code running as anyone but HR, which the trigger cannot count
+        # for itself: it cannot read a table that only HR can read.
+        Index(
+            "uq_case_summaries_one_not_by_hr_per_case",
+            "tenant_id",
+            "case_id",
+            unique=True,
+            postgresql_where=text("NOT written_by_hr"),
+        ),
+        # The newest summary of a case, and the key to the case.
+        Index(None, "tenant_id", "case_id", "created_at"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, server_default=func.gen_random_uuid())
+    tenant_id: Mapped[uuid.UUID] = mapped_column(ForeignKey(TENANT_FK, ondelete="CASCADE"))
+    case_id: Mapped[uuid.UUID]
+    # written or failed.
+    status: Mapped[str]
+    # A failure's code. Null for a written summary.
+    reason: Mapped[str | None]
+    # Encrypted with the case's data key. Null when failed.
+    ciphertext: Mapped[bytes | None] = mapped_column(LargeBinary)
+    # Nullable because a failure from budget, crisis, or unscreened makes no model call.
+    model: Mapped[str | None]
+    prompt_version: Mapped[str | None]
+    created_at: Mapped[datetime] = mapped_column(server_default=func.now())
+    # Stamped by a trigger from the HR flag of the transaction, whatever an insert says.
+    written_by_hr: Mapped[bool] = mapped_column(server_default=false())
+
+
+class CaseEvent(Base):
+    """One step in a case's timeline. Insert-only, HR alone can read it, and it holds no text."""
+
+    __tablename__ = "case_events"
+    __table_args__ = (
+        ForeignKeyConstraint(["tenant_id", "case_id"], ["cases.tenant_id", "cases.id"]),
+        ForeignKeyConstraint(["tenant_id", "actor_person_id"], ["people.tenant_id", "people.id"]),
+        CheckConstraint(
+            "kind IN ('opened', 'summary_written', 'summary_failed', 'viewed', 'text_read',"
+            " 'status_changed')",
+            name="kind",
+        ),
+        CheckConstraint("from_status IN ('new', 'in_review', 'closed')", name="from_status"),
+        CheckConstraint("to_status IN ('new', 'in_review', 'closed')", name="to_status"),
+        # Only a status change names two statuses.
+        CheckConstraint(
+            "(kind = 'status_changed' AND from_status IS NOT NULL AND to_status IS NOT NULL)"
+            " OR (kind <> 'status_changed' AND from_status IS NULL AND to_status IS NULL)",
+            name="statuses_only_on_a_change",
+        ),
+        # A case's timeline, oldest first, and the key to the case.
+        Index(None, "tenant_id", "case_id", "occurred_at"),
+        Index(None, "tenant_id", "actor_person_id"),
+        # Code running as the person adds one `opened` and one summary event per case (migration
+        # 0015); HR's rows are not held to it.
+        Index(
+            "uq_case_events_one_opened_not_by_hr_per_case",
+            "tenant_id",
+            "case_id",
+            unique=True,
+            postgresql_where=text("kind = 'opened' AND NOT written_by_hr"),
+        ),
+        Index(
+            "uq_case_events_one_summary_not_by_hr_per_case",
+            "tenant_id",
+            "case_id",
+            unique=True,
+            postgresql_where=text(
+                "kind IN ('summary_written', 'summary_failed') AND NOT written_by_hr"
+            ),
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, server_default=func.gen_random_uuid())
+    tenant_id: Mapped[uuid.UUID] = mapped_column(ForeignKey(TENANT_FK, ondelete="CASCADE"))
+    case_id: Mapped[uuid.UUID]
+    # Who did it. Null for something the system did, such as a background summary.
+    actor_person_id: Mapped[uuid.UUID | None]
+    occurred_at: Mapped[datetime] = mapped_column(server_default=func.now())
+    # opened, summary_written, summary_failed, viewed, text_read, or status_changed.
+    kind: Mapped[str]
+    from_status: Mapped[str | None]
+    to_status: Mapped[str | None]
+    # Stamped by a trigger from the HR flag of the transaction, whatever an insert says.
+    written_by_hr: Mapped[bool] = mapped_column(server_default=false())

@@ -13,20 +13,24 @@ from pathlib import Path
 
 from app.ai.transport import GUARD_NEW_MESSAGE_TAG
 
-PROMPT_VERSION = "2026-11.1"
-TOOLSET_VERSION = "2026-11.1"
-GUARD_PROMPT_VERSION = "2026-10.1"
+PROMPT_VERSION = "2026-11.2"
+TOOLSET_VERSION = "2026-11.2"
+GUARD_PROMPT_VERSION = "2026-11.1"
+# The case summary has its own prompt and version; a summary records the version that wrote it.
+CASE_SUMMARY_PROMPT_VERSION = "2026-11.2"
 
 # The guard puts the assistant's last answer beside the new message, in this tag.
 GUARD_PREVIOUS_ANSWER_TAG = "previous_answer"
 
 __all__ = [
     "CANARY",
+    "CASE_SUMMARY_PROMPT_VERSION",
     "GUARD_NEW_MESSAGE_TAG",
     "GUARD_PREVIOUS_ANSWER_TAG",
     "GUARD_PROMPT_VERSION",
     "PROMPT_VERSION",
     "TOOLSET_VERSION",
+    "case_summary_prompt",
     "guard_prompt",
     "system_prompt",
 ]
@@ -38,6 +42,11 @@ _MARKER = "Internal marker, never to be repeated or mentioned: "
 @cache
 def system_prompt() -> str:
     return (_DIRECTORY / "assistant.md").read_text(encoding="utf-8")
+
+
+@cache
+def case_summary_prompt() -> str:
+    return (_DIRECTORY / "case_summary.md").read_text(encoding="utf-8")
 
 
 @cache

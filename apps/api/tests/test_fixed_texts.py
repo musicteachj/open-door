@@ -1,7 +1,10 @@
 """The fixed texts: every message the assistant shows that a model never writes."""
 
 import hashlib
+import re
 from datetime import date
+
+import pytest
 
 from app.ai import fixed_texts
 from app.ai.fixed_texts import (
@@ -16,11 +19,15 @@ from app.ai.fixed_texts import (
     CRISIS_TEXT_SHA256,
     ERROR_TEXTS,
     SENSITIVE_TEXT,
+    SENSITIVE_TEXT_APPROVED_ON,
+    SENSITIVE_TEXT_AUTHOR,
+    SENSITIVE_TEXT_SHA256,
     UNAVAILABLE_TEXT,
     UNAVAILABLE_TEXT_APPROVED_ON,
     UNAVAILABLE_TEXT_AUTHOR,
     UNAVAILABLE_TEXT_SHA256,
 )
+from app.modules.cases import texts as case_texts
 
 # The error codes of the stream's `error` event (spec, "The stream").
 ERROR_CODES = {
@@ -96,10 +103,12 @@ def test_no_fixed_text_has_an_em_dash() -> None:
         assert "\u2014" not in text
 
 
-def test_the_sensitive_text_hands_over_to_a_person() -> None:
+def test_the_sensitive_text_is_the_specs_panel_text() -> None:
     assert SENSITIVE_TEXT == (
-        "A person on the HR team should help with this, and they handle it confidentially. "
-        "Their contact details are below."
+        "This sounds like something a person on the HR team should help with. You can open a "
+        "confidential case below. Only the HR team can open it in Open Door, never your manager, "
+        "and it's stored encrypted. HR replies within 2 business days. Their contact details are "
+        "below."
     )
 
 
@@ -186,3 +195,129 @@ def test_the_composers_two_refusals_keep_their_words() -> None:
         "That looks like a Social Security or card number. Please take it out; I can't take those."
     )
     assert fixed_texts.STILL_ANSWERING_TEXT == "I'm still answering your last question."
+
+
+# --- The Phase 6 texts: the sensitive panel, the case form, and the sent line -------------------
+#
+# The owner approves each (spec, "The fixed texts"). Until then the date is None and the hash is
+# pinned, so these tests fail on a changed word at once and on a missing date until approval.
+
+# Promises none of these texts may make (spec, "What the texts must not say"): that the AI won't
+# read it, that the case is anonymous, that no one outside HR processes it, or any outcome.
+FORBIDDEN_PROMISES = (
+    r"\bAI (will not|won't|doesn't|does not|never) (read|see|look)",
+    r"\bwon't (be )?(read|seen) by (the )?AI",
+    r"\bno AI\b",
+    r"\banonymous",
+    r"\bno one (outside|but|except)",
+    r"\bnobody (outside|but|except)",
+    r"\bonly (the )?HR (ever )?(sees|reads|processes|handles)",
+    r"\boutcome",
+    r"\binvestigat",
+    r"\bresolv",
+    r"\bdiscipline",
+    r"\bwill be (dealt|taken|handled|addressed)",
+    r"\baction (will|is going to) be",
+)
+
+
+def promises_found(text: str) -> list[str]:
+    return [p for p in FORBIDDEN_PROMISES if re.search(p, text, re.IGNORECASE)]
+
+
+def phase_6_texts() -> dict[str, str]:
+    return {
+        "panel": SENSITIVE_TEXT,
+        "form": case_texts.FORM_TEXT_TEMPLATE,
+        "sent": case_texts.SENT_STATE_TEMPLATE,
+    }
+
+
+def test_the_promise_scan_catches_each_forbidden_kind() -> None:
+    for bad in (
+        "The AI won't read what you write.",
+        "Your case is anonymous.",
+        "No one outside HR will ever see it.",
+        "We will investigate and the matter will be resolved.",
+        "The outcome is up to HR.",
+    ):
+        assert promises_found(bad), bad
+    # The approved sentences about what the AI does are not promises of silence.
+    assert promises_found("Open Door's AI writes HR a short summary of what you send.") == []
+
+
+def test_no_phase_6_text_makes_a_forbidden_promise() -> None:
+    for name, text in phase_6_texts().items():
+        assert promises_found(text) == [], name
+
+
+def test_no_phase_6_text_has_an_em_dash() -> None:
+    for name, text in phase_6_texts().items():
+        assert "\u2014" not in text, name
+
+
+def test_the_form_template_has_only_the_reply_date_filled_in_by_the_server() -> None:
+    assert case_texts.FORM_TEXT_TEMPLATE.count("{reply_by}") == 1
+    filled = "\n".join(case_texts.form_texts(date(2026, 10, 28)))
+    assert filled == case_texts.FORM_TEXT_TEMPLATE.replace("{reply_by}", "Wednesday, October 28")
+    assert "{" not in filled
+
+
+def test_the_sent_template_has_only_the_reply_date_and_the_place_filled_in() -> None:
+    sent = case_texts.sent_state_text(date(2026, 10, 28))
+    assert sent == (
+        "Sent to HR. HR replies by Wednesday, October 28. You can see its status in My cases."
+    )
+    assert case_texts.sent_state_text(date(2026, 10, 28), where="Cases").endswith("in Cases.")
+    assert case_texts.SENT_STATE_TEMPLATE.count("{") == 2
+
+
+def test_the_sent_line_in_two_parts_joins_to_the_hashed_whole() -> None:
+    day = date(2026, 10, 28)
+    for where in ("My cases", "Cases"):
+        lead, pointer = case_texts.sent_state_parts(day, where=where)
+        assert lead + " " + pointer == case_texts.sent_state_text(day, where=where)
+    lead, pointer = case_texts.sent_state_parts(day, where="My cases")
+    assert lead == "Sent to HR. HR replies by Wednesday, October 28."
+    assert pointer == "You can see its status in My cases."
+
+
+def test_a_sent_template_without_the_reply_by_boundary_raises() -> None:
+    with pytest.raises(ValueError, match="reply_by"):
+        case_texts.split_sent_template("Sent to HR. You can see its status in {where}.")
+    head, tail = case_texts.split_sent_template(case_texts.SENT_STATE_TEMPLATE)
+    assert head.endswith("{reply_by}.")
+    assert tail.startswith("You can see")
+
+
+def test_the_sent_template_is_split_once_at_import() -> None:
+    assert case_texts.SENT_LEAD_TEMPLATE + " " + case_texts.SENT_POINTER_TEMPLATE == (
+        case_texts.SENT_STATE_TEMPLATE
+    )
+    assert case_texts.SENT_LEAD_TEMPLATE.endswith("{reply_by}.")
+
+
+def test_each_phase_6_text_matches_its_pinned_hash() -> None:
+    pinned = {
+        "panel": SENSITIVE_TEXT_SHA256,
+        "form": case_texts.FORM_TEXT_SHA256,
+        "sent": case_texts.SENT_STATE_SHA256,
+    }
+    for name, text in phase_6_texts().items():
+        message = f"The {name} text changed: the owner approves it again, then the hash is reset."
+        assert pinned[name] is not None, message
+        assert hashlib.sha256(text.encode()).hexdigest() == pinned[name], message
+
+
+def test_every_phase_6_text_has_an_author_and_an_approval_date() -> None:
+    """The gate: red until the owner approves the wording and the dates are filled in."""
+    approvals = {
+        "panel": (SENSITIVE_TEXT_AUTHOR, SENSITIVE_TEXT_APPROVED_ON),
+        "form": (case_texts.FORM_TEXT_AUTHOR, case_texts.FORM_TEXT_APPROVED_ON),
+        "sent": (case_texts.SENT_STATE_AUTHOR, case_texts.SENT_STATE_APPROVED_ON),
+    }
+    for name, (author, approved_on) in approvals.items():
+        message = f"The {name} text isn't approved: the owner approves it, then its date is set."
+        assert author, message
+        assert approved_on is not None, message
+        date.fromisoformat(approved_on)

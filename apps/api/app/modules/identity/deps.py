@@ -45,6 +45,20 @@ class SignedIn:
     session: SessionRecord
 
 
+def _check_csrf(request: Request, record: SessionRecord) -> None:
+    """Refuse (403, logged) a request whose X-CSRF-Token is missing or wrong."""
+    if token_matches(request.headers.get(CSRF_HEADER), record.csrf_hash):
+        return
+    log_security_event(
+        SecurityEvent.CSRF_REJECTED,
+        request,
+        "X-CSRF-Token is missing or wrong",
+        tenant_id=record.tenant_id,
+        actor_id=record.person_id,
+    )
+    raise HTTPException(status.HTTP_403_FORBIDDEN, "The CSRF token is missing or wrong.")
+
+
 async def current_session(
     request: Request, engine: Annotated[AsyncEngine, Depends(get_engine)]
 ) -> SessionRecord:
@@ -61,18 +75,21 @@ async def current_session(
     if record is None:
         log_security_event(SecurityEvent.SESSION_INVALID, request, "unknown or expired session")
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, NOT_SIGNED_IN)
-    if request.method not in SAFE_METHODS and not token_matches(
-        request.headers.get(CSRF_HEADER), record.csrf_hash
-    ):
-        log_security_event(
-            SecurityEvent.CSRF_REJECTED,
-            request,
-            "X-CSRF-Token is missing or wrong",
-            tenant_id=record.tenant_id,
-            actor_id=record.person_id,
-        )
-        raise HTTPException(status.HTTP_403_FORBIDDEN, "The CSRF token is missing or wrong.")
+    if request.method not in SAFE_METHODS:
+        _check_csrf(request, record)
     return record
+
+
+async def require_csrf_header(
+    request: Request, record: Annotated[SessionRecord, Depends(current_session)]
+) -> None:
+    """The CSRF check on any method, for a read that is audited: no navigation or cross-site form
+    can send the header. Use it as a route-level dependency so it runs before the route's
+    transaction opens, and a refusal writes nothing."""
+    _check_csrf(request, record)
+
+
+AuditedReadDep = Depends(require_csrf_header)
 
 
 async def signed_in(

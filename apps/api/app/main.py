@@ -8,13 +8,15 @@ from fastapi import FastAPI
 
 from app import __version__
 from app.ai import anthropic_transport
+from app.ai.case_summary import Summarizer
 from app.ai.embeddings import Embedder, QueryEmbeddingLru, VoyageEmbedder
-from app.ai.scripted import ScriptedTransport
+from app.ai.scripted import ScriptedSummarizer, ScriptedTransport
 from app.ai.transport import Transport, require_a_transport_fit_for
 from app.api.problems import document_problems_as_problem_json
 from app.api.v1.router import api_router
 from app.core.cache_control import NoStoreMiddleware
 from app.core.config import Settings, get_settings
+from app.core.encryption import LocalKeyProvider, load_key_provider
 from app.core.logging import configure_logging
 from app.core.problems import install_problem_handlers
 from app.core.request_id import RequestIdMiddleware
@@ -36,6 +38,17 @@ def _build_transport(settings: Settings) -> Transport:
     return ScriptedTransport()
 
 
+def _build_summarizer(settings: Settings, transport: Transport) -> Summarizer:
+    """The case summarizer. Under `anthropic` it shares the transport's client (and so its pool,
+    which the lifespan closes); every other transport gets the scripted one."""
+    if settings.ai_transport == "anthropic":
+        if not isinstance(transport, anthropic_transport.AnthropicTransport):
+            msg = "AI_TRANSPORT=anthropic needs an AnthropicTransport to build the summarizer on"
+            raise ValueError(msg)
+        return anthropic_transport.AnthropicSummarizer(transport.client)
+    return ScriptedSummarizer()
+
+
 def _build_embedder(settings: Settings) -> Embedder | None:
     """Query embeddings cost money, so only the anthropic transport with a Voyage key gets one.
 
@@ -45,6 +58,21 @@ def _build_embedder(settings: Settings) -> Embedder | None:
     if settings.ai_transport != "anthropic" or settings.voyage_api_key is None:
         return None
     return QueryEmbeddingLru(VoyageEmbedder(settings.voyage_api_key))
+
+
+def build_key_provider(settings: Settings) -> LocalKeyProvider:
+    """The one key provider, or a refusal to start: no keyring, a keyring file others can read,
+    or the fake test key outside APP_ENV=test. There is no default key."""
+    keyring = settings.encryption_keyring
+    keyring_file = settings.encryption_keyring_file
+    keys = load_key_provider(
+        keyring=None if keyring is None else keyring.get_secret_value(),
+        keyring_file=None if keyring_file is None else keyring_file.get_secret_value(),
+    )
+    if keys.uses_test_key and settings.app_env != "test":
+        msg = "The keyring holds the test key, which only APP_ENV=test accepts. Run `make keyring`."
+        raise ValueError(msg)
+    return keys
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
@@ -59,6 +87,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             " fixture-path setting. Use scripted or anthropic for the app."
         )
         raise ValueError(msg)
+    keys = build_key_provider(settings)
     # Refused here so a bad environment fails at boot. The transport itself is built in the
     # lifespan, with the client it closes, so each lifespan run gets its own.
     if settings.ai_transport == "anthropic":
@@ -70,6 +99,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         app.state.engine = create_engine(str(settings.database_url))
         app.state.transport = transport
         app.state.embedder = _build_embedder(settings)
+        app.state.summarizer = _build_summarizer(settings, transport)
         streams = StreamTracker()
         app.state.streams = streams
         try:
@@ -93,6 +123,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     app = FastAPI(title="Open Door API", version=__version__, lifespan=lifespan)
     app.state.settings = settings
+    app.state.keys = keys
     # The middleware added last runs first. The request-ID middleware wraps the same-origin check,
     # so even a refused request carries its ID, and the no-store middleware wraps both, so a refusal
     # carries `Cache-Control: no-store` too. There is no CORS middleware: the web app reaches the

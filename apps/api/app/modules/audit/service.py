@@ -11,7 +11,7 @@ app/modules/identity/security_log.py).
 
 from collections.abc import Mapping
 from typing import Literal
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from sqlalchemy import insert
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -34,6 +34,15 @@ type AuditAction = Literal[
     "proposal.confirmed",
     "proposal.canceled",
     "proposal.failed",
+    "case.opened",
+    "case.summary.written",
+    "case.summary.failed",
+    "case.summary.retried",
+    "case.screened",
+    "case.viewed",
+    "case.text.read",
+    "case.status_changed",
+    "case.listed",
 ]
 type Via = Literal["ui", "assistant", "system"]
 
@@ -53,8 +62,9 @@ _PRIVATE_KEYS = frozenset(
 )
 
 # Text a person wrote, which never belongs in the log: a denial's note (`decision_note` is the
-# column, `note` the field name the service and the routes use).
-_FREE_TEXT_KEYS = frozenset({"decisionnote", "note"})
+# column, `note` the field name the service and the routes use), and a case's words, its summary,
+# and any narrative (Phase 6).
+_FREE_TEXT_KEYS = frozenset({"decisionnote", "note", "text", "summary", "words", "narrative"})
 _REFUSED_KEYS = _PRIVATE_KEYS | _FREE_TEXT_KEYS
 
 
@@ -100,6 +110,9 @@ async def record_event(
         raise ValueError(msg)
     await session.execute(
         insert(AuditEvent).values(
+            # Made here, so the insert asks for nothing back. Postgres checks RETURNING against the
+            # SELECT rule, and a person may write an event (a case's, say) that only HR may read.
+            id=uuid4(),
             tenant_id=tenant_id,
             actor_person_id=actor_id,
             via=via,

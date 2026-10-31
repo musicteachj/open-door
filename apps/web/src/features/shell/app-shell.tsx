@@ -11,7 +11,7 @@ import { Toast, ToastProvider, ToastViewport } from '@/components/ui/toast'
 import { navFor } from '@/app/nav'
 import { useMe } from '@/app/useMe'
 import { useTimeOffSummary } from '@/features/time-off/use-time-off'
-import { getGetHandbookQueryKey, useGetHandbook } from '@/api/generated'
+import { getGetHandbookQueryKey, useGetCaseCounts, useGetHandbook } from '@/api/generated'
 import {
   ConversationSourcePanel,
   NARROW_WINDOW_QUERY,
@@ -22,7 +22,7 @@ import { useMediaQuery } from '@/hooks/use-media-query'
 import { cn } from '@/lib/utils'
 import { formatMonthDay, formatTimeLeft, isExpiringSoon } from '@/lib/time'
 import { useExpiryBannerDismissal } from './expiry-banner-dismissal'
-import { timeOffGlance } from './glance'
+import { casesGlance, timeOffGlance } from './glance'
 import { useIdentityActions } from './use-identity-actions'
 import { ShellBannerSlot } from './shell-slots'
 import { useShellLayout } from './shell-layout-store'
@@ -79,8 +79,12 @@ function Frame({ me }: { me: NonNullable<ReturnType<typeof useMe>['data']> }) {
   // The time-off summary feeds the rail on the assistant home and a manager's Approvals badge on
   // every page. A failure leaves the figures and the badge out, as the handbook figure is.
   const summary = useTimeOffSummary({ enabled: showRail || me.isManager })
+  // HR's Cases badge and the rail's two case figures. Only HR asks, and a failure leaves the badge
+  // and the figures out, as the time-off summary's does.
+  const caseCounts = useGetCaseCounts({ query: { enabled: me.isHrAdmin } })
   const glance: GlanceItem[] = [
     ...(summary.data && showRail ? timeOffGlance(summary.data) : []),
+    ...(caseCounts.data && showRail && me.isHrAdmin ? casesGlance(caseCounts.data) : []),
     ...(handbook.data
       ? [
           {
@@ -149,8 +153,13 @@ function Frame({ me }: { me: NonNullable<ReturnType<typeof useMe>['data']> }) {
                 label={item.label}
                 to={item.to}
                 count={
-                  item.to === '/approvals' ? (summary.data?.waitingCount ?? undefined) : undefined
+                  item.to === '/approvals'
+                    ? (summary.data?.waitingCount ?? undefined)
+                    : item.to === '/cases' && me.isHrAdmin
+                      ? caseCounts.data?.new
+                      : undefined
                 }
+                {...(item.to === '/cases' ? { countWord: 'new', wordInBadge: true } : {})}
                 className="max-[760px]:shrink-0"
               />
             ))}

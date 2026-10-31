@@ -6,9 +6,11 @@ from typing import Annotated
 from fastapi import Depends, Request
 from sqlalchemy.ext.asyncio import AsyncEngine
 
+from app.ai.case_summary import Summarizer
 from app.ai.embeddings import Embedder
 from app.ai.transport import Transport
 from app.core.config import Settings
+from app.core.encryption import KeyProvider
 from app.modules.assistant.sse import StreamTracker
 
 
@@ -46,6 +48,17 @@ def get_embedder(request: Request) -> Embedder | None:
     return request.app.state.embedder  # type: ignore[no-any-return]
 
 
+def get_summarizer(request: Request) -> Summarizer | None:
+    """The case summarizer, or None when there is none (a real transport, until Stage 4).
+
+    None is a real answer, so only a missing lifespan is an error.
+    """
+    if not hasattr(request.app.state, "summarizer"):
+        msg = "No summarizer slot: build the app with create_app() and run its lifespan."
+        raise RuntimeError(msg)
+    return request.app.state.summarizer  # type: ignore[no-any-return]
+
+
 def get_app_settings(request: Request) -> Settings:
     """The settings the app was built with, so a route reads the same values the lifespan used."""
     settings = getattr(request.app.state, "settings", None)
@@ -62,6 +75,18 @@ def get_streams(request: Request) -> StreamTracker:
         msg = "No stream tracker: build the app with create_app() and run its lifespan."
         raise RuntimeError(msg)
     return streams
+
+
+def get_keys(request: Request) -> KeyProvider:
+    """The key provider the app built at boot, for sealing and opening encrypted text."""
+    keys = getattr(request.app.state, "keys", None)
+    if keys is None:
+        msg = "No keyring: build the app with create_app(), which refuses to start without one."
+        raise RuntimeError(msg)
+    if not isinstance(keys, KeyProvider):
+        msg = "app.state.keys is not a key provider."
+        raise RuntimeError(msg)
+    return keys
 
 
 def utc_now() -> datetime:

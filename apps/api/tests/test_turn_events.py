@@ -64,6 +64,7 @@ def test_each_event_serializes_to_the_specs_payload() -> None:
         ],
         "offerCase": False,
     }
+    assert Escalation("crisis", "msg", (), offer_case=True).to_json()["offerCase"] is True
     assert Error("refusal", "msg").to_json() == {
         "code": "refusal",
         "message": "msg",

@@ -63,7 +63,6 @@ from sqlalchemy import (
     literal_column,
     null,
     select,
-    text,
     update,
 )
 from sqlalchemy import cast as sql_cast
@@ -88,6 +87,7 @@ from app.ai.proposal_cards import (
 )
 from app.api.schemas import CamelModel
 from app.db.errors import constraint_name, has_sqlstate
+from app.db.locks import CONVERSATION_PROPOSALS_NS, database_now, lock_tenant_scoped
 from app.db.models import AiMessage, AiProposal, AiTurn, TimeOffRequest
 from app.db.tenancy import TenantContext, tenant_session
 from app.domain.timeoff.evaluate import NewRequest, overlapping_days
@@ -101,13 +101,6 @@ type ProposalStatus = Literal["pending", "executed", "failed", "canceled", "expi
 type CanceledReason = Literal["dismissed", "replaced", "turn-incomplete"]
 type AutomaticReason = Literal["replaced", "turn-incomplete"]
 
-# The two-integer advisory lock's namespace for a conversation's proposals. 4401 and 4402 are the AI
-# budget's, and 4403 is a person's time-off balance.
-CONVERSATION_PROPOSALS_NS = 4404
-TAKE_CONVERSATION_LOCK = text(
-    f"SELECT pg_advisory_xact_lock({CONVERSATION_PROPOSALS_NS},"
-    " hashtext(CAST(:tenant_id AS text) || ':' || CAST(:conversation_id AS text)))"
-)
 PROPOSAL_LIFETIME: ColumnElement[Any] = literal_column("interval '15 minutes'")
 # The SQLSTATE of migration 0009's triggers: a proposal ends once, and never executes after expiry.
 PROPOSAL_TRIGGER_SQLSTATE = "OD003"
@@ -433,12 +426,6 @@ def _canceled_reason(status: str, outcome: Mapping[str, Any] | None) -> str | No
     return reason if isinstance(reason, str) else None
 
 
-async def _database_now(db: AsyncSession) -> datetime:
-    """The transaction's `now()`: the clock the expiry check, `created_at`, `ended_at`, and the
-    trigger that refuses a late execute all use."""
-    return (await db.execute(select(func.now()))).scalar_one()
-
-
 def _ending_update(
     proposal_id: UUID,
     status: str,
@@ -606,10 +593,7 @@ async def create_proposal(
         # store a pending card. A transaction-scoped advisory lock on the conversation serializes
         # them (the API's login may not lock the conversation's row: it can update none of its
         # columns), and a partial unique index (migration 0010) refuses it if this ever changes.
-        await db.execute(
-            TAKE_CONVERSATION_LOCK,
-            {"tenant_id": str(tenant_id), "conversation_id": str(conversation_id)},
-        )
+        await lock_tenant_scoped(db, CONVERSATION_PROPOSALS_NS, tenant_id, conversation_id)
         # Then the turn's row: a tool task that wakes after its turn ended (stopped, failed, or
         # recovered as abandoned) must store nothing, since the model never learns of the card.
         turn = (
@@ -624,7 +608,7 @@ async def create_proposal(
             raise ValueError(msg)
         # `answering` only: a `running` turn past the limit is presumed dead, and its late tool
         # must not replace a valid earlier card (the database's clock, as the confirm reads it).
-        if turn_state_of(turn.status, turn.started_at, await _database_now(db)) != "answering":
+        if turn_state_of(turn.status, turn.started_at, await database_now(db)) != "answering":
             raise TurnFinished(str(turn_id))
         replaced = await _end_pending(
             db, ctx, AiProposal.conversation_id == conversation_id, "replaced"
@@ -825,11 +809,11 @@ async def confirm(
         raise ProposalNotFound
     if row.status != "pending":
         raise Conflict(row.status, reason=_canceled_reason(row.status, row.outcome))
-    database_now = await _database_now(db)
-    if database_now > row.expires_at:
+    db_now = await database_now(db)
+    if db_now > row.expires_at:
         await _end_or_conflict(db, row.id, "expired", None)
         raise Conflict("expired", wrote=True)
-    turn_state = await _turn_state(db, row.turn_id, database_now)
+    turn_state = await _turn_state(db, row.turn_id, db_now)
     if turn_state == "answering":
         raise Conflict(TURN_RUNNING)
     if turn_state == "incomplete":
@@ -889,7 +873,7 @@ async def confirm(
         if constraint_name(error) == ONE_REQUEST_PER_PROPOSAL:
             raise await _current_conflict(db, row.id) from error
         raise
-    return proposal_out(await _read_proposal(db, row.id), database_now)
+    return proposal_out(await _read_proposal(db, row.id), db_now)
 
 
 async def cancel(db: AsyncSession, actor: Actor, proposal_id: UUID) -> ProposalOut:
@@ -901,8 +885,8 @@ async def cancel(db: AsyncSession, actor: Actor, proposal_id: UUID) -> ProposalO
         raise ProposalNotFound
     if row.status != "pending":
         raise Conflict(row.status, reason=_canceled_reason(row.status, row.outcome))
-    database_now = await _database_now(db)
-    if database_now > row.expires_at:
+    now = await database_now(db)
+    if now > row.expires_at:
         await _end_or_conflict(db, row.id, "expired", None)
         raise Conflict("expired", wrote=True)
     await _end_or_conflict(db, row.id, "canceled", {"reason": "dismissed"})
@@ -917,7 +901,7 @@ async def cancel(db: AsyncSession, actor: Actor, proposal_id: UUID) -> ProposalO
         status="canceled",
         extra={"reason": "dismissed"},
     )
-    return proposal_out(await _read_proposal(db, row.id), database_now)
+    return proposal_out(await _read_proposal(db, row.id), now)
 
 
 # ---------------------------------------------------------------------------------------------
@@ -1119,6 +1103,12 @@ def told_entry(proposal_id: UUID, status: str) -> str:
     return f"{proposal_id}:{status}"
 
 
+def join_outcome_sentences(sentences: Sequence[str]) -> str:
+    """The sentences of the one "Since the last message:" line: the first follows the prefix as it
+    is, and each later one starts a sentence of its own."""
+    return " ".join([sentences[0], *(s[0].upper() + s[1:] for s in sentences[1:])])
+
+
 def unreported_outcomes(
     rows: Sequence[_Identified], now: datetime
 ) -> tuple[tuple[str, ...], tuple[str, ...]]:
@@ -1144,8 +1134,6 @@ def unreported_outcomes(
     if not changes:
         return (), ()
     sentences = [sentence for _, _, _, sentence in changes]
-    # The first follows the prefix as it is; each later one starts a sentence of its own.
-    joined = " ".join([sentences[0], *(s[0].upper() + s[1:] for s in sentences[1:])])
-    return (OUTCOME_PREFIX + joined,), tuple(
+    return (OUTCOME_PREFIX + join_outcome_sentences(sentences),), tuple(
         told_entry(row.id, status) for _, row, status, _ in changes
     )

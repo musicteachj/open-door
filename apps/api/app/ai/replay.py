@@ -61,6 +61,14 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Literal, NamedTuple, Self, get_args
 
+from app.ai.case_summary import (
+    Summarizer,
+    SummaryAnswer,
+    SummaryRefused,
+    SummaryRequest,
+    SummaryUnavailable,
+    summary_api_kwargs,
+)
 from app.ai.pricing import IterationUsage, Usage
 from app.ai.transport import (
     Finished,
@@ -84,7 +92,7 @@ from app.ai.transport import (
 RE_RECORD_HINT = "re-record with `make eval-live`"
 UNNAMED_ITEM = "(no eval item)"
 
-Kind = Literal["model", "guard", "judge"]
+Kind = Literal["model", "guard", "judge", "summary"]
 _KINDS: tuple[str, ...] = get_args(Kind)
 
 # --- Fingerprints -----------------------------------------------------------------------------
@@ -109,6 +117,10 @@ def model_fingerprint(request: ModelRequest) -> str:
 
 def guard_fingerprint(request: GuardRequest) -> str:
     return fingerprint("guard", guard_api_kwargs(request))
+
+
+def summary_fingerprint(request: SummaryRequest) -> str:
+    return fingerprint("summary", summary_api_kwargs(request))
 
 
 # --- Serialization ----------------------------------------------------------------------------
@@ -241,16 +253,41 @@ def decode_guard_result(data: Mapping[str, Any]) -> GuardResult:
     )
 
 
+def encode_summary_answer(answer: SummaryAnswer) -> dict[str, Any]:
+    return {
+        "text": answer.text,
+        "model": answer.model,
+        "prompt_version": answer.prompt_version,
+        "usage": encode_usage(answer.usage),
+    }
+
+
+def decode_summary_answer(data: Mapping[str, Any]) -> SummaryAnswer:
+    return SummaryAnswer(
+        text=data["text"],
+        model=data["model"],
+        prompt_version=data["prompt_version"],
+        usage=decode_usage(data["usage"]),
+    )
+
+
 # The errors a stream or the guard can raise that the loop handles by type. Anything else is a bug
 # and is never recorded.
-RECORDED_ERRORS = (ModelUnavailable, SpendLimitReached, InvalidToolInput, GuardUnavailable)
+SUMMARY_ERRORS = (SummaryUnavailable, SummaryRefused)
+RECORDED_ERRORS = (
+    ModelUnavailable,
+    SpendLimitReached,
+    InvalidToolInput,
+    GuardUnavailable,
+    *SUMMARY_ERRORS,
+)
 
 
 def is_transient(error: Exception) -> bool:
     """A failure that says nothing about how the model behaves, so it is never recorded: it would
     replay an outage forever. `InvalidToolInput` and a guard failure that carries usage (the model
     did answer, unusably) are model behavior."""
-    if isinstance(error, GuardUnavailable):
+    if isinstance(error, GuardUnavailable | SummaryUnavailable | SummaryRefused):
         return error.usage is None
     return isinstance(error, ModelUnavailable | SpendLimitReached)
 
@@ -274,6 +311,15 @@ def encode_error(error: Exception) -> dict[str, Any]:
             "message": message,
             "usage": None if error.usage is None else encode_usage(error.usage),
         }
+    if isinstance(error, SummaryUnavailable | SummaryRefused):
+        usage = error.usage
+        return {
+            "type": "summary_unavailable"
+            if isinstance(error, SummaryUnavailable)
+            else "summary_refused",
+            "message": message,
+            "usage": None if usage is None else encode_usage(usage),
+        }
     raise TypeError(f"cannot record an error of type {type(error).__name__}")
 
 
@@ -292,6 +338,11 @@ def decode_error(data: Mapping[str, Any]) -> Exception:
         return GuardUnavailable(
             data["message"], usage=None if usage is None else decode_usage(usage)
         )
+    if kind in {"summary_unavailable", "summary_refused"}:
+        usage = data["usage"]
+        decoded = None if usage is None else decode_usage(usage)
+        summary_error = SummaryUnavailable if kind == "summary_unavailable" else SummaryRefused
+        return summary_error(data["message"], usage=decoded)
     raise ValueError(f"unknown error type {kind!r} in a recording")
 
 
@@ -570,6 +621,19 @@ class _MissLog(_PerItem):
             raise self._unreadable("guard", key, cause) from None
         raise error
 
+    def _serve_summary(self, record: Record, key: str) -> SummaryAnswer:
+        """A recorded summary call's answer, or its recorded error. See `_serve_model`."""
+        try:
+            if record.error is not None:
+                error = decode_error(record.error)
+            elif record.result is None:
+                raise ValueError("no summary answer")
+            else:
+                return decode_summary_answer(record.result)
+        except (ValueError, KeyError, TypeError) as cause:
+            raise self._unreadable("summary", key, cause) from None
+        raise error
+
     def clear_misses(self) -> None:
         self.misses.clear()
 
@@ -583,7 +647,68 @@ class _MissLog(_PerItem):
         )
 
 
-class RecordingTransport(_MissLog):
+class _Recorder(_MissLog):
+    """What a recorder keeps beside the real thing it wraps: the store, the clock, the calls it did
+    not record (`skipped`), and the time of each live call (`timings`)."""
+
+    def __init__(
+        self,
+        inner: Any,
+        store: FixtureStore,
+        *,
+        clock: Callable[[], float] = time.monotonic,
+    ) -> None:
+        super().__init__()
+        self.inner = inner
+        self.store = store
+        self._clock = clock
+        self.skipped: list[Skipped] = []
+        # (kind, fingerprint, occurrence) -> milliseconds, for the live calls of the current item.
+        self.timings: dict[tuple[Kind, str, int], int] = {}
+
+    def _item_changed(self) -> None:
+        self.skipped = []
+        self.misses = []
+        self.timings = {}
+
+    def _timed(self, kind: Kind, key: str, occurrence: int, started: float) -> None:
+        self.timings[(kind, key, occurrence)] = round((self._clock() - started) * 1000)
+
+    def _own(self, key: str, occurrence: int, kind: Kind) -> Record | None:
+        """The recording already in the store for this call, if there is one."""
+        record = self.store.get(key, occurrence)
+        return record if record is not None and record.kind == kind else None
+
+    def _skip(self, key: str, kind: Kind, occurrence: int, reason: str) -> None:
+        self.skipped.append(Skipped(self.current_item, kind, key, occurrence, reason))
+
+    def _put(self, record: Record) -> None:
+        self.store.put(record)
+
+    def _record(
+        self,
+        key: str,
+        kind: Kind,
+        occurrence: int,
+        *,
+        events: tuple[dict[str, Any], ...] | None = None,
+        result: dict[str, Any] | None = None,
+        error: dict[str, Any] | None = None,
+    ) -> None:
+        self._put(
+            Record(
+                fingerprint=key,
+                kind=kind,
+                item=self.current_item,
+                occurrence=occurrence,
+                events=events,
+                result=result,
+                error=error,
+            )
+        )
+
+
+class RecordingTransport(_Recorder):
     """Wraps a real transport for a live eval run: everything passes through unchanged, and each
     request is recorded with its response, or with the typed error that ended it. A request that
     is already in the store, whether this run recorded it (a later item asking the same) or it was
@@ -608,24 +733,14 @@ class RecordingTransport(_MissLog):
         *,
         clock: Callable[[], float] = time.monotonic,
     ) -> None:
-        super().__init__()
-        self.inner = inner
-        self.store = store
-        self._clock = clock
-        self.skipped: list[Skipped] = []
-        # (kind, fingerprint, occurrence) -> milliseconds, for the live calls of the current item.
-        self.timings: dict[tuple[Kind, str, int], int] = {}
+        super().__init__(inner, store, clock=clock)
+        self.inner: Transport = inner
         # Streams the consumer closed early with no error, awaiting the turn's outcome.
         self._pending: list[Record] = []
 
     def _item_changed(self) -> None:
-        self.skipped = []
+        super()._item_changed()
         self._pending = []
-        self.misses = []
-        self.timings = {}
-
-    def _timed(self, kind: Kind, key: str, occurrence: int, started: float) -> None:
-        self.timings[(kind, key, occurrence)] = round((self._clock() - started) * 1000)
 
     @property
     def has_pending_close(self) -> bool:
@@ -727,38 +842,49 @@ class RecordingTransport(_MissLog):
         self._record(key, "guard", occurrence, result=encode_guard_result(result))
         return result
 
-    def _own(self, key: str, occurrence: int, kind: Kind) -> Record | None:
-        """The recording already in the store for this call, if there is one."""
-        record = self.store.get(key, occurrence)
-        return record if record is not None and record.kind == kind else None
 
-    def _skip(self, key: str, kind: Kind, occurrence: int, reason: str) -> None:
-        self.skipped.append(Skipped(self.current_item, kind, key, occurrence, reason))
+class RecordingSummarizer(_Recorder):
+    """Wraps the real summarizer for a live eval run, like `RecordingTransport`: a request already
+    in the store is answered from it, a new one is called and recorded with its answer or the typed
+    summary error that ended it. A failure that reports no usage, a timeout, or an error the
+    recorder does not know says nothing about the model and is listed in `skipped`, not recorded."""
 
-    def _put(self, record: Record) -> None:
-        self.store.put(record)
-
-    def _record(
+    def __init__(
         self,
-        key: str,
-        kind: Kind,
-        occurrence: int,
+        inner: Summarizer,
+        store: FixtureStore,
         *,
-        events: tuple[dict[str, Any], ...] | None = None,
-        result: dict[str, Any] | None = None,
-        error: dict[str, Any] | None = None,
+        clock: Callable[[], float] = time.monotonic,
     ) -> None:
-        self._put(
-            Record(
-                fingerprint=key,
-                kind=kind,
-                item=self.current_item,
-                occurrence=occurrence,
-                events=events,
-                result=result,
-                error=error,
-            )
-        )
+        super().__init__(inner, store, clock=clock)
+        self.inner: Summarizer = inner
+        # How many requests went to the real summarizer (not answered from a recording).
+        self.live_calls = 0
+
+    async def summarize(self, request: SummaryRequest) -> SummaryAnswer:
+        key = summary_fingerprint(request)
+        occurrence = self._next_occurrence(key)
+        recorded = self._own(key, occurrence, "summary")
+        if recorded is not None:
+            return self._serve_summary(recorded, key)
+        started = self._clock()
+        self.live_calls += 1
+        try:
+            answer = await self.inner.summarize(request)
+        except SUMMARY_ERRORS as error:
+            if error.usage is None:
+                reason = f"transient error ({type(error).__name__}), not recorded"
+                self._skip(key, "summary", occurrence, reason)
+            else:
+                self._record(key, "summary", occurrence, error=encode_error(error))
+            raise
+        except BaseException as error:
+            reason = f"ended by {type(error).__name__}, not recorded"
+            self._skip(key, "summary", occurrence, reason)
+            raise
+        self._timed("summary", key, occurrence, started)
+        self._record(key, "summary", occurrence, result=encode_summary_answer(answer))
+        return answer
 
 
 # --- The replay -------------------------------------------------------------------------------
@@ -798,3 +924,20 @@ class ReplayTransport(_MissLog):
                 f" ({recorded} recorded)"
             )
         raise self._miss(kind, key, reason)
+
+
+class ReplaySummarizer(_MissLog):
+    """Answers the case summary from a `FixtureStore` and never calls a model, like
+    `ReplayTransport`. A request with no recording is a `ReplayMiss`."""
+
+    def __init__(self, store: FixtureStore) -> None:
+        super().__init__()
+        self.store = store
+
+    async def summarize(self, request: SummaryRequest) -> SummaryAnswer:
+        key = summary_fingerprint(request)
+        occurrence = self._next_occurrence(key)
+        record = self.store.get(key, occurrence)
+        if record is None or record.kind != "summary":
+            raise self._miss("summary", key, "no recording for this summary request")
+        return self._serve_summary(record, key)

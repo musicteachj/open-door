@@ -136,9 +136,11 @@ async def test_the_shutdown_waits_for_a_turn_that_is_still_starting(
     """A request canceled during a slow start, then shutdown at once (as uvicorn does): the drain
     must count the start, or the engine is closed under it and `asyncio.run` ends it half done."""
     real_begin: Any = TurnRun.begin.__func__  # type: ignore[attr-defined]
+    start_entered = asyncio.Event()
     start_finished = asyncio.Event()
 
     async def slow_begin(cls: type[TurnRun], *args: Any, **kwargs: Any) -> TurnRun:
+        start_entered.set()
         await asyncio.sleep(0.8)
         run: TurnRun = await real_begin(cls, *args, **kwargs)
         await asyncio.sleep(0.8)
@@ -160,6 +162,10 @@ async def test_the_shutdown_waits_for_a_turn_that_is_still_starting(
         holder.append(session)
         call = RawCall(session, SICK)
         task = asyncio.create_task(call.run())
+        # Cancel during the slow start itself. A fixed sleep here raced the request's admission,
+        # which runs before the start is counted, and on a loaded machine the cancel could land
+        # before the start began, which tests nothing.
+        await asyncio.wait_for(start_entered.wait(), timeout=10)
         await asyncio.sleep(0.3)
         task.cancel()
     with contextlib.suppress(asyncio.CancelledError):

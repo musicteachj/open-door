@@ -3,6 +3,7 @@ import type { BudgetOut, ConversationOut, Me, TurnOut } from '@/api/generated'
 import { Composer } from '@/components/assistant/composer'
 import { TryAskingList } from '@/components/assistant/try-asking-list'
 import { useMe } from '@/app/useMe'
+import { useWriteToHrLink } from '@/features/cases/use-write-to-hr'
 import { BudgetStop } from '@/features/chat/budget-stop'
 import { ConversationView } from '@/features/chat/conversation-view'
 import { forgetOpener } from '@/features/chat/source-opener'
@@ -103,6 +104,7 @@ function Home({
   focusComposerOnMount: boolean
 }) {
   const now = useNow()
+  const writeToHr = useWriteToHrLink()
   const composer = useAssistantComposer(conversation, budget)
   const { banner } = composer
   const setDraft = useChatStore((s) => s.setDraft)
@@ -110,7 +112,8 @@ function Home({
     if (focusComposerOnMount) focusComposerIfLost()
   }, [focusComposerOnMount])
   // The home has no answers to cite. A passage left open from the conversation that was just
-  // replaced (or from a stale link) closes, by replacing the address, with no history step.
+  // replaced (or from a stale link) closes: by going back when the panel pushed its own history
+  // entry, otherwise by replacing the address.
   const { clear: clearSource } = useSourceUrl()
   useEffect(() => {
     forgetOpener()
@@ -123,7 +126,7 @@ function Home({
   // 760 px. The greeting is 32/40 on a narrow screen, a size the type scale has no step for.
   return (
     <div className="flex min-w-0 flex-col pt-30 pr-18 pb-12 pl-20 max-[1100px]:px-12 max-[1100px]:pt-18 max-[1100px]:pb-10 max-[760px]:px-5 max-[760px]:pt-10 max-[760px]:pb-8">
-      {banner !== null && <BudgetStop banner={banner} />}
+      {banner !== null && <BudgetStop banner={banner} writeToHr={writeToHr} />}
       <h1 className="m-0 mb-9 text-display text-ink max-[760px]:text-[32px] max-[760px]:leading-10">
         {greetingLine(new Date(now), me.location.timezone, me.givenName)}
       </h1>

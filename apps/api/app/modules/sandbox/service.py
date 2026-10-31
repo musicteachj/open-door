@@ -9,6 +9,7 @@ from sqlalchemy import insert
 from sqlalchemy.exc import DBAPIError
 from sqlalchemy.ext.asyncio import AsyncEngine
 
+from app.core.encryption import KeyProvider
 from app.db.errors import has_sqlstate
 from app.db.models import Tenant
 from app.db.tenancy import NO_TENANT, TenantContext, tenant_session
@@ -62,7 +63,7 @@ async def _end_replaced_session(engine: AsyncEngine, token_hash: bytes) -> None:
 
 
 async def create_sandbox(
-    engine: AsyncEngine, persona: PersonaKey, replacing: bytes | None
+    engine: AsyncEngine, persona: PersonaKey, replacing: bytes | None, keys: KeyProvider
 ) -> NewSandbox:
     """Create and seed a sandbox, and start a session in it as `persona`, in one transaction.
 
@@ -89,7 +90,7 @@ async def create_sandbox(
                     id=tenant_id, expires_at=expires_at, anchor_date=company.anchor_date
                 )
             )
-            await insert_company(db, company)
+            await insert_company(db, company, keys)
             tokens = await start_session(db, tenant_id, person_id)
             await record_event(
                 db,

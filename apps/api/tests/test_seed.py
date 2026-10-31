@@ -4,16 +4,18 @@ import hashlib
 import re
 from collections import Counter
 from dataclasses import astuple, fields
-from datetime import UTC, date, datetime, timedelta
+from datetime import UTC, date, datetime, time, timedelta
 from itertools import cycle, islice, pairwise
 from typing import cast
 from uuid import UUID
+from zoneinfo import ZoneInfo
 
 import pytest
 
 # Importing the models puts every table on Base.metadata.
 from app.db import models  # noqa: F401
 from app.db.base import Base
+from app.domain.cases import reply_by
 from app.domain.holidays import holidays_for
 from app.domain.timeoff.counting import count_days
 from app.domain.timeoff.evaluate import NewRequest, evaluate
@@ -32,13 +34,20 @@ from app.domain.timeoff.sick import sick_years
 from app.domain.timeoff.today import today_at
 from app.modules.sandbox.seed import (
     ROW_TYPES,
+    CaseEventRow,
+    CaseRow,
     PersonRow,
     RequestRow,
     Row,
     SeedCompany,
     build_company,
 )
-from app.modules.sandbox.seed_data import LOCATIONS, TIME_OFF_STREAM
+from app.modules.sandbox.seed_data import (
+    LOCATIONS,
+    SEEDED_SUMMARY_MODEL,
+    SEEDED_SUMMARY_PLACEHOLDER,
+    TIME_OFF_STREAM,
+)
 
 TENANT_ID = UUID("0b6f3f9e-5d0c-4c1e-9a43-6b1f0d3c2a71")
 OTHER_TENANT_ID = UUID("d2a4c6e8-1f3b-4d5a-8c7e-9b0a1c2d3e4f")
@@ -753,3 +762,215 @@ def test_the_people_and_their_private_details_are_unchanged_by_time_off(
         digest(holidays_before)
         == "dcb5672e08a04aa609bb410d2ce1ab415fcf74ebb8f2776982a3c86701b837b6"
     )
+
+
+# --- The seeded cases (Phase 6) ---
+
+DENVER = ZoneInfo("America/Denver")
+
+
+def denver_holidays(year: int) -> frozenset[date]:
+    return frozenset(
+        holiday.holiday_date
+        for years in (year - 1, year, year + 1)
+        for holiday in holidays_for("den", years)
+    )
+
+
+def business_days_between(earlier: date, later: date, closed: frozenset[date]) -> int:
+    """How many business days after `earlier` is `later` (counting `later`, never `earlier`)."""
+    days = (earlier + timedelta(days=n) for n in range(1, (later - earlier).days + 1))
+    return sum(1 for day in days if day.weekday() < 5 and day not in closed)
+
+
+def case_of(company: SeedCompany, given_name: str) -> CaseRow:
+    person = next(p for p in company.people if p.given_name == given_name)
+    return next(case for case in company.cases if case.person_id == person.id)
+
+
+def test_the_four_seeded_cases_are_from_the_specs_people(company: SeedCompany) -> None:
+    people = {person.id: person for person in company.people}
+    locations = {location.id: location.code for location in company.locations}
+
+    seen = [
+        (
+            f"{people[case.person_id].given_name} {people[case.person_id].family_name}",
+            people[case.person_id].title,
+            locations[people[case.person_id].location_id],
+            case.category,
+            case.status,
+        )
+        for case in company.cases
+    ]
+
+    assert seen == [
+        ("Keisha Zhang", "Warehouse Associate", "aus", "pay", "new"),
+        ("Chloe Foster", "Shift Lead, Opening", "atl", "harassment_discrimination", "new"),
+        ("Aaliyah Edwards", "Cashier", "oak", "safety", "in_review"),
+        ("Lucia Gutierrez", "Graphic Designer", "den", "medical_accommodation", "closed"),
+    ]
+    # None of them is a persona, so none can be the visitor.
+    assert all(people[case.person_id].persona_key is None for case in company.cases)
+
+
+def test_the_cases_ids_come_from_the_sandbox_id(company: SeedCompany) -> None:
+    other = build_company(OTHER_TENANT_ID, ANCHOR)
+
+    for case in company.cases:
+        assert case.tenant_id == TENANT_ID
+        assert case.id.version == 5
+    assert {case.id for case in company.cases}.isdisjoint(case.id for case in other.cases)
+    ids = [
+        value
+        for case in company.cases
+        for value in (case.id, case.submission_id, case.summary_id, *(e.id for e in case.events))
+    ]
+    assert len(ids) == len(set(ids))
+
+
+def recorded_case_ids(company: SeedCompany) -> set[UUID]:
+    return {c.id for c in company.cases if c.summary_text != SEEDED_SUMMARY_PLACEHOLDER}
+
+
+def test_build_company_holds_the_words_and_the_placeholder_in_plaintext(
+    company: SeedCompany,
+) -> None:
+    assert build_company(TENANT_ID, ANCHOR) == company
+    assert all(case.text and "\u2014" not in case.text for case in company.cases)
+    # A case with no recorded real summary carries the placeholder (tests/test_seeded_summaries.py
+    # checks the recorded ones).
+    plain = [c for c in company.cases if c.id not in recorded_case_ids(company)]
+    assert {case.summary_text for case in plain} <= {SEEDED_SUMMARY_PLACEHOLDER}
+    assert {case.summary_model for case in plain} <= {SEEDED_SUMMARY_MODEL}
+
+
+def anchors() -> list[date]:
+    # Every weekday of a week (October 5, 2026 is a Monday), the Monday after Thanksgiving (the
+    # Friday between is an HQ holiday), the Friday after Thanksgiving itself, Christmas week, and
+    # New Year's Day.
+    week = [date(2026, 10, 5) + timedelta(days=n) for n in range(7)]
+    return [
+        *week,
+        date(2026, 11, 26),
+        date(2026, 11, 27),
+        date(2026, 11, 30),
+        date(2026, 12, 25),
+        date(2027, 1, 1),
+        date(2027, 1, 4),
+    ]
+
+
+@pytest.mark.parametrize("anchor", anchors())
+def test_the_cases_are_sent_in_business_days_before_the_anchor(anchor: date) -> None:
+    company = build_company(TENANT_ID, anchor)
+    closed = denver_holidays(anchor.year)
+    # The anchor's own day, or the last business day before it when it is a closed day.
+    today = anchor
+    while today.weekday() >= 5 or today in closed:
+        today -= timedelta(days=1)
+
+    sent = {
+        given: case_of(company, given).created_at.astimezone(DENVER).date()
+        for given in ("Keisha", "Chloe", "Aaliyah", "Lucia")
+    }
+
+    assert {given: business_days_between(day, today, closed) for given, day in sent.items()} == {
+        "Keisha": 1,
+        "Chloe": 2,
+        "Aaliyah": 6,
+        "Lucia": 15,
+    }
+    assert all(day.weekday() < 5 and day not in closed for day in sent.values())
+
+
+@pytest.mark.parametrize("anchor", anchors())
+def test_chloes_reply_is_due_on_the_anchor_and_keishas_is_later(anchor: date) -> None:
+    company = build_company(TENANT_ID, anchor)
+    closed = denver_holidays(anchor.year)
+    keisha, chloe = case_of(company, "Keisha"), case_of(company, "Chloe")
+    is_business_day = anchor.weekday() < 5 and anchor not in closed
+
+    if is_business_day:
+        assert chloe.reply_by == anchor
+    else:
+        # A reply cannot fall on a closed day: it is due the last business day before it, which
+        # is already due on the anchor.
+        assert chloe.reply_by < anchor
+        assert business_days_between(chloe.reply_by, anchor, closed) <= 1
+    assert keisha.reply_by > chloe.reply_by
+    assert chloe.status == keisha.status == "new"
+
+
+def test_the_cases_use_the_replyby_rule_and_the_dates_stay_before_the_anchor() -> None:
+    for anchor in anchors():
+        company = build_company(TENANT_ID, anchor)
+        closed = denver_holidays(anchor.year)
+        for case in company.cases:
+            assert case.reply_by == reply_by(case.created_at, DENVER, closed)
+            assert all(
+                case.created_at <= event.occurred_at < datetime.combine(anchor, time.min, UTC)
+                for event in case.events
+            )
+
+
+def test_the_timelines_match_the_statuses_in_time_order(company: SeedCompany) -> None:
+    dana = next(p.id for p in company.people if p.persona_key == "dana")
+
+    timeline = {
+        given: [
+            (e.kind, e.from_status, e.to_status, e.actor_person_id)
+            for e in case_of(company, given).events
+        ]
+        for given in ("Keisha", "Chloe", "Aaliyah", "Lucia")
+    }
+
+    for given in ("Keisha", "Chloe", "Aaliyah", "Lucia"):
+        case = case_of(company, given)
+        times = [event.occurred_at for event in case.events]
+        assert times == sorted(times)
+        assert times[0] == case.created_at
+        assert case.events[0].kind == "opened"
+        assert case.events[0].actor_person_id == case.person_id
+        assert case.events[1].kind == "summary_written"
+        assert case.events[1].actor_person_id is None
+        changes = [e for e in case.events if e.kind == "status_changed"]
+        assert case.status_changed_at == (changes[-1].occurred_at if changes else case.created_at)
+        assert (changes[-1].to_status if changes else "new") == case.status
+    assert [kind for kind, *_ in timeline["Keisha"]] == ["opened", "summary_written"]
+    assert [kind for kind, *_ in timeline["Chloe"]] == ["opened", "summary_written"]
+    assert timeline["Aaliyah"][2:] == [
+        ("viewed", None, None, dana),
+        ("text_read", None, None, dana),
+        ("status_changed", "new", "in_review", dana),
+    ]
+    assert timeline["Lucia"][2:] == [
+        ("viewed", None, None, dana),
+        ("text_read", None, None, dana),
+        ("status_changed", "new", "in_review", dana),
+        ("status_changed", "in_review", "closed", dana),
+    ]
+
+
+def test_the_cases_sit_in_the_cases_table_apart_from_the_sealed_columns() -> None:
+    plain = {field.name for field in fields(CaseRow)}
+    sealed_or_elsewhere = {"text", "summary_id", "events"} | {
+        name for name in plain if name.startswith("summary_")
+    }
+    columns = set(Base.metadata.tables["cases"].columns.keys())
+
+    assert plain - sealed_or_elsewhere <= columns
+    # What a seeded case leaves unset or seals on the way in.
+    assert columns - (plain - sealed_or_elsewhere) == {
+        "conversation_id",
+        "turn_id",
+        "key_id",
+        "wrapped_key",
+        "text_ciphertext",
+    }
+    event_columns = set(Base.metadata.tables["case_events"].columns.keys())
+    # `written_by_hr` is stamped by a trigger (the seed sets no person, so it counts with HR).
+    assert {f.name for f in fields(CaseEventRow)} | {
+        "tenant_id",
+        "case_id",
+        "written_by_hr",
+    } == event_columns

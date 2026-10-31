@@ -52,13 +52,16 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 
 from app.ai.budget import BudgetExceeded, Caps, Reservation, reserve, settle
+from app.ai.case_outcomes import unreported_cases, with_case_sentences
 from app.ai.citations import CitationEvent, CitationMapper
 from app.ai.context import ActorView, turn_context
 from app.ai.conversations import (
+    ConversationCipher,
     SourceEntry,
     StoredMessage,
     TurnOutcome,
     append_messages,
+    conversation_cipher,
     conversation_is_outdated,
     finish_turn,
     model_history,
@@ -74,12 +77,18 @@ from app.ai.fixed_texts import (
     HrContact,
     hr_contact,
 )
-from app.ai.guard import GuardOutcome, build_guard_request, guard_reservation_usd, screen
+from app.ai.guard import (
+    GuardOutcome,
+    build_guard_request,
+    guard_cost,
+    guard_reservation_usd,
+    offers_case,
+    screen,
+)
 from app.ai.pricing import (
     IterationUsage,
     Usage,
     estimate_input_tokens,
-    is_priced,
     reservation_usd,
     total_usage,
     turn_call_cost,
@@ -110,6 +119,7 @@ from app.ai.transport import (
     Transport,
 )
 from app.ai.transport import TextDelta as ModelText
+from app.core.encryption import KeyProvider
 from app.db.models import AiConversation, AiProposal, AiTurn
 from app.db.tenancy import TenantContext, tenant_session
 from app.domain.handbook.applicability import Asker
@@ -372,6 +382,8 @@ class TurnDeps:
     asker: Asker
     version_id: UUID
     handbook_label: str
+    # Unwraps the conversation's data key, which seals the turn's text (ADR 0015).
+    keys: KeyProvider
 
 
 # --- Small helpers ----------------------------------------------------------------------------
@@ -508,15 +520,17 @@ def _holds_the_canary(event: TurnEvent) -> bool:
     return any(_has_canary(text) for text in _strings(event.to_json()))
 
 
-def _previous_answer(previous: Sequence[Any] | None) -> str | None:
+def _previous_answer(previous: Sequence[Any] | None, cipher: ConversationCipher) -> str | None:
     """What the guard is shown of the turn just before this one. Usually its answer; where it had
     none because the person was sent a fixed text (crisis, the guard down, a budget stop), that
     text, so a short reply such as "yes, tonight" is screened with its context."""
     if previous is None:
         return None
-    answer_text, status, error_code = previous
-    if answer_text:
-        return str(answer_text)
+    turn_id, answer_ciphertext, status, error_code = previous
+    if answer_ciphertext is not None:
+        answer_text = cipher.open_text(answer_ciphertext, "ai_turns", "answer_ciphertext", turn_id)
+        if answer_text:
+            return answer_text
     if status == "crisis":
         return CRISIS_TEXT
     if status == "guard_unavailable" or error_code == "guard-error":
@@ -668,6 +682,7 @@ class TurnRun:
         now: datetime,
         *,
         turn_id: UUID,
+        cipher: ConversationCipher,
         history: list[dict[str, Any]],
         sources: list[SourceEntry],
         previous_answer: str | None,
@@ -679,6 +694,7 @@ class TurnRun:
         self.question = question
         self.now = now
         self.turn_id = turn_id
+        self.cipher = cipher
         self.history = history
         self.mapper = CitationMapper(sources)
         self.previous_answer = previous_answer
@@ -750,20 +766,31 @@ class TurnRun:
 
     @classmethod
     async def begin(
-        cls, deps: TurnDeps, conversation: AiConversation, question: str, now: datetime
+        cls,
+        deps: TurnDeps,
+        conversation: AiConversation,
+        question: str,
+        now: datetime,
+        cipher: ConversationCipher | None = None,
     ) -> "TurnRun":
         """Recover an abandoned turn, add this one, and read what the turn starts from. Raises
-        `TurnRunning` when a turn is still in progress."""
+        `TurnRunning` when a turn is still in progress.
+
+        The conversation's data key is unwrapped once, here, unless the caller (admission) already
+        did and passes it in. The run keeps it for every seal and open after this."""
+        if cipher is None:
+            cipher = conversation_cipher(deps.keys, conversation)
         async with tenant_session(deps.engine, deps.tenant_ctx) as db:
             # The abandoned turns' cards are canceled in this same transaction, after their turns.
             await recover_abandoned_turns(db, deps.tenant_ctx, conversation.id)
-            turn = await start_turn(db, conversation, question)
-            history = await model_history(db, conversation.id)
+            turn = await start_turn(db, conversation, question, cipher)
+            history = await model_history(db, conversation.id, cipher)
             sources = await search_sources(db, conversation.id)
             previous = (
                 await db.execute(
                     select(
-                        AiTurn.answer_text,
+                        AiTurn.id,
+                        AiTurn.answer_ciphertext,
                         AiTurn.status,
                         AiTurn.error_code,
                     )
@@ -772,6 +799,8 @@ class TurnRun:
                     .limit(1)
                 )
             ).first()
+            # Opened inside the transaction: a value that won't open rolls the new turn back.
+            previous_answer = _previous_answer(previous, cipher)
             # What changed for the person's cards that no stored context has told the model about.
             # What was told decides, not a timestamp: a confirm or dismiss can begin before a turn
             # and still commit after the turn read the card as pending, with an `ended_at` earlier
@@ -796,15 +825,22 @@ class TurnRun:
             outcomes, outcome_entries = unreported_outcomes(
                 await conversation_proposals(db, conversation.id, untold_at=now_db), now_db
             )
+            # A case the person opened from this conversation is told the same way, once.
+            case_sentences, case_entries = await unreported_cases(
+                db, conversation.tenant_id, conversation.person_id, conversation.id
+            )
+            outcomes = with_case_sentences(outcomes, case_sentences)
+            outcome_entries += case_entries
         return cls(
             deps,
             conversation,
             question,
             now,
             turn_id=turn.id,
+            cipher=cipher,
             history=history,
             sources=sources,
-            previous_answer=_previous_answer(previous),
+            previous_answer=previous_answer,
             outcomes=outcomes,
             outcome_entries=outcome_entries,
         )
@@ -1049,24 +1085,13 @@ class TurnRun:
             self.budget_stopped = True
             self.fail("spend-limit")
             return None, []
-        usage = outcome.usage
-        # Priced at the model that served it when that has a pinned price (the scripted stand-in
-        # is free). The name the API echoes can be a dated snapshot with no pinned price, which
-        # would be charged at the dearest rates, so then the pinned guard model is used.
-        model = (
-            outcome.served_by
-            if outcome.served_by is not None and is_priced(outcome.served_by)
-            else self.conversation.guard_model
-        )
-        await self._settle(
-            reservation,
-            None if usage is None else partial(turn_call_cost, [IterationUsage(model, usage)]),
-        )
+        await self._settle(reservation, guard_cost(outcome, self.conversation.guard_model))
         self.guard_verdict = outcome.verdict_json()
         self.injection = outcome.injection_suspected
         if outcome.route == "crisis":
             self.status = "crisis"
-            return None, [Escalation("crisis", CRISIS_TEXT, await self._contacts())]
+            offer = offers_case("crisis", self.guard_verdict)
+            return None, [Escalation("crisis", CRISIS_TEXT, await self._contacts(), offer)]
         if outcome.route == "unavailable":
             self.status = "guard_unavailable"
             return None, [Escalation("unavailable", UNAVAILABLE_TEXT, await self._contacts())]
@@ -1582,6 +1607,7 @@ class TurnRun:
                 kind,
                 SENSITIVE_TEXT if kind == "sensitive" else UNAVAILABLE_TEXT,
                 await self._contacts(),
+                offers_case(kind, self.guard_verdict),
             )
             # After an error; before the completion, so the HR contact follows the answer.
             if isinstance(events[0], TurnCompleted):
@@ -1671,7 +1697,7 @@ class TurnRun:
             async with tenant_session(self.deps.engine, self.deps.tenant_ctx) as db:
                 # The turn's row first, then its cards, in one transaction: a confirm sees either
                 # both ended or neither (the reverse order deadlocks with a late proposal).
-                await finish_turn(db, self.turn_id, outcome)
+                await finish_turn(db, self.turn_id, outcome, self.cipher)
                 await self._cancel_cards(db)
         except Exception as error:
             logger.error(
@@ -1726,7 +1752,7 @@ class TurnRun:
     async def _try_append(self, batch: list[StoredMessage]) -> bool:
         try:
             async with tenant_session(self.deps.engine, self.deps.tenant_ctx) as db:
-                await append_messages(db, self.conversation.id, self.turn_id, batch)
+                await append_messages(db, self.conversation.id, self.turn_id, batch, self.cipher)
         except Exception as error:
             logger.warning("Storing the turn's messages failed (%s)", error_name(error))
             return False
@@ -1734,7 +1760,12 @@ class TurnRun:
 
 
 async def start_turn_run(
-    deps: TurnDeps, *, conversation: AiConversation, question: str, now: datetime
+    deps: TurnDeps,
+    *,
+    conversation: AiConversation,
+    question: str,
+    now: datetime,
+    cipher: ConversationCipher | None = None,
 ) -> TurnRun:
     """Check the question and the conversation, start the turn, and return it. Await this before
     the response is sent: the checks raise here, not on the first event.
@@ -1742,7 +1773,8 @@ async def start_turn_run(
     Raises `ValueError` for a question that isn't 1 to 2,000 characters after trimming,
     `ConversationNotFound` for a conversation that isn't the actor's, `ConversationOutdated` for a
     prompt or tool set that has moved on, and `TurnRunning` (from the store) when a turn is in
-    progress.
+    progress. `cipher` is the conversation's unwrapped key if the caller has it (admission does);
+    without it the turn unwraps the key itself, once.
     The route maps them to 422, 404, 409, and 409. The personal-data check is the route's. Then
     iterate `TurnRun.events()` right away.
     """
@@ -1756,7 +1788,7 @@ async def start_turn_run(
         raise ConversationNotFound
     if conversation_is_outdated(conversation):
         raise ConversationOutdated
-    return await TurnRun.begin(deps, conversation, trimmed, now)
+    return await TurnRun.begin(deps, conversation, trimmed, now, cipher)
 
 
 async def run_turn(

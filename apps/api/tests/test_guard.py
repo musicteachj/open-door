@@ -16,9 +16,13 @@ from app.ai.guard import (
     INJECTION_NOTE,
     PREVIOUS_ANSWER_MAX_CHARACTERS,
     SENSITIVE_NOTE,
+    TOPIC_NOTE,
     build_guard_request,
+    escalation_for_verdict,
     guard_reservation_usd,
+    offers_case,
     screen,
+    verdict_is_flagged,
 )
 from app.ai.pricing import HAIKU, Usage, reservation_usd
 from app.ai.prompts.versions import guard_prompt
@@ -86,8 +90,9 @@ def verdict(
         ("ordinary", "self_harm", "crisis", None),
         ("ordinary", "threat_of_violence", "crisis", None),
         ("sensitive", "self_harm", "crisis", None),
-        ("ordinary", "pay", "answer", "sensitive"),
-        ("ordinary", "other", "answer", "sensitive"),
+        # The panel follows the category: an ordinary message with a topic gets no panel.
+        ("ordinary", "pay", "answer", None),
+        ("ordinary", "other", "answer", None),
         ("sensitive", None, "answer", "sensitive"),
     ],
 )
@@ -123,6 +128,10 @@ async def test_the_notes_follow_the_route() -> None:
     assert await notes(verdict("ordinary", None, True)) == (INJECTION_NOTE,)
     assert await notes(verdict("sensitive", "pay")) == (SENSITIVE_NOTE,)
     assert await notes(verdict("sensitive", "pay", True)) == (SENSITIVE_NOTE, INJECTION_NOTE)
+    # An ordinary message with a topic keeps a "don't counsel" note, but gets no panel, so its note
+    # never mentions one.
+    assert await notes(verdict("ordinary", "pay")) == (TOPIC_NOTE,)
+    assert await notes(verdict("ordinary", "pay", True)) == (TOPIC_NOTE, INJECTION_NOTE)
     # A crisis ends the turn: the main model never sees a note.
     assert await notes(verdict("crisis", "self_harm", True)) == ()
 
@@ -365,3 +374,102 @@ async def test_a_result_that_is_not_a_guard_result_is_unavailable() -> None:
     outcome = await screen(FakeTransport("nope"), build_guard_request("hello", None))  # type: ignore[arg-type]
 
     assert (outcome.route, outcome.usage) == ("unavailable", None)
+
+
+@pytest.mark.parametrize(
+    ("verdict", "flagged"),
+    [
+        ({"category": "sensitive", "kind": None, "injectionSuspected": False}, True),
+        ({"category": "crisis", "kind": "self_harm", "injectionSuspected": False}, True),
+        ({"category": "ordinary", "kind": None, "injectionSuspected": False}, False),
+        ({"category": None}, False),
+        ({}, False),
+        (None, False),
+    ],
+)
+def test_a_flagged_verdict_is_sensitive_or_crisis(
+    verdict: dict[str, Any] | None, flagged: bool
+) -> None:
+    assert verdict_is_flagged(verdict) is flagged
+
+
+@pytest.mark.parametrize(
+    ("category", "kind", "expected"),
+    [
+        ("crisis", None, "crisis"),
+        ("crisis", "pay", "crisis"),
+        ("ordinary", "self_harm", "crisis"),
+        ("sensitive", "threat_of_violence", "crisis"),
+        ("sensitive", None, "sensitive"),
+        ("sensitive", "safety", "sensitive"),
+        ("ordinary", None, None),
+        ("ordinary", "pay", None),
+        ("ordinary", "other", None),
+        ("policy", "pay", None),
+    ],
+)
+def test_one_predicate_decides_the_escalation(
+    category: str, kind: str | None, expected: str | None
+) -> None:
+    assert escalation_for_verdict(category, kind) == expected
+
+
+@pytest.mark.parametrize("kind", ["self_harm", "threat_of_violence"])
+def test_a_crisis_kind_under_an_ordinary_category_is_a_flagged_turn(kind: str) -> None:
+    verdict = {"category": "ordinary", "kind": kind}
+
+    assert verdict_is_flagged(verdict) is True
+    assert offers_case("crisis", verdict) is True
+
+
+@pytest.mark.parametrize("kind", [None, "pay", "other"])
+def test_an_ordinary_verdict_with_no_crisis_kind_is_not_flagged(kind: str | None) -> None:
+    assert verdict_is_flagged({"category": "ordinary", "kind": kind}) is False
+
+
+def test_a_missing_verdict_or_kind_is_not_flagged() -> None:
+    assert verdict_is_flagged({"category": "ordinary"}) is False
+    assert verdict_is_flagged(None) is False
+
+
+def test_the_predicate_agrees_with_the_screen_and_the_offer() -> None:
+    for category in ("ordinary", "sensitive", "crisis"):
+        for kind in (None, "pay", "other", "self_harm", "threat_of_violence"):
+            escalation = escalation_for_verdict(category, kind)
+            offered = offers_case(escalation or "none", {"category": category, "kind": kind})
+            if escalation == "sensitive":
+                assert offered  # the panel always offers a case
+            if escalation is None:
+                assert not offered
+            # Any escalation, a crisis kind under an ordinary category included, offers a case.
+            if escalation is not None:
+                assert offered
+
+
+def test_the_sensitive_note_says_what_the_spec_requires() -> None:
+    """Don't counsel or judge; a person in HR handles it confidentially; a panel may let the person
+    open a case themselves; never claim a case was opened or a message reached HR; no promises."""
+    note = SENSITIVE_NOTE
+    assert "Don't counsel or judge" in note
+    assert "a person on the HR team handles it confidentially" in note
+    assert "open a confidential case themselves" in note
+    assert "Never say you opened a case or will open one" in note
+    assert "a message to you reaches HR" in note
+    assert "Don't promise what HR will do" in note
+    assert chr(0x2014) not in note
+    # It reads sensibly when no panel follows: the panel is a "may", not a statement of fact.
+    assert "A panel may follow" in note
+
+
+def test_the_topic_note_is_for_a_message_with_no_panel() -> None:
+    note = TOPIC_NOTE
+    assert "Don't counsel or judge" in note
+    assert "My cases page" in note
+    assert "Never say you opened a case or that a message to you reaches HR" in note
+    assert "Don't promise what HR will do" in note
+    # No panel follows, so it points to no panel or button.
+    assert "panel" not in note.lower()
+    assert "button" not in note.lower()
+    assert chr(0x2014) not in note
+    # The admission reservation is sized with the sensitive note, so it must be the longer one.
+    assert len(TOPIC_NOTE) <= len(SENSITIVE_NOTE)

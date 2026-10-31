@@ -1,6 +1,8 @@
 """The lifespan builds the transport and the query embedder, and the app refuses a bad setup."""
 
 import asyncio
+import base64
+from pathlib import Path
 from typing import Any
 
 import pytest
@@ -12,10 +14,11 @@ from pydantic import SecretStr
 from app.ai.anthropic_transport import AnthropicTransport
 from app.ai.embeddings import QueryEmbeddingLru
 from app.ai.scripted import ScriptedTransport
-from app.api.deps import get_app_settings, get_embedder, get_streams, get_transport
+from app.api.deps import get_app_settings, get_embedder, get_keys, get_streams, get_transport
 from app.core.config import Settings
+from app.core.encryption import LocalKeyProvider
 from app.main import create_app
-from tests.conftest import UNREACHABLE_DATABASE_URL
+from tests.conftest import TEST_KEYRING, UNREACHABLE_DATABASE_URL
 from tests.test_deps import request_for
 
 KEY = SecretStr("sk-ant-test-not-real")
@@ -32,6 +35,8 @@ def settings_with(**overrides: Any) -> Settings:
         "anthropic_api_key": None,
         "voyage_api_key": None,
         "ai_transport": "scripted",
+        "encryption_keyring_file": None,
+        "encryption_keyring": TEST_KEYRING,
     }
     fields.update(overrides)
     return Settings(**fields)
@@ -220,3 +225,106 @@ def test_the_stream_tracker_dependency_gives_a_clear_error_without_the_lifespan(
 ) -> None:
     with pytest.raises(RuntimeError, match="lifespan"):
         get_streams(request_for(app))
+
+
+REAL_KEYRING = SecretStr("k1:" + base64.b64encode(bytes(range(32))).decode())
+
+
+def write_keyring(path: Path, text: str, mode: int) -> Path:
+    path.write_text(text)
+    path.chmod(mode)
+    return path
+
+
+def test_no_keyring_stops_the_app_at_boot(tmp_path: Path) -> None:
+    missing = SecretStr(str(tmp_path / "missing"))
+    with pytest.raises(ValueError, match="keyring"):
+        create_app(settings_with(encryption_keyring=None, encryption_keyring_file=missing))
+    with pytest.raises(ValueError, match="keyring"):
+        create_app(settings_with(encryption_keyring=None, encryption_keyring_file=None))
+
+
+def test_a_bad_keyring_stops_the_app_and_the_error_holds_no_key() -> None:
+    with pytest.raises(ValueError, match="keyring") as excinfo:
+        create_app(settings_with(encryption_keyring=SecretStr("k1:c2hvcnQ=")))
+    assert "c2hvcnQ=" not in str(excinfo.value)
+
+
+@pytest.mark.parametrize("mode", [0o640, 0o604, 0o644, 0o660, 0o666])
+def test_a_keyring_file_others_can_read_is_refused(tmp_path: Path, mode: int) -> None:
+    path = write_keyring(tmp_path / "keyring", REAL_KEYRING.get_secret_value(), mode)
+    with pytest.raises(ValueError, match="readable by"):
+        create_app(
+            settings_with(encryption_keyring=None, encryption_keyring_file=SecretStr(str(path)))
+        )
+
+
+@pytest.mark.parametrize("mode", [0o600, 0o400])
+def test_a_keyring_file_only_its_owner_can_read_is_accepted(tmp_path: Path, mode: int) -> None:
+    path = write_keyring(tmp_path / "keyring", REAL_KEYRING.get_secret_value(), mode)
+    app = create_app(
+        settings_with(
+            app_env="development",
+            encryption_keyring=None,
+            encryption_keyring_file=SecretStr(str(path)),
+        )
+    )
+    assert isinstance(app.state.keys, LocalKeyProvider)
+    assert app.state.keys.key_ids == ("k1",)
+
+
+def test_the_test_key_is_refused_outside_the_test_environment() -> None:
+    for env in ("development", "production"):
+        with pytest.raises(ValueError, match="test key"):
+            create_app(settings_with(app_env=env, ai_transport="anthropic", anthropic_api_key=KEY))
+
+
+def test_the_test_key_in_a_file_is_refused_outside_the_test_environment(tmp_path: Path) -> None:
+    path = write_keyring(tmp_path / "keyring", TEST_KEYRING.get_secret_value(), 0o600)
+    with pytest.raises(ValueError, match="test key"):
+        create_app(
+            settings_with(
+                app_env="development",
+                encryption_keyring=None,
+                encryption_keyring_file=SecretStr(str(path)),
+            )
+        )
+
+
+def test_a_real_key_is_accepted_in_every_environment() -> None:
+    app = create_app(settings_with(app_env="development", encryption_keyring=REAL_KEYRING))
+    assert app.state.keys.key_ids == ("k1",)
+
+
+def test_the_app_holds_one_key_provider_and_the_dependency_returns_it() -> None:
+    app = create_app(settings_with())
+    assert isinstance(app.state.keys, LocalKeyProvider)
+    with TestClient(app):
+        assert get_keys(request_for(app)) is app.state.keys
+        assert get_keys(request_for(app)) is get_keys(request_for(app))
+
+
+def test_the_key_dependency_gives_a_clear_error_for_an_app_without_keys() -> None:
+    with pytest.raises(RuntimeError, match="keyring"):
+        get_keys(request_for(FastAPI()))
+
+
+def test_the_key_dependency_refuses_a_keys_attribute_that_is_not_a_provider() -> None:
+    app = FastAPI()
+    app.state.keys = object()
+    with pytest.raises(RuntimeError, match="not a key provider"):
+        get_keys(request_for(app))
+
+
+def test_the_key_dependency_accepts_any_object_with_wrap_and_unwrap() -> None:
+    class FakeKeys:
+        def wrap(self, data_key: bytes, *, aad: bytes) -> tuple[str, bytes]:
+            return "fake", data_key
+
+        def unwrap(self, key_id: str, wrapped: bytes, *, aad: bytes) -> bytes:
+            return wrapped
+
+    app = FastAPI()
+    fake = FakeKeys()
+    app.state.keys = fake
+    assert get_keys(request_for(app)) is fake

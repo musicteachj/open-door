@@ -1,0 +1,62 @@
+<!-- @dsCard group="Components" viewport="1180x3000" name="Cases" -->
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><link rel="stylesheet" href="../../styles.css"><script src="https://unpkg.com/react@18.3.1/umd/react.production.min.js"></script><script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.production.min.js"></script><script src="https://unpkg.com/@babel/standalone@7.24.7/babel.min.js"></script><script src="../../preview/loader.js"></script></head><body style="margin:0;background:var(--surface-raised)"><div id="root"></div>
+<script type="text/babel" data-presets="react">
+loadOpenDoor("../../", OD_FILES).then(function (OD) {
+  const { CaseForm, CaseSent, CaseList, StatusBadge } = OD;
+  const Lbl = ({ children }) => <div style={{ font: "400 11px/16px var(--font-sans)", color: "var(--ink-muted)", marginBottom: 8 }}>{children}</div>;
+  const H = ({ children }) => <h2 style={{ margin: "0 0 12px", font: "600 15px/24px var(--font-sans)", color: "var(--ink)" }}>{children}</h2>;
+  const Grid = ({ children }) => <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 540px))", gap: 24, alignItems: "start" }}>{children}</div>;
+  const Cell = ({ label, children }) => <div><Lbl>{label}</Lbl>{children}</div>;
+  const Band = ({ children }) => <div style={{ border: "1px solid var(--border-strong)", borderRadius: "var(--radius-xl)", overflow: "hidden" }}><div className="od-case-band">{children}</div></div>;
+  const Q = 'My manager keeps making comments about my age.';
+  const H1 = 'Harassment or discrimination';
+  function Live() {
+    const [st, setSt] = React.useState('form'); const [cat, setCat] = React.useState(null); const [w, setW] = React.useState(Q); const [errs, setErrs] = React.useState({});
+    const send = () => {
+      const e = {};
+      if (!cat) e.category = 'Choose what this is about.';
+      if (!w.trim()) e.words = 'Add your words before sending.';
+      else if (/\b\d{3}[- ]?\d{2}[- ]?\d{4}\b/.test(w)) e.words = 'That looks like a Social Security or card number. Please take it out before sending.';
+      else if (w.length >= 4000) e.limit = true;
+      setErrs(e); if (Object.keys(e).length) return;
+      setSt('sending'); setTimeout(() => setSt('sent'), 1200);
+    };
+    return <div><Band>{st === 'sent' ? <CaseSent /> : <CaseForm id="live" state={st} category={cat} words={w} errors={errs} onCategory={(v) => { setCat(v); setErrs({ ...errs, category: null }); }} onWords={(v) => { setW(v); setErrs({ ...errs, words: null, limit: false }); }} onSend={send} onClose={() => {}} />}</Band>
+      <button type="button" className="od-btn od-btn--ghost od-btn--sm" style={{ marginTop: 8 }} onClick={() => { setSt('form'); setCat(null); setW(Q); setErrs({}); }}>Reset</button></div>;
+  }
+  const rows = [
+    { category: H1, sent: 'Sent Mon, Oct 26', status: 'case-sent', line: 'HR replies by Wed, Oct 28' },
+    { category: 'Workplace safety', sent: 'Sent Mon, Oct 12', status: 'case-reviewing', line: 'Since Tue, Oct 13' },
+    { category: 'Pay concern', sent: 'Sent Tue, Sep 15', status: 'case-finished', line: 'Finished Fri, Sep 25' }
+  ];
+  function Card() {
+    return (
+      <div style={{ padding: "20px 24px 40px", display: "flex", flexDirection: "column", gap: 40 }}>
+        <div><H>CaseForm</H><Grid>
+          <Cell label="Live: choose, edit, Send to HR"><Live /></Cell>
+          <Cell label="Ready, Send to HR focused"><Band><CaseForm id="f1" category={H1} words={Q} sendState="focus" /></Band></Cell>
+          <Cell label="Errors (role=alert)"><Band><CaseForm id="f2" words={Q + ' My employee number is 123-45-6789.'} errors={{ category: 'Choose what this is about.', words: 'That looks like a Social Security or card number. Please take it out before sending.' }} /></Band></Cell>
+          <Cell label="Short reply: neutral prompt"><Band><CaseForm id="f3" short words="yes, that's what happened" /></Band></Cell>
+          <Cell label="Sending: fields disabled"><Band><CaseForm id="f4" state="sending" category={H1} words={Q} /></Band></Cell>
+          <Cell label="Send failed: kept, Try again"><Band><CaseForm id="f5" state="error" category={H1} words={Q} /></Band></Cell>
+          <Cell label="On My cases (card, h2, empty words)"><div className="od-case-card"><CaseForm id="f6" headingLevel={2} /></div></Cell>
+          <Cell label="Send to HR hover, Not now focus"><Band><CaseForm id="f7" category={H1} words={Q} sendState="hover" /></Band></Cell>
+        </Grid></div>
+        <div><H>CaseSent</H><Grid>
+          <Cell label="In the HR panel"><Band><CaseSent /></Band></Cell>
+          <Cell label="On My cases (no link)"><div className="od-case-card"><CaseSent showLink={false} /></div></Cell>
+          <Cell label="Five cases waiting"><Band><CaseSent variant="limit" /></Band></Cell>
+        </Grid></div>
+        <div><H>CaseList and case statuses</H>
+          <div style={{ maxWidth: 760, display: "flex", flexDirection: "column", gap: 24 }}>
+            <CaseList cases={rows} />
+            <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}><StatusBadge status="case-sent" /><StatusBadge status="case-reviewing" /><StatusBadge status="case-finished" /></div>
+            <div className="od-case-empty"><p>You haven’t sent HR a case.</p><button type="button" className="od-btn od-btn--primary"><OD.Icon name="lock" size={16} />Open a confidential case</button></div>
+          </div>
+        </div>
+      </div>);
+  }
+  ReactDOM.createRoot(document.getElementById("root")).render(<Card />);
+});
+</script></body></html>

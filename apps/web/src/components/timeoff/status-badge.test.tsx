@@ -48,6 +48,38 @@ describe('StatusBadge', () => {
     expect(screen.getByText('Waiting for approval')).toBeInTheDocument()
   })
 
+  it.each([
+    ['case-sent', 'Sent to HR', 'text-marker'],
+    ['case-reviewing', 'HR is reviewing', 'text-primary'],
+    ['case-finished', 'HR has finished its review', 'text-ink'],
+    ['case-in-review', 'In review', 'text-primary'],
+    ['case-closed', 'Closed', 'text-ink'],
+  ] as const)('shows the case status %s as "%s" with an icon in %s', (status, word, iconClass) => {
+    render(<StatusBadge status={status} />)
+    const badge = screen.getByText(word)
+    const icon = badge.querySelector('svg')
+    expect(icon).toHaveAttribute('aria-hidden', 'true')
+    expect(icon).toHaveClass(iconClass)
+    expect(badge).toHaveClass('h-6', 'border-border-strong', 'text-ink')
+  })
+
+  it('shows a new case as a small filled cinnamon dot beside the word', () => {
+    render(<StatusBadge status="case-new" />)
+    const badge = screen.getByText('New')
+    expect(badge.querySelector('svg')).toBeNull()
+    const dot = badge.querySelector('[data-slot="status-dot"]')
+    expect(dot).toHaveAttribute('aria-hidden', 'true')
+    expect(dot).toHaveClass('bg-marker', 'rounded-full')
+  })
+
+  it('never uses a warning color for a case status', () => {
+    for (const status of ['case-new', 'case-sent', 'case-in-review', 'case-closed'] as const) {
+      const { container, unmount } = render(<StatusBadge status={status} />)
+      expect(container.innerHTML).not.toMatch(/danger|warning/)
+      unmount()
+    }
+  })
+
   it('passes a class through', () => {
     render(<StatusBadge status="recorded" className="self-start" />)
     expect(screen.getByText('Recorded')).toHaveClass('self-start')

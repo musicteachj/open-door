@@ -82,6 +82,8 @@ def test_the_tools_come_in_a_fixed_order() -> None:
         "propose_time_off_request",
         "propose_time_off_decision",
         "propose_cancel_time_off",
+        "get_my_cases",
+        "list_cases",
     ]
 
 

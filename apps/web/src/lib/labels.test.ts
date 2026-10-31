@@ -11,11 +11,13 @@ describe('navItemLabel', () => {
   it('names the count after the label', () => {
     expect(navItemLabel('Approvals', 1)).toBe('Approvals, 1 waiting')
     expect(navItemLabel('Approvals', 12)).toBe('Approvals, 12 waiting')
+    expect(navItemLabel('Cases', 3, 'new')).toBe('Cases, 3 new')
   })
 
   it('is just the label with no count, or a count of zero', () => {
     expect(navItemLabel('Approvals')).toBe('Approvals')
     expect(navItemLabel('Approvals', 0)).toBe('Approvals')
+    expect(navItemLabel('Cases', 0, 'new')).toBe('Cases')
   })
 })
 

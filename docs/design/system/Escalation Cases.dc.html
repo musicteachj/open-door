@@ -1,0 +1,435 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="design_doc_mode" content="canvas">
+<link rel="stylesheet" href="styles.css">
+<template id="__bundler_thumbnail"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><rect width="100" height="100" fill="#59256A"></rect><g fill="none" stroke="#F5F7F8" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"><rect x="27" y="46" width="46" height="30" rx="5"></rect><path d="M37 46V36a13 13 0 0 1 26 0v10"></path></g></svg></template>
+<style>body{margin:0;background:#ECEEEF;font-family:'Instrument Sans',system-ui,sans-serif;-webkit-font-smoothing:antialiased}a{color:#59256A}a:hover{color:#461B54}textarea::placeholder{color:#66737B}@keyframes od-spin{to{transform:rotate(360deg)}}@media (prefers-reduced-motion:reduce){.od-spin{animation-duration:2.4s!important}}.dv-turn{padding:40px 44px 32px;border-bottom:1px solid rgba(0,0,0,.08);scroll-margin-top:16px}.dv-thd{display:flex;align-items:baseline;gap:10px;margin:0 0 8px}.dv-tid{font:600 10px ui-monospace,Menlo,monospace;padding:3px 7px;background:#1a1a1a;color:#fff;border-radius:4px;text-decoration:none}.dv-tname{font:600 13px/1.2 system-ui,sans-serif;color:#1a1a1a}.dv-note{font:12px/1.55 system-ui,sans-serif;color:rgba(0,0,0,.6);max-width:1100px;margin:0 0 24px}.dv-opts{display:flex;flex-wrap:wrap;gap:56px;align-items:flex-start;max-width:2936px}.dv-opt{flex:none;display:flex;flex-direction:column;gap:12px;scroll-margin-top:16px}.dv-oid{font:600 10.5px ui-monospace,Menlo,monospace;padding:3px 7px;background:rgba(0,0,0,.08);color:#1a1a1a;border-radius:5px;text-decoration:none}.dv-olabel{display:flex;align-items:baseline;gap:8px;font:400 12px/1.3 system-ui,sans-serif;color:rgba(0,0,0,.6);max-width:1440px}.dv-card{max-width:100%;background:#fff;border:1px solid rgba(0,0,0,.08);border-radius:8px;box-shadow:0 1px 3px rgba(0,0,0,.06);overflow:hidden}.dv-opt:target .dv-oid{background:#2a78d6;color:#fff}</style>
+</helmet>
+<section class="dv-turn" id="t1" data-screen-label="11 Escalation and cases">
+<div class="dv-thd"><a class="dv-tid" href="#t1">1</a><span class="dv-tname">Screen 11: The case button, the confidential-case form, and My cases</span></div>
+<p class="dv-note">When the safety check routes a message to HR, the panel under the answer offers "Open a confidential case". The form opens inside the panel on a quiet aubergine wash with a lock, never an alert style. The person picks a category, reviews their own words, reads what's true about a case, and sends it. The AI never opens a case. The same form opens from My cases, which lists each case's status and never its words. Every frame is live: open the form, choose, type, send, or press "Not now". The component library is in <a class="dv-oid" href="#components">components</a>.</p>
+<div class="dv-opts">
+<sc-for list="{{ frames }}" as="f" hint-placeholder-count="2">
+<div class="dv-opt" id="{{ f.id }}">
+<div class="dv-olabel"><a class="dv-oid" href="{{ f.href }}">{{ f.id }}</a>{{ f.label }}</div>
+<div class="dv-card" data-frame="{{ f.id }}" ref="{{ f.rootRef }}" style="width:{{ f.cardW }};max-width:none">
+<div style="display:flex;min-height:900px;box-sizing:border-box;background:var(--surface);font-family:var(--font-sans);color:var(--ink)">
+  <sc-for list="{{ f.sidebars }}" as="sb" hint-placeholder-count="1">
+  <aside style="width:248px;flex:none;display:flex;flex-direction:column;padding:28px 16px 20px 20px;box-sizing:border-box;border-right:{{ sb.divider }}">
+    <div style="display:flex;align-items:center;gap:12px;padding:0 8px 32px"><img src="assets/logo-mark.svg" width="32" height="32" alt=""><div style="display:flex;flex-direction:column;gap:2px"><span style="font-size:16px;line-height:20px;font-weight:600;letter-spacing:-0.01em">Open Door</span><span style="font-size:12px;line-height:16px;color:var(--ink-muted)">Juniper Row</span></div></div>
+    <nav aria-label="Main" style="display:flex;flex-direction:column;gap:2px">
+      <sc-for list="{{ sb.nav }}" as="n" hint-placeholder-count="5">
+        <a href="{{ n.href }}" aria-current="{{ n.ac }}" style="display:flex;align-items:center;gap:12px;height:40px;padding:0 12px;border-radius:var(--radius-md);background:{{ n.bg }};color:{{ n.fg }};font-size:14px;line-height:20px;font-weight:{{ n.w }};text-decoration:none" style-hover="background:var(--neutral-hover);color:var(--ink)" style-focus="outline:2px solid var(--focus-ring);outline-offset:2px">
+          <sc-if value="{{ n.icAsk }}" hint-placeholder-val="{{ false }}"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z"></path></svg></sc-if>
+          <sc-if value="{{ n.icTime }}" hint-placeholder-val="{{ false }}"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="4" rx="2"></rect><path d="M16 2v4M8 2v4M3 10h18"></path></svg></sc-if>
+          <sc-if value="{{ n.icCases }}" hint-placeholder-val="{{ false }}"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect width="8" height="5" x="14" y="17" rx="1"></rect><path d="M10 20H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h3.9a2 2 0 0 1 1.69.9l.81 1.2a2 2 0 0 0 1.67.9H20a2 2 0 0 1 2 2v2.5"></path><path d="M20 17v-2a2 2 0 1 0-4 0v2"></path></svg></sc-if>
+          <sc-if value="{{ n.icDir }}" hint-placeholder-val="{{ false }}"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"></path></svg></sc-if>
+          <sc-if value="{{ n.icBook }}" hint-placeholder-val="{{ false }}"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"></path><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"></path></svg></sc-if>
+          <sc-if value="{{ n.icAppr }}" hint-placeholder-val="{{ false }}"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect width="8" height="4" x="8" y="2" rx="1"></rect><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"></path><path d="m9 14 2 2 4-4"></path></svg></sc-if>
+          <span style="flex:1">{{ n.label }}</span>
+          <sc-if value="{{ n.hasCount }}" hint-placeholder-val="{{ false }}"><span style="min-width:20px;height:20px;padding:0 6px;box-sizing:border-box;border-radius:9999px;background:var(--primary);color:var(--on-primary);display:inline-flex;align-items:center;justify-content:center;font-size:12px;line-height:16px;font-weight:600;font-variant-numeric:tabular-nums"><span aria-hidden="true">2</span><span style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)">, 2 waiting</span></span></sc-if>
+        </a>
+      </sc-for>
+    </nav>
+    <div style="flex:1"></div>
+    <a href="/how-its-built" style="display:flex;align-items:center;gap:12px;height:40px;padding:0 12px;margin-bottom:12px;border-radius:var(--radius-md);color:var(--ink-nav);font-size:14px;line-height:20px;font-weight:500;text-decoration:none" style-hover="background:var(--neutral-hover);color:var(--ink)" style-focus="outline:2px solid var(--focus-ring);outline-offset:2px"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="m16 18 6-6-6-6M8 6l-6 6 6 6"></path></svg>How it's built</a>
+    <button type="button" aria-haspopup="menu" aria-expanded="false" style="display:flex;align-items:center;gap:12px;width:100%;min-height:61px;padding:12px 8px;border:0;border-top:1px solid var(--border);background:transparent;font-family:inherit;text-align:left;cursor:pointer;color:var(--ink)" style-hover="background:var(--neutral-hover)" style-focus="outline:2px solid var(--focus-ring);outline-offset:2px">
+      <span style="width:36px;height:36px;flex:none;border-radius:9999px;background:var(--primary-tint);display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:600">{{ sb.ini }}</span>
+      <span style="flex:1;min-width:0;display:flex;flex-direction:column;gap:2px"><span style="font-size:14px;line-height:18px;font-weight:600">{{ sb.name }}</span><span style="font-size:12px;line-height:16px;color:var(--ink-muted)">{{ sb.title }}</span></span>
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="flex:none;color:var(--ink-muted)"><path d="m7 15 5 5 5-5M7 9l5-5 5 5"></path></svg>
+    </button>
+  </aside>
+  </sc-for>
+
+  <sc-if value="{{ f.hasMain }}" hint-placeholder-val="{{ true }}">
+  <main style="flex:1;min-width:0;display:flex;padding:12px 12px 12px 0;box-sizing:border-box">
+    <div style="flex:1;min-width:0;display:flex;background:var(--surface-raised);border:1px solid var(--border);border-radius:var(--radius-xl);overflow:hidden">
+      <div style="flex:1;min-width:0;display:flex;flex-direction:column">
+        <sc-if value="{{ f.isConv }}" hint-placeholder-val="{{ true }}">
+          <div style="flex:none;display:flex;align-items:center;gap:16px;padding:20px 40px 0">
+            <p style="flex:1;min-width:0;margin:0;font-size:13px;line-height:20px;color:var(--ink-muted);text-wrap:pretty">Conversations are deleted with your sandbox after 24 hours.</p>
+            <button type="button" style="flex:none;display:inline-flex;align-items:center;gap:8px;height:32px;padding:0 10px;border:0;border-radius:var(--radius-sm);background:transparent;color:var(--ink);font-family:var(--font-sans);font-size:13px;line-height:20px;font-weight:600;cursor:pointer" style-hover="background:var(--neutral-hover)" style-focus="outline:2px solid var(--focus-ring);outline-offset:2px"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.375 2.625a1 1 0 0 1 3 3l-9.013 9.014a2 2 0 0 1-.853.506l-2.873.84a.5.5 0 0 1-.62-.62l.84-2.873a2 2 0 0 1 .506-.852z"></path></svg>Start a new conversation</button>
+            <span style="flex:none;display:inline-flex;align-items:center;gap:8px;height:28px;padding:0 12px;border:1px solid var(--border);border-radius:9999px;font-size:12px;line-height:16px;color:var(--ink-muted);font-variant-numeric:tabular-nums;white-space:nowrap"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><path d="M12 6v6l4 2"></path></svg>Sandbox resets in 21 h</span>
+          </div>
+        </sc-if>
+        <div style="flex:1;display:flex;flex-direction:column;justify-content:{{ f.justify }};padding:{{ f.pad }}">
+          <div style="display:flex;flex-direction:column;gap:{{ f.gap }};width:100%;max-width:760px">
+            <sc-if value="{{ f.isPage }}" hint-placeholder-val="{{ false }}">
+              <div style="display:flex;flex-direction:column;gap:8px">
+                <div style="display:flex;align-items:center;justify-content:space-between;gap:24px">
+                  <h1 style="margin:0;font-size:var(--text-h1);line-height:var(--leading-h1);font-weight:600;letter-spacing:var(--tracking-h1)">My cases</h1>
+                  <span style="display:inline-flex;align-items:center;gap:8px;height:28px;padding:0 12px;border:1px solid var(--border);border-radius:9999px;font-size:12px;line-height:16px;color:var(--ink-muted);font-variant-numeric:tabular-nums;white-space:nowrap"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><path d="M12 6v6l4 2"></path></svg>Sandbox resets in 21 h</span>
+                </div>
+                <p style="margin:0;max-width:640px;font-size:16px;line-height:26px;color:var(--ink-muted);text-wrap:pretty">Cases you’ve sent to HR. Only the HR team can open them in Open Door, and they’re stored encrypted.</p>
+              </div>
+            </sc-if>
+
+            <sc-for list="{{ f.blocks }}" as="b" hint-placeholder-count="2">
+              <sc-if value="{{ b.isUser }}" hint-placeholder-val="{{ true }}">
+                <div style="align-self:flex-end;max-width:520px;padding:10px 16px;background:var(--surface-hover);border-radius:var(--radius-lg);font-size:15px;line-height:24px;color:var(--ink);text-wrap:pretty"><span style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)">You asked: </span>{{ b.text }}</div>
+              </sc-if>
+
+              <sc-if value="{{ b.isAi }}" hint-placeholder-val="{{ false }}">
+                <div style="display:flex;flex-direction:column;gap:14px;max-width:680px">
+                  <div style="display:flex;align-items:center;gap:8px"><span style="display:inline-flex;align-items:center;height:20px;padding:0 6px;box-sizing:border-box;border:1px solid var(--border-strong);border-radius:var(--radius-xs);font-size:11px;line-height:16px;font-weight:600;letter-spacing:.03em;color:var(--ink)">AI</span><span style="font-size:13px;line-height:20px;color:var(--ink-muted)">Open Door</span></div>
+                  <p style="margin:0;font-size:15px;line-height:24px;color:var(--ink);text-wrap:pretty"><sc-for list="{{ b.segs }}" as="sg" hint-placeholder-count="1"><sc-if value="{{ sg.isText }}" hint-placeholder-val="{{ true }}"><span>{{ sg.text }}</span></sc-if><sc-if value="{{ sg.isMk }}" hint-placeholder-val="{{ false }}"><a href="{{ sg.href }}" aria-label="{{ sg.aria }}" style="display:inline-flex;align-items:center;justify-content:center;min-width:20px;height:20px;padding:0 5px;margin:0 1px 0 4px;vertical-align:1px;box-sizing:border-box;border:1px solid var(--border-strong);border-radius:var(--radius-xs);background:var(--surface-raised);font-size:12px;line-height:16px;font-weight:600;color:var(--ink);text-decoration:none;font-variant-numeric:tabular-nums" style-hover="border-color:var(--primary);background:var(--primary-tint);color:var(--ink)" style-focus="outline:2px solid var(--focus-ring);outline-offset:2px">{{ sg.n }}</a></sc-if></sc-for></p>
+                  <div style="display:flex;flex-direction:column;gap:8px;margin-top:2px">
+                    <p style="margin:0;font-size:13px;line-height:20px;color:var(--ink-muted)">Sources</p>
+                    <div style="display:flex;flex-wrap:wrap;gap:8px">
+                      <sc-for list="{{ b.chips }}" as="c" hint-placeholder-count="2">
+                        <a href="{{ c.href }}" aria-label="{{ c.aria }}" style="display:inline-flex;align-items:center;gap:8px;height:32px;padding:0 12px 0 6px;border:1px solid var(--border-strong);border-radius:var(--radius-sm);background:var(--surface-raised);font-size:13px;line-height:20px;color:var(--ink);text-decoration:none;white-space:nowrap" style-hover="border-color:var(--primary);background:var(--primary-tint);color:var(--ink)" style-focus="outline:2px solid var(--focus-ring);outline-offset:2px"><span style="display:inline-flex;align-items:center;justify-content:center;min-width:20px;height:20px;padding:0 5px;box-sizing:border-box;border:1px solid var(--border-strong);border-radius:var(--radius-xs);background:var(--surface-raised);font-size:12px;line-height:16px;font-weight:600;font-variant-numeric:tabular-nums">{{ c.n }}</span>{{ c.label }}</a>
+                      </sc-for>
+                    </div>
+                  </div>
+                </div>
+              </sc-if>
+
+              <sc-if value="{{ b.isPanel }}" hint-placeholder-val="{{ false }}">
+                <section aria-labelledby="{{ b.hid }}" style="max-width:{{ f.panelMax }};border:1px solid var(--border-strong);border-radius:var(--radius-xl);overflow:hidden;background:var(--surface-raised)">
+                  <sc-if value="{{ b.isCrisis }}" hint-placeholder-val="{{ false }}"><div style="display:flex;align-items:center;gap:10px;padding:12px 24px;background:var(--ink);color:var(--on-primary)"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="flex:none"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"></path></svg><h2 id="{{ b.hid }}" style="margin:0;font-size:15px;line-height:22px;font-weight:600">Reach a person right now</h2></div></sc-if>
+                  <sc-if value="{{ b.isSens }}" hint-placeholder-val="{{ false }}"><div style="display:flex;align-items:center;gap:10px;padding:12px 24px;background:var(--surface-sunken);border-bottom:1px solid var(--border);color:var(--ink)"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="flex:none"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"></path></svg><h2 id="{{ b.hid }}" style="margin:0;font-size:15px;line-height:22px;font-weight:600">A person in HR handles this, not the AI</h2></div></sc-if>
+                  <sc-if value="{{ b.isUnav }}" hint-placeholder-val="{{ false }}"><div style="display:flex;align-items:center;gap:10px;padding:12px 24px;background:var(--surface-sunken);border-bottom:1px solid var(--border);color:var(--ink)"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="flex:none;color:var(--danger)"><circle cx="12" cy="12" r="10"></circle><path d="M12 8v4M12 16h.01"></path></svg><h2 id="{{ b.hid }}" style="margin:0;font-size:15px;line-height:22px;font-weight:600">Can't answer right now</h2></div></sc-if>
+                  <div style="display:flex;flex-direction:column;gap:16px;padding:18px 24px {{ b.bodyPb }}">
+                    <sc-if value="{{ b.isCrisis }}" hint-placeholder-val="{{ false }}">
+                      <div style="display:flex;flex-direction:column;gap:12px;font-size:16px;line-height:26px;color:var(--ink)">
+                        <p style="margin:0;text-wrap:pretty">I’m an AI assistant, and what you wrote sounds serious, so I want to make sure you can reach a person right now.</p>
+                        <ul style="margin:0;padding-left:22px;display:flex;flex-direction:column;gap:8px">
+                          <li style="text-wrap:pretty">If you or someone else is in immediate danger, <a href="tel:911" style="color:var(--primary);font-weight:600;text-decoration:underline;text-decoration-thickness:1px;text-underline-offset:3px;border-radius:2px" style-hover="color:var(--primary-hover)" style-focus="outline:2px solid var(--focus-ring);outline-offset:2px">call 911</a>.</li>
+                          <li style="text-wrap:pretty"><a href="tel:988" style="color:var(--primary);font-weight:600;text-decoration:underline;text-decoration-thickness:1px;text-underline-offset:3px;border-radius:2px" style-hover="color:var(--primary-hover)" style-focus="outline:2px solid var(--focus-ring);outline-offset:2px">Call or text 988</a> to reach the 988 Suicide &amp; Crisis Lifeline, or chat at <a href="https://chat.988lifeline.org" style="color:var(--primary);font-weight:600;text-decoration:underline;text-decoration-thickness:1px;text-underline-offset:3px;border-radius:2px" style-hover="color:var(--primary-hover)" style-focus="outline:2px solid var(--focus-ring);outline-offset:2px">chat.988lifeline.org</a>. It’s free, confidential, and available 24/7.</li>
+                          <li style="text-wrap:pretty">The Juniper Row Employee Assistance Program (EAP) offers free, confidential counseling, 24 hours a day: <a href="tel:18005550137" style="color:var(--primary);font-weight:600;text-decoration:underline;text-decoration-thickness:1px;text-underline-offset:3px;border-radius:2px;font-variant-numeric:tabular-nums;white-space:nowrap" style-hover="color:var(--primary-hover)" style-focus="outline:2px solid var(--focus-ring);outline-offset:2px">1-800-555-0137</a>.</li>
+                          <li style="text-wrap:pretty">You can also talk to someone on the HR team. Their contact details are below.</li>
+                        </ul>
+                        <p style="margin:0">You don’t have to go through this alone.</p>
+                      </div>
+                    </sc-if>
+                    <sc-if value="{{ b.isSens }}" hint-placeholder-val="{{ false }}"><p style="margin:0;font-size:16px;line-height:26px;text-wrap:pretty">This sounds like something a person on the HR team should help with. You can open a confidential case below. Only the HR team can open it in Open Door, never your manager, and it’s stored encrypted. HR replies within 2 business days. Their contact details are below.</p></sc-if>
+                    <sc-if value="{{ b.isUnav }}" hint-placeholder-val="{{ false }}">
+                      <p style="margin:0;font-size:16px;line-height:26px;text-wrap:pretty">I’m an AI assistant, and I can’t answer right now. Please try again in a moment. If you or someone else is in danger, call 911, or call or text 988 to reach the 988 Suicide &amp; Crisis Lifeline. For anything else that can’t wait, the HR team can help directly. Their contact details are below.</p>
+                      <div><button type="button" style="display:inline-flex;align-items:center;gap:6px;height:32px;padding:0 12px;border:1px solid var(--border-strong);border-radius:var(--radius-sm);background:var(--surface-raised);color:var(--ink);font-family:var(--font-sans);font-size:13px;line-height:20px;font-weight:600;cursor:pointer" style-hover="background:var(--surface-hover);border-color:var(--border-strong-hover)" style-focus="outline:2px solid var(--focus-ring);outline-offset:2px"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"></path><path d="M3 3v5h5"></path></svg>Try again</button></div>
+                    </sc-if>
+                    <div style="display:flex;flex-direction:column;gap:2px">
+                      <h3 style="margin:0;font-size:13px;line-height:20px;font-weight:600">HR contacts</h3>
+                      <p style="margin:0 0 4px;font-size:13px;line-height:20px;color:var(--ink-muted)">A person on the HR team reads and answers these, not the AI.</p>
+                      <ul role="list" style="margin:0;padding:0;list-style:none">
+                        <sc-for list="{{ b.hr }}" as="h" hint-placeholder-count="2">
+                          <li style="display:flex;align-items:center;gap:12px;padding:12px 0;border-top:1px solid var(--border-subtle)">
+                            <span aria-hidden="true" style="width:36px;height:36px;flex:none;border-radius:9999px;background:var(--primary-tint);display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:600"><sc-if value="{{ h.isPerson }}" hint-placeholder-val="{{ true }}">{{ h.ini }}</sc-if><sc-if value="{{ h.isTeam }}" hint-placeholder-val="{{ false }}"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"></path></svg></sc-if></span>
+                            <span style="flex:1;min-width:0;display:flex;flex-direction:column"><span style="font-size:15px;line-height:22px;font-weight:600">{{ h.name }}</span><span style="font-size:13px;line-height:18px;color:var(--ink-muted)">{{ h.role }}</span></span>
+                            <a href="{{ h.mailto }}" style="font-size:14px;line-height:20px;font-weight:600;color:var(--primary);text-decoration:underline;text-decoration-thickness:1px;text-underline-offset:3px;border-radius:2px;white-space:nowrap" style-hover="color:var(--primary-hover)" style-focus="outline:2px solid var(--focus-ring);outline-offset:2px">{{ h.email }}</a>
+                          </li>
+                        </sc-for>
+                      </ul>
+                    </div>
+                    <sc-if value="{{ b.isSens }}" hint-placeholder-val="{{ false }}"><a href="/handbook/7.2" style="align-self:flex-start;font-size:14px;line-height:20px;font-weight:600;color:var(--primary);text-decoration:underline;text-decoration-thickness:1px;text-underline-offset:3px;border-radius:2px" style-hover="color:var(--primary-hover)" style-focus="outline:2px solid var(--focus-ring);outline-offset:2px">How confidential HR cases work, §7.2</a></sc-if>
+                    <sc-if value="{{ b.isUnav }}" hint-placeholder-val="{{ false }}"><a href="/my-cases" style="align-self:flex-start;display:inline-flex;align-items:center;gap:4px;font-size:14px;line-height:20px;font-weight:600;color:var(--primary);text-decoration:underline;text-decoration-thickness:1px;text-underline-offset:3px;border-radius:2px" style-hover="color:var(--primary-hover)" style-focus="outline:2px solid var(--focus-ring);outline-offset:2px">Write to HR</a></sc-if>
+                    <sc-if value="{{ b.offerPrimary }}" hint-placeholder-val="{{ false }}"><div style="padding:4px 0 8px"><button type="button" data-case-open="true" onClick="{{ b.open }}" style="display:inline-flex;align-items:center;gap:8px;height:40px;padding:0 18px 0 16px;border:0;border-radius:var(--radius-md);background:var(--primary);color:var(--on-primary);font-family:var(--font-sans);font-size:14px;line-height:20px;font-weight:600;cursor:pointer" style-hover="background:var(--primary-hover)" style-focus="outline:2px solid var(--focus-ring);outline-offset:2px"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="18" height="11" x="3" y="11" rx="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>Open a confidential case</button></div></sc-if>
+                    <sc-if value="{{ b.offerSecondary }}" hint-placeholder-val="{{ false }}"><div style="padding:4px 0 8px"><button type="button" data-case-open="true" onClick="{{ b.open }}" style="display:inline-flex;align-items:center;gap:8px;height:40px;padding:0 18px 0 16px;border:1px solid var(--border-strong);border-radius:var(--radius-md);background:var(--surface-raised);color:var(--ink);font-family:var(--font-sans);font-size:14px;line-height:20px;font-weight:600;cursor:pointer" style-hover="background:var(--surface-hover);border-color:var(--border-strong-hover)" style-focus="outline:2px solid var(--focus-ring);outline-offset:2px"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="18" height="11" x="3" y="11" rx="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>Open a confidential case</button></div></sc-if>
+                  </div>
+                  <sc-if value="{{ b.band }}" hint-placeholder-val="{{ false }}">
+                    <div style="padding:22px 24px 24px;border-top:1px solid var(--confidential-border);background:var(--confidential-tint)">
+                      <dc-import name="Case Form" c="{{ b.c }}" hint-size="100%,120px"></dc-import>
+                    </div>
+                  </sc-if>
+                </section>
+              </sc-if>
+
+              <sc-if value="{{ b.isWork }}" hint-placeholder-val="{{ false }}">
+                <div style="display:flex;flex-direction:column;gap:12px;max-width:680px">
+                  <div style="display:flex;justify-content:flex-end;min-height:32px">
+                    <button type="button" aria-expanded="{{ b.wExp }}" aria-controls="{{ b.wid }}" onClick="{{ b.toggle }}" style="display:inline-flex;align-items:center;gap:6px;height:32px;padding:0 8px 0 10px;border:0;border-radius:var(--radius-sm);background:transparent;color:var(--ink);font-family:var(--font-sans);font-size:13px;line-height:20px;font-weight:600;cursor:pointer" style-hover="background:var(--neutral-hover)" style-focus="outline:2px solid var(--focus-ring);outline-offset:2px">Show your work<sc-if value="{{ b.wClosed }}" hint-placeholder-val="{{ true }}"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="color:var(--ink-muted)"><path d="m6 9 6 6 6-6"></path></svg></sc-if><sc-if value="{{ b.wOpen }}" hint-placeholder-val="{{ false }}"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="color:var(--ink-muted)"><path d="m18 15-6-6-6 6"></path></svg></sc-if></button>
+                  </div>
+                  <sc-if value="{{ b.wOpen }}" hint-placeholder-val="{{ false }}">
+                    <div id="{{ b.wid }}" style="display:flex;flex-direction:column;gap:16px;padding:16px 20px 18px;border:1px solid var(--border);border-radius:var(--radius-lg);background:var(--surface-sunken)">
+                      <p style="display:flex;align-items:center;gap:8px;margin:0;font-size:14px;line-height:20px;font-weight:600"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="flex:none;color:var(--ink-muted)"><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"></path><path d="m9 12 2 2 4-4"></path></svg>Routed to HR guidance</p>
+                      <div style="display:flex;flex-direction:column;gap:6px">
+                        <h3 style="margin:0;font-size:13px;line-height:20px;font-weight:600">Tools called</h3>
+                        <p style="display:flex;align-items:center;gap:8px;margin:0;font-size:14px;line-height:20px"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="flex:none;color:var(--ink-muted)"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"></path><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"></path></svg>Searched the handbook</p>
+                      </div>
+                      <div style="display:flex;flex-direction:column;gap:6px">
+                        <h3 style="margin:0;font-size:13px;line-height:20px;font-weight:600">Sections retrieved</h3>
+                        <p style="margin:0;font-size:14px;line-height:20px">§2.2 Harassment and discrimination · §7.2 How confidential HR cases work</p>
+                      </div>
+                    </div>
+                  </sc-if>
+                </div>
+              </sc-if>
+
+              <sc-if value="{{ b.isEmpty }}" hint-placeholder-val="{{ false }}">
+                <div style="display:flex;flex-direction:column;align-items:flex-start;gap:16px;padding:28px 28px 32px;border:1px solid var(--border);border-radius:var(--radius-lg);background:var(--surface-sunken)">
+                  <p style="margin:0;font-size:16px;line-height:26px;color:var(--ink)">You haven’t sent HR a case.</p>
+                  <button type="button" data-case-open="true" onClick="{{ b.open }}" style="display:inline-flex;align-items:center;gap:8px;height:40px;padding:0 18px 0 16px;border:0;border-radius:var(--radius-md);background:var(--primary);color:var(--on-primary);font-family:var(--font-sans);font-size:14px;line-height:20px;font-weight:600;cursor:pointer" style-hover="background:var(--primary-hover)" style-focus="outline:2px solid var(--focus-ring);outline-offset:2px"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="18" height="11" x="3" y="11" rx="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>Open a confidential case</button>
+                </div>
+              </sc-if>
+
+              <sc-if value="{{ b.isOffer }}" hint-placeholder-val="{{ false }}">
+                <div><button type="button" data-case-open="true" onClick="{{ b.open }}" style="display:inline-flex;align-items:center;gap:8px;height:40px;padding:0 18px 0 16px;border:0;border-radius:var(--radius-md);background:var(--primary);color:var(--on-primary);font-family:var(--font-sans);font-size:14px;line-height:20px;font-weight:600;cursor:pointer" style-hover="background:var(--primary-hover)" style-focus="outline:2px solid var(--focus-ring);outline-offset:2px"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="18" height="11" x="3" y="11" rx="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>Open a confidential case</button></div>
+              </sc-if>
+
+              <sc-if value="{{ b.isCaseCard }}" hint-placeholder-val="{{ false }}">
+                <div style="padding:24px 28px 28px;border:1px solid var(--confidential-border);border-radius:var(--radius-xl);background:var(--confidential-tint)">
+                  <dc-import name="Case Form" c="{{ b.c }}" hint-size="100%,120px"></dc-import>
+                </div>
+              </sc-if>
+
+              <sc-if value="{{ b.isList }}" hint-placeholder-val="{{ false }}">
+                <ul role="list" aria-label="Your cases" style="margin:0;padding:0;list-style:none;border:1px solid var(--border);border-radius:var(--radius-lg);overflow:hidden">
+                  <sc-for list="{{ b.cases }}" as="r" hint-placeholder-count="3">
+                    <li style="display:grid;grid-template-columns:minmax(0,1fr) 248px 176px;align-items:center;gap:16px;padding:16px 20px;border-top:{{ r.bt }}">
+                      <span style="display:flex;flex-direction:column;gap:2px;min-width:0"><span style="font-size:15px;line-height:22px;font-weight:600">{{ r.cat }}</span><span style="font-size:13px;line-height:20px;color:var(--ink-muted);font-variant-numeric:tabular-nums">{{ r.sent }}</span></span>
+                      <span><span style="display:inline-flex;align-items:center;gap:6px;height:24px;padding:0 8px;border:1px solid var(--border-strong);border-radius:var(--radius-xs);background:var(--surface-raised);font-size:13px;line-height:20px;font-weight:500;color:var(--ink);white-space:nowrap">
+                        <sc-if value="{{ r.isSent }}" hint-placeholder-val="{{ false }}"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:var(--marker)"><circle cx="12" cy="12" r="10"></circle><path d="M12 6v6l4 2"></path></svg></sc-if>
+                        <sc-if value="{{ r.isRev }}" hint-placeholder-val="{{ false }}"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:var(--primary)"><path d="M14 2v4a2 2 0 0 0 2 2h4"></path><path d="M4.268 21a2 2 0 0 0 1.727 1H18a2 2 0 0 0 2-2V7l-5-5H6a2 2 0 0 0-2 2v3"></path><path d="m9 18-1.5-1.5"></path><circle cx="5" cy="14" r="3"></circle></svg></sc-if>
+                        <sc-if value="{{ r.isFin }}" hint-placeholder-val="{{ false }}"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:var(--ink)"><circle cx="12" cy="12" r="10"></circle><path d="m9 12 2 2 4-4"></path></svg></sc-if>
+                        {{ r.badge }}</span></span>
+                      <span style="font-size:14px;line-height:20px;color:var(--ink-muted);font-variant-numeric:tabular-nums;text-align:right">{{ r.line }}</span>
+                    </li>
+                  </sc-for>
+                </ul>
+              </sc-if>
+            </sc-for>
+          </div>
+        </div>
+        <sc-if value="{{ f.isConv }}" hint-placeholder-val="{{ true }}">
+          <div style="flex:none;padding:12px 40px 24px">
+            <div style="max-width:760px;border:1px solid var(--input-border);border-radius:var(--radius-lg);background:var(--surface-raised)" style-hover="border-color:var(--input-border-hover)">
+              <textarea aria-label="Ask Open Door" rows="2" maxLength="2000" placeholder="Ask a follow-up…" style="display:block;width:100%;box-sizing:border-box;border:0;outline:0;resize:none;font-family:var(--font-sans);font-size:var(--text-body-lg);line-height:var(--leading-body-lg);color:var(--ink);background:transparent;padding:14px 20px 6px"></textarea>
+              <div style="display:flex;align-items:center;gap:16px;padding:10px 10px 10px 20px;border-top:1px solid var(--border-subtle)">
+                <p style="flex:1;display:flex;align-items:center;gap:8px;margin:0;font-size:13px;line-height:20px;color:var(--ink-muted)"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="flex:none"><circle cx="12" cy="12" r="10"></circle><path d="M12 16v-4M12 8h.01"></path></svg>Open Door is an AI assistant. It can make mistakes, and it always shows its sources.</p>
+                <button type="button" style="flex:none;height:40px;padding:0 14px 0 16px;border:0;border-radius:var(--radius-md);background:var(--primary);color:var(--on-primary);display:flex;align-items:center;gap:8px;font-family:var(--font-sans);font-size:14px;font-weight:600;cursor:pointer" style-hover="background:var(--primary-hover)" style-focus="outline:2px solid var(--focus-ring);outline-offset:2px">Ask<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M12 5l7 7-7 7"></path></svg></button>
+              </div>
+            </div>
+          </div>
+        </sc-if>
+      </div>
+      <sc-if value="{{ f.isConv }}" hint-placeholder-val="{{ true }}">
+        <aside aria-label="Your summary" style="width:340px;flex:none;box-sizing:border-box;padding:28px 32px 32px;border-left:1px solid var(--border-subtle);background:var(--surface-sunken)">
+          <div style="font-size:13px;line-height:20px;color:var(--ink-muted);padding-bottom:12px;border-bottom:1px solid var(--border)">At a glance</div>
+          <div style="display:flex;flex-direction:column">
+            <sc-for list="{{ glance }}" as="g" hint-placeholder-count="3">
+              <a href="{{ g.href }}" aria-label="{{ g.aria }}" style="display:flex;align-items:center;gap:12px;padding:20px 12px;margin:0 -12px;border-bottom:1px solid var(--border-subtle);border-radius:var(--radius-md);color:var(--ink);text-decoration:none" style-hover="background:var(--primary-tint);color:var(--ink)" style-focus="outline:2px solid var(--focus-ring);outline-offset:2px;position:relative;z-index:1">
+                <span style="flex:1;min-width:0;display:flex;flex-direction:column;gap:2px"><span style="font-size:32px;line-height:40px;font-weight:600;letter-spacing:-0.01em;font-variant-numeric:tabular-nums;white-space:nowrap">{{ g.v }}</span><span style="font-size:14px;line-height:20px;color:var(--ink-muted)">{{ g.cap }}</span></span>
+                <span style="display:flex;align-items:center;gap:4px;font-size:13px;line-height:20px;font-weight:600;color:var(--primary)">{{ g.dest }}<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"></path></svg></span>
+              </a>
+            </sc-for>
+          </div>
+        </aside>
+      </sc-if>
+    </div>
+  </main>
+  </sc-if>
+</div>
+</div>
+</div>
+</sc-for>
+</div>
+</section>
+<section class="dv-turn" id="components" data-screen-label="11 Case components">
+<div class="dv-thd"><a class="dv-tid" href="#components">C</a><span class="dv-tname">Case components</span></div>
+<p class="dv-note">The component library card, rendered from components/cases/ (CaseForm, CaseSent, CaseList). Every state shown is a real prop or data-state on the component.</p>
+<iframe src="components/cases/cases.card.html" title="Case components" ref="{{ cardRef }}" style="width:1180px;height:3000px;border:1px solid rgba(0,0,0,.08);border-radius:8px;background:#fff"></iframe>
+</section>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  state = { fs: {} };
+  roots = {};
+  timers = {};
+  componentWillUnmount() { Object.values(this.timers).forEach(clearTimeout); clearInterval(this.fitTimer); }
+  cardRef = el => {
+    if (!el || el === this.cardEl) return;
+    this.cardEl = el;
+    const fit = () => { try { const doc = el.contentDocument; if (!doc || !doc.body) return; const h = doc.body.scrollHeight; if (h > 200 && Math.abs(el.offsetHeight - h - 24) > 4) el.style.height = (h + 24) + 'px'; } catch (err) {} };
+    el.addEventListener('load', fit);
+    let n = 0; clearInterval(this.fitTimer);
+    this.fitTimer = setInterval(() => { fit(); if (++n > 40) clearInterval(this.fitTimer); }, 250);
+  };
+  data() {
+    if (this._d) return this._d;
+    const HR = [
+      { isPerson: true, ini: 'DW', name: 'Dana Whitfield', role: 'HR Business Partner · Denver HQ', email: 'dana.whitfield@juniperrow.example' },
+      { isTeam: true, name: 'HR team', role: 'Shared inbox', email: 'hr@juniperrow.example' }
+    ].map(h => ({ ...h, mailto: 'mailto:' + h.email }));
+    const CATS = ['Harassment or discrimination', 'Workplace safety', 'Medical or accommodation', 'Pay concern', 'Something else, or not sure'];
+    const Q = 'My manager keeps making comments about my age.';
+    const SHORT = "yes, that's what happened";
+    const base = 'My manager keeps making comments about my age. It started in August, when the store was planning the holiday displays. In huddles on the sales floor, my manager has said I’m too old to know what customers want, and asked in front of the team whether I need help with the ladder. It happened again on Friday, October 23, in front of three people on the visual team. I’ve kept notes with the dates and who was there. ';
+    let LONG = ''; while (LONG.length < 4000) LONG += base; LONG = LONG.slice(0, 4000);
+    const SSN = Q + ' My employee number is 123-45-6789.';
+    const CASES = [
+      { cat: 'Harassment or discrimination', sent: 'Sent Mon, Oct 26', st: 'sent', line: 'HR replies by Wed, Oct 28' },
+      { cat: 'Workplace safety', sent: 'Sent Mon, Oct 12', st: 'rev', line: 'Since Tue, Oct 13' },
+      { cat: 'Pay concern', sent: 'Sent Tue, Sep 15', st: 'fin', line: 'Finished Fri, Sep 25' }
+    ];
+    const ANSWER = [
+      { t: 'I’m an AI assistant, so I can’t look into this, but a person on the HR team can, and they handle it confidentially. Juniper Row doesn’t allow harassment based on age, and you don’t have to tell your manager first.' },
+      { mk: 1 },
+      { t: ' If you’d like HR to look into it, you can open a confidential case with the button below.' },
+      { mk: 2 }
+    ];
+    const SRC = { 1: ['Handbook §2.2 · Harassment and discrimination', '/handbook/2.2'], 2: ['Handbook §7.2 · How confidential HR cases work', '/handbook/7.2'] };
+    return this._d = { HR, CATS, Q, SHORT, LONG, SSN, CASES, ANSWER, SRC };
+  }
+  nav(mgr, cur) {
+    const items = [['ask', 'Ask', '/ask'], ['time', 'Time off', '/time-off'], ['cases', 'My cases', '/my-cases'], ['dir', 'Directory', '/directory'], ['book', 'Handbook', '/handbook']];
+    if (mgr) items.push(['appr', 'Approvals', '/approvals']);
+    return items.map(([k, label, href]) => {
+      const on = k === cur;
+      return { label, href, ac: on ? 'page' : 'false', bg: on ? 'var(--primary-tint)' : 'transparent', fg: on ? 'var(--ink)' : 'var(--ink-nav)', w: on ? 600 : 500,
+        icAsk: k === 'ask', icTime: k === 'time', icCases: k === 'cases', icDir: k === 'dir', icBook: k === 'book', icAppr: k === 'appr', hasCount: k === 'appr' };
+    });
+  }
+  frame(cfg) {
+    const D = this.data(), k = cfg.id;
+    const base = { phase: 'offer', cat: null, words: '', errs: {}, ring: false, work: false, cases: null, failNext: false };
+    const cur = s => Object.assign({}, base, cfg.init || {}, s.fs[k] || {});
+    const st = cur(this.state);
+    const upd = fn => this.setState(s => ({ fs: { ...s.fs, [k]: { ...(s.fs[k] || {}), ...fn(cur(s)) } } }));
+    const focusSel = sel => setTimeout(() => { const r = this.roots[k]; const el = r && r.querySelector(sel); if (el) el.focus(); }, 60);
+    const isPage = cfg.kind === 'page';
+    const cases = st.cases || [];
+    const busy = st.phase === 'sending';
+    const words = st.words;
+    const n = words.length, atLimit = n >= 4000;
+    const pre = k + '-cf';
+    const errs = st.errs || {};
+    const open = () => { upd(() => ({ phase: 'form', words: cfg.prefill || '', cat: null, errs: {}, ring: false })); focusSel('[data-case-h]'); };
+    const close = () => { upd(() => ({ phase: 'offer', errs: {}, ring: false })); focusSel('[data-case-open]'); };
+    const send = () => {
+      const s = cur(this.state);
+      const e = {};
+      if (!s.cat) e.cat = 'Choose what this is about.';
+      if (!s.words.trim()) e.words = 'Add your words before sending.';
+      else if (/\b\d{3}[- ]?\d{2}[- ]?\d{4}\b/.test(s.words) || /\b(?:\d[ -]?){13,19}\b/.test(s.words)) e.words = 'That looks like a Social Security or card number. Please take it out before sending.';
+      else if (s.words.length >= 4000) e.limit = true;
+      if (e.cat || e.words || e.limit) {
+        upd(() => ({ errs: e, ring: false }));
+        const idx = s.cat ? Math.max(0, D.CATS.indexOf(s.cat)) : 0;
+        focusSel(e.cat ? '[data-opt="' + idx + '"]' : '[data-case-w]');
+        return;
+      }
+      upd(() => ({ phase: 'sending', errs: {}, ring: false }));
+      clearTimeout(this.timers[k]);
+      this.timers[k] = setTimeout(() => {
+        const s2 = cur(this.state);
+        if (s2.failNext) { upd(() => ({ phase: 'sendErr', failNext: false })); focusSel('[data-case-err]'); return; }
+        const row = { cat: s2.cat, sent: 'Sent Mon, Oct 26', st: 'sent', line: 'HR replies by Wed, Oct 28' };
+        upd(c => ({ phase: 'sent', cases: isPage ? [row, ...(c.cases || [])] : c.cases }));
+        focusSel('[data-case-sent]');
+      }, 1300);
+    };
+    const pick = label => upd(c => ({ cat: label, errs: { ...c.errs, cat: null }, ring: false }));
+    const onKey = e => {
+      const step = e.key === 'ArrowRight' || e.key === 'ArrowDown' ? 1 : e.key === 'ArrowLeft' || e.key === 'ArrowUp' ? -1 : 0;
+      if (!step) return;
+      e.preventDefault();
+      const i = D.CATS.indexOf(cur(this.state).cat);
+      const nx = ((i < 0 ? (step > 0 ? -1 : 0) : i) + step + D.CATS.length) % D.CATS.length;
+      pick(D.CATS[nx]); focusSel('[data-opt="' + nx + '"]');
+    };
+    const anyOn = !!st.cat;
+    const c = {
+      pre, hLevel: isPage ? 2 : 3, hLevel2: isPage ? 3 : 4,
+      isForm: st.phase === 'form' || st.phase === 'sending' || st.phase === 'sendErr', isSent: st.phase === 'sent', isLimit: st.phase === 'limit',
+      busy, canSend: !busy, sendErr: st.phase === 'sendErr', sendLabel: st.phase === 'sendErr' ? 'Try again' : 'Send to HR',
+      sendOl: st.ring ? '2px solid var(--focus-ring)' : 'none', send, close, spinner: this.spinner,
+      noBd: busy ? 'var(--disabled-bg)' : 'var(--border-strong)', noFg: busy ? 'var(--disabled-fg)' : 'var(--ink)',
+      opts: D.CATS.map((label, i) => {
+        const on = st.cat === label;
+        return { v: String(i), label, on, ti: on || (!anyOn && i === 0) ? 0 : -1, pick: () => pick(label), cur: busy ? 'not-allowed' : 'pointer',
+          bd: busy ? 'var(--disabled-bg)' : on ? 'var(--primary)' : 'var(--border-strong)', sh: on && !busy ? 'inset 0 0 0 1px var(--primary)' : 'none',
+          bg: on && !busy ? 'var(--primary-tint)' : 'var(--surface-raised)', fg: busy ? 'var(--disabled-fg)' : 'var(--ink)',
+          rbd: busy ? 'var(--disabled-bg)' : on ? 'var(--primary)' : 'var(--input-border)', dot: busy ? 'var(--disabled-fg)' : 'var(--primary)' };
+      }),
+      onKey, hasCatErr: !!errs.cat, catErr: errs.cat || '', catInvalid: errs.cat ? 'true' : 'false', catDesc: errs.cat ? pre + '-ce' : pre + '-cl',
+      hint: cfg.short ? 'Add what happened, when, where, and who was involved, as much as you know.' : 'Say what happened, when, where, and who was involved, as much as you know.',
+      words, onWords: e => { const v = e.target.value.slice(0, 4000); upd(cc => ({ words: v, errs: { ...cc.errs, words: null, limit: false }, ring: false })); },
+      hasWErr: !!errs.words, wErr: errs.words || '', wInvalid: errs.words || errs.limit ? 'true' : 'false',
+      wDesc: pre + '-wh ' + pre + '-wc' + (errs.words ? ' ' + pre + '-we' : ''),
+      taBd: busy ? 'var(--disabled-bg)' : errs.words || errs.limit ? 'var(--danger)' : 'var(--input-border)',
+      taBg: busy ? 'var(--disabled-bg)' : 'var(--surface-raised)', taFg: busy ? 'var(--disabled-fg)' : 'var(--ink)',
+      count: atLimit ? '4,000 of 4,000 characters. Shorten it to send.' : n.toLocaleString('en-US') + ' of 4,000 characters',
+      cntFg: errs.limit ? 'var(--danger)' : atLimit ? 'var(--ink)' : 'var(--ink-muted)', cntW: atLimit ? 600 : 400, cntRole: errs.limit ? 'alert' : 'none',
+      sentText: isPage ? 'Sent to HR. HR replies by Wednesday, October 28.' : 'Sent to HR. HR replies by Wednesday, October 28. You can see its status in My cases.',
+      sentLink: !isPage
+    };
+    const blocks = [];
+    const panel = (kind, withCase) => ({
+      isPanel: true, hid: k + '-' + kind + '-h', hr: D.HR, isCrisis: kind === 'crisis', isSens: kind === 'sens', isUnav: kind === 'unav',
+      offerPrimary: withCase && kind === 'sens' && st.phase === 'offer', offerSecondary: withCase && kind === 'crisis' && st.phase === 'offer',
+      band: withCase && st.phase !== 'offer', bodyPb: withCase && st.phase === 'offer' ? '16px' : '12px', open, c
+    });
+    const ai = segs => ({ isAi: true, segs: segs.map(s => s.mk ? { isMk: true, isText: false, n: String(s.mk), href: D.SRC[s.mk][1], aria: 'Source ' + s.mk + ': ' + D.SRC[s.mk][0].replace(' · ', ', ') } : { isText: true, isMk: false, text: s.t }),
+      chips: [...new Set(segs.filter(s => s.mk).map(s => s.mk))].map(m => ({ n: String(m), label: D.SRC[m][0], href: D.SRC[m][1], aria: 'Source ' + m + ': ' + D.SRC[m][0].replace(' · ', ', ') })) });
+    const work = () => ({ isWork: true, wid: k + '-w', wOpen: st.work, wClosed: !st.work, wExp: st.work ? 'true' : 'false', toggle: () => upd(cc => ({ work: !cc.work })) });
+    if (cfg.kind === 'conv') {
+      if (cfg.thread === 'short') {
+        blocks.push({ isUser: true, text: 'Is a manager allowed to joke about someone’s age at work?' });
+        blocks.push(ai([{ t: 'No. Juniper Row doesn’t allow harassment based on age, and that includes jokes and repeated comments.' }, { mk: 1 }, { t: ' Did something like this happen to you at work?' }]));
+        blocks.push({ isUser: true, text: D.SHORT });
+      } else if (cfg.thread === 'crisis') {
+        blocks.push({ isUser: true, text: 'Everything feels hopeless lately, and I don’t know if I can keep going.' });
+      } else if (cfg.thread === 'unav') {
+        blocks.push({ isUser: true, text: D.Q });
+      } else blocks.push({ isUser: true, text: D.Q });
+      if (cfg.thread === 'crisis') blocks.push(panel('crisis', true));
+      else if (cfg.thread === 'unav') blocks.push(panel('unav', false));
+      else { blocks.push(ai(D.ANSWER)); blocks.push(panel('sens', true)); blocks.push(work()); }
+    } else if (isPage) {
+      if (st.phase === 'offer') blocks.push(cases.length ? { isOffer: true, open } : { isEmpty: true, open });
+      else blocks.push({ isCaseCard: true, c });
+      if (st.phase === 'sent' && cfg.crisis) blocks.push(panel('crisis', false));
+      if (cases.length) blocks.push({ isList: true, cases: cases.map((r, i) => ({ ...r, bt: i ? '1px solid var(--border-subtle)' : '0', isSent: r.st === 'sent', isRev: r.st === 'rev', isFin: r.st === 'fin',
+        badge: r.st === 'sent' ? 'Sent to HR' : r.st === 'rev' ? 'HR is reviewing' : 'HR has finished its review' })) });
+    }
+    const priya = { ini: 'PR', name: 'Priya Raman', title: 'Visual Merchandiser', divider: '0', nav: this.nav(false, isPage ? 'cases' : 'ask') };
+    if (cfg.kind === 'nav') {
+      return { id: k, href: '#' + k, label: cfg.label, rootRef: el => { if (el) this.roots[k] = el; }, cardW: '498px', hasMain: false, isConv: false, isPage: false,
+        sidebars: [{ ...priya, divider: '1px solid var(--border)' }, { ini: 'MB', name: 'Marcus Bell', title: 'Store Manager', divider: '0', nav: this.nav(true, 'ask') }], blocks: [] };
+    }
+    return {
+      id: k, href: '#' + k, label: cfg.label, rootRef: el => { if (el) this.roots[k] = el; }, cardW: '1442px', hasMain: true,
+      isConv: cfg.kind === 'conv', isPage, sidebars: [priya],
+      justify: isPage ? 'flex-start' : 'flex-end', pad: isPage ? '40px 48px 72px' : '24px 40px 16px', gap: isPage ? '24px' : '32px', panelMax: isPage ? '760px' : '680px',
+      blocks
+    };
+  }
+  renderVals() {
+    const D = this.data();
+    if (!this.spinner) this.spinner = React.createElement('svg', { className: 'od-spin', width: 16, height: 16, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: 2, strokeLinecap: 'round', 'aria-hidden': true, style: { animation: 'od-spin 0.9s linear infinite', flex: 'none' } }, React.createElement('path', { d: 'M21 12a9 9 0 1 1-6.219-8.56' }));
+    const H = 'Harassment or discrimination';
+    const P = { prefill: D.Q };
+    const frames = [
+      { id: 'desktop-sensitive-offer', kind: 'conv', ...P, label: 'The answer with its AI label and two sources, then the HR panel with the new body text, the contacts, §7.2, and "Open a confidential case". Show your work stays collapsed under the panel.' },
+      { id: 'desktop-form', kind: 'conv', ...P, init: { phase: 'form', words: D.Q }, label: 'The button pressed: the form opens in a quiet band at the foot of the panel, replacing the button. Nothing chosen; the words are prefilled from the flagged message.' },
+      { id: 'desktop-form-ready', kind: 'conv', ...P, init: { phase: 'form', words: D.Q, cat: H, ring: true }, label: 'Ready: "Harassment or discrimination" chosen, focus ring on "Send to HR".' },
+      { id: 'desktop-form-short', kind: 'conv', thread: 'short', short: true, prefill: D.SHORT, init: { phase: 'form', words: D.SHORT }, label: 'A short flagged reply: the words prefill as typed, and the hint becomes a neutral prompt to add more.' },
+      { id: 'desktop-form-errors', kind: 'conv', ...P, init: { phase: 'form', words: D.SSN, errs: { cat: 'Choose what this is about.', words: 'That looks like a Social Security or card number. Please take it out before sending.' } }, label: 'Send pressed with no category and a number that looks like a Social Security number: two field errors, in the error color, announced as alerts.' },
+      { id: 'desktop-form-limit', kind: 'conv', ...P, init: { phase: 'form', words: D.LONG, cat: H }, label: 'The words at the 4,000-character limit: the counter says to shorten it. Ink, not red, until Send is pressed.' },
+      { id: 'desktop-sending', kind: 'conv', ...P, init: { phase: 'sending', words: D.Q, cat: H }, label: 'Sending: spinner and "Sending…", fields and "Not now" disabled.' },
+      { id: 'desktop-sent', kind: 'conv', ...P, init: { phase: 'sent', words: D.Q, cat: H }, label: 'Sent: the form becomes one quiet line with a lock and "View in My cases". The case button is gone. A reload shows exactly this.' },
+      { id: 'desktop-send-error', kind: 'conv', ...P, init: { phase: 'sendErr', words: D.Q, cat: H }, label: 'The send failed: the refusal message above the buttons, "Try again" in place of "Send to HR". Category and words are kept.' },
+      { id: 'desktop-waiting-limit', kind: 'conv', ...P, init: { phase: 'limit' }, label: 'Five cases already waiting: the band says so in place of the case button, with the panel’s HR contacts directly above.' },
+      { id: 'desktop-crisis-offer', kind: 'conv', thread: 'crisis', prefill: 'Everything feels hopeless lately, and I don’t know if I can keep going.', label: 'Screen 07’s crisis panel, unchanged and first, with a secondary "Open a confidential case" after the contacts.' },
+      { id: 'desktop-cant-answer-link', kind: 'conv', thread: 'unav', label: '"Can’t answer right now", with "Write to HR" (to My cases) after the contacts. No case button here.' },
+      { id: 'desktop-my-cases-empty', kind: 'page', init: { cases: [] }, label: 'My cases, empty: the intro and one primary action.' },
+      { id: 'desktop-my-cases', kind: 'page', init: { cases: D.CASES }, label: 'Three cases, newest first: category, sent date, status, and a date line. Rows aren’t links and never show the words.' },
+      { id: 'desktop-my-cases-form', kind: 'page', init: { cases: D.CASES, phase: 'form' }, label: 'The form on My cases: same fields and five lines, empty words with the hint.' },
+      { id: 'desktop-sent-crisis', kind: 'page', crisis: true, init: { cases: D.CASES, phase: 'sent', cat: H }, label: 'Sent from My cases, where the safety check routed the words to crisis: the sent line, then screen 07’s crisis panel in full, then the list.' },
+      { id: 'desktop-nav', kind: 'nav', label: 'Priya’s sidebar with My cases after Time off; Marcus’s adds Approvals after Handbook.' }
+    ];
+    const glance = [['92 hours', 'PTO available', 'Time off', '/time-off'], ['0', 'requests pending', 'Time off', '/time-off'], ['Sep 12', 'Handbook updated', 'Handbook', '/handbook']]
+      .map(([v, cap, dest, href]) => ({ v, cap, dest, href, aria: v + ' ' + cap + '. Open ' + dest }));
+    return { frames: frames.map(f => this.frame(f)), glance, cardRef: this.cardRef };
+  }
+}
+</script>
+</body>
+</html>

@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from 'vitest'
 import type { CitationOut } from '@/api/generated'
 import { citation } from '@/test/assistant-fixtures'
 import { Answer } from './answer'
+import { AnswerViewerContext, type AnswerViewer } from './answer-viewer'
 import * as linkSpans from './link-spans'
 
 // A stand-in for the real marker (Task 35): a button named by its marker number.
@@ -15,10 +16,17 @@ function renderMarker(c: CitationOut) {
   )
 }
 
-function renderAnswer(text: string, citations: CitationOut[] = [], caret = false) {
+function renderAnswer(
+  text: string,
+  citations: CitationOut[] = [],
+  caret = false,
+  viewer: AnswerViewer = null,
+) {
   return render(
     <MemoryRouter>
-      <Answer text={text} citations={citations} renderMarker={renderMarker} caret={caret} />
+      <AnswerViewerContext value={viewer}>
+        <Answer text={text} citations={citations} renderMarker={renderMarker} caret={caret} />
+      </AnswerViewerContext>
     </MemoryRouter>,
   )
 }
@@ -140,6 +148,73 @@ describe('Answer: raw HTML and links', () => {
     renderAnswer('Ask [Elena](/directory/abc).')
     expect(screen.getByRole('link', { name: 'Elena' })).toHaveAttribute('href', '/directory/abc')
   })
+
+  it.each([
+    ['/my-cases', '/my-cases'],
+    ['/my-cases with a query', '/my-cases?x=1'],
+    ['/my-cases with a fragment', '/my-cases#top'],
+  ])('links %s for a person', (_name, href) => {
+    renderAnswer(`Open [it](${href}).`, [], false, 'person')
+    expect(screen.getByRole('link', { name: 'it' })).toHaveAttribute('href', href)
+  })
+
+  it.each([
+    ['/cases', '/cases'],
+    ['/cases with a query', '/cases?status=open'],
+    ['a case page', '/cases/abc'],
+  ])('links %s for HR', (_name, href) => {
+    renderAnswer(`Open [it](${href}).`, [], false, 'hr')
+    expect(screen.getByRole('link', { name: 'it' })).toHaveAttribute('href', href)
+  })
+
+  it.each([
+    ['HR, a link to My cases', 'hr', '/my-cases'],
+    ['a person, a link to the queue', 'person', '/cases'],
+    ['a person, a link to a case', 'person', '/cases/abc'],
+    ['nobody known, My cases', null, '/my-cases'],
+    ['nobody known, the queue', null, '/cases'],
+  ] as const)('shows %s as plain text', (_name, viewer, href) => {
+    const { container } = renderAnswer(`Open [it](${href}).`, [], false, viewer)
+    expect(container.querySelector('a')).toBeNull()
+    expect(container).toHaveTextContent('Open it.')
+  })
+
+  it.each(['person', 'hr'] as const)(
+    'shows a page below My cases as plain text for %s',
+    (viewer) => {
+      const { container } = renderAnswer('Before [x](/my-cases/abc) after.', [], false, viewer)
+      expect(container.querySelector('a')).toBeNull()
+    },
+  )
+
+  it.each(['person', 'hr'] as const)(
+    'still links the handbook and the directory for %s',
+    (viewer) => {
+      renderAnswer('See [a](/handbook/4.3) and [b](/directory/abc).', [], false, viewer)
+      expect(screen.getAllByRole('link')).toHaveLength(2)
+    },
+  )
+
+  describe.each([
+    ['person', '/my-cases'],
+    ['hr', '/cases'],
+  ] as const)(
+    'for %s, the traversal and encoding table holds under its own page',
+    (viewer, base) => {
+      it.each([
+        ['a path that only starts like it', `[x](${base}X)`],
+        ['a dot-dot path', `[x](${base}/../admin)`],
+        ['an encoded dot-dot path', `[x](${base}/%2e%2e/admin)`],
+        ['a backslash', `[x](${base}/a\\b)`],
+        ['an encoded slash', `[x](${base}%2Fabc)`],
+        ['a bad percent escape', `[x](${base}/%zz)`],
+      ])('shows %s as its plain text, with no anchor', (_name, markdown) => {
+        const { container } = renderAnswer(`Before ${markdown} after.`, [], false, viewer)
+        expect(container.querySelector('a')).toBeNull()
+        expect(container).toHaveTextContent('Before x after.')
+      })
+    },
+  )
 
   it.each([
     ['an https link', '[x](https://evil.example)'],

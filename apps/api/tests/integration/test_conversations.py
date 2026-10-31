@@ -11,32 +11,46 @@ from collections.abc import Sequence
 from datetime import date, datetime, timedelta
 from decimal import Decimal
 from typing import Any
-from uuid import UUID
+from uuid import UUID, uuid4
 
 import pytest
-from sqlalchemy import text
+from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 
 from app.ai.conversations import (
+    ConversationCipher,
     Pins,
     SourceEntry,
     StoredMessage,
     TurnFinished,
     TurnOutcome,
     TurnRunning,
+    add_feedback,
     append_messages,
+    conversation_cipher,
+    conversation_turns,
     create_conversation,
     current_conversation,
     finish_turn,
     model_history,
+    open_reason,
     recover_abandoned,
     search_sources,
     start_turn,
 )
 from app.ai.transport import count_search_results
+from app.core.encryption import DecryptionFailed, new_data_key, wrap_aad
+from app.db.models import AiConversation, AiFeedback, AiMessage, AiTurn
 from app.db.tenancy import TenantContext, tenant_session
 from app.policy import Actor
-from tests.integration.conftest import MakeTenant, SampleTenant
+from tests.integration.conftest import (
+    TEST_KEYS,
+    MakeTenant,
+    OpenTurn,
+    SampleTenant,
+    begin_turn,
+    open_turns,
+)
 
 pytestmark = pytest.mark.integration
 
@@ -89,10 +103,40 @@ def search_result_message(entries: tuple[SourceEntry, ...]) -> StoredMessage:
     return StoredMessage("user", blocks, entries)
 
 
+async def cipher_of(db: AsyncSession, conversation_id: UUID) -> ConversationCipher:
+    conversation = await db.get(AiConversation, conversation_id)
+    assert conversation is not None
+    return conversation_cipher(TEST_KEYS, conversation)
+
+
+async def append(
+    db: AsyncSession, conversation_id: UUID, turn_id: UUID, messages: Sequence[StoredMessage]
+) -> None:
+    """`append_messages` with the conversation's own key."""
+    await append_messages(
+        db, conversation_id, turn_id, messages, await cipher_of(db, conversation_id)
+    )
+
+
+async def read_history(db: AsyncSession, conversation_id: UUID) -> list[dict[str, Any]]:
+    """`model_history` with the conversation's own key."""
+    return await model_history(db, conversation_id, await cipher_of(db, conversation_id))
+
+
+async def finish(db: AsyncSession, turn_id: UUID, outcome: TurnOutcome) -> None:
+    """`finish_turn` with the key of the turn's conversation."""
+    turn = await db.get(AiTurn, turn_id)
+    if turn is None:  # A turn that is not there: the store's own refusal is what the test wants.
+        cipher = ConversationCipher(UUID(int=0), uuid4(), new_data_key())
+    else:
+        cipher = await cipher_of(db, turn.conversation_id)
+    await finish_turn(db, turn_id, outcome, cipher)
+
+
 async def new_conversation(app_engine: AsyncEngine, tenant: SampleTenant) -> UUID:
     actor = actor_of(tenant, tenant.employee_id)
     async with tenant_session(app_engine, context_of(tenant)) as db:
-        return (await create_conversation(db, actor, PINS)).id
+        return (await create_conversation(db, actor, PINS, TEST_KEYS)).id
 
 
 async def new_turn(
@@ -104,7 +148,7 @@ async def new_turn(
         conversation = await current_conversation(db, actor)
         assert conversation is not None
         assert conversation.id == conversation_id
-        return (await start_turn(db, conversation, question)).id
+        return (await begin_turn(db, conversation, question)).id
 
 
 # A thinking block is signed over its exact bytes. These have keys out of alphabetical order, text
@@ -162,7 +206,7 @@ async def test_history_comes_back_exactly_as_it_was_stored(
     conversation_id = await new_conversation(app_engine, tenant)
     turn_id = await new_turn(app_engine, tenant, conversation_id)
     async with tenant_session(app_engine, context_of(tenant)) as db:
-        await append_messages(
+        await append(
             db,
             conversation_id,
             turn_id,
@@ -174,22 +218,21 @@ async def test_history_comes_back_exactly_as_it_was_stored(
         )
 
     async with tenant_session(app_engine, context_of(tenant)) as db:
-        history = await model_history(db, conversation_id)
-        stored: Sequence[str] = (
-            (
-                await db.execute(
-                    text(
-                        "SELECT content::text FROM ai_messages WHERE conversation_id = :c"
-                        " ORDER BY position"
-                    ),
-                    {"c": conversation_id},
-                )
+        history = await read_history(db, conversation_id)
+        cipher = await cipher_of(db, conversation_id)
+        sealed = (
+            await db.execute(
+                select(AiMessage.id, AiMessage.content_ciphertext)
+                .where(AiMessage.conversation_id == conversation_id)
+                .order_by(AiMessage.position)
             )
-            .scalars()
-            .all()
-        )
+        ).all()
+        stored = [
+            cipher.open_text(ciphertext, "ai_messages", "content_ciphertext", message_id)
+            for message_id, ciphertext in sealed
+        ]
 
-    # What SQLAlchemy serialized is what Postgres kept, byte for byte.
+    # What was sealed is the JSON text of the content, byte for byte.
     assert list(stored) == [
         json.dumps(TRICKY_USER_CONTENT),
         json.dumps(TRICKY_ASSISTANT_CONTENT),
@@ -211,7 +254,7 @@ async def test_positions_are_consecutive_across_appends(
     conversation_id = await new_conversation(app_engine, tenant)
     turn_id = await new_turn(app_engine, tenant, conversation_id)
     async with tenant_session(app_engine, context_of(tenant)) as db:
-        await append_messages(
+        await append(
             db,
             conversation_id,
             turn_id,
@@ -221,7 +264,7 @@ async def test_positions_are_consecutive_across_appends(
             ],
         )
     async with tenant_session(app_engine, context_of(tenant)) as db:
-        await append_messages(
+        await append(
             db,
             conversation_id,
             turn_id,
@@ -232,15 +275,15 @@ async def test_positions_are_consecutive_across_appends(
         positions = (
             await db.execute(
                 text(
-                    "SELECT position, content->0->>'text' FROM ai_messages"
+                    "SELECT position, role FROM ai_messages"
                     " WHERE conversation_id = :c ORDER BY position"
                 ),
                 {"c": conversation_id},
             )
         ).all()
-        history = await model_history(db, conversation_id)
+        history = await read_history(db, conversation_id)
 
-    assert [tuple(row) for row in positions] == [(0, "one"), (1, "two"), (2, "three")]
+    assert [tuple(row) for row in positions] == [(0, "user"), (1, "assistant"), (2, "user")]
     assert [m["content"][0]["text"] for m in history] == ["one", "two", "three"]
 
 
@@ -256,7 +299,7 @@ async def test_a_second_running_turn_is_refused_and_the_transaction_survives(
         conversation = await current_conversation(db, actor)
         assert conversation is not None
         with pytest.raises(TurnRunning):
-            await start_turn(db, conversation, "Another question")
+            await begin_turn(db, conversation, "Another question")
         # The caller's transaction is still usable: the failed insert rolled back to a savepoint.
         assert (await db.execute(text("SELECT 1"))).scalar_one() == 1
         still_there = await current_conversation(db, actor)
@@ -270,7 +313,7 @@ async def test_a_new_turn_starts_once_the_running_one_has_finished(
     conversation_id = await new_conversation(app_engine, tenant)
     turn_id = await new_turn(app_engine, tenant, conversation_id)
     async with tenant_session(app_engine, context_of(tenant)) as db:
-        await finish_turn(db, turn_id, TurnOutcome(status="completed", answer_text="Done."))
+        await finish(db, turn_id, TurnOutcome(status="completed", answer_text="Done."))
 
     await new_turn(app_engine, tenant, conversation_id, "And another?")
 
@@ -341,11 +384,11 @@ async def test_a_finished_turn_cannot_be_finished_again(
         total_ms=2100,
     )
     async with tenant_session(app_engine, context_of(tenant)) as db:
-        await finish_turn(db, turn_id, outcome)
+        await finish(db, turn_id, outcome)
 
     async with tenant_session(app_engine, context_of(tenant)) as db:
         with pytest.raises(TurnFinished):
-            await finish_turn(db, turn_id, TurnOutcome(status="failed", error_code="again"))
+            await finish(db, turn_id, TurnOutcome(status="failed", error_code="again"))
         # The transaction survived the refusal.
         assert (await db.execute(text("SELECT 1"))).scalar_one() == 1
 
@@ -353,16 +396,19 @@ async def test_a_finished_turn_cannot_be_finished_again(
         row = (
             await connection.execute(
                 text(
-                    "SELECT status, answer_text, citations, served_by_models, cost_usd,"
+                    "SELECT status, answer_ciphertext, citations, served_by_models, cost_usd,"
                     " cache_write_tokens, total_ms, ended_at IS NOT NULL"
                     " FROM ai_turns WHERE id = :id"
                 ),
                 {"id": turn_id},
             )
         ).one()
+    async with tenant_session(app_engine, context_of(tenant)) as db:
+        cipher = await cipher_of(db, conversation_id)
+    answer = cipher.open_text(row[1], "ai_turns", "answer_ciphertext", turn_id)
     assert tuple(row) == (
         "completed",
-        "You get 40 hours.",
+        row[1],
         [{"marker": 1, "sectionId": "CA-4.3"}],
         ["claude-opus-5-5"],
         Decimal("0.0504"),
@@ -370,6 +416,7 @@ async def test_a_finished_turn_cannot_be_finished_again(
         2100,
         True,
     )
+    assert answer == "You get 40 hours."
 
 
 async def test_a_turn_finished_without_a_verdict_has_a_sql_null_guard_verdict(
@@ -379,7 +426,7 @@ async def test_a_turn_finished_without_a_verdict_has_a_sql_null_guard_verdict(
     conversation_id = await new_conversation(app_engine, tenant)
     turn_id = await new_turn(app_engine, tenant, conversation_id)
     async with tenant_session(app_engine, context_of(tenant)) as db:
-        await finish_turn(db, turn_id, TurnOutcome(status="failed", error_code="budget-daily"))
+        await finish(db, turn_id, TurnOutcome(status="failed", error_code="budget-daily"))
 
     async with tenant_session(app_engine, context_of(tenant)) as db:
         is_null: bool = (
@@ -432,7 +479,7 @@ async def test_sources_are_stored_for_search_results_inside_tool_results(
     ]
 
     async with tenant_session(app_engine, context_of(tenant)) as db:
-        await append_messages(
+        await append(
             db,
             conversation_id,
             turn_id,
@@ -455,7 +502,7 @@ async def test_sources_that_do_not_match_the_search_results_are_refused(
 
     async with tenant_session(app_engine, context_of(tenant)) as db:
         with pytest.raises(ValueError, match="search_result"):
-            await append_messages(
+            await append(
                 db,
                 conversation_id,
                 turn_id,
@@ -468,7 +515,7 @@ async def test_sources_that_do_not_match_the_search_results_are_refused(
             )
 
     async with tenant_session(app_engine, context_of(tenant)) as db:
-        assert await model_history(db, conversation_id) == []
+        assert await read_history(db, conversation_id) == []
 
 
 async def test_sources_on_a_message_with_no_search_results_are_refused(
@@ -480,7 +527,7 @@ async def test_sources_on_a_message_with_no_search_results_are_refused(
 
     async with tenant_session(app_engine, context_of(tenant)) as db:
         with pytest.raises(ValueError, match="search_result"):
-            await append_messages(
+            await append(
                 db,
                 conversation_id,
                 turn_id,
@@ -498,7 +545,7 @@ async def test_finishing_a_turn_that_does_not_exist_fails(
     tenant = await make_tenant()
     async with tenant_session(app_engine, context_of(tenant)) as db:
         with pytest.raises(LookupError):
-            await finish_turn(db, UUID(int=1), TurnOutcome(status="completed"))
+            await finish(db, UUID(int=1), TurnOutcome(status="completed"))
 
 
 async def test_search_sources_run_in_order_across_turns_even_a_recovered_one(
@@ -508,7 +555,7 @@ async def test_search_sources_run_in_order_across_turns_even_a_recovered_one(
     conversation_id = await new_conversation(app_engine, tenant)
     first = await new_turn(app_engine, tenant, conversation_id, "First question")
     async with tenant_session(app_engine, context_of(tenant)) as db:
-        await append_messages(
+        await append(
             db,
             conversation_id,
             first,
@@ -528,7 +575,7 @@ async def test_search_sources_run_in_order_across_turns_even_a_recovered_one(
 
     second = await new_turn(app_engine, tenant, conversation_id, "Second question")
     async with tenant_session(app_engine, context_of(tenant)) as db:
-        await append_messages(
+        await append(
             db,
             conversation_id,
             second,
@@ -551,7 +598,7 @@ async def test_source_entries_are_stored_with_camel_case_keys(
     conversation_id = await new_conversation(app_engine, tenant)
     turn_id = await new_turn(app_engine, tenant, conversation_id)
     async with tenant_session(app_engine, context_of(tenant)) as db:
-        await append_messages(
+        await append(
             db,
             conversation_id,
             turn_id,
@@ -662,13 +709,13 @@ async def test_a_message_cannot_be_stored_with_a_turn_of_another_conversation(
 
     async with tenant_session(app_engine, context_of(tenant)) as db:
         with pytest.raises(ValueError, match="turn"):
-            await append_messages(db, second, first_turn, [message])
+            await append(db, second, first_turn, [message])
         with pytest.raises(ValueError, match="turn"):
-            await append_messages(db, second, UUID(int=1), [message])
+            await append(db, second, UUID(int=1), [message])
         # Its own turn is fine, and nothing was stored by the refused calls.
-        assert await model_history(db, second) == []
-        await append_messages(db, first, first_turn, [message])
-        assert len(await model_history(db, first)) == 1
+        assert await read_history(db, second) == []
+        await append(db, first, first_turn, [message])
+        assert len(await read_history(db, first)) == 1
 
 
 async def test_every_field_of_a_turn_outcome_reaches_the_row(
@@ -683,7 +730,9 @@ async def test_every_field_of_a_turn_outcome_reaches_the_row(
         "answer_text": "Partial answer",
         "citations": [{"marker": 1, "sectionId": "CA-4.3"}],
         "guard_verdict": {"verdict": "pass", "reason": "ok"},
-        "tool_calls": [{"name": "search_handbook", "ok": False, "durationMs": 7}],
+        "tool_calls": [
+            {"name": "search_handbook", "inputSummary": "sick leave", "ok": False, "durationMs": 7}
+        ],
         "sections_retrieved": [{"sectionId": "CA-4.3", "passageIds": ["p2"]}],
         "served_by_models": ["claude-opus-5-5", "claude-opus-5"],
         "effort": "high",
@@ -704,11 +753,13 @@ async def test_every_field_of_a_turn_outcome_reaches_the_row(
     assert set(expected) == {f.name for f in dataclasses.fields(TurnOutcome)}
     outcome = TurnOutcome(**expected)
     async with tenant_session(app_engine, context_of(tenant)) as db:
-        await finish_turn(db, turn_id, outcome)
+        await finish(db, turn_id, outcome)
 
-    columns = ", ".join(expected)
+    # Every field is a column of the same name, but the answer is `answer_ciphertext` and the input
+    # summaries in `tool_calls` are sealed.
+    columns = ", ".join("answer_ciphertext" if name == "answer_text" else name for name in expected)
     async with owner_engine.connect() as connection:
-        row = (
+        row = dict(
             (
                 await connection.execute(
                     text(f"SELECT {columns} FROM ai_turns WHERE id = :id"),  # noqa: S608
@@ -718,7 +769,13 @@ async def test_every_field_of_a_turn_outcome_reaches_the_row(
             .mappings()
             .one()
         )
-    assert dict(row) == expected
+    async with tenant_session(app_engine, context_of(tenant)) as db:
+        cipher = await cipher_of(db, conversation_id)
+    row["answer_text"] = cipher.open_text(
+        row.pop("answer_ciphertext"), "ai_turns", "answer_ciphertext", turn_id
+    )
+    row["tool_calls"] = cipher.open_tool_calls(turn_id, row["tool_calls"])
+    assert row == expected
 
 
 async def test_a_message_cannot_be_appended_to_a_turn_that_has_ended(
@@ -730,14 +787,14 @@ async def test_a_message_cannot_be_appended_to_a_turn_that_has_ended(
     conversation_id = await new_conversation(app_engine, tenant)
     turn_id = await new_turn(app_engine, tenant, conversation_id)
     async with tenant_session(app_engine, context_of(tenant)) as db:
-        await finish_turn(db, turn_id, TurnOutcome(status="failed", error_code="abandoned"))
+        await finish(db, turn_id, TurnOutcome(status="failed", error_code="abandoned"))
     late = StoredMessage("assistant", [{"type": "text", "text": "I was slow"}])
 
     async with tenant_session(app_engine, context_of(tenant)) as db:
         with pytest.raises(TurnFinished):
-            await append_messages(db, conversation_id, turn_id, [late])
+            await append(db, conversation_id, turn_id, [late])
         # The transaction is still usable, and nothing was stored.
-        assert await model_history(db, conversation_id) == []
+        assert await read_history(db, conversation_id) == []
 
 
 async def wait_for_a_blocked_update(owner_engine: AsyncEngine) -> None:
@@ -776,7 +833,7 @@ async def test_appending_locks_the_turn_so_recovery_waits_for_it(
     # The append checks that the turn is running and holds it so until its transaction ends. If it
     # didn't, recovery could fail the turn between that check and the insert.
     async with tenant_session(app_engine, context_of(tenant)) as db:
-        await append_messages(
+        await append(
             db, conversation_id, turn_id, [StoredMessage("user", [{"type": "text", "text": "Hi"}])]
         )
         recovery = asyncio.create_task(recover())
@@ -832,8 +889,8 @@ async def test_a_tool_call_is_stored_with_all_of_its_results_or_not_at_all(
 
     async with tenant_session(app_engine, context_of(tenant)) as db:
         with pytest.raises(ValueError, match="tool_use"):
-            await append_messages(db, conversation_id, turn_id, batch)
-        assert await model_history(db, conversation_id) == []
+            await append(db, conversation_id, turn_id, batch)
+        assert await read_history(db, conversation_id) == []
 
 
 async def test_a_tool_call_with_every_result_is_stored(
@@ -844,7 +901,7 @@ async def test_a_tool_call_with_every_result_is_stored(
     turn_id = await new_turn(app_engine, tenant, conversation_id)
 
     async with tenant_session(app_engine, context_of(tenant)) as db:
-        await append_messages(
+        await append(
             db,
             conversation_id,
             turn_id,
@@ -857,7 +914,7 @@ async def test_a_tool_call_with_every_result_is_stored(
         )
 
     async with tenant_session(app_engine, context_of(tenant)) as db:
-        history = await model_history(db, conversation_id)
+        history = await read_history(db, conversation_id)
     assert [m["role"] for m in history] == ["user", "assistant", "user", "assistant"]
 
 
@@ -871,7 +928,7 @@ async def test_a_turn_cannot_be_finished_as_running(
 
     async with tenant_session(app_engine, context_of(tenant)) as db:
         with pytest.raises(ValueError, match="running"):
-            await finish_turn(db, turn_id, TurnOutcome(status="running"))  # type: ignore[arg-type]
+            await finish(db, turn_id, TurnOutcome(status="running"))  # type: ignore[arg-type]
 
 
 async def test_an_assistant_message_with_no_content_is_refused(
@@ -885,7 +942,7 @@ async def test_an_assistant_message_with_no_content_is_refused(
 
     async with tenant_session(app_engine, context_of(tenant)) as db:
         with pytest.raises(ValueError, match="empty"):
-            await append_messages(
+            await append(
                 db,
                 conversation_id,
                 turn_id,
@@ -894,7 +951,7 @@ async def test_an_assistant_message_with_no_content_is_refused(
                     StoredMessage("assistant", []),
                 ],
             )
-        assert await model_history(db, conversation_id) == []
+        assert await read_history(db, conversation_id) == []
 
 
 async def started_and_ended(db: AsyncSession, turn_id: UUID) -> tuple[datetime, datetime]:
@@ -917,9 +974,9 @@ async def test_a_finished_turn_ends_when_it_is_written_not_when_the_transaction_
         conversation = await current_conversation(db, actor)
         assert conversation is not None
         assert conversation.id == conversation_id
-        turn = await start_turn(db, conversation, "Quick question")
+        turn = await begin_turn(db, conversation, "Quick question")
         await asyncio.sleep(0.05)
-        await finish_turn(db, turn.id, TurnOutcome(status="completed"))
+        await finish(db, turn.id, TurnOutcome(status="completed"))
         started, ended = await started_and_ended(db, turn.id)
 
     assert ended - started >= timedelta(milliseconds=40)
@@ -967,7 +1024,7 @@ async def test_appending_does_not_block_writes_that_point_at_the_turn(
             )
 
     async with tenant_session(app_engine, context_of(tenant)) as db:
-        await append_messages(
+        await append(
             db, conversation_id, turn_id, [StoredMessage("user", [{"type": "text", "text": "Hi"}])]
         )
         await asyncio.wait_for(write_a_spend_row(), timeout=3)
@@ -1000,8 +1057,8 @@ async def test_a_tool_result_must_answer_the_tool_use_just_before_it_in_the_same
 
     async with tenant_session(app_engine, context_of(tenant)) as db:
         with pytest.raises(ValueError, match="tool_result"):
-            await append_messages(db, conversation_id, turn_id, batch)
-        assert await model_history(db, conversation_id) == []
+            await append(db, conversation_id, turn_id, batch)
+        assert await read_history(db, conversation_id) == []
 
 
 async def test_tool_results_must_come_before_any_other_content_in_their_message(
@@ -1016,12 +1073,12 @@ async def test_tool_results_must_come_before_any_other_content_in_their_message(
 
     async with tenant_session(app_engine, context_of(tenant)) as db:
         with pytest.raises(ValueError, match="before"):
-            await append_messages(db, conversation_id, turn_id, [tool_call("toolu_1"), late])
-        assert await model_history(db, conversation_id) == []
+            await append(db, conversation_id, turn_id, [tool_call("toolu_1"), late])
+        assert await read_history(db, conversation_id) == []
         # Text after the results is fine.
         early = StoredMessage("user", [*answer.content, {"type": "text", "text": "Also, a note."}])
-        await append_messages(db, conversation_id, turn_id, [tool_call("toolu_1"), early])
-        assert len(await model_history(db, conversation_id)) == 2
+        await append(db, conversation_id, turn_id, [tool_call("toolu_1"), early])
+        assert len(await read_history(db, conversation_id)) == 2
 
 
 @pytest.mark.parametrize("text_value", ["", "   ", "\n\t"])
@@ -1039,8 +1096,8 @@ async def test_a_message_with_an_empty_text_block_is_refused(
 
     async with tenant_session(app_engine, context_of(tenant)) as db:
         with pytest.raises(ValueError, match="empty"):
-            await append_messages(db, conversation_id, turn_id, [message])
-        assert await model_history(db, conversation_id) == []
+            await append(db, conversation_id, turn_id, [message])
+        assert await read_history(db, conversation_id) == []
 
 
 async def test_a_thinking_block_with_no_visible_text_is_accepted(
@@ -1059,5 +1116,312 @@ async def test_a_thinking_block_with_no_visible_text_is_accepted(
     )
 
     async with tenant_session(app_engine, context_of(tenant)) as db:
-        await append_messages(db, conversation_id, turn_id, [message])
-        assert len(await model_history(db, conversation_id)) == 1
+        await append(db, conversation_id, turn_id, [message])
+        assert len(await read_history(db, conversation_id)) == 1
+
+
+# --- Encrypted text (Phase 6, stage 1) --------------------------------------------------------
+
+WORDS = "my manager keeps making comments about my age"
+
+
+async def raw_rows(owner_engine: AsyncEngine, sql: str, **params: Any) -> list[Any]:
+    """Read as the database owner, which sees the stored bytes and not the API's view."""
+    async with owner_engine.connect() as connection:
+        return list((await connection.execute(text(sql), params)).all())
+
+
+async def test_a_new_conversation_gets_a_data_key_wrapped_for_its_sandbox_and_id(
+    app_engine: AsyncEngine, owner_engine: AsyncEngine, make_tenant: MakeTenant
+) -> None:
+    tenant = await make_tenant()
+    conversation_id = await new_conversation(app_engine, tenant)
+
+    [(key_id, wrapped)] = await raw_rows(
+        owner_engine,
+        "SELECT key_id, wrapped_key FROM ai_conversations WHERE id = :id",
+        id=conversation_id,
+    )
+
+    # The ID was made before the key was wrapped, so the wrapped key is bound to it.
+    own = wrap_aad(tenant.id, "ai_conversations", conversation_id)
+    assert len(TEST_KEYS.unwrap(key_id, bytes(wrapped), aad=own)) == 32
+    for other in (
+        wrap_aad(uuid4(), "ai_conversations", conversation_id),
+        wrap_aad(tenant.id, "ai_conversations", uuid4()),
+        wrap_aad(tenant.id, "ai_turns", conversation_id),
+    ):
+        with pytest.raises(DecryptionFailed):
+            TEST_KEYS.unwrap(key_id, bytes(wrapped), aad=other)
+    # Two conversations never share a key.
+    other_id = await new_conversation(app_engine, tenant)
+    [(_, other_wrapped)] = await raw_rows(
+        owner_engine,
+        "SELECT key_id, wrapped_key FROM ai_conversations WHERE id = :id",
+        id=other_id,
+    )
+    assert bytes(other_wrapped) != bytes(wrapped)
+
+
+async def test_messages_are_sealed_and_the_raw_column_holds_no_plaintext(
+    app_engine: AsyncEngine, owner_engine: AsyncEngine, make_tenant: MakeTenant
+) -> None:
+    tenant = await make_tenant()
+    conversation_id = await new_conversation(app_engine, tenant)
+    turn_id = await new_turn(app_engine, tenant, conversation_id)
+    async with tenant_session(app_engine, context_of(tenant)) as db:
+        await append(
+            db,
+            conversation_id,
+            turn_id,
+            [
+                StoredMessage("user", [{"type": "text", "text": WORDS}]),
+                StoredMessage("assistant", [{"type": "text", "text": "I am sorry to hear that."}]),
+            ],
+        )
+
+    rows = await raw_rows(
+        owner_engine,
+        "SELECT content_ciphertext, row_to_json(m)::text FROM ai_messages m"
+        " WHERE conversation_id = :c ORDER BY position",
+        c=conversation_id,
+    )
+
+    assert len(rows) == 2
+    for ciphertext, whole_row in rows:
+        assert WORDS.encode() not in bytes(ciphertext)
+        assert b"sorry" not in bytes(ciphertext)
+        assert WORDS not in whole_row
+        assert "sorry" not in whole_row
+        assert bytes(ciphertext)[:1] == b"\x01"  # The format's version byte.
+    # Two messages, two ciphertexts: each is sealed for its own row.
+    assert bytes(rows[0][0]) != bytes(rows[1][0])
+
+
+async def test_a_message_ciphertext_copied_to_another_row_fails_to_read(
+    app_engine: AsyncEngine, owner_engine: AsyncEngine, make_tenant: MakeTenant
+) -> None:
+    tenant = await make_tenant()
+    conversation_id = await new_conversation(app_engine, tenant)
+    turn_id = await new_turn(app_engine, tenant, conversation_id)
+    async with tenant_session(app_engine, context_of(tenant)) as db:
+        await append(
+            db,
+            conversation_id,
+            turn_id,
+            [
+                StoredMessage("user", [{"type": "text", "text": "one"}]),
+                StoredMessage("assistant", [{"type": "text", "text": "two"}]),
+            ],
+        )
+    async with owner_engine.begin() as connection:
+        await connection.execute(
+            text(
+                "UPDATE ai_messages SET content_ciphertext ="
+                " (SELECT content_ciphertext FROM ai_messages WHERE position = 0"
+                "  AND conversation_id = :c) WHERE position = 1 AND conversation_id = :c"
+            ),
+            {"c": conversation_id},
+        )
+
+    async with tenant_session(app_engine, context_of(tenant)) as db:
+        with pytest.raises(DecryptionFailed) as raised:
+            await read_history(db, conversation_id)
+    assert str(raised.value) == "The value could not be decrypted."
+
+
+async def test_a_summary_swapped_between_two_tool_calls_fails_to_open(
+    app_engine: AsyncEngine, owner_engine: AsyncEngine, make_tenant: MakeTenant
+) -> None:
+    tenant = await make_tenant()
+    conversation_id = await new_conversation(app_engine, tenant)
+    turn_id = await new_turn(app_engine, tenant, conversation_id)
+    calls = [
+        {"name": "search_handbook", "inputSummary": "sick leave", "ok": True, "durationMs": 4},
+        {"name": "search_handbook", "inputSummary": WORDS, "ok": True, "durationMs": 5},
+    ]
+    async with tenant_session(app_engine, context_of(tenant)) as db:
+        await finish(db, turn_id, TurnOutcome(status="completed", tool_calls=calls))
+        cipher = await cipher_of(db, conversation_id)
+    [(stored,)] = await raw_rows(
+        owner_engine, "SELECT tool_calls FROM ai_turns WHERE id = :id", id=turn_id
+    )
+
+    # The names, results, and durations stay readable; the summaries are not.
+    assert [c["name"] for c in stored] == ["search_handbook", "search_handbook"]
+    assert "sick leave" not in json.dumps(stored)
+    assert WORDS not in json.dumps(stored)
+    assert [c["inputSummary"] for c in cipher.open_tool_calls(turn_id, stored)] == [
+        "sick leave",
+        WORDS,
+    ]
+    swapped = [
+        {**stored[0], "inputSummary": stored[1]["inputSummary"]},
+        {**stored[1], "inputSummary": stored[0]["inputSummary"]},
+    ]
+    with pytest.raises(DecryptionFailed):
+        cipher.open_tool_calls(turn_id, swapped)
+
+
+async def test_the_question_is_sealed_when_the_turn_begins_and_the_answer_when_it_ends(
+    app_engine: AsyncEngine, owner_engine: AsyncEngine, make_tenant: MakeTenant
+) -> None:
+    tenant = await make_tenant()
+    conversation_id = await new_conversation(app_engine, tenant)
+    turn_id = await new_turn(app_engine, tenant, conversation_id, WORDS)
+    sql = "SELECT question_ciphertext, answer_ciphertext, row_to_json(t)::text FROM ai_turns t"
+    [(question, answer, whole_row)] = await raw_rows(
+        owner_engine, sql + " WHERE id = :id", id=turn_id
+    )
+
+    assert WORDS not in whole_row
+    assert bytes(question)[:1] == b"\x01"
+    assert answer is None  # Nothing to seal until the turn ends.
+    async with tenant_session(app_engine, context_of(tenant)) as db:
+        [running] = await open_turns_of(db, conversation_id)
+    assert (running.question, running.answer_text) == (WORDS, "")  # No answer reads as "".
+
+    async with tenant_session(app_engine, context_of(tenant)) as db:
+        await finish(db, turn_id, TurnOutcome(status="completed", answer_text="That is not OK."))
+    [(_, answer, whole_row)] = await raw_rows(owner_engine, sql + " WHERE id = :id", id=turn_id)
+
+    assert bytes(answer)[:1] == b"\x01"
+    assert "That is not OK" not in whole_row
+    assert WORDS not in whole_row
+    async with tenant_session(app_engine, context_of(tenant)) as db:
+        [done] = await open_turns_of(db, conversation_id)
+    assert (done.question, done.answer_text) == (WORDS, "That is not OK.")
+
+
+async def test_a_stopped_turns_partial_answer_is_sealed_and_reads_back(
+    app_engine: AsyncEngine, owner_engine: AsyncEngine, make_tenant: MakeTenant
+) -> None:
+    tenant = await make_tenant()
+    conversation_id = await new_conversation(app_engine, tenant)
+    turn_id = await new_turn(app_engine, tenant, conversation_id)
+    async with tenant_session(app_engine, context_of(tenant)) as db:
+        await finish(db, turn_id, TurnOutcome(status="stopped", answer_text="You get four"))
+
+    [(whole_row,)] = await raw_rows(
+        owner_engine, "SELECT row_to_json(t)::text FROM ai_turns t WHERE id = :id", id=turn_id
+    )
+    async with tenant_session(app_engine, context_of(tenant)) as db:
+        [stopped] = await open_turns_of(db, conversation_id)
+
+    assert "You get four" not in whole_row
+    assert (stopped.status, stopped.answer_text) == ("stopped", "You get four")
+
+
+async def test_an_abandoned_turn_recovered_later_reads_back_with_no_answer(
+    app_engine: AsyncEngine, owner_engine: AsyncEngine, make_tenant: MakeTenant
+) -> None:
+    tenant = await make_tenant()
+    conversation_id = await new_conversation(app_engine, tenant)
+    turn_id = await new_turn(app_engine, tenant, conversation_id, WORDS)
+    async with owner_engine.begin() as connection:
+        await connection.execute(
+            text("UPDATE ai_turns SET started_at = now() - interval '11 minutes' WHERE id = :id"),
+            {"id": turn_id},
+        )
+    async with tenant_session(app_engine, context_of(tenant)) as db:
+        assert await recover_abandoned(db, conversation_id) == [turn_id]
+
+    [(answer,)] = await raw_rows(
+        owner_engine, "SELECT answer_ciphertext FROM ai_turns WHERE id = :id", id=turn_id
+    )
+    async with tenant_session(app_engine, context_of(tenant)) as db:
+        [recovered] = await open_turns_of(db, conversation_id)
+
+    assert answer is None  # Recovery writes no text, so there is nothing to seal.
+    assert (recovered.status, recovered.question, recovered.answer_text) == ("failed", WORDS, "")
+
+
+async def test_a_feedback_reason_is_sealed_for_its_row(
+    app_engine: AsyncEngine, owner_engine: AsyncEngine, make_tenant: MakeTenant
+) -> None:
+    tenant = await make_tenant()
+    conversation_id = await new_conversation(app_engine, tenant)
+    turn_id = await new_turn(app_engine, tenant, conversation_id)
+    actor = actor_of(tenant, tenant.employee_id)
+    async with tenant_session(app_engine, context_of(tenant)) as db:
+        await finish(db, turn_id, TurnOutcome(status="completed", answer_text="Done."))
+    async with tenant_session(app_engine, context_of(tenant)) as db:
+        await add_feedback(db, actor, turn_id, helpful=False, reason=WORDS, keys=TEST_KEYS)
+
+    [(ciphertext, whole_row)] = await raw_rows(
+        owner_engine,
+        "SELECT reason_ciphertext, row_to_json(f)::text FROM ai_feedback f WHERE turn_id = :t",
+        t=turn_id,
+    )
+    async with tenant_session(app_engine, context_of(tenant)) as db:
+        feedback = (await db.scalars(select(AiFeedback).where(AiFeedback.turn_id == turn_id))).one()
+        cipher = await cipher_of(db, conversation_id)
+
+    assert WORDS.encode() not in bytes(ciphertext)
+    assert WORDS not in whole_row
+    assert open_reason(cipher, feedback) == WORDS
+    # Moved to another row, the reason does not open.
+    with pytest.raises(DecryptionFailed):
+        cipher.open_text(bytes(ciphertext), "ai_feedback", "reason_ciphertext", uuid4())
+
+
+async def test_feedback_without_a_reason_stores_no_ciphertext(
+    app_engine: AsyncEngine, owner_engine: AsyncEngine, make_tenant: MakeTenant
+) -> None:
+    tenant = await make_tenant()
+    conversation_id = await new_conversation(app_engine, tenant)
+    turn_id = await new_turn(app_engine, tenant, conversation_id)
+    async with tenant_session(app_engine, context_of(tenant)) as db:
+        await finish(db, turn_id, TurnOutcome(status="completed", answer_text="Done."))
+        await add_feedback(
+            db,
+            actor_of(tenant, tenant.employee_id),
+            turn_id,
+            helpful=True,
+            reason=None,
+            keys=TEST_KEYS,
+        )
+
+    rows = await raw_rows(
+        owner_engine, "SELECT reason_ciphertext FROM ai_feedback WHERE turn_id = :t", t=turn_id
+    )
+
+    assert rows == [(None,)]
+
+
+async def open_turns_of(db: AsyncSession, conversation_id: UUID) -> list[OpenTurn]:
+    return await open_turns(db, await conversation_turns(db, conversation_id))
+
+
+async def test_a_cipher_for_another_conversation_is_refused_before_anything_is_written(
+    app_engine: AsyncEngine, owner_engine: AsyncEngine, make_tenant: MakeTenant
+) -> None:
+    tenant = await make_tenant()
+    conversation_id = await new_conversation(app_engine, tenant)
+    turn_id = await new_turn(app_engine, tenant, conversation_id)
+    sql_turns = "SELECT count(*) FROM ai_turns WHERE tenant_id = :t"
+    sql_messages = "SELECT count(*) FROM ai_messages WHERE tenant_id = :t"
+    [(turns_before,)] = await raw_rows(owner_engine, sql_turns, t=tenant.id)
+    [(messages_before,)] = await raw_rows(owner_engine, sql_messages, t=tenant.id)
+    async with tenant_session(app_engine, context_of(tenant)) as db:
+        conversation = await db.get(AiConversation, conversation_id)
+        assert conversation is not None
+        other = dataclasses.replace(await cipher_of(db, conversation_id), conversation_id=uuid4())
+        with pytest.raises(ValueError, match="another conversation"):
+            await start_turn(db, conversation, "Hi again", other)
+        with pytest.raises(ValueError, match="another conversation"):
+            await append_messages(
+                db,
+                conversation_id,
+                turn_id,
+                [StoredMessage("user", [{"type": "text", "text": "hi"}])],
+                other,
+            )
+        with pytest.raises(LookupError):
+            await finish_turn(db, turn_id, TurnOutcome(status="completed"), other)
+    assert await raw_rows(owner_engine, sql_turns, t=tenant.id) == [(turns_before,)]
+    assert await raw_rows(owner_engine, sql_messages, t=tenant.id) == [(messages_before,)]
+    [(status,)] = await raw_rows(
+        owner_engine, "SELECT status FROM ai_turns WHERE id = :id", id=turn_id
+    )
+    assert status == "running"

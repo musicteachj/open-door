@@ -45,6 +45,9 @@
   --apricot-tint: #FBEFE5; /* The confirmed moment on a confirm card: a warm wash from the cinnamon family. Ink on it 14.5:1, success icon 5.6:1, primary link 9.8:1 */
   --apricot-border: #EBC6A8; /* Edge of the confirmed strip, 1.6:1 on white (decorative; the icon and words carry the meaning) */
 
+  --confidential-tint: #F7F3F9; /* Behind a confidential-case form or sent line: a quiet aubergine wash, never an alert. Ink on it 14.9:1, ink-muted 5.6:1, primary 10.1:1, danger 6.0:1 */
+  --confidential-border: #E4DAE9; /* Edge of the confidential band or card, 1.3:1 on white (decorative; the lock icon and heading carry the meaning) */
+
   /* Disabled */
   --disabled-bg: #E7EBED; /* Disabled fills */
   --disabled-fg: #87939A; /* Disabled text; exempt from 4.5:1, 2.6:1 on disabled-bg */

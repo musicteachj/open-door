@@ -46,9 +46,16 @@ function DialogDemo({
   const [note, setNote] = useState(initialNote)
   const opener = useRef<HTMLButtonElement>(null)
   // The deciding frame closes itself, since nothing inside it can while the decision is running.
+  // The browser tests hold it open to scan it: with `data-gallery-hold` on the page it waits for
+  // the `gallery:release` event instead of the timer, so no fake clock is needed.
   useEffect(() => {
     if (!open || !startDeciding) return
-    const timer = setTimeout(() => setOpen(false), 4000)
+    const close = () => setOpen(false)
+    if (document.documentElement.dataset.galleryHold !== undefined) {
+      window.addEventListener('gallery:release', close)
+      return () => window.removeEventListener('gallery:release', close)
+    }
+    const timer = setTimeout(close, 4000)
     return () => clearTimeout(timer)
   }, [open, startDeciding])
   return (

@@ -41,17 +41,21 @@ from app.ai.budget import Caps, budget_state
 from app.ai.context import ActorView, actor_view
 from app.ai.conversations import (
     CURRENT_PINS,
+    ConversationCipher,
     FeedbackGiven,
     TurnNotCompleted,
     TurnNotFound,
     TurnRunning,
     add_feedback,
+    conversation_cipher,
     conversation_is_outdated,
     conversation_turns,
     create_conversation,
     current_conversation,
     has_running_turn,
     model_history,
+    open_reason,
+    open_turn,
     section_names,
     turn_feedback,
 )
@@ -64,6 +68,7 @@ from app.ai.fixed_texts import (
     STILL_ANSWERING_TEXT,
     hr_contact,
 )
+from app.ai.guard import verdict_is_flagged
 from app.ai.personal_data import kind_of_personal_data
 from app.ai.proposals import (
     TURN_RUNNING,
@@ -86,18 +91,29 @@ from app.ai.turn import (
     TurnDeps,
     start_turn_run,
 )
-from app.api.deps import Now, get_app_settings, get_embedder, get_engine, get_streams, get_transport
+from app.api.contacts import hr_contact_out
+from app.api.deps import (
+    Now,
+    get_app_settings,
+    get_embedder,
+    get_engine,
+    get_keys,
+    get_streams,
+    get_transport,
+)
 from app.api.problems import problem_responses
 from app.core.config import Settings
+from app.core.encryption import KeyProvider
 from app.core.problems import ProblemError, problem_response
 from app.db.models import AiConversation, HandbookVersion
 from app.db.tenancy import TenantContext, set_is_hr, tenant_session
 from app.domain.handbook.applicability import Asker
-from app.modules.assistant.display import hr_contact_out, needs_hr_contact, shown, turn_out
+from app.modules.assistant.display import needs_hr_contact, shown, turn_out
 from app.modules.assistant.schemas import (
     AssistantTextsOut,
     BudgetBannerOut,
     BudgetOut,
+    CaseOpenedOut,
     ConfirmIn,
     ConversationOut,
     FeedbackGivenOut,
@@ -106,6 +122,8 @@ from app.modules.assistant.schemas import (
     is_storable,
 )
 from app.modules.assistant.sse import StreamTracker, TurnResponse, TurnStream
+from app.modules.cases.api_schemas import sent_line_out
+from app.modules.cases.queries import cases_by_turn
 from app.modules.handbook.asker import load_asker
 from app.modules.handbook.search import pinned_version_id
 from app.modules.identity.deps import (
@@ -263,7 +281,9 @@ async def conversation_out(
     conversation: AiConversation,
     caps: Caps,
     now: datetime,
+    keys: KeyProvider,
 ) -> ConversationOut:
+    cipher = conversation_cipher(keys, conversation)
     turns = await conversation_turns(db, conversation.id)
     feedback = await turn_feedback(db, conversation.id)
     # The database's clock decides what is abandoned, as for the POST.
@@ -287,7 +307,16 @@ async def conversation_out(
             )
         )
     contacts = await hr_contact(db) if needs_hr_contact(shows) else []
-    history = await model_history(db, conversation.id)
+    # One query for the whole conversation's cases, not one per turn.
+    # Skipped when no turn was flagged: only a flagged turn can have a case.
+    opened = (
+        await cases_by_turn(
+            db, signed_in.actor.tenant_id, signed_in.actor.person_id, conversation.id
+        )
+        if any(verdict_is_flagged(t.guard_verdict) for t in turns)
+        else {}
+    )
+    history = await model_history(db, conversation.id, cipher)
     tokens = history_tokens(history)
     budget = await budget_out(
         db,
@@ -305,7 +334,25 @@ async def conversation_out(
         id=conversation.id,
         created_at=conversation.created_at,
         turns=[
-            turn_out(t, s, feedback.get(t.id), contacts, names, by_turn.get(t.id, ()))
+            turn_out(
+                t,
+                open_turn(cipher, t),
+                s,
+                feedback.get(t.id),
+                None if t.id not in feedback else open_reason(cipher, feedback[t.id]),
+                contacts,
+                names,
+                by_turn.get(t.id, ()),
+                None
+                if t.id not in opened
+                else CaseOpenedOut(
+                    status=opened[t.id].status,
+                    reply_by=opened[t.id].reply_by,
+                    sent_line=sent_line_out(
+                        opened[t.id].reply_by, is_hr=signed_in.actor.is_hr_admin
+                    ),
+                ),
+            )
             for t, s in zip(turns, shows, strict=True)
         ],
         hr_contacts=hr_contact_out(contacts),
@@ -324,13 +371,15 @@ async def conversation_out(
     responses=CURRENT_ERRORS,
 )
 async def get_current_conversation(
-    signed_in: SignedInDep, settings: Annotated[Settings, Depends(get_app_settings)]
+    signed_in: SignedInDep,
+    settings: Annotated[Settings, Depends(get_app_settings)],
+    keys: Annotated[KeyProvider, Depends(get_keys)],
 ) -> ConversationOut | None:
     conversation = await current_conversation(signed_in.db, signed_in.actor)
     if conversation is None:
         return None
     return await conversation_out(
-        signed_in.db, signed_in, conversation, Caps.from_settings(settings), datetime.now(UTC)
+        signed_in.db, signed_in, conversation, Caps.from_settings(settings), datetime.now(UTC), keys
     )
 
 
@@ -342,7 +391,9 @@ async def get_current_conversation(
     responses=CURRENT_ERRORS,
 )
 async def get_assistant_budget(
-    signed_in: SignedInDep, settings: Annotated[Settings, Depends(get_app_settings)]
+    signed_in: SignedInDep,
+    settings: Annotated[Settings, Depends(get_app_settings)],
+    keys: Annotated[KeyProvider, Depends(get_keys)],
 ) -> BudgetOut:
     """The same `BudgetOut` the conversation carries, for a person with none yet: the home needs
     the banner before the first question. With a conversation it is that conversation's, built by
@@ -352,7 +403,11 @@ async def get_assistant_budget(
     # The pins and history the next question would have: the conversation's own, or today's pins
     # and an empty history for a person who has none yet.
     pins = CURRENT_PINS if conversation is None else conversation
-    history = [] if conversation is None else await model_history(db, conversation.id)
+    history = (
+        []
+        if conversation is None
+        else await model_history(db, conversation.id, conversation_cipher(keys, conversation))
+    )
     return await budget_out(
         db,
         signed_in,
@@ -388,13 +443,15 @@ async def get_assistant_texts() -> AssistantTextsOut:
     responses=CREATE_ERRORS,
 )
 async def create_new_conversation(
-    signed_in: SignedInDep, settings: Annotated[Settings, Depends(get_app_settings)]
+    signed_in: SignedInDep,
+    settings: Annotated[Settings, Depends(get_app_settings)],
+    keys: Annotated[KeyProvider, Depends(get_keys)],
 ) -> ConversationOut:
-    conversation = await create_conversation(signed_in.db, signed_in.actor, CURRENT_PINS)
+    conversation = await create_conversation(signed_in.db, signed_in.actor, CURRENT_PINS, keys)
     # The server fills these in at insert; read them back for the response.
     await signed_in.db.refresh(conversation)
     return await conversation_out(
-        signed_in.db, signed_in, conversation, Caps.from_settings(settings), datetime.now(UTC)
+        signed_in.db, signed_in, conversation, Caps.from_settings(settings), datetime.now(UTC), keys
     )
 
 
@@ -407,14 +464,17 @@ async def create_new_conversation(
     responses=FEEDBACK_ERRORS,
 )
 async def give_feedback(
-    turn_id: UUID, body: FeedbackIn, signed_in: SignedInDep
+    turn_id: UUID,
+    body: FeedbackIn,
+    signed_in: SignedInDep,
+    keys: Annotated[KeyProvider, Depends(get_keys)],
 ) -> FeedbackGivenOut:
     reason = body.reason or None
     if reason is not None and kind_of_personal_data(reason) is not None:
         raise personal_data_refusal()
     try:
         await add_feedback(
-            signed_in.db, signed_in.actor, turn_id, helpful=body.helpful, reason=reason
+            signed_in.db, signed_in.actor, turn_id, helpful=body.helpful, reason=reason, keys=keys
         )
     except TurnNotFound:
         raise HTTPException(status.HTTP_404_NOT_FOUND, NO_TURN) from None
@@ -525,6 +585,8 @@ class Admitted:
     question: str
     asker: AskerContext
     caps: Caps
+    # The conversation's data key, unwrapped once for the whole request and handed to the turn.
+    cipher: ConversationCipher
 
 
 async def admit_question(
@@ -534,6 +596,7 @@ async def admit_question(
     raw_question: str,
     settings: Settings,
     now: datetime,
+    keys: KeyProvider,
 ) -> Admitted:
     """Run the checks in the spec's order, each a problem response, in a short transaction of its
     own. The transaction ends before this returns, so the request holds no database connection
@@ -562,7 +625,9 @@ async def admit_question(
             raise personal_data_refusal()
 
         # Read only now, so a refused question does not load it.
-        history = await model_history(db, conversation.id)
+        # (A ciphertext that does not open raises `DecryptionFailed`: a 500 with no turn written.)
+        cipher = conversation_cipher(keys, conversation)
+        history = await model_history(db, conversation.id, cipher)
         # Judged after the question, with the other 409s. Too long to send again: the page offers
         # a new conversation (the GET's `historyTooLong` says so too), and tells it apart from an
         # outdated one.
@@ -590,7 +655,7 @@ async def admit_question(
         if scope is not None:
             code = f"budget-{scope}"
             raise ProblemError(status.HTTP_429_TOO_MANY_REQUESTS, code, ERROR_TEXTS[code])
-    return Admitted(conversation, question, asker, caps)
+    return Admitted(conversation, question, asker, caps, cipher)
 
 
 def outdated_refusal() -> ProblemError:
@@ -655,10 +720,13 @@ async def start_turn_stream(
     embedder: Annotated[Embedder | None, Depends(get_embedder)],
     settings: Annotated[Settings, Depends(get_app_settings)],
     streams: Annotated[StreamTracker, Depends(get_streams)],
+    keys: Annotated[KeyProvider, Depends(get_keys)],
 ) -> TurnResponse:
     actor = caller.actor
     now = datetime.now(UTC)
-    admitted = await admit_question(engine, caller, conversation_id, body.question, settings, now)
+    admitted = await admit_question(
+        engine, caller, conversation_id, body.question, settings, now, keys
+    )
     asker = admitted.asker
     deps = TurnDeps(
         engine=engine,
@@ -671,6 +739,7 @@ async def start_turn_stream(
         asker=asker.asker,
         version_id=asker.version_id,
         handbook_label=asker.handbook_label,
+        keys=keys,
     )
 
     async def start() -> TurnStream:
@@ -678,7 +747,11 @@ async def start_turn_stream(
         streams.opened()
         try:
             run = await start_turn_run(
-                deps, conversation=admitted.conversation, question=admitted.question, now=now
+                deps,
+                conversation=admitted.conversation,
+                question=admitted.question,
+                now=now,
+                cipher=admitted.cipher,
             )
             started = TurnStream(
                 run,

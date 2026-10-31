@@ -7,9 +7,10 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from sqlalchemy.ext.asyncio import AsyncEngine
 
-from app.api.deps import get_engine
+from app.api.deps import get_engine, get_keys
 from app.api.problems import problem_responses
 from app.api.schemas import CamelModel
+from app.core.encryption import KeyProvider
 from app.modules.identity.cookies import SESSION_COOKIE, set_session_cookies
 from app.modules.identity.tokens import hash_token
 from app.modules.people.schemas import Me, PersonaKey
@@ -50,6 +51,7 @@ async def post_sandbox(
     request: Request,
     response: Response,
     engine: Annotated[AsyncEngine, Depends(get_engine)],
+    keys: Annotated[KeyProvider, Depends(get_keys)],
     body: NewSandboxRequest | None = None,
 ) -> SandboxCreated:
     # The same-origin check has already run. There is no CSRF token to check: a visitor without a
@@ -57,7 +59,9 @@ async def post_sandbox(
     persona = (body or NewSandboxRequest()).persona
     current = request.cookies.get(SESSION_COOKIE)
     try:
-        sandbox = await create_sandbox(engine, persona, hash_token(current) if current else None)
+        sandbox = await create_sandbox(
+            engine, persona, hash_token(current) if current else None, keys
+        )
     except HandbookNotLoadedError:
         raise HTTPException(
             status.HTTP_503_SERVICE_UNAVAILABLE, "The handbook isn't loaded yet."
