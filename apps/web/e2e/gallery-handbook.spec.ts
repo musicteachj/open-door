@@ -99,7 +99,7 @@ test('a wide section row keeps its six columns, with the title on one line', asy
     expect(columns).toHaveLength(6)
     expect(Number.parseFloat(columns[1] ?? '0')).toBeGreaterThan(200)
     const [title, audience] = await row
-      .locator(':scope > span')
+      .locator(':scope > span:not(.sr-only)')
       .evaluateAll((spans) => spans.slice(1, 3).map((span) => span.getBoundingClientRect()))
     expect(title?.right ?? 0).toBeLessThanOrEqual(audience?.left ?? 0)
     // One line is 48 px with the cell's padding; two would be 72.
@@ -229,7 +229,7 @@ test.describe('at 390 px', () => {
     const link = state(page, 'section-row-narrow').getByRole('link')
     await link.scrollIntoViewIfNeeded()
     const [id, title, audience] = await Promise.all(
-      [0, 1, 2].map((i) => link.locator(':scope > span').nth(i).boundingBox()),
+      [0, 1, 2].map((i) => link.locator(':scope > span:not(.sr-only)').nth(i).boundingBox()),
     )
     expect(audience!.y).toBeGreaterThan(title!.y)
     expect(Math.abs(id!.y - title!.y)).toBeLessThanOrEqual(8)
@@ -250,7 +250,7 @@ test.describe('at 390 px', () => {
 
   test('a State rules row puts the marker under the name', async ({ page }) => {
     const row = state(page, 'link-block-state-rules').getByRole('link').first()
-    const name = await row.locator(':scope > span').first().boundingBox()
+    const name = await row.locator(':scope > span:not(.sr-only)').first().boundingBox()
     const marker = await row.getByText('Applies to you').boundingBox()
     expect(marker!.y).toBeGreaterThan(name!.y + name!.height - 4)
   })

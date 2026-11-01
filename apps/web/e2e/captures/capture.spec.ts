@@ -143,8 +143,8 @@ const MINUTE_MS = 60_000
 /** Sets a screen up in its state, and returns what to photograph. The same tools the browser
  * tests use: page.route holds or fails a request, and page.clock sets the time left. */
 async function reachScreen(page: Page, row: ScreenRow) {
-  const card = (name: string) => page.getByRole('button', { name: new RegExp(`^Start a sandbox as ${name} `) })
-  const switcher = page.getByRole('button', { name: /^Switch persona/ })
+  const card = (name: string) => page.getByRole('button', { name: new RegExp(`^${name} `) })
+  const switcher = page.getByRole('button', { name: /Switch persona$/ })
   const reach = async () => {
     if (row.persona) {
       await startAs(page, row.persona)
@@ -1210,7 +1210,7 @@ async function reachHrCases(page: Page, state: HrCasesState) {
     case 'home-hr':
       await priyaSends()
       await page.goto('/ask')
-      await expect(page.getByRole('link', { name: /new cases?\. Open/ })).toBeVisible()
+      await expect(page.getByRole('link', { name: /new cases? Cases$/ })).toBeVisible()
       break
     case 'nav-hr':
       await priyaSends()

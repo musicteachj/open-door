@@ -52,7 +52,8 @@ everything on the assistant home.
 ## Interactions
 
 - **Persona switcher:** opens the menu. Its accessible name always includes the full title, even
-  when the visible title is truncated.
+  when the visible title is truncated, and starts with what it shows: "Marcus Bell, Store
+  Manager. Current persona. Switch persona" (WCAG 2.5.3, Label in Name; changed 2026-11-01).
 - **Persona menu:** focus starts on the current persona, and the arrow keys move between items.
   The build adds what the sketch doesn't have: Escape and a click outside close the menu and
   return focus to the switcher (shadcn's dropdown menu does both). The personas are

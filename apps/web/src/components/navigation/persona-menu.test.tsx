@@ -37,7 +37,7 @@ describe('PersonaMenu', () => {
   it('has the current persona in its switcher', () => {
     setup({ currentKey: 'marcus' })
     expect(screen.getByRole('button', { name: /Switch persona/ })).toHaveAccessibleName(
-      'Switch persona. Current: Marcus Bell, Department Lead, Apparel',
+      'Marcus Bell, Department Lead, Apparel. Current persona. Switch persona',
     )
   })
 
@@ -121,7 +121,7 @@ describe('PersonaMenu', () => {
 
   it('names no one, and checks no one, for an unknown currentKey', async () => {
     const { user, trigger, onSwitch } = setup({ currentKey: 'nobody' })
-    expect(trigger).toHaveAccessibleName('Switch persona. Choose a persona')
+    expect(trigger).toHaveAccessibleName('Choose a persona. Switch persona')
     expect(trigger).toHaveTextContent('Choose a persona')
     for (const persona of PERSONAS) expect(trigger).not.toHaveTextContent(persona.name)
     await open(user, trigger)

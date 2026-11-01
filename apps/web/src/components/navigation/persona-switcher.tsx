@@ -4,7 +4,6 @@ import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { useIsTruncated } from '@/hooks/use-is-truncated'
 import { initialsOf } from '@/lib/initials'
-import { personaSwitcherLabel } from '@/lib/labels'
 import { cn } from '@/lib/utils'
 
 type PersonaSwitcherProps = Omit<ComponentProps<'button'>, 'children'> & {
@@ -17,9 +16,10 @@ type PersonaSwitcherProps = Omit<ComponentProps<'button'>, 'children'> & {
 }
 
 /**
- * The button at the bottom of the sidebar that opens the persona menu. Its name always holds the
- * full title. The title truncates, and the tooltip shows it in full only when it is truncated.
- * It spreads its props onto the button, so a menu trigger can wrap it. From PersonaSwitcher.jsx.
+ * The button at the bottom of the sidebar that opens the persona menu. Its name starts with the
+ * shown name and holds the full title. The title truncates, and the tooltip shows it in full only
+ * when it is truncated. It spreads its props onto the button, so a menu trigger can wrap it. From
+ * PersonaSwitcher.jsx.
  */
 function PersonaSwitcher({
   name,
@@ -45,10 +45,9 @@ function PersonaSwitcher({
           aria-busy={busy || undefined}
           // Not `disabled`: that would drop keyboard focus. It just looks and reports as inactive.
           aria-disabled={busy || undefined}
-          aria-label={busy ? busyLabel : personaSwitcherLabel(name, title)}
           // min-h-[61px] is the sketch's height (.od-persona__btn); the spacing scale has no 61 px step.
           className={cn(
-            'flex min-h-[61px] w-full cursor-pointer items-center gap-3 border-0 border-t border-t-border bg-transparent px-2 py-3 text-left text-ink transition-[color,background-color] hover:bg-neutral-hover aria-disabled:cursor-default aria-disabled:hover:bg-transparent aria-expanded:bg-neutral-hover',
+            'relative flex min-h-[61px] w-full cursor-pointer items-center gap-3 border-0 border-t border-t-border bg-transparent px-2 py-3 text-left text-ink transition-[color,background-color] hover:bg-neutral-hover aria-disabled:cursor-default aria-disabled:hover:bg-transparent aria-expanded:bg-neutral-hover',
             className,
           )}
           {...props}
@@ -70,10 +69,17 @@ function PersonaSwitcher({
                   {name ?? 'Choose a persona'}
                 </span>
                 {title !== undefined && (
-                  <span ref={titleRef} className="truncate text-caption text-ink-muted">
-                    {title}
-                  </span>
+                  <>
+                    <span className="sr-only">,</span>{' '}
+                    <span ref={titleRef} className="truncate text-caption text-ink-muted">
+                      {title}
+                    </span>
+                  </>
                 )}
+              </span>
+              {/* The name is what the button shows, then what it does (WCAG 2.5.3, Label in Name). */}
+              <span className="sr-only">
+                {name === undefined ? '. Switch persona' : '. Current persona. Switch persona'}
               </span>
               <ChevronsUpDown aria-hidden="true" className="size-4 flex-none text-ink-muted" />
             </>

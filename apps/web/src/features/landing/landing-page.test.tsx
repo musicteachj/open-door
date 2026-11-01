@@ -11,8 +11,8 @@ import { renderApp } from '@/test/render-app'
 
 const SANDBOXES = () => `${window.location.origin}/api/v1/sandboxes`
 const card = (firstName: string) =>
-  screen.findByRole('button', { name: new RegExp(`^Start a sandbox as ${firstName} `) })
-const cards = () => screen.getAllByRole('button', { name: /^Start a sandbox as / })
+  screen.findByRole('button', { name: new RegExp(`^${firstName} `) })
+const cards = () => screen.getAllByRole('button', { name: / Start as \w+$/ })
 
 function gate() {
   let resolve = () => {}
@@ -99,7 +99,7 @@ describe('the landing page', () => {
     PERSONAS.forEach((persona, index) => {
       const button = within(items[index]!).getByRole('button')
       expect(button).toHaveAccessibleName(
-        `Start a sandbox as ${persona.name}, ${persona.title}, ${persona.location}. ${persona.cardPrompt}`,
+        `${persona.name}, ${persona.title}, ${persona.location}. ${persona.cardPrompt} Start as ${persona.name.split(' ')[0]}`,
       )
     })
   })

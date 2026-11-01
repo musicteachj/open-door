@@ -2,6 +2,7 @@ import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router'
 import { describe, expect, it, vi } from 'vitest'
+import { accessibleNameOf } from '@/test/accessible-name'
 import { apiCitations, citation } from '@/test/assistant-fixtures'
 import { AssistantMessage } from './assistant-message'
 import { CitationMarker } from './citation-marker'
@@ -460,12 +461,15 @@ describe('AssistantMessage: numbering by source', () => {
     expect(markers.map((m) => m.textContent)).toEqual(['1', '1', '1', '2'])
     const chips = within(screen.getByRole('list', { name: 'Sources' })).getAllByRole('button')
     expect(chips).toHaveLength(2)
-    expect(markers.map((m) => m.getAttribute('aria-label'))).toEqual([
-      chips[0]!.getAttribute('aria-label'),
-      chips[0]!.getAttribute('aria-label'),
-      chips[0]!.getAttribute('aria-label'),
-      chips[1]!.getAttribute('aria-label'),
+    // A marker is named "Source 1: Handbook ...", its chip starts with the chip's own text and ends
+    // with the same number.
+    expect(markers.map((m) => accessibleNameOf(m).slice(0, 9))).toEqual([
+      'Source 1:',
+      'Source 1:',
+      'Source 1:',
+      'Source 2:',
     ])
+    expect(chips.map((c) => accessibleNameOf(c).slice(-10))).toEqual([', source 1', ', source 2'])
   })
 
   it('still opens the passage each marker cites', async () => {

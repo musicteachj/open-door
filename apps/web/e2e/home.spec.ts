@@ -1,6 +1,15 @@
 import { expect, test, type Page } from '@playwright/test'
 import { PERSONAS } from '../src/features/personas/personas'
-import { focusRing, greetingHeading, scan, startAs, themeColor, type FirstName } from './helpers'
+import {
+  focusRing,
+  focusedName,
+  greetingHeading,
+  scan,
+  startAs,
+  themeColor,
+  type FirstName,
+  nameLike,
+} from './helpers'
 
 // One test per acceptance criterion in docs/design/screens/03-assistant-home/notes.md.
 //
@@ -110,10 +119,7 @@ test('every interactive element is reachable by keyboard in the order above and 
   for (let i = 0; i < 15; i += 1) {
     await page.keyboard.press('Tab')
     stops.push({
-      name: await page.evaluate(() => {
-        const el = document.activeElement as HTMLElement
-        return el.getAttribute('aria-label') ?? el.textContent?.trim() ?? ''
-      }),
+      name: await focusedName(page),
       ring: await focusRing(page),
     })
   }
@@ -123,14 +129,14 @@ test('every interactive element is reachable by keyboard in the order above and 
     'My cases',
     'Directory',
     'Handbook',
-    `Switch persona. Current: ${priya.name}, ${priya.title}`,
+    `${priya.name}, ${priya.title}. Current persona. Switch persona`,
     'Ask Open Door',
     'Ask',
     ...priya.tryAsking,
-    expect.stringMatching(/ PTO available\. Open Time off$/),
-    expect.stringMatching(/ requests? pending\. Open Time off$/),
+    expect.stringMatching(/ PTO available\s?\. Open Time off$/),
+    expect.stringMatching(/ requests? pending\s?\. Open Time off$/),
     // The date is the published handbook's, so it changes with each edition.
-    expect.stringMatching(/^[A-Z][a-z]{2} \d{1,2} Handbook updated\. Open Handbook$/),
+    expect.stringMatching(/^[A-Z][a-z]{2} \d{1,2} Handbook updated\s?\. Open Handbook$/),
   ])
   // The ring is 2 px, offset 2 px. The composer's box shows its own primary border and halo
   // instead (components.spec.ts), so its stop is checked there.
@@ -236,7 +242,7 @@ test('the AI disclosure is always visible in the composer', async ({ page }) => 
 })
 
 test('a long persona title truncates and shows its tooltip only when cut off', async ({ page }) => {
-  const switcher = page.getByRole('button', { name: /^Switch persona/ })
+  const switcher = page.getByRole('button', { name: /Switch persona$/ })
   // "Visual Merchandiser" fits the sidebar: hovering shows no tooltip.
   await switcher.hover()
   await page.waitForTimeout(800)
@@ -251,7 +257,7 @@ test('a long persona title truncates and shows its tooltip only when cut off', a
   await expect(page.getByRole('tooltip').first()).toContainText('Visual Merchandiser')
   // The switcher's name always carries the whole title, cut off or not.
   await expect(switcher).toHaveAccessibleName(
-    'Switch persona. Current: Priya Raman, Visual Merchandiser',
+    nameLike('Priya Raman, Visual Merchandiser. Current persona. Switch persona'),
   )
 })
 

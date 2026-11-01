@@ -38,12 +38,12 @@ describe('DirectoryRow', () => {
     expect(within(link).queryByText('You')).not.toBeInTheDocument()
   })
 
-  it('tags your own row "You", and the name says "(you)"', () => {
+  it('tags your own row "You", and the name says "You"', () => {
     renderWithRouter(<DirectoryRow {...leo} isYou />)
     const link = screen.getByRole('link')
     expect(within(link).getByText('You')).toBeInTheDocument()
     expect(link).toHaveAccessibleName(
-      'Leo Nakamura, Sales Associate, Store Operations, Oakland store (you)',
+      'Leo Nakamura, You, Sales Associate, Store Operations, Oakland store',
     )
   })
 

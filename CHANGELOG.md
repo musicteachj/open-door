@@ -27,6 +27,21 @@ version (`0.x.y` while the app is being built, `1.0.0` when it is complete).
   ADR 0017 record the change; the landing's link and the nav item are removed in Stage 6 instead
   of turned on, and the tour ends on the console.
 
+### Fixed
+
+- **Controls are now named by what they show** (between Phase 7 stages, accessibility). The
+  `@axe-core/playwright` bump to 4.14 turns on axe's "Label in Name" rule (WCAG 2.5.3): a
+  control's accessible name must contain its visible text, so a person using voice control can say
+  what they see ("click Marcus Bell") and activate it. Several controls had an `aria-label` that
+  replaced their text with different wording. The persona switcher, the landing persona cards, the
+  at-a-glance links, the directory and handbook rows, the HR case queue rows, the handbook search
+  results, the source chips, and the sidebar items with a count are now named from their content.
+  Hidden text between the shown pieces keeps the same pauses and words the old labels had ("4.3
+  Sick leave. Applies to Everyone. Last updated Sep 12, 2026", "Approvals, 2 waiting"), always
+  starting with the shown text. The Dates field is named by the dates it shows, with the full form
+  as its description, and the filter menus' option names no longer split a name from its count.
+  Visible text and layout are unchanged. The browser tests' axe scans now run the rule.
+
 ## [0.6.0] - 2026-10-31
 
 Phase 6: cases and escalation. When the safety check calls a message sensitive or a crisis, the

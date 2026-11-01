@@ -1,4 +1,4 @@
-import { Fragment, useId } from 'react'
+import { Fragment } from 'react'
 import { ChevronRight } from 'lucide-react'
 import { Link } from 'react-router'
 import type { SearchResultOut } from '@/api/generated'
@@ -25,53 +25,51 @@ type SearchResultRowProps = {
  */
 function SearchResultRow({ result, onNavigate, className }: SearchResultRowProps) {
   const { section, passageId, excerpt } = result
-  const excerptId = useId()
-  const metaId = useId()
   return (
     <li>
       <Link
         to={handbookPath(section.id, passageId)}
         data-slot="search-result-row"
         onClick={onNavigate}
-        aria-label={`${section.id} ${section.title}, ${searchResultSource(section)}`}
-        aria-describedby={`${excerpt.length > 0 ? `${excerptId} ` : ''}${metaId}`}
         className={cn(
-          'grid grid-cols-[72px_minmax(0,1fr)_16px] items-start gap-x-5 border-b border-border-subtle px-3 pt-4 pb-[18px] text-ink no-underline transition-colors hover:bg-primary-tint hover:text-ink max-[760px]:grid-cols-[minmax(0,1fr)_16px]',
+          'relative grid grid-cols-[72px_minmax(0,1fr)_16px] items-start gap-x-5 border-b border-border-subtle px-3 pt-4 pb-[18px] text-ink no-underline transition-colors hover:bg-primary-tint hover:text-ink max-[760px]:grid-cols-[minmax(0,1fr)_16px]',
           rowFocusRing,
           className,
         )}
       >
-        <span className="text-ui leading-6 font-regular text-ink-muted tabular-nums max-[760px]:hidden">
+        <span className="text-ui leading-6 font-regular text-ink-muted tabular-nums max-[760px]:sr-only">
           {section.id}
-        </span>
+        </span>{' '}
         <span className="flex min-w-0 flex-col gap-1.5">
           <span className="text-body font-semibold">
             {section.title}
             <span className="font-regular text-ink-muted"> · {searchResultSource(section)}</span>
           </span>
+          {/* Hidden punctuation makes a screen reader pause between the pieces. */}
+          <span className="sr-only">.</span>{' '}
           {excerpt.length > 0 && (
-            <span
-              id={excerptId}
-              className="max-w-content truncate text-ui leading-[22px] font-regular text-ink-muted"
-            >
-              {excerpt.map((segment, index) =>
-                segment.match ? (
-                  <mark
-                    key={index}
-                    className="rounded-[3px] bg-primary-tint px-0.5 font-semibold text-ink"
-                  >
-                    {segment.text}
-                  </mark>
-                ) : (
-                  <Fragment key={index}>{segment.text}</Fragment>
-                ),
-              )}
-            </span>
-          )}
-          <span id={metaId} className="flex flex-wrap items-center gap-x-4 gap-y-2">
+            <>
+              <span className="max-w-content truncate text-ui leading-[22px] font-regular text-ink-muted">
+                {excerpt.map((segment, index) =>
+                  segment.match ? (
+                    <mark
+                      key={index}
+                      className="rounded-[3px] bg-primary-tint px-0.5 font-semibold text-ink"
+                    >
+                      {segment.text}
+                    </mark>
+                  ) : (
+                    <Fragment key={index}>{segment.text}</Fragment>
+                  ),
+                )}
+              </span>
+              <span className="sr-only">.</span>{' '}
+            </>
+          )}{' '}
+          <span className="flex flex-wrap items-center gap-x-4 gap-y-2">
             <ApplicabilityBadge label={section.audienceLabel} />
-            <AppliesMarker applies={section.appliesToMe} />
-            <LastUpdated date={section.lastUpdated} />
+            <span className="sr-only">.</span> <AppliesMarker applies={section.appliesToMe} />
+            <span className="sr-only">.</span> <LastUpdated date={section.lastUpdated} />
           </span>
         </span>
         <ChevronRight aria-hidden="true" className="mt-1 size-4 text-ink-muted" />

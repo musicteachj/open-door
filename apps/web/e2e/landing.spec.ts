@@ -8,6 +8,7 @@ import {
   scan,
   themeColor,
   type FirstName,
+  nameLike,
 } from './helpers'
 
 // One test per acceptance criterion in docs/design/screens/01-landing/notes.md. "Matches the
@@ -17,17 +18,21 @@ import {
 // function, so a change to the wording fails here.
 const CARD_NAMES: Record<FirstName, string> = {
   Priya:
-    'Start a sandbox as Priya Raman, Visual Merchandiser, Oakland store. Ask about California sick leave and book a day off.',
+    'Priya Raman, Visual Merchandiser, Oakland store. Ask about California sick leave and book a day off. Start as Priya',
   Mateo:
-    'Start a sandbox as Mateo Alvarez, Warehouse Associate, Austin warehouse. Ask the same questions and get Texas answers.',
+    'Mateo Alvarez, Warehouse Associate, Austin warehouse. Ask the same questions and get Texas answers. Start as Mateo',
   Marcus:
-    'Start a sandbox as Marcus Bell, Store Manager, Oakland store. Approve a request and check on your team.',
-  Dana: 'Start a sandbox as Dana Whitfield, HR Business Partner, Denver HQ. See the confidential case queue.',
+    'Marcus Bell, Store Manager, Oakland store. Approve a request and check on your team. Start as Marcus',
+  Dana: 'Dana Whitfield, HR Business Partner, Denver HQ. See the confidential case queue. Start as Dana',
 }
 const FIRST_NAMES = Object.keys(CARD_NAMES) as FirstName[]
 
+// Found by the person's name, which stays at the start of the card's name while it starts (then the
+// name ends with "Setting up Juniper Row…" in place of "Start as ...").
 const card = (page: Page, name: FirstName) =>
-  page.getByRole('button', { name: CARD_NAMES[name], exact: true })
+  page.getByRole('button', {
+    name: new RegExp(`^${CARD_NAMES[name].split(',')[0]}\\s?, `),
+  })
 const startError = (page: Page) => page.getByText("We couldn't start a sandbox.")
 const AI_DISCLOSURE =
   'Open Door is an AI assistant. It can make mistakes, and it always shows its sources.'
@@ -61,6 +66,8 @@ test('each persona card is a single button with the accessible name above, reach
   for (const name of FIRST_NAMES) {
     await page.keyboard.press('Tab')
     await expect(card(page, name)).toBeFocused()
+    // Its name is what it shows, in order (WCAG 2.5.3, Label in Name).
+    await expect(card(page, name)).toHaveAccessibleName(nameLike(CARD_NAMES[name]))
     // The ring is a :focus-visible outline: 2 px, offset 2 px, in the focus-ring color.
     expect(await focusRing(page)).toEqual({ width: '2px', style: 'solid', offset: '2px' })
     // Polled: a color transition on the card would otherwise be read mid-fade.

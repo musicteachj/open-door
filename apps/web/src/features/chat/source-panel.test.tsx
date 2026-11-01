@@ -301,7 +301,7 @@ describe('the docked panel (a wide window)', () => {
   it('opens from a source chip with the first passage cited from its section, and focus returns to the chip', async () => {
     const { user, router } = signedIn()
     const chip = (await screen.findByRole('list', { name: 'Sources' })).querySelector(
-      `button[aria-label="${CO_MARKER}"]`,
+      '[data-slot="source-chip"][data-passage-id="4.3~p1"]',
     ) as HTMLElement
     await user.click(chip)
     await panel()

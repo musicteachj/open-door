@@ -2,7 +2,6 @@ import { ChevronRight } from 'lucide-react'
 import { Link } from 'react-router'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { initialsOf } from '@/lib/initials'
-import { directoryRowLabel } from '@/lib/labels'
 import { cn } from '@/lib/utils'
 import { directoryColumns } from './directory-grid'
 
@@ -25,8 +24,9 @@ type DirectoryRowProps = {
 
 /**
  * One person in the directory, from DirectoryRow.jsx: a single link to their profile, named by
- * `directoryRowLabel`. The sketch gives the link `role="listitem"`, which would hide that it is a
- * link; the table's `li` carries the list semantics instead. The initials are decoration.
+ * what it shows: the name, "You" on your own row, the title, the department, and the location. The
+ * sketch gives the link `role="listitem"`, which would hide that it is a link; the table's `li`
+ * carries the list semantics instead. The initials are decoration.
  */
 function DirectoryRow({
   name,
@@ -46,10 +46,9 @@ function DirectoryRow({
       state={linkState}
       onClick={onFollow}
       data-slot="directory-row"
-      aria-label={directoryRowLabel({ name, title, department, location, isYou })}
       className={cn(
         directoryColumns,
-        'h-15 border-b border-border-subtle text-ink no-underline transition-colors hover:bg-primary-tint hover:text-ink',
+        'relative h-15 border-b border-border-subtle text-ink no-underline transition-colors hover:bg-primary-tint hover:text-ink',
         'focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-focus-ring focus-visible:outline-solid',
         className,
       )}
@@ -59,18 +58,25 @@ function DirectoryRow({
           <AvatarFallback className="text-caption">{initials ?? initialsOf(name)}</AvatarFallback>
         </Avatar>
         <span className="min-w-0 truncate text-body font-semibold">{name}</span>
+        {/* Hidden commas make a screen reader pause between the pieces: "Name, You, Title, ...". */}
+        <span className="sr-only">,</span>{' '}
         {isYou && (
-          <span className="inline-flex h-5 flex-none items-center rounded-xs border border-border-strong px-1.5 text-caption text-ink-muted">
-            You
-          </span>
+          <>
+            <span className="inline-flex h-5 flex-none items-center rounded-xs border border-border-strong px-1.5 text-caption text-ink-muted">
+              You
+            </span>
+            <span className="sr-only">,</span>{' '}
+          </>
         )}
-      </span>
+      </span>{' '}
       <span className="truncate text-ui font-regular max-[760px]:col-start-1 max-[760px]:pl-11">
         {title}
       </span>
+      <span className="sr-only">,</span>{' '}
       <span className="truncate text-ui font-regular text-ink-muted max-[760px]:col-start-1 max-[760px]:pl-11">
         {department}
       </span>
+      <span className="sr-only">,</span>{' '}
       <span className="truncate text-ui font-regular text-ink-muted max-[760px]:col-start-1 max-[760px]:pl-11">
         {location}
       </span>

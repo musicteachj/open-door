@@ -30,7 +30,7 @@ export const greetingHeading = (page: Page, name: FirstName) =>
 /** Starts a sandbox from the landing page and waits for /ask. */
 export async function startAs(page: Page, name: FirstName) {
   await page.goto('/')
-  await page.getByRole('button', { name: new RegExp(`^Start a sandbox as ${name} `) }).click()
+  await page.getByRole('button', { name: new RegExp(`^${name} `) }).click()
   await expect(page).toHaveURL('/ask')
 }
 
@@ -47,13 +47,13 @@ export const themeColor = (page: Page, token: string) =>
 
 /** Opens the persona menu from the sidebar's switcher and chooses a person, such as "Marcus". */
 export async function switchTo(page: Page, firstName: string) {
-  await page.getByRole('button', { name: /^Switch persona/ }).click()
+  await page.getByRole('button', { name: /Switch persona$/ }).click()
   await page.getByRole('menuitemradio', { name: new RegExp(`^${firstName} `) }).click()
 }
 
 /** Opens the persona menu and chooses Sign out. */
 export async function signOut(page: Page) {
-  await page.getByRole('button', { name: /^Switch persona/ }).click()
+  await page.getByRole('button', { name: /Switch persona$/ }).click()
   await page.getByRole('menuitem', { name: 'Sign out' }).click()
 }
 
@@ -309,3 +309,35 @@ export async function statesPastEdge(page: Page, ids: readonly string[], width: 
   }
   return past
 }
+
+/**
+ * The accessible name of the element that has focus, as the browser computes it. A name made from
+ * content (a link, a button) is not an `aria-label`, and its text content includes decoration.
+ */
+export async function focusedName(page: Page): Promise<string> {
+  const label = await page.evaluate(
+    () => document.activeElement?.getAttribute('aria-label') ?? null,
+  )
+  if (label !== null) return label
+  if ((await page.locator(':focus').count()) === 0) return ''
+  const snapshot = await page.locator(':focus').ariaSnapshot()
+  const match = /^- [\w-]+ "((?:[^"\\]|\\.)*)"/.exec(snapshot.trim())
+  return match ? tidyName(match[1]!.replace(/\\"/g, '"')) : ''
+}
+
+/**
+ * A name as written, without the space the browser puts before a hidden comma or period ("Marcus
+ * Bell , Store Manager" is "Marcus Bell, Store Manager").
+ */
+export const tidyName = (name: string) => name.replace(/\s+([,.])/g, '$1')
+
+/** A pattern for a whole accessible name, allowing that space before each comma and period. */
+export const nameLike = (expected: string) =>
+  new RegExp(
+    `^${expected
+      .split(/([,.])/)
+      .map((part) =>
+        part === ',' || part === '.' ? `\\s?\\${part}` : part.replace(/[\\^$*+?()|[\]{}]/g, '\\$&'),
+      )
+      .join('')}$`,
+  )
