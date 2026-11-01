@@ -53,8 +53,8 @@ describe('DirectoryTable', () => {
   it('marks only your own row', () => {
     renderWithRouter(<DirectoryTable items={items} youId="b" />)
     expect(screen.getAllByText('You')).toHaveLength(1)
-    expect(screen.getByRole('link', { name: /Priya Raman.*\(you\)$/ })).toBeInTheDocument()
-    expect(screen.getByRole('link', { name: /Dana Whitfield/ })).not.toHaveAccessibleName(/\(you\)/)
+    expect(screen.getByRole('link', { name: /Priya Raman, You/ })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: /Dana Whitfield/ })).not.toHaveAccessibleName(/, You, /)
   })
 
   it('while loading shows eight skeleton rows, keeps the labels, and says so politely', () => {

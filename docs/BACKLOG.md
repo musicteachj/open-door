@@ -163,6 +163,15 @@ should pick it up. When one is done, delete it here and record it in the changel
   pending card as replaced at once; if the turn then fails, its own card is canceled too, and a
   status can't move back. The person can ask again. Deferring the replacement to the turn's end
   would need the one-pending-card index (migration 0010) relaxed. (Phase 5 stage 4 review.)
+- **Label in Name follow-ups.** The 2026-11-01 fix names controls from their content, with hidden
+  punctuation and words between the shown pieces. Left as they are: Chromium puts a space before
+  each hidden comma or period ("Marcus Bell , Store Manager"), which screen readers don't voice and
+  the browser tests normalize (`tidyName`, `nameLike`); the fix at the root is a hiding technique
+  that keeps the punctuation in the same text run, with one shared helper in place of about 20
+  copies. A handbook search result's name now holds its excerpt (once its description), which is
+  long in a links list. The persona card's name changes to its starting text while the live region
+  announces the same words. A citation marker and its chip name the same source two ways.
+  (`/code-review medium` on `fix/label-in-name`.)
 
 ## Handbook content
 

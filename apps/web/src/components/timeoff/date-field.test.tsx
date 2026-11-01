@@ -11,24 +11,25 @@ describe('DateField', () => {
     expect(button).toHaveAttribute('aria-expanded', 'false')
   })
 
-  it('shows the short form and is named by the label and the full form', () => {
+  it('shows the short form, is named by the label and the short form, and described by the full form', () => {
     render(<DateField start="2026-11-25" end="2026-11-27" onToggle={() => {}} controls="picker" />)
     const button = screen.getByRole('button', {
-      name: 'Dates Wednesday, November 25 to Friday, November 27',
+      name: 'Dates Wed, Nov 25 to Fri, Nov 27',
     })
     expect(button).toHaveTextContent('Wed, Nov 25 to Fri, Nov 27')
+    expect(button).toHaveAccessibleDescription('Wednesday, November 25 to Friday, November 27')
     expect(button).toHaveAttribute('aria-controls', 'picker')
   })
 
   it('shows one day as one date', () => {
     render(<DateField start="2026-10-30" onToggle={() => {}} />)
-    const button = screen.getByRole('button', { name: 'Dates Friday, October 30' })
+    const button = screen.getByRole('button', { name: 'Dates Fri, Oct 30' })
     expect(button).toHaveTextContent('Fri, Oct 30')
   })
 
-  it('hides the visible short form from assistive technology, so the name is not read twice', () => {
+  it('does not hide the shown dates from the name, so a voice user can say what they see', () => {
     render(<DateField start="2026-10-30" onToggle={() => {}} />)
-    expect(screen.getByText('Fri, Oct 30')).toHaveAttribute('aria-hidden', 'true')
+    expect(screen.getByText('Fri, Oct 30')).not.toHaveAttribute('aria-hidden')
   })
 
   it('reports it is open, with a chevron up in place of down', () => {
@@ -66,9 +67,6 @@ describe('DateField', () => {
 
   it('mutes the placeholder', () => {
     render(<DateField onToggle={() => {}} />)
-    const visible = screen
-      .getAllByText('Pick a day or a range')
-      .find((node) => node.hasAttribute('aria-hidden'))
-    expect(visible).toHaveClass('text-ink-placeholder')
+    expect(screen.getByText('Pick a day or a range')).toHaveClass('text-ink-placeholder')
   })
 })

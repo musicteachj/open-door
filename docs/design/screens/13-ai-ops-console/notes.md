@@ -118,6 +118,13 @@ the build leaves it out.
 - Tokens: none. Uses existing `--confidential-tint`, `--primary-tint`, `--surface-sunken`, `--border-strong`, `--ink-muted`, `--danger` (Failed only), `--panel-width`.
 - New icons (Lucide, added to `Icon.jsx`): `shield-check` (safety check), `shield-off` (Safety check unavailable), `circle-stop` (Stopped by the person), `gauge` (Spending cap reached), `search-x` (Said the handbook doesn't cover it). Reused: `message-circle` (Answered), `ban` (Refused), `circle-alert` (Failed), `layout-dashboard` (Console, trace eyebrow), `search`, `calendar`, `users`, `clipboard-check` (tools), `lock` (flagged row), `check`.
 
+## Build note: accessible names (2026-11-01)
+
+**Accessible names start with the visible text** (WCAG 2.5.3, Label in Name, which axe-core
+4.14 checks from 2026-11-01). Name a control from its own content, with any extra words as
+visually hidden text after what it shows, rather than an `aria-label` that replaces it. This
+covers the row button's "10:31 AM, Employee, Oakland, CA, Answered".
+
 ## Build decisions (owner, 2026-10-31)
 
 These were decided after the handoff. Where they differ from a screenshot or the notes above, the

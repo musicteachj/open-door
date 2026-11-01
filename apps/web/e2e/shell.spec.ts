@@ -9,6 +9,7 @@ import {
   setSandboxLeft,
   startAs,
   themeColor,
+  nameLike,
 } from './helpers'
 
 // One test per acceptance criterion in docs/design/screens/02-app-shell/notes.md. "Matches the
@@ -16,7 +17,7 @@ import {
 // and returns to the landing page" is proved by session.spec.ts, which signs out through the real
 // persona menu and checks the 204 and the redirect.
 
-const switcher = (page: Page) => page.getByRole('button', { name: /^Switch persona/ })
+const switcher = (page: Page) => page.getByRole('button', { name: /Switch persona$/ })
 const navLinks = (page: Page) => page.getByRole('navigation', { name: 'Main' }).getByRole('link')
 const TOAST = 'Now viewing as Marcus Bell.'
 const toast = (page: Page) => page.locator('[data-slot="toast"]')
@@ -25,21 +26,22 @@ test.describe('each persona sees exactly the nav items above, and an item appear
   // Phases 2, 3, and 5 build Ask, Time off, Directory, Handbook, and Approvals (managers). Phase 6
   // adds My cases (everyone but HR) and Cases (HR). Console (HR) arrives later, and "How it's
   // built" in Phase 7. Marcus's Approvals item carries his count (the seed has Zara's request
-  // waiting), so its text reads "Approvals1".
+  // waiting), so its text reads "Approvals, 1 waiting1" (the name's hidden words, then the badge).
   for (const name of ['Priya', 'Mateo', 'Marcus', 'Dana'] as const) {
     test(name, async ({ page }) => {
       await startAs(page, name)
       const person = ['Ask', 'Time off', 'My cases', 'Directory', 'Handbook']
       await expect(navLinks(page)).toHaveText(
         name === 'Marcus'
-          ? [...person, 'Approvals1']
+          ? [...person, 'Approvals, 1 waiting1']
           : name === 'Dana'
             ? ['Ask', 'Time off', 'Directory', 'Handbook', /^Cases/]
             : person,
       )
       await expect(page.getByRole('link', { name: "How it's built" })).toHaveCount(0)
       const approvals = page.getByRole('link', { name: /^Approvals/ })
-      if (name === 'Marcus') await expect(approvals).toHaveAccessibleName('Approvals, 1 waiting')
+      if (name === 'Marcus')
+        await expect(approvals).toHaveAccessibleName(nameLike('Approvals, 1 waiting'))
       else await expect(approvals).toHaveCount(0)
       // HR has no My cases, and nobody else has Cases. Console is not built yet.
       await expect(page.getByRole('link', { name: /^My cases/ })).toHaveCount(
@@ -57,7 +59,7 @@ test('the persona switcher names the full title, and the persona menu works by k
 }) => {
   await startAs(page, 'Priya')
   await expect(switcher(page)).toHaveAccessibleName(
-    'Switch persona. Current: Priya Raman, Visual Merchandiser',
+    nameLike('Priya Raman, Visual Merchandiser. Current persona. Switch persona'),
   )
   const item = (name: string) => page.getByRole('menuitemradio', { name: new RegExp(`^${name} `) })
 
@@ -164,7 +166,7 @@ test('switching changes persona with no dialog, empties the composer, shows the 
   await expect(greetingHeading(page, 'Marcus')).toBeVisible()
   await expect(toast(page)).toContainText(TOAST)
   await expect(box).toHaveValue('')
-  await expect(switcher(page)).toHaveAccessibleName(/Marcus Bell, Store Manager/)
+  await expect(switcher(page)).toHaveAccessibleName(/Marcus Bell\s?, Store Manager/)
   expect(dialogs).toBe(0)
 })
 
@@ -222,7 +224,7 @@ test.describe('the toast', () => {
     await toast(page).getByRole('button', { name: 'Dismiss' }).focus()
     await page.clock.fastForward(20_000)
     await expect(toast(page)).toBeVisible()
-    await page.getByRole('button', { name: /^Switch persona/ }).focus()
+    await page.getByRole('button', { name: /Switch persona$/ }).focus()
     await page.clock.fastForward(7_000)
     await expect(toast(page)).toBeHidden()
   })

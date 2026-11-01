@@ -34,18 +34,16 @@ describe('SearchResultRow', () => {
     expect(links[0]).toHaveAttribute('href', '/handbook/CA-3.2?passage=p2')
   })
 
-  it('is named "number title, source", and described by the excerpt and the meta line', () => {
+  it('is named by its whole content, in order: number, title, source, excerpt, and meta line', () => {
     renderWithRouter(
       <SearchResultRow
         result={result({ section: sectionSummary({ id: '3.2', title: 'Overtime' }) })}
       />,
     )
-    const link = screen.getByRole('link')
-    expect(link).toHaveAccessibleName('3.2 Overtime, Company handbook')
-    // jsdom doesn't lay out flex items, so the meta line's pieces run together here; a browser
-    // puts a space between them.
-    expect(link).toHaveAccessibleDescription(
-      /^Hourly staff are paid overtime at 1\.5 times their rate Applies to:.*Everyone.*Applies to you.*Last updated Sep 12, 2026$/,
+    // The link has no label of its own, so its name holds all the text it shows (WCAG 2.5.3).
+    // jsdom doesn't lay out flex items, so pieces may run together here; a browser spaces them.
+    expect(screen.getByRole('link')).toHaveAccessibleName(
+      /^3\.2\s*Overtime\s*·\s*Company handbook\.\s*Hourly staff are paid overtime at 1\.5 times their rate\.\s*Applies to:\s*Everyone\. Applies to you\. Last updated Sep 12, 2026$/,
     )
   })
 

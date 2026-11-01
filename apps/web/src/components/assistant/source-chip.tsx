@@ -1,7 +1,7 @@
 import { useId } from 'react'
 import type { CitationOut } from '@/api/generated'
 import { cn } from '@/lib/utils'
-import { chipLabel, conversationCopy, sourceName } from './labels'
+import { chipLabel, conversationCopy } from './labels'
 import { firstPerSection } from './sources'
 
 type SourceChipProps = {
@@ -15,7 +15,7 @@ type SourceChipProps = {
 /**
  * A source under the answer: the marker number in a badge, then "Handbook CA-4.3 · California
  * addendum". The label truncates with an ellipsis when the row is narrow, and the button's name
- * keeps the full source, the same as its marker's.
+ * is that text (never cut off), then ", source 1" for the number its marker carries.
  */
 function SourceChip({ citation, expanded, onOpen, className }: SourceChipProps) {
   return (
@@ -23,11 +23,10 @@ function SourceChip({ citation, expanded, onOpen, className }: SourceChipProps) 
       data-slot="source-chip"
       data-passage-id={citation.passageId}
       type="button"
-      aria-label={sourceName(citation.marker, citation)}
       aria-expanded={expanded}
       onClick={() => onOpen(citation)}
       className={cn(
-        'box-border inline-flex h-8 max-w-full min-w-0 cursor-pointer items-center gap-2 rounded-sm border border-border-strong bg-surface-raised pr-3 pl-1.5 text-small text-ink transition-[background-color,border-color]',
+        'relative box-border inline-flex h-8 max-w-full min-w-0 cursor-pointer items-center gap-2 rounded-sm border border-border-strong bg-surface-raised pr-3 pl-1.5 text-small text-ink transition-[background-color,border-color]',
         'hover:border-primary hover:bg-primary-tint',
         'aria-expanded:border-primary aria-expanded:bg-primary-tint',
         className,
@@ -39,7 +38,10 @@ function SourceChip({ citation, expanded, onOpen, className }: SourceChipProps) 
       >
         {citation.marker}
       </span>
-      <span className="truncate">{chipLabel(citation)}</span>
+      <span className="truncate">
+        {chipLabel(citation)}
+        <span className="sr-only">, source {citation.marker}</span>
+      </span>
     </button>
   )
 }

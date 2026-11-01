@@ -122,6 +122,13 @@
 - **Every figure on the pages behind the coach mark** (balances, counts, the console) comes from
   its own page's API, as on screens 03, 08 to 13.
 
+## Build note: accessible names (2026-11-01)
+
+**Accessible names start with the visible text** (WCAG 2.5.3, Label in Name, which axe-core
+4.14 checks from 2026-11-01). Name a control from its own content, with any extra words as
+visually hidden text after what it shows, rather than an `aria-label` that replaces it. This
+covers the chips' "Send: …" (which must start with the chip's own text instead) and "…, sent", and the menu item's "Resume the tour, step 5 of 10".
+
 ## Build decisions (owner, 2026-10-31)
 
 These were decided after the handoff. Where they differ from a screenshot or the notes above, the

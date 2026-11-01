@@ -118,7 +118,7 @@ export function chipLabel(citation: Pick<CitationOut, 'sectionId' | 'groupName'>
   return `Handbook ${sectionNumber(citation.sectionId)} · ${citation.groupName}`
 }
 
-/** A marker's or chip's accessible name: "Source 1: Handbook CA-4.3, California addendum". */
+/** A citation marker's accessible name: "Source 1: Handbook CA-4.3, California addendum". */
 export function sourceName(
   marker: number,
   citation: Pick<CitationOut, 'sectionId' | 'groupName'>,

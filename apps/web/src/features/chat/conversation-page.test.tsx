@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event'
 import { http, HttpResponse } from 'msw'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { ConversationOut, EscalationOut, TurnOut } from '@/api/generated'
+import { accessibleNameOf } from '@/test/accessible-name'
 import { citation, DANA, toolCall } from '@/test/assistant-fixtures'
 import { installFakeApi } from '@/test/fake-api'
 import {
@@ -1242,7 +1243,7 @@ describe('the conversation’s reading order', () => {
     for (let i = 0; i < 20; i++) {
       await user.tab()
       const el = document.activeElement as HTMLElement
-      names.push(el.getAttribute('aria-label') ?? el.textContent ?? '')
+      names.push(el.getAttribute('aria-label') ?? accessibleNameOf(el))
     }
     const start = names.indexOf('Start a new conversation')
     expect(start).toBeGreaterThan(-1)
@@ -1250,8 +1251,8 @@ describe('the conversation’s reading order', () => {
       'Start a new conversation',
       'Source 1: Handbook CA-4.3, California addendum',
       'Source 2: Handbook §4.3, Time off',
-      'Source 1: Handbook CA-4.3, California addendum',
-      'Source 2: Handbook §4.3, Time off',
+      'Handbook CA-4.3 · California addendum, source 1',
+      'Handbook §4.3 · Time off, source 2',
       'Yes',
       'No',
       'Show your work',

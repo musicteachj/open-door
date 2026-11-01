@@ -44,8 +44,10 @@ Logo, Persona card (new), Inline error, Button (secondary for the tour and for R
 
 ## Interactions
 
-- **Each persona card is one button.** Its accessible name is "Start a sandbox as Priya Raman,
-  Visual Merchandiser, Oakland store." followed by the card's prompt.
+- **Each persona card is one button.** Its accessible name is "Priya Raman, Visual Merchandiser,
+  Oakland store." followed by the card's prompt and "Start as Priya". It is named from the card's
+  own text, so it starts with what the card shows (WCAG 2.5.3, Label in Name; changed
+  2026-11-01, when axe-core 4.14 began checking it).
 - **Selecting a card** calls `POST /api/v1/sandboxes` with that persona. The card shows the
   starting state (`aria-busy`), announced in a polite live region, and the other cards are
   disabled. On success the visitor lands on the assistant home as that persona. It usually

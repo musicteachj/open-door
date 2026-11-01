@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { getGetMeQueryKey } from '@/api/generated'
 import { getSessionStatus } from '@/app/session-status'
 import { useChatStore } from '@/features/chat/store'
+import { accessibleNameOf } from '@/test/accessible-name'
 import { installFakeApi } from '@/test/fake-api'
 import { installFakeHandbook } from '@/test/fake-handbook'
 import { installFakeTimeOff } from '@/test/fake-time-off'
@@ -19,8 +20,8 @@ import { renderApp } from '@/test/render-app'
 const SWITCH = () => `${window.location.origin}/api/v1/session/persona`
 const END = () => `${window.location.origin}/api/v1/session`
 const LANDING = 'Your open-door policy, now always open.'
-const PRIYA = 'Switch persona. Current: Priya Raman, Visual Merchandiser'
-const MARCUS = 'Switch persona. Current: Marcus Bell, Store Manager'
+const PRIYA = 'Priya Raman, Visual Merchandiser. Current persona. Switch persona'
+const MARCUS = 'Marcus Bell, Store Manager. Current persona. Switch persona'
 
 const toast = () => document.querySelector<HTMLElement>('[data-slot="toast"]')
 const hoursFromNow = (hours: number) => new Date(Date.now() + hours * 3_600_000).toISOString()
@@ -214,7 +215,7 @@ describe('the shell: layout', () => {
     expect(
       within(glance)
         .getAllByRole('link')
-        .map((link) => link.getAttribute('aria-label')),
+        .map((link) => accessibleNameOf(link)),
     ).toEqual(['92 hours PTO available. Open Time off', '0 requests pending. Open Time off'])
   })
 
@@ -525,7 +526,7 @@ describe('the shell: the countdown and the banner', () => {
     await signOutViaMenu(user)
     await screen.findByRole('heading', { level: 1, name: LANDING })
     api.setExpiry(hoursFromNow(2.9))
-    await user.click(await screen.findByRole('button', { name: /^Start a sandbox as Priya / }))
+    await user.click(await screen.findByRole('button', { name: /^Priya / }))
     await screen.findByRole('complementary', { name: 'Sidebar' })
     expect(banner()).not.toBeNull()
   })
@@ -551,7 +552,7 @@ describe('the shell: review fixes', () => {
     renderApp({ at: '/ask' })
     const sidebar = await sidebarReady()
     expect(within(sidebar).getByRole('navigation', { name: 'Main' })).toBeInTheDocument()
-    expect(within(sidebar).getByRole('button', { name: /^Switch persona/ })).toBeInTheDocument()
+    expect(within(sidebar).getByRole('button', { name: /Switch persona$/ })).toBeInTheDocument()
     expect(screen.queryByRole('banner')).not.toBeInTheDocument()
   })
 
@@ -566,7 +567,7 @@ describe('the shell: review fixes', () => {
     await act(() => queryClient.invalidateQueries({ queryKey: getGetMeQueryKey() }))
     await waitFor(() =>
       expect(personaSwitcher()).toHaveAccessibleName(
-        'Switch persona. Current: Dana Whitfield, HR Business Partner',
+        'Dana Whitfield, HR Business Partner. Current persona. Switch persona',
       ),
     )
     expect(toast()).toBeNull()
@@ -584,7 +585,7 @@ describe('the shell: review fixes', () => {
     api.expire()
     await act(() => queryClient.invalidateQueries())
     await user.click(await screen.findByRole('button', { name: 'Choose who to be' }))
-    await user.click(await screen.findByRole('button', { name: /^Start a sandbox as Priya / }))
+    await user.click(await screen.findByRole('button', { name: /^Priya / }))
     await sidebarReady()
     expect(personaSwitcher()).toHaveAccessibleName(PRIYA)
     expect(toast()).toBeNull()
@@ -720,7 +721,7 @@ describe('the shell: time off, approvals, and the rail', () => {
   const navLinks = () =>
     within(screen.getByRole('navigation', { name: 'Main' }))
       .getAllByRole('link')
-      .map((link) => link.getAttribute('aria-label') ?? link.textContent)
+      .map((link) => accessibleNameOf(link))
 
   it('shows Marcus the Approvals item with the count in its name, and Priya none', async () => {
     installFakeApi('marcus')
@@ -773,10 +774,10 @@ describe('the shell: time off, approvals, and the rail', () => {
     const seen: { who: string; approvals: boolean }[] = []
     const observer = new MutationObserver(() => {
       const main = document.querySelector('nav[aria-label="Main"]')
-      const switcher = document.querySelector('[aria-label^="Switch persona"]')
+      const switcher = document.querySelector('[data-slot="persona-switcher"]')
       if (!main || !switcher) return
       seen.push({
-        who: switcher.getAttribute('aria-label') ?? '',
+        who: accessibleNameOf(switcher),
         approvals: main.textContent?.includes('Approvals') ?? false,
       })
     })
@@ -852,7 +853,7 @@ describe('the shell: time off, approvals, and the rail', () => {
       const glance = await screen.findByRole('region', { name: 'At a glance' })
       await within(glance).findByRole('link', { name: '3 new cases. Open Cases' })
       const links = within(glance).getAllByRole('link')
-      expect(links.map((link) => link.getAttribute('aria-label'))).toEqual([
+      expect(links.map((link) => accessibleNameOf(link))).toEqual([
         '92 hours PTO available. Open Time off',
         '0 requests pending. Open Time off',
         '3 new cases. Open Cases',
@@ -883,7 +884,7 @@ describe('the shell: time off, approvals, and the rail', () => {
       expect(
         within(glance)
           .getAllByRole('link')
-          .map((link) => link.getAttribute('aria-label')),
+          .map((link) => accessibleNameOf(link)),
       ).toEqual([
         '92 hours PTO available. Open Time off',
         '0 requests pending. Open Time off',
@@ -900,7 +901,7 @@ describe('the shell: time off, approvals, and the rail', () => {
     const glance = await within(rail).findByRole('region', { name: 'At a glance' })
     await within(glance).findByRole('link', { name: 'Sep 12 Handbook updated. Open Handbook' })
     const links = within(glance).getAllByRole('link')
-    expect(links.map((link) => link.getAttribute('aria-label'))).toEqual([
+    expect(links.map((link) => accessibleNameOf(link))).toEqual([
       '92 hours PTO available. Open Time off',
       '1 request pending. Open Time off',
       'Sep 12 Handbook updated. Open Handbook',
@@ -960,7 +961,7 @@ describe('the shell: time off, approvals, and the rail', () => {
     expect(
       within(glance)
         .getAllByRole('link')
-        .map((link) => link.getAttribute('aria-label')),
+        .map((link) => accessibleNameOf(link)),
     ).toEqual(['Sep 12 Handbook updated. Open Handbook'])
   })
 })

@@ -1,4 +1,5 @@
 import { expect, type Locator, type Page } from '@playwright/test'
+import { focusedName } from './helpers'
 
 // Shared by conversation.spec.ts and conversation-layout.spec.ts: the steps of asking a question
 // on /ask and reading the page back. Every question goes to the real API, which answers with the
@@ -227,12 +228,13 @@ export async function tabStops(page: Page, count: number) {
       await page.evaluate(() => {
         const el = document.activeElement as HTMLElement
         return {
-          name: el.getAttribute('aria-label') ?? el.textContent?.trim().slice(0, 60) ?? '',
+          name: '',
           slot: el.getAttribute('data-slot'),
           tag: el.tagName,
         }
       }),
     )
+    stops.at(-1)!.name = await focusedName(page)
   }
   return stops
 }

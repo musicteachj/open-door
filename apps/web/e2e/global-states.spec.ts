@@ -64,7 +64,7 @@ test.describe('a 401 shows session expired outside the shell, and its button rea
     await expect(page.getByText('Open Door', { exact: true })).toBeVisible()
     await expect(page.getByRole('navigation')).toHaveCount(0)
     await expect(page.getByRole('complementary')).toHaveCount(0)
-    await expect(page.getByRole('button', { name: /^Switch persona/ })).toHaveCount(0)
+    await expect(page.getByRole('button', { name: /Switch persona$/ })).toHaveCount(0)
     expect((await scan(page)).violations).toEqual([])
   })
 
@@ -99,7 +99,7 @@ test.describe('a 401 shows session expired outside the shell, and its button rea
     await expireSession(page)
     await page.getByRole('button', { name: 'Choose who to be' }).click()
     await expect(page).toHaveURL('/')
-    await expect(page.getByRole('button', { name: /^Start a sandbox as Priya / })).toBeVisible()
+    await expect(page.getByRole('button', { name: /^Priya / })).toBeVisible()
   })
 })
 
@@ -115,7 +115,7 @@ test.describe('an unknown route shows not found inside the shell, with no nav it
     // Inside the shell: the navigation and the switcher are still there, and the sheet holds the
     // page's one <main>.
     await expect(page.getByRole('navigation', { name: 'Main' })).toBeVisible()
-    await expect(page.getByRole('button', { name: /^Switch persona/ })).toBeVisible()
+    await expect(page.getByRole('button', { name: /Switch persona$/ })).toBeVisible()
     await expect(page.getByRole('main')).toContainText("We couldn't find that page.")
     // No nav item is marked current, and none carries the tint.
     await expect(page.locator('[data-slot="nav-item"][aria-current]')).toHaveCount(0)
@@ -199,7 +199,7 @@ test("if the shell can't load, the error page renders outside it", async ({ page
   await expect(page.getByText('Open Door', { exact: true })).toBeVisible()
   await expect(page.getByRole('navigation')).toHaveCount(0)
   await expect(page.getByRole('complementary')).toHaveCount(0)
-  await expect(page.getByRole('button', { name: /^Switch persona/ })).toHaveCount(0)
+  await expect(page.getByRole('button', { name: /Switch persona$/ })).toHaveCount(0)
   // The page fills the window, as a message with no shell around it does.
   const message = await page.locator('[data-slot="full-page-message"]').boundingBox()
   const viewport = page.viewportSize()!

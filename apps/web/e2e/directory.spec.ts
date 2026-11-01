@@ -6,7 +6,7 @@ import {
   openDirectory,
   openProfileBySearch,
 } from './directory-helpers'
-import { MODAL_OVERLAY_RULES, problem, scan, startAs } from './helpers'
+import { MODAL_OVERLAY_RULES, problem, scan, startAs, nameLike } from './helpers'
 
 // One test per acceptance criterion in docs/design/screens/04-directory/notes.md, for the list.
 // The profile's are in profile.spec.ts.
@@ -27,7 +27,9 @@ const familyNames = async (page: Page) =>
   await rows(page)
     .getByRole('link')
     .evaluateAll((links) =>
-      links.map((link) => link.querySelector('span')!.textContent!.trim().split(' ').at(-1)!),
+      links.map((link) =>
+        link.querySelector('span.text-body')!.textContent!.trim().split(' ').at(-1)!,
+      ),
     )
 
 /** An option's size, from its accessible name "Oakland store, 40". */
@@ -96,13 +98,13 @@ test('the list is sorted by last name, 50 at a time, and Show more appends the n
   await expect(page.getByRole('navigation', { name: /pag/i })).toHaveCount(0)
 })
 
-test('each row is one link named for the person, with "(you)" on your own', async ({ page }) => {
+test('each row is one link named for the person, with "You" on your own', async ({ page }) => {
   await openDirectory(page, 'Priya')
   await expect(rows(page).first().getByRole('link')).toHaveCount(1)
   await page.getByRole('searchbox').fill('Raman')
   await expect(rows(page)).toHaveCount(1)
   await expect(rows(page).getByRole('link')).toHaveAccessibleName(
-    'Priya Raman, Visual Merchandiser, Store Operations, Oakland store (you)',
+    nameLike('Priya Raman, You, Visual Merchandiser, Store Operations, Oakland store'),
   )
 })
 
@@ -361,7 +363,7 @@ test.describe('a failed list request shows "something went wrong" inside the she
     await expect(wrong).toBeFocused()
     // Inside the shell: the sidebar, the persona switcher, and the one <main> are still there.
     await expect(page.getByRole('navigation', { name: 'Main' })).toBeVisible()
-    await expect(page.getByRole('button', { name: /^Switch persona/ })).toBeVisible()
+    await expect(page.getByRole('button', { name: /Switch persona$/ })).toBeVisible()
     await expect(page.getByRole('main').getByRole('heading', { level: 1 })).toHaveCount(1)
     await expect(page.getByRole('main').locator('code')).toHaveText(REQUEST_ID)
     await expect(page.getByRole('link', { name: 'Directory' })).toHaveAttribute(

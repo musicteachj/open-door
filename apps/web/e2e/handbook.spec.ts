@@ -18,7 +18,7 @@ const MATEO_MARKED = ['3.2', '3.3', 'TX-3.4', 'TX-4.5']
 
 const rows = (page: Page) => page.locator('[data-slot="section-row"]')
 const everyoneRows = (page: Page) =>
-  page.locator('[data-slot="section-row"][aria-label*="Applies to Everyone."]')
+  rows(page).filter({ has: page.getByText('Everyone', { exact: true }) })
 const rowIds = (page: Page) =>
   rows(page).evaluateAll((links) =>
     links.map((link) => link.querySelector('span')!.textContent!.trim()),
@@ -64,7 +64,7 @@ test.describe('the handbook home', () => {
     await expect(page.getByText('Juniper Row · Version')).toBeVisible()
     // Each row says who it applies to and when it changed.
     await expect(rows(page).first()).toHaveAccessibleName(
-      /^1\.1 About this handbook\. Applies to Everyone\. Last updated [A-Z][a-z]{2} \d+, \d{4}$/,
+      /^1\.1 About this handbook\s?\. Applies to Everyone\s?\. Last updated [A-Z][a-z]{2} \d+, \d{4}$/,
     )
     await expect(
       page.getByText(/is a fictional company\. This handbook is demo content/),
@@ -200,6 +200,20 @@ test.describe('the handbook home', () => {
     await page.goto('/handbook?show=mine')
     await expect(rows(page)).toHaveCount(PRIYA_MARKED.length + (await countEveryone(page)))
     await noViolations(page)
+  })
+
+  test("keeps a search result's section number in its name at 390 px, where the number is hidden", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 390, height: 844 })
+    await openHandbook(page, 'Priya')
+    await page.getByRole('searchbox', { name: 'Search the handbook' }).fill('overtime')
+    const result = page.locator('[data-slot="search-result-row"]').first()
+    await expect(result).toBeVisible()
+    // The number's column is not drawn here, but a voice or screen reader user still gets it.
+    const number = result.locator('span').first()
+    expect((await number.boundingBox())!.width).toBeLessThanOrEqual(1)
+    await expect(result).toHaveAccessibleName(/^([A-Z]+-)?\d+\.\d+ \S/)
   })
 
   test('stacks the list at 390 px with nothing scrolling sideways', async ({ page }) => {

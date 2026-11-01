@@ -44,8 +44,10 @@ function setup(props: Partial<CaseQueueTableProps> = {}) {
 describe('CaseQueueTable', () => {
   it('shows a link per case to its detail, named by the facts in order', () => {
     setup()
+    // The link has no label of its own: its name is its content, in reading order (WCAG 2.5.3).
+    // jsdom doesn't lay out the row, so the pieces may run together here; a browser spaces them.
     const link = screen.getByRole('link', {
-      name: 'Priya Raman, Visual Merchandiser, Oakland store. Harassment or discrimination. Sent Mon, Oct 26. Reply due Wed, Oct 28. New.',
+      name: /^Priya Raman, Visual Merchandiser · Oakland store\. Harassment or discrimination\. Sent Mon, Oct 26\. Reply due Wed, Oct 28\. New$/,
     })
     expect(link).toHaveAttribute('href', '/cases/c-priya')
   })
@@ -109,8 +111,8 @@ describe('CaseQueueTable', () => {
     const fact = screen.getByText('The safety check routed this message to crisis text.')
     expect(fact.closest('span')).toHaveClass('text-ink-muted')
     expect(fact.parentElement!.querySelector('svg')).toHaveAttribute('aria-hidden', 'true')
-    expect(screen.getByRole('link').getAttribute('aria-label')).toContain(
-      'Harassment or discrimination. The safety check routed this message to crisis text. Sent',
+    expect(screen.getByRole('link')).toHaveAccessibleName(
+      /Harassment or discrimination\. The safety check routed this message to crisis text\. Sent/,
     )
   })
 
@@ -166,7 +168,7 @@ describe('CaseQueueTable', () => {
     setup()
     const link = screen.getByRole('link')
     expect(link.className).toContain('max-sm:grid-cols-[minmax(0,1fr)_auto]')
-    expect(screen.getByText('Mon, Oct 26')).toHaveClass('max-sm:hidden')
+    expect(screen.getByText('Mon, Oct 26')).toHaveClass('max-sm:sr-only')
     expect(link.querySelector('[data-slot="chevron"]')).toHaveClass('max-sm:hidden')
   })
 
