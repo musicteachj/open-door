@@ -163,6 +163,18 @@ MATRIX: dict[Action, dict[str, bool]] = {
         "HR, for anyone": True,
         "HR, for their own": False,
     },
+    # The AI Ops console is HR's, like the case queue. "HR, for their own" is True because the
+    # route passes the HR person's own PersonResource (unlike the case reads, which compare a case's
+    # owner with the actor).
+    Action.CONSOLE_READ: {
+        "self": False,
+        "another employee": False,
+        "manager, for a report": False,
+        "manager two levels up": False,
+        "manager, for their own manager": False,
+        "HR, for anyone": True,
+        "HR, for their own": True,
+    },
 }
 
 

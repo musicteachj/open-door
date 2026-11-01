@@ -121,12 +121,14 @@ The console counts finished turns only.
 | `turn_id` | the turn, for the API's own lookups | **null** |
 | `occurred_on` | the date, in the sandbox's HQ timezone | yes |
 | `occurred_at` | the time | **null** |
-| `flagged` | the safety check said sensitive or crisis | true |
+| `flagged` | the safety check said sensitive or crisis, or the turn was abandoned (redacted either way) | true |
+| `abandoned` | the app marked the turn abandoned (no verdict was stored); always flagged, never counted as an escalation | yes |
+| `fallback` | another model served the turn | yes |
 | `asker_role` | `employee`, `manager`, or `hr` | **null** |
 | `asker_location` | the location's name and state code | **null** |
 | `outcome` | `answered`, `not_found`, `refused`, `stopped`, `failed`, `budget`, `guard_unavailable` | **null** |
 | `refusal_category` | the API's refusal category, when refused (never its explanation) | **null** |
-| `guard_category`, `guard_kind`, `injection_suspected` | the safety check's verdict | **null** |
+| `guard_category`, `injection_suspected` | the safety check's verdict (its `kind` isn't stored: see the ADR's amendment) | **null** |
 | `tools` | `[{name, ok, durationMs}]`, never the inputs | **null** |
 | `sections_retrieved`, `sections_cited` | handbook section IDs | **null** |
 | `card_action` | the card the turn offered, if any (`timeoff.request`, `timeoff.decide`, `timeoff.cancel`) | **null** |
@@ -135,8 +137,10 @@ The console counts finished turns only.
 | `guard_ms`, `first_text_ms`, `total_ms` | timings | yes |
 
 - **No person ID, no conversation ID, no name, and no text**, on any row. Role and location are
-  labels copied when the row is written. Nothing in the database links a console row back to a
-  person.
+  labels copied when the row is written. Nothing on the row links it back to a person. (HR's
+  session can still match a flagged row's cost to one turn in the spend ledger and that turn's
+  `escalation.offered` audit event, which already tell HR who was offered help and when; the
+  routes read the ledger only as sums. See ADR 0016's amendment.)
 - **A flagged turn's row is redacted when it's written,** so no later code can un-redact it.
   The database enforces it too: a check constraint requires every "null on a flagged turn" column
   to be null when `flagged` is true.
@@ -172,7 +176,8 @@ Each shows its sample size; under 20 turns it says "Small sample".
 - **Safety check time,** p95, against the 800 ms target.
 - **Cost per answered question,** and the sandbox's spend so far against its cap (from the
   ledger, so the safety check, case screening, and case summaries count).
-- **Escalation rate:** flagged turns over all finished turns.
+- **Escalation rate:** flagged turns over all finished turns (an abandoned turn is redacted but
+  isn't an escalation).
 - **Refusals and fallbacks:** the share of turns the API refused or another model served.
 - **Said the handbook doesn't cover it:** the count, with the sections search came closest with,
   most frequent first (the unanswered-questions report).
@@ -449,6 +454,9 @@ The seams, for Stage 1's Opus 5.5 security reviewer:
   `turn_id` or time on a flagged one; role and location only. With four personas the demo is easy
   to re-identify by hand, and `AI-GOVERNANCE.md` says so: role and location are coarse, not
   anonymous.
+  A flagged row hides the turn's details, not the fact or the time of an HR offer, which Phase
+  6's audit rule already shows HR (ADR 0016's amendment). No route returns `ai_spend` or audit
+  rows per turn.
 - **A flagged row holds nothing but its date and its counts,** enforced at write and by the check
   constraint, so a crisis or sensitive turn shows no category, tools, or sections.
 - **No text reaches the console:** no question, answer, tool input, refusal explanation, or

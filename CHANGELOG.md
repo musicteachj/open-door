@@ -18,9 +18,31 @@ version (`0.x.y` while the app is being built, `1.0.0` when it is complete).
   end card) are designed in Claude Design and approved, with each screen's build decisions and
   acceptance criteria in its notes. The design system gains the console and tour components; no
   new tokens.
+- **The AI Ops console's data** (Phase 7, Stage 1). Each finished turn now writes a console row
+  (migration 0016, `ai_console_turns`): the asker's role and location, the outcome, the safety
+  check's category, the tools with their durations, the handbook sections retrieved and cited, the
+  card it offered, the model and versions, tokens and cost (the safety check's included), and three
+  timings, two of them new (the safety check's time, and the time to the first word of the
+  answer). No row holds a person ID, a conversation ID, a name, or any text. A sensitive or crisis
+  turn, or a turn the app later marks abandoned (its process died mid-turn), is a date-only row, and the database
+  refuses a flagged row with anything more (an abandoned turn's row says so, and isn't counted as
+  an escalation). Only HR reads the rows, in its own sandbox, through
+  the new `console.read` permission and two routes: the turn list (newest first, each day's
+  flagged rows after its timed rows) and the tiles (time to first token, safety check time, cost
+  per answered question, the sandbox's spend, escalation rate, refusals and fallbacks, what the
+  handbook didn't cover, cards a person confirmed, and possible prompt injections). Writing a row
+  can never fail a person's turn. An Opus 5.5 security reviewer found nothing high, and its one
+  medium (a flagged row can be matched to its turn through the spend ledger and the audit log HR
+  already reads) is recorded in ADR 0016's amendment. No paid AI calls; every recorded eval
+  fixture still replays.
 
 ### Changed
 
+- **The "handbook doesn't cover it" check moves into the API** (Phase 7, Stage 1), so the console
+  and the evals read an answer the same way; the evals import it. A location now carries its city
+  in the API's responses, for the console's "Oakland, CA". The safety check's "kind" is never
+  stored on a console row (the owner's call: the console doesn't show it, and beside a time and a
+  role it would name a topic).
 - **"How it's built" is dropped** (Phase 7, design). The public page planned for Phase 7 would
   have repeated the README, which carries the rules, the stack, and (from Stage 2) the
   scoreboard, and the owner's site links the code. The spec, the plan, the roadmap, the brief, and

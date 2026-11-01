@@ -194,15 +194,26 @@ async def settle(
         )
 
 
+async def _session_tenant_id(db: AsyncSession) -> UUID:
+    tenant_id: UUID | None = (await db.execute(text("SELECT app.current_tenant_id()"))).scalar_one()
+    if tenant_id is None:
+        raise ValueError("the budget state needs a session scoped to a tenant")
+    return tenant_id
+
+
+async def sandbox_spent_usd(db: AsyncSession) -> Decimal:
+    """What the session's sandbox has spent, as one sum of its ledger. It reads no daily ledger."""
+    tenant_id = await _session_tenant_id(db)
+    spent: Decimal = (await db.execute(SANDBOX_SUM, {"tenant_id": tenant_id})).scalar_one()
+    return spent
+
+
 async def budget_state(db: AsyncSession, caps: Caps) -> BudgetState:
     """The room left in the sandbox (the session's tenant) and in today's demo-wide budget.
 
     A session with no tenant sees no spend, which would read as a full budget, so it fails.
     """
-    tenant_id: UUID | None = (await db.execute(text("SELECT app.current_tenant_id()"))).scalar_one()
-    if tenant_id is None:
-        raise ValueError("the budget state needs a session scoped to a tenant")
-    sandbox_spent: Decimal = (await db.execute(SANDBOX_SUM, {"tenant_id": tenant_id})).scalar_one()
+    sandbox_spent = await sandbox_spent_usd(db)
     daily_spent: Decimal = (await db.execute(DAY_SUM)).scalar_one()
     return BudgetState(
         sandbox_remaining_usd=caps.sandbox_usd - sandbox_spent,

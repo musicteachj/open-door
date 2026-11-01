@@ -43,6 +43,10 @@ automated-decision systems apply that to the data such systems use and produce.
   reports', HR reads everyone's).
 - **The assistant's proposals** (`ai_proposals`, Phase 5) are visible only to the person they were
   made for, with no HR exception, like the conversations: the same restrictive rule enforces it.
+- **The console's rows** (`ai_console_turns`, Phase 7) are HR's alone, in HR's own sandbox. The
+  person who asked, a manager, and an HR session without the flag read nothing, and no row holds a
+  person ID, a conversation ID, or text. A restrictive Postgres rule enforces it, and the policy
+  layer's `console.read` action agrees.
 - **Cases** (`cases`, Phase 6) are visible only to the person who opened one and to HR. A manager
   sees nothing, not even a report's. Their summaries (`case_summaries`) and timelines
   (`case_events`) are HR's alone. Restrictive Postgres rules enforce it, and the policy layer
@@ -228,7 +232,7 @@ Every ID below is a random UUID, so one sandbox can't estimate another's activit
 | `served_by_models`, `effort`, `prompt_version`, `toolset_version` | The model IDs that served the turn, and the settings in effect | Explains a result, and shows when a fallback happened. |
 | `input_tokens`, `output_tokens`, `cache_read_tokens`, `cache_write_tokens`, `cost_usd` | Token counts and the cost at list price | Measures cost and caching. |
 | `first_event_ms`, `total_ms` | Milliseconds to the first visible event, and in total | Measures latency. |
-| `refusal`, `fallback`, `injection_suspected` | Yes or no | Phase 7's console counts these. |
+| `refusal`, `fallback`, `injection_suspected` | Yes or no | The record. Phase 7's console counts its own copies, in `ai_console_turns`, not these. |
 
 ### `ai_feedback`
 
@@ -260,10 +264,12 @@ Global: no sandbox, no person, no text, and outside row-level security.
 
 **Who sees them.** `ai_conversations`, `ai_messages`, `ai_turns`, and `ai_feedback` are visible to the
 person they belong to and to no one else, HR included: Postgres enforces a second, restrictive rule
-on top of the sandbox rule. Phase 7 decides what the console may show. `ai_spend` is the sandbox's
-own ledger: its sum covers everyone in the sandbox, so people in one sandbox can see each other's
-turn IDs and the timing of their calls there, though never a question or an answer. A sandbox is one
-visitor playing fictional personas, so that is accepted, and no route returns these rows.
+on top of the sandbox rule. The console shows none of these tables' rows (see `ai_console_turns`).
+`ai_spend` is the sandbox's own ledger: its sum covers everyone in the sandbox, so people in one
+sandbox can see each other's turn IDs and the timing of their calls there, though never a question
+or an answer. A sandbox is one visitor playing fictional personas, so that is accepted. No route
+returns these rows: HR's console metrics route (`GET /api/v1/console/metrics`) returns one sum of
+the sandbox's spend and no rows, never a figure per turn.
 `ai_spend_daily` holds amounts only, so it is visible to every sandbox's API session.
 
 **How long.** The first five are deleted with the sandbox, 24 hours after it is created.
@@ -406,6 +412,59 @@ the model and prompt version that wrote it).
 no earlier. The API can add rows, and change only a case's `status`, `status_changed_at`, and (once, from
 `unscreened`, by HR's retry) `screening`.
 Dropped plaintext, if any, lingers as for the conversations (see above).
+
+### The console: `ai_console_turns`
+
+Added in Phase 7 (migration 0016, ADR 0016). One row for each finished turn, written in the same
+transaction that finishes it, whatever its ending. It is what HR's AI Ops console reads: a trace of
+what the assistant did, without the person behind it. A turn the app later marks abandoned (its
+process died mid-turn) gets a redacted row too, since no verdict was stored for it.
+
+| Column | Holds | Why |
+|---|---|---|
+| `id`, `tenant_id` | The row's own random ID (never the turn's), and its sandbox | Identity. |
+| `turn_id` | The turn's ID, for the API's own lookups. **Null on a flagged row.** Not a foreign key: nothing in the database links a console row to the person's turn rows | Lets a route find a row's turn without a person in the row. |
+| `occurred_on` | The date, in Denver HQ's time zone (`America/Denver`) | The console groups turns by day. |
+| `occurred_at` | When the turn was asked (UTC). **Null on a flagged row** | The time shown on a row. |
+| `flagged` | Whether the safety check said sensitive or crisis, or the turn showed an HR panel, or no verdict was stored (an abandoned turn) | Decides the redaction below. |
+| `abandoned` | True only on the row written when a turn's process died before it stored a verdict (default false). Always flagged (a check constraint). Says only that a turn died, nothing about a person | The escalation tile counts flagged rows that are not abandoned, so a crashed worker is a turn, not an escalation; a list row can be worded differently. |
+| `asker_role`, `asker_location` | `employee`, `manager`, or `hr`, and the location's city and state code ("Oakland, CA"), copied when the row is written. **Null on a flagged row** | Coarse labels, not anonymous: in a four-persona demo a person can be recognized by hand. |
+| `outcome` | `answered`, `not_found`, `refused`, `stopped`, `failed`, `budget`, or `guard_unavailable`. **Null on a flagged row** | `not_found` is the turn's reading of its own finished answer ("said the handbook doesn't cover it"); the answer itself is not stored. |
+| `refusal_category` | The model service's refusal category, such as `general_harms`, when the turn was refused: a short word, enforced by a check constraint. Never its explanation. **Null on a flagged row** | Shows why the service refused. |
+| `guard_category`, `injection_suspected` | The safety check's category (the topic kind is not kept) and whether injection was suspected. The category on an unflagged row is `ordinary` or null (a check constraint). **Null on a flagged row** | Shows why a turn was routed. |
+| `tools` | `[{name, ok, durationMs}]` in call order. Never an input. A name that isn't one of the assistant's tools is stored as `unknown`. **Null on a flagged row** | What the assistant did. |
+| `sections_retrieved`, `sections_cited` | Handbook section IDs (`4.3`, `CA-4.3`). **Null on a flagged row** | What search found against what the answer cited. |
+| `card_action` | `timeoff.request`, `timeoff.decide`, or `timeoff.cancel`, when the turn made a confirm card. **Null on a flagged row** | Invariant 3 in numbers. |
+| `served_by`, `fallback`, `effort`, `prompt_version`, `toolset_version` | The model IDs that served the turn, whether another model served some of it (a fallback; false on an abandoned row), and the settings in effect. Empty or null on an abandoned row. Kept on a flagged row: they say what answered, not who asked | What answered, and the "Refusals and fallbacks" tile. |
+| `input_tokens`, `output_tokens`, `cache_read_tokens`, `cache_write_tokens`, `cost_usd` | The turn's tokens, the safety check's included, and its cost at list price | Cost and caching. |
+| `guard_ms`, `first_text_ms`, `total_ms` | Milliseconds the safety check took (null if it never ran), to the first word of the answer (null if none), and the whole turn | Latency against the targets. |
+
+**A flagged row is redacted when it is written.** It keeps its date, its counts, its timings, and
+the model's labels, and nothing else: no time, turn ID, role, location, outcome, verdict, tool,
+section, or card. A check constraint refuses a flagged row that holds any of them, so a bug in the
+writer fails the insert instead of leaking, and the turn still finishes. The handbook promises that
+a message alone never reaches HR, and a console that showed a sensitive turn's details would break
+it. An unflagged row must be complete (a second check).
+
+**No row holds a person ID, a conversation ID, a name, or any text** a person or the model wrote:
+not the question, the answer, a tool's input, a refusal's explanation, or a feedback reason.
+
+**Who sees them.** HR, in its own sandbox, through a restrictive Postgres rule on top of the
+sandbox rule. The person who asked can't read their own turn's row, and neither can a manager, a
+coworker, an HR session without the flag, or another sandbox. The app's login may insert and read
+(under that rule) and may not update, delete, or truncate; the cleanup login has no grant.
+
+**What the routes return.** `GET /api/v1/console/turns` returns rows from this table only (never
+`turn_id`), 50 a page, and `GET /api/v1/console/metrics` returns figures worked out from them:
+counts, percentiles, and means. For the sandbox's spend it also returns one sum from `ai_spend`, and
+for "Cards confirmed by a person" three counts of `proposal.confirmed` audit events by action. Neither
+route returns a spend row, an audit row, or any text. Both are HR-only (a 404 for anyone else) and
+`no-store`.
+
+**What the seed writes.** Nothing: no turns are seeded, because made-up telemetry would be dishonest.
+The console starts empty.
+
+**How long.** The sandbox's life: deleted with it, 24 hours after it is created.
 
 ### The handbook: `handbook_versions`, `handbook_sections`, `handbook_chunks`
 

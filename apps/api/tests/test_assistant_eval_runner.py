@@ -23,6 +23,7 @@ import pytest
 from app.ai.pricing import HAIKU, IterationUsage, Usage, turn_call_cost
 from app.ai.replay import FixtureStore, Record
 from app.ai.transport import Finished, GuardRequest, GuardResult, SpendLimitReached
+from app.core.stats import percentile
 from app.modules.sandbox.seed import build_company
 from tests.assistant_eval import (
     EVAL_DIR,
@@ -576,12 +577,14 @@ def test_the_guards_latency_counts_only_live_guard_calls() -> None:
 
 
 @pytest.mark.parametrize("percent", [50, 95])
-def test_nearest_rank_matches_exact_integer_math_for_every_count(percent: int) -> None:
+def test_the_one_percentile_function_matches_exact_integer_math_for_every_count(
+    percent: int,
+) -> None:
     for count in range(1, 501):
         values = list(range(1, count + 1))  # The value at a rank is the rank itself.
         exact_rank = (percent * count + 99) // 100  # ceil(percent * count / 100), no floats
 
-        assert board._nearest_rank(values, percent) == exact_rank, (count, percent)
+        assert percentile(values, percent) == exact_rank, (count, percent)
 
 
 def test_one_live_guard_call_is_its_own_percentiles() -> None:

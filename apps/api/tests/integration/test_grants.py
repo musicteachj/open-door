@@ -61,6 +61,9 @@ EXPECTED_TABLE_GRANTS = {
         for table in ("cases", "case_summaries", "case_events")
         for privilege in ("SELECT", "INSERT")
     ),
+    # The console's rows (Phase 7) are insert-only, and the cleanup login needs no grant.
+    ("od_app", "ai_console_turns", "SELECT"),
+    ("od_app", "ai_console_turns", "INSERT"),
     ("od_cleanup", "tenants", "SELECT"),
     ("od_cleanup", "tenants", "DELETE"),
 }

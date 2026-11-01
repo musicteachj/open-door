@@ -33,6 +33,7 @@ export function meFor(persona: PersonaKey, tenantExpiresAt: string = DEFAULT_EXP
             id: 'loc-3',
             code: 'aus',
             name: 'Austin warehouse',
+            city: 'Austin',
             state: 'TX',
             timezone: 'America/Chicago',
           }
@@ -40,6 +41,7 @@ export function meFor(persona: PersonaKey, tenantExpiresAt: string = DEFAULT_EXP
             id: 'loc-1',
             code: 'oak',
             name: 'Oakland store',
+            city: 'Oakland',
             state: 'CA',
             timezone: 'America/Los_Angeles',
           },

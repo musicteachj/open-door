@@ -2770,10 +2770,139 @@
           }
         }
       }
+    },
+    "/api/v1/console/turns": {
+      "get": {
+        "tags": [
+          "console"
+        ],
+        "summary": "HR's turn list: labels, counts, and timings, newest first, no words",
+        "operationId": "listConsoleTurns",
+        "parameters": [
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 512
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConsoleTurnsPageOut"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Unprocessable Content",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/console/metrics": {
+      "get": {
+        "tags": [
+          "console"
+        ],
+        "summary": "HR's tiles over the sandbox's life: counts, percentiles, and sums, no words",
+        "operationId": "getConsoleMetrics",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConsoleMetricsOut"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
     "schemas": {
+      "ActionCountOut": {
+        "properties": {
+          "action": {
+            "type": "string",
+            "title": "Action"
+          },
+          "count": {
+            "type": "integer",
+            "title": "Count"
+          }
+        },
+        "type": "object",
+        "required": [
+          "action",
+          "count"
+        ],
+        "title": "ActionCountOut"
+      },
       "AssistantTextsOut": {
         "properties": {
           "personalData": {
@@ -3721,6 +3850,372 @@
         "title": "ConfirmIn",
         "description": "The body of a confirm. A denial's note is the only thing the client sends: the proposal's\naction, payload, and person are the server's own, so any other field is a 422."
       },
+      "ConsoleMetricsOut": {
+        "properties": {
+          "turns": {
+            "type": "integer",
+            "title": "Turns",
+            "description": "Every console row in the sandbox, flagged ones included."
+          },
+          "smallSample": {
+            "type": "boolean",
+            "title": "Smallsample"
+          },
+          "firstToken": {
+            "$ref": "#/components/schemas/FirstTokenTileOut"
+          },
+          "safetyCheck": {
+            "$ref": "#/components/schemas/SafetyCheckTileOut"
+          },
+          "cost": {
+            "$ref": "#/components/schemas/CostTileOut"
+          },
+          "escalation": {
+            "$ref": "#/components/schemas/EscalationTileOut"
+          },
+          "refusals": {
+            "$ref": "#/components/schemas/RefusalsTileOut"
+          },
+          "notFound": {
+            "$ref": "#/components/schemas/NotFoundTileOut"
+          },
+          "cardsConfirmed": {
+            "items": {
+              "$ref": "#/components/schemas/ActionCountOut"
+            },
+            "type": "array",
+            "title": "Cardsconfirmed"
+          },
+          "injections": {
+            "$ref": "#/components/schemas/InjectionTileOut"
+          }
+        },
+        "type": "object",
+        "required": [
+          "turns",
+          "smallSample",
+          "firstToken",
+          "safetyCheck",
+          "cost",
+          "escalation",
+          "refusals",
+          "notFound",
+          "cardsConfirmed",
+          "injections"
+        ],
+        "title": "ConsoleMetricsOut"
+      },
+      "ConsoleTurnOut": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "occurredOn": {
+            "type": "string",
+            "format": "date",
+            "title": "Occurredon"
+          },
+          "occurredAt": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Occurredat"
+          },
+          "flagged": {
+            "type": "boolean",
+            "title": "Flagged"
+          },
+          "abandoned": {
+            "type": "boolean",
+            "title": "Abandoned"
+          },
+          "askerRole": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Askerrole"
+          },
+          "askerLocation": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Askerlocation"
+          },
+          "outcome": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Outcome"
+          },
+          "refusalCategory": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Refusalcategory"
+          },
+          "guardCategory": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Guardcategory"
+          },
+          "injectionSuspected": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Injectionsuspected"
+          },
+          "tools": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/ToolOut"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tools"
+          },
+          "sectionsRetrieved": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sectionsretrieved"
+          },
+          "sectionsCited": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sectionscited"
+          },
+          "cardAction": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cardaction"
+          },
+          "servedBy": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Servedby"
+          },
+          "fallback": {
+            "type": "boolean",
+            "title": "Fallback"
+          },
+          "effort": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Effort"
+          },
+          "promptVersion": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Promptversion"
+          },
+          "toolsetVersion": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Toolsetversion"
+          },
+          "inputTokens": {
+            "type": "integer",
+            "title": "Inputtokens"
+          },
+          "outputTokens": {
+            "type": "integer",
+            "title": "Outputtokens"
+          },
+          "cacheReadTokens": {
+            "type": "integer",
+            "title": "Cachereadtokens"
+          },
+          "cacheWriteTokens": {
+            "type": "integer",
+            "title": "Cachewritetokens"
+          },
+          "costUsd": {
+            "type": "number",
+            "title": "Costusd"
+          },
+          "guardMs": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Guardms"
+          },
+          "firstTextMs": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Firsttextms"
+          },
+          "totalMs": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Totalms"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "occurredOn",
+          "occurredAt",
+          "flagged",
+          "abandoned",
+          "askerRole",
+          "askerLocation",
+          "outcome",
+          "refusalCategory",
+          "guardCategory",
+          "injectionSuspected",
+          "tools",
+          "sectionsRetrieved",
+          "sectionsCited",
+          "cardAction",
+          "servedBy",
+          "fallback",
+          "effort",
+          "promptVersion",
+          "toolsetVersion",
+          "inputTokens",
+          "outputTokens",
+          "cacheReadTokens",
+          "cacheWriteTokens",
+          "costUsd",
+          "guardMs",
+          "firstTextMs",
+          "totalMs"
+        ],
+        "title": "ConsoleTurnOut",
+        "description": "One console row. A flagged row has only its date, its counts, and the model's labels: every\nother field is null. `id` is the row's own and never a turn's."
+      },
+      "ConsoleTurnsPageOut": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ConsoleTurnOut"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "nextCursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Nextcursor"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items",
+          "nextCursor"
+        ],
+        "title": "ConsoleTurnsPageOut"
+      },
       "ConversationOut": {
         "properties": {
           "id": {
@@ -3775,6 +4270,46 @@
           "outdated"
         ],
         "title": "ConversationOut"
+      },
+      "CostTileOut": {
+        "properties": {
+          "perAnsweredQuestionUsd": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Peransweredquestionusd"
+          },
+          "answeredCount": {
+            "type": "integer",
+            "title": "Answeredcount"
+          },
+          "sandboxSpendUsd": {
+            "type": "number",
+            "title": "Sandboxspendusd"
+          },
+          "sandboxCapUsd": {
+            "type": "number",
+            "title": "Sandboxcapusd"
+          },
+          "smallSample": {
+            "type": "boolean",
+            "title": "Smallsample"
+          }
+        },
+        "type": "object",
+        "required": [
+          "perAnsweredQuestionUsd",
+          "answeredCount",
+          "sandboxSpendUsd",
+          "sandboxCapUsd",
+          "smallSample"
+        ],
+        "title": "CostTileOut"
       },
       "CountsOut": {
         "properties": {
@@ -4298,6 +4833,41 @@
         "title": "EscalationOut",
         "description": "The fixed text the stream's `escalation` event had, and the HR team to reach."
       },
+      "EscalationTileOut": {
+        "properties": {
+          "rate": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rate"
+          },
+          "flaggedCount": {
+            "type": "integer",
+            "title": "Flaggedcount"
+          },
+          "turns": {
+            "type": "integer",
+            "title": "Turns"
+          },
+          "smallSample": {
+            "type": "boolean",
+            "title": "Smallsample"
+          }
+        },
+        "type": "object",
+        "required": [
+          "rate",
+          "flaggedCount",
+          "turns",
+          "smallSample"
+        ],
+        "title": "EscalationTileOut"
+      },
       "FailureOut": {
         "properties": {
           "code": {
@@ -4444,6 +5014,53 @@
         ],
         "title": "FieldError",
         "description": "One failed field on a 422: where it was, what was wrong, and the error's kind."
+      },
+      "FirstTokenTileOut": {
+        "properties": {
+          "p50Ms": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "P50Ms"
+          },
+          "p95Ms": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "P95Ms"
+          },
+          "targetMs": {
+            "type": "integer",
+            "title": "Targetms"
+          },
+          "sampleSize": {
+            "type": "integer",
+            "title": "Samplesize"
+          },
+          "smallSample": {
+            "type": "boolean",
+            "title": "Smallsample"
+          }
+        },
+        "type": "object",
+        "required": [
+          "p50Ms",
+          "p95Ms",
+          "targetMs",
+          "sampleSize",
+          "smallSample"
+        ],
+        "title": "FirstTokenTileOut"
       },
       "GuardOut": {
         "properties": {
@@ -4631,6 +5248,29 @@
         ],
         "title": "HrContactOut"
       },
+      "InjectionTileOut": {
+        "properties": {
+          "count": {
+            "type": "integer",
+            "title": "Count"
+          },
+          "turns": {
+            "type": "integer",
+            "title": "Turns"
+          },
+          "smallSample": {
+            "type": "boolean",
+            "title": "Smallsample"
+          }
+        },
+        "type": "object",
+        "required": [
+          "count",
+          "turns",
+          "smallSample"
+        ],
+        "title": "InjectionTileOut"
+      },
       "Inline": {
         "properties": {
           "text": {
@@ -4758,6 +5398,10 @@
             "type": "string",
             "title": "Name"
           },
+          "city": {
+            "type": "string",
+            "title": "City"
+          },
           "state": {
             "type": "string",
             "title": "State"
@@ -4772,6 +5416,7 @@
           "id",
           "code",
           "name",
+          "city",
           "state",
           "timezone"
         ],
@@ -4882,6 +5527,37 @@
         },
         "type": "object",
         "title": "NewSandboxRequest"
+      },
+      "NotFoundTileOut": {
+        "properties": {
+          "count": {
+            "type": "integer",
+            "title": "Count"
+          },
+          "turns": {
+            "type": "integer",
+            "title": "Turns"
+          },
+          "sections": {
+            "items": {
+              "$ref": "#/components/schemas/SectionCountOut"
+            },
+            "type": "array",
+            "title": "Sections"
+          },
+          "smallSample": {
+            "type": "boolean",
+            "title": "Smallsample"
+          }
+        },
+        "type": "object",
+        "required": [
+          "count",
+          "turns",
+          "sections",
+          "smallSample"
+        ],
+        "title": "NotFoundTileOut"
       },
       "OpenCaseBody": {
         "properties": {
@@ -5534,6 +6210,51 @@
         ],
         "title": "QueuePageOut"
       },
+      "RefusalsTileOut": {
+        "properties": {
+          "rate": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rate"
+          },
+          "refusedCount": {
+            "type": "integer",
+            "title": "Refusedcount"
+          },
+          "fallbackCount": {
+            "type": "integer",
+            "title": "Fallbackcount"
+          },
+          "affectedCount": {
+            "type": "integer",
+            "title": "Affectedcount"
+          },
+          "turns": {
+            "type": "integer",
+            "title": "Turns"
+          },
+          "smallSample": {
+            "type": "boolean",
+            "title": "Smallsample"
+          }
+        },
+        "type": "object",
+        "required": [
+          "rate",
+          "refusedCount",
+          "fallbackCount",
+          "affectedCount",
+          "turns",
+          "smallSample"
+        ],
+        "title": "RefusalsTileOut"
+      },
       "RequestCard": {
         "properties": {
           "kind": {
@@ -5869,6 +6590,41 @@
         ],
         "title": "RuleRefOut"
       },
+      "SafetyCheckTileOut": {
+        "properties": {
+          "p95Ms": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "P95Ms"
+          },
+          "targetMs": {
+            "type": "integer",
+            "title": "Targetms"
+          },
+          "sampleSize": {
+            "type": "integer",
+            "title": "Samplesize"
+          },
+          "smallSample": {
+            "type": "boolean",
+            "title": "Smallsample"
+          }
+        },
+        "type": "object",
+        "required": [
+          "p95Ms",
+          "targetMs",
+          "sampleSize",
+          "smallSample"
+        ],
+        "title": "SafetyCheckTileOut"
+      },
       "SandboxCreated": {
         "properties": {
           "tenant": {
@@ -5925,6 +6681,24 @@
           "results"
         ],
         "title": "SearchResults"
+      },
+      "SectionCountOut": {
+        "properties": {
+          "sectionId": {
+            "type": "string",
+            "title": "Sectionid"
+          },
+          "count": {
+            "type": "integer",
+            "title": "Count"
+          }
+        },
+        "type": "object",
+        "required": [
+          "sectionId",
+          "count"
+        ],
+        "title": "SectionCountOut"
       },
       "SectionDetail": {
         "properties": {
@@ -6606,6 +7380,30 @@
           "durationMs"
         ],
         "title": "ToolCallOut"
+      },
+      "ToolOut": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "ok": {
+            "type": "boolean",
+            "title": "Ok"
+          },
+          "durationMs": {
+            "type": "integer",
+            "title": "Durationms"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "ok",
+          "durationMs"
+        ],
+        "title": "ToolOut",
+        "description": "A tool the turn called: its name, whether it worked, and its time. Never its input."
       },
       "TurnErrorOut": {
         "properties": {
