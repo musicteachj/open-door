@@ -24,6 +24,7 @@ from app.ai.budget import (
     Reservation,
     budget_state,
     reserve,
+    sandbox_spent_usd,
     settle,
 )
 from app.ai.pricing import IterationUsage, Usage, reservation_usd, turn_call_cost
@@ -441,6 +442,34 @@ async def test_the_budget_state_reports_both_ledgers(
     assert state.daily_remaining_usd == Decimal("0")
     assert state.daily_reached
     assert not state.sandbox_reached
+
+
+async def test_the_sandbox_spend_reads_only_the_sandbox_ledger(
+    app_engine: AsyncEngine,
+    owner_engine: AsyncEngine,
+    make_tenant: MakeTenant,
+    daily_baseline: Decimal,
+) -> None:
+    tenant = await make_tenant()
+    turn_id = await add_turn(app_engine, tenant)
+    caps = await caps_with_room(owner_engine, tenant.id, sandbox_room=Decimal("0.30"))
+    await reserve(
+        app_engine, context_of(tenant), turn_id=turn_id, amount_usd=Decimal("0.08"), caps=caps
+    )
+
+    async with tenant_session(app_engine, context_of(tenant)) as session:
+        spent = await sandbox_spent_usd(session)
+        state = await budget_state(session, caps)
+
+    # The room was 0.30 before the 0.08 reservation.
+    assert spent == caps.sandbox_usd - Decimal("0.22")
+    assert caps.sandbox_usd - spent == state.sandbox_remaining_usd
+
+
+async def test_the_sandbox_spend_needs_a_tenant(app_engine: AsyncEngine) -> None:
+    async with tenant_session(app_engine, TenantContext(None, None)) as session:
+        with pytest.raises(ValueError, match="tenant"):
+            await sandbox_spent_usd(session)
 
 
 async def test_the_sandbox_is_reached_when_its_room_is_gone(

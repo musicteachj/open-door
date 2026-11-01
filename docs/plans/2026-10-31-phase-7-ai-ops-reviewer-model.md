@@ -850,7 +850,102 @@ Recorded at each stage's close.
   the stack, and (from Stage 2) the scoreboard, and the owner's site links the code. Tasks 29 and
   33 are dropped (33 keeps removing the hidden link), the tour's step 10 is the end card, and
   Stage 5 and 6 shrink accordingly.
+- **Phase 7's base commit is `098c0b8`** (`dev` after the planning PR, #88, merged). Task 36's
+  phase review diffs against it. The screens merged in #89 (`dev` 262d12f), and Stage 1 branched
+  from there.
+- **Stage 1 (2026-11-01), what the code forced:**
+  - The console inputs never go on `TurnOutcome`, whose fields map one to one onto `ai_turns`
+    columns. The turn's `_finish` builds them and inserts the row in the same transaction, after
+    `finish_turn` and the card cancellation, in its own savepoint; building the row is guarded too,
+    so neither can fail the turn.
+  - `recover_abandoned` writes a redacted row for each turn it marks, dated by when the turn was
+    asked (`started_at`), with zero counts.
+  - The turn didn't keep the refusal's category (it now reads `stop_details["category"]`, a short
+    word only, never the explanation), the card's action (only its ID), or the safety check's
+    tokens (the console's tokens add them; `ai_turns` stays main-model only).
+  - `guard_ms` runs from the budget reservation to the verdict (the turn makes one guard call; the
+    SDK's retries are inside it), null when the budget refused first. `first_text_ms` is the first
+    non-blank text shown.
+  - "Oakland, CA" needed the city: `LocationRef` and `ActorView` gained `city`, never rendered to
+    the model.
+  - `flagged` is the verdict's rule (`verdict_is_flagged`), a crisis status, or an HR panel shown,
+    whichever is true.
+  - `says_not_found` moved with `normalize` and its patterns into `app/ai/answer_checks.py`; the
+    graders import them back.
+  - `make_tenant` writes a console row, since the isolation and cleanup tests need a row in every
+    tenant table.
+  - An `abandoned` column was added (`/code-review medium`, round 1): abandoned rows are redacted
+    like flagged ones, and without it the escalation rate counted crashes. Stages 5 and 6 must
+    not word an abandoned row as "Flagged by the safety check".
+  - A guard error (`guard-error`) is "Safety check unavailable", as the person sees it, and
+    `guard_ms` starts at the guard call itself, not before the spend reservation (the spec's "its
+    own time"; the plan said from the reservation).
+  - The evals' guard latency uses the console's `percentile`, so there's one formula.
+  - A `fallback` column was added: the "Refusals and fallbacks" tile had no other way to know
+    another model answered. It stays on a flagged row, like `served_by`.
+  - The spend tile reads the sandbox's ledger sum through a new `sandbox_spent_usd`, which
+    `budget_state` now uses too.
+  - Tool names are checked against the registry ("unknown" otherwise), since the model writes
+    them; section IDs and the refusal category are checked by pattern.
+- **Stage 1, the owner's calls on the security review (2026-10-31):**
+  - **The safety check's `kind` is not stored** (the spec's column is dropped): the console never
+    shows it, and on an unflagged row it would put a topic beside the time, role, and location.
+  - **A flagged row can be matched to its turn** through the spend ledger (`ai_spend`, a turn ID
+    per charge, open to the sandbox) and the `escalation.offered` audit event HR already reads.
+    The docs were corrected (ADR 0016's amendment, the spec, `AI-GOVERNANCE.md`); the routes read
+    the ledger only as a sum. A flagged row hides the details, not the fact or the time of an HR
+    offer.
+  - The database also refuses an unflagged row whose category isn't ordinary, and a refusal
+    category that isn't a short word.
+- **Stage 1, kept as the spec says:** a turn the safety check never screened (guard unavailable, a
+  guard error, a budget stop before it) is a timed row with role, location, and outcome, and no
+  verdict, tools, or sections. The security reviewer agreed: it holds no content, and the console
+  is where a guard outage shows.
+- **Stage 1, `AI-GOVERNANCE.md`** gained "The AI Ops console" (its redaction and its limits),
+  which no task named.
 
 ## Backlog
 
 Recorded at each stage's close, then moved to `docs/BACKLOG.md`.
+
+- **Stage 1:** a flagged row's counts can hint whether it was a crisis (no answer, so no
+  first-word time) or sensitive; HR's audit log already shows the kind of an HR offer (ADR 0016's
+  amendment). The "Cards confirmed" tile counts flagged turns' cards too, which the audit log
+  already shows HR.
+- **Stage 1, `/code-review medium` lows not fixed:** a refused turn's first-word time counts text
+  that was later taken back (the person did see it first, so it's kept as a true latency); a card
+  canceled when its turn didn't finish still shows as offered (the spec: the card the turn
+  offered). `console_rows.py` imports `ProposalAction` from `proposal_cards`, so the builder is
+  pure in behavior but no longer free of database imports.
+- **Stage 1, `/code-review medium` round 2 (one fixed, the rest recorded):** a stop that landed
+  while the safety check's charge was being written lost a sensitive verdict, so the row went out
+  unflagged; the verdict is now kept before that write (fixed, with a test). Not fixed: a turn whose
+  process died with no later question in its conversation is never recovered, so it never gets a
+  console row (Phase 8's cleanup job can recover it); the console insert runs inside the turn's
+  10-second finishing bound, so a timeout during it rolls back the finish too, as a slow
+  `finish_turn` already would; refusals, not-found answers, and injections are counted over all
+  turns, flagged ones included, as screen 13 shows them ("0 of 9 turns"); `hq_timezone` is passed
+  by both callers rather than defaulted.
+- **Stage 1, `/code-review medium` round 3 (one fixed, the rest recorded):** round 2's fix kept
+  the verdict but not what it decides, so a stop at that moment stored a sensitive verdict with no
+  audited HR offer, and the reload showed a panel the audit never recorded. Now the verdict, the
+  sensitive flag, and the crisis or unavailable status are all set before the charge is written
+  (tests for the sensitive and crisis cases). That write is already shielded from a normal stop,
+  so only a native task cancel could cut it. Not fixed: a `max-tokens` completion is "answered"
+  (it showed an answer, cut short); `says_not_found` takes non-overlapping matches, so a rejected
+  "you can't" can hide a later "I couldn't find it" in the same span (moved verbatim from the
+  evals, where changing it would change graded results); the evals import `percentile` from the
+  console module rather than a shared helper module; a dropped connection during the console
+  insert fails the finish's commit, as it would fail the finish anyway.
+- **Stage 1, `/code-review medium` round 4: nothing new high or medium, so the loop stopped.**
+  Fixed from its lows: `percentile` at 0 gave the largest value (now rank 1 at least) and moved to
+  `app/core/stats.py`, which imports nothing, so the evals no longer load the assistant for it; the
+  "pure" claims in `console_rows.py` and `metrics.py` now say what they import; `Role` comes from
+  `app.ai.context`; the changelog and `AI-GOVERNANCE.md` no longer say a turn stopped before its
+  verdict is date-only (only an abandoned one is). Recorded: the console row's columns are listed
+  in three places for the list route (`LIST_COLUMNS`, `ConsoleTurnOut`, `_turn_out`); a flagged
+  row's `fallback` counts in the refusals-and-fallbacks tile while its refusal can't. The rest
+  repeated earlier rounds (an unscreened turn's timed row, the first-word time, a canceled card,
+  loading the rows, `hq_timezone`).
+- **Stage 1:** the metrics route loads every console row's narrow columns for the tiles. A
+  sandbox's rows are bounded (24 hours, a capped spend), so it's fine until sandboxes live longer.

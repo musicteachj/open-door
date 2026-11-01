@@ -203,11 +203,12 @@ def finished(
     iterations: tuple[IterationUsage, ...] | None = None,
     fell_back: bool = False,
     served_by: str = "scripted",
+    stop_details: dict[str, Any] | None = None,
 ) -> Finished:
     return Finished(
         message=message(content),
         stop_reason=stop_reason,
-        stop_details=None,
+        stop_details=stop_details,
         usage=usage,
         iterations=iterations or (IterationUsage("scripted", usage),),
         served_by=served_by,

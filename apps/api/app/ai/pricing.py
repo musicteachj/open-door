@@ -16,6 +16,7 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from decimal import ROUND_CEILING, ROUND_HALF_EVEN, Decimal
 from types import MappingProxyType
+from typing import Final
 
 logger = logging.getLogger(__name__)
 
@@ -99,6 +100,11 @@ PRICES: Mapping[str, Price] = MappingProxyType(
         ),
     }
 )
+
+
+# The stream's budget error codes: the sandbox's cap, the day's cap, and the API's own spend limit.
+# One list for the turn (which sets them and shows their texts) and the console (which labels them).
+BUDGET_ERROR_CODES: Final = ("budget-sandbox", "budget-daily", "spend-limit")
 
 
 @dataclass(frozen=True)

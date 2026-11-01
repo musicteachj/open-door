@@ -46,6 +46,7 @@ from decimal import Decimal
 from functools import partial
 from typing import Any, ClassVar, Literal
 from uuid import UUID
+from zoneinfo import ZoneInfo
 
 import anyio
 from sqlalchemy import func, select
@@ -54,6 +55,14 @@ from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 from app.ai.budget import BudgetExceeded, Caps, Reservation, reserve, settle
 from app.ai.case_outcomes import unreported_cases, with_case_sentences
 from app.ai.citations import CitationEvent, CitationMapper
+from app.ai.console_rows import (
+    UNKNOWN_TOOL,
+    ConsoleInputs,
+    ToolCallMeta,
+    build_console_row,
+    location_label,
+    refusal_category_of,
+)
 from app.ai.context import ActorView, turn_context
 from app.ai.conversations import (
     ConversationCipher,
@@ -67,6 +76,7 @@ from app.ai.conversations import (
     model_history,
     search_sources,
     start_turn,
+    write_console_row,
 )
 from app.ai.embeddings import Embedder
 from app.ai.fixed_texts import (
@@ -86,6 +96,7 @@ from app.ai.guard import (
     screen,
 )
 from app.ai.pricing import (
+    BUDGET_ERROR_CODES,
     IterationUsage,
     Usage,
     estimate_input_tokens,
@@ -122,6 +133,7 @@ from app.ai.transport import TextDelta as ModelText
 from app.core.encryption import KeyProvider
 from app.db.models import AiConversation, AiProposal, AiTurn
 from app.db.tenancy import TenantContext, tenant_session
+from app.domain.cases import HQ_TIMEZONE
 from app.domain.handbook.applicability import Asker
 from app.modules.audit.service import record_event
 from app.policy import Actor
@@ -358,6 +370,9 @@ TurnEvent = (
 # What a person can see, for the time to the first visible event. A retraction is not one: the text
 # it takes back was already shown.
 _VISIBLE = (Status, TextDelta, ToolStarted, Escalation)
+# The tools the registry defines. The model names the tools it calls, so a name outside this set
+# never reaches the console row.
+_KNOWN_TOOLS = frozenset(definition["name"] for definition in TOOL_DEFINITIONS)
 
 
 # --- Dependencies -----------------------------------------------------------------------------
@@ -537,7 +552,7 @@ def _previous_answer(previous: Sequence[Any] | None, cipher: ConversationCipher)
         return UNAVAILABLE_TEXT
     if status == "failed" and error_code == "refusal":
         return ERROR_TEXTS["refusal"]
-    if status == "failed" and error_code in ("budget-sandbox", "budget-daily", "spend-limit"):
+    if status == "failed" and error_code in BUDGET_ERROR_CODES:
         return ERROR_TEXTS[error_code]
     return None
 
@@ -755,6 +770,18 @@ class TurnRun:
         self.cost_usd = Decimal(0)
         self.inflight: Reservation | None = None
         self.first_event_ms: int | None = None
+        # The console row's own measurements and labels. They travel to that row only, never to
+        # `ai_turns`, whose columns the finished-turn trigger and its grants fix (Phase 7).
+        # Milliseconds from the guard's reservation to its verdict; None if the guard never ran.
+        self.guard_ms: int | None = None
+        # Milliseconds from the start of the loop to the first text the person was sent.
+        self.first_text_ms: int | None = None
+        # The safety check's tokens, added to the main model's for the console row. Its cost is
+        # already in `cost_usd`.
+        self.guard_usage: Usage | None = None
+        # The refusal's category (never its explanation), and the last card's action.
+        self.refusal_category: str | None = None
+        self.card_action: str | None = None
         self.finish_failed = False
         # The cards that successful tool outcomes reported this turn. A card stored while its tool
         # timed out or was canceled is not here, and the ending cancels it.
@@ -967,6 +994,8 @@ class TurnRun:
         if text:
             tail = self.sent_tail + text
             self.sent_tail = tail[_tail_start(tail) :]
+        if self.first_text_ms is None and text.strip():
+            self.first_text_ms = int((_clock() - self.started_loop_s) * 1000)
         return self._seen(TextDelta(text))
 
     def _keep(self, reservation: Reservation) -> None:
@@ -1077,23 +1106,36 @@ class TurnRun:
             # screened with the "can't answer right now" text as its context.
             self.error_code = "guard-error"
             return None, []
+        # The safety check's own time: the reservation's ledger write above is not part of it.
+        guard_started_s = _clock()
         try:
-            outcome = await screen(self.deps.transport, request)
+            try:
+                outcome = await screen(self.deps.transport, request)
+            finally:
+                # The one call, its own retries included, however it ends.
+                self.guard_ms = int((_clock() - guard_started_s) * 1000)
         except SpendLimitReached:
             # The API refused the request, so nothing was billed.
             await self._settle(reservation, lambda: Decimal(0))
             self.budget_stopped = True
             self.fail("spend-limit")
             return None, []
-        await self._settle(reservation, guard_cost(outcome, self.conversation.guard_model))
+        # Everything the verdict decides is kept before the settle's await, so a stop that lands
+        # during the ledger write leaves the turn as the verdict made it: a sensitive turn still
+        # audits its HR offer, and a flagged turn's console row is still redacted.
         self.guard_verdict = outcome.verdict_json()
         self.injection = outcome.injection_suspected
+        self.guard_usage = outcome.usage
+        self.sensitive = outcome.escalation == "sensitive"
         if outcome.route == "crisis":
             self.status = "crisis"
+        elif outcome.route == "unavailable":
+            self.status = "guard_unavailable"
+        await self._settle(reservation, guard_cost(outcome, self.conversation.guard_model))
+        if outcome.route == "crisis":
             offer = offers_case("crisis", self.guard_verdict)
             return None, [Escalation("crisis", CRISIS_TEXT, await self._contacts(), offer)]
         if outcome.route == "unavailable":
-            self.status = "guard_unavailable"
             return None, [Escalation("unavailable", UNAVAILABLE_TEXT, await self._contacts())]
         return outcome, []
 
@@ -1114,7 +1156,6 @@ class TurnRun:
         if outcome is None:
             return
         self.guard_passed = True
-        self.sensitive = outcome.escalation == "sensitive"
 
         # If this raises, the turn fails as `internal` and the question is still stored.
         context = turn_context(
@@ -1382,6 +1423,7 @@ class TurnRun:
                 self.incomplete = True
             elif finished.stop_reason == "refusal":
                 self.refusal = True
+                self.refusal_category = refusal_category_of(finished.stop_details)
                 if self.shown:
                     # The client holds this partial text (and its citations); tell it to drop
                     # them before the refusal error, or they would stay beside it.
@@ -1529,6 +1571,7 @@ class TurnRun:
                 # Reported to the model as made, so the ending keeps it; then sent to the browser,
                 # right after this tool's own `tool.finished`.
                 self.reported_proposals.add(outcome.proposal.id)
+                self.card_action = outcome.proposal.action
                 finished_events.put_nowait(Proposal(outcome.proposal))
 
         tasks = [asyncio.create_task(one(index, blocks[index])) for index in slot_of]
@@ -1699,12 +1742,76 @@ class TurnRun:
                 # both ended or neither (the reverse order deadlocks with a late proposal).
                 await finish_turn(db, self.turn_id, outcome, self.cipher)
                 await self._cancel_cards(db)
+                await self._write_console_row(db, outcome)
         except Exception as error:
             logger.error(
                 "Recording the end of turn %s failed (%s)", self.turn_id, error_name(error)
             )
             self.finish_failed = True
             return
+
+    async def _write_console_row(self, db: AsyncSession, outcome: TurnOutcome) -> None:
+        """The turn's console row, in the ending's own transaction and its own savepoint. Neither
+        building it nor writing it can fail the turn: an error is logged by its type alone and the
+        row is dropped (`write_console_row`)."""
+        try:
+            row = build_console_row(self._console_inputs(outcome), turn_id=self.turn_id)
+        except Exception as error:
+            logger.error("Building the console row failed (%s)", error_name(error))
+            return
+        await write_console_row(db, self.deps.actor.tenant_id, row)
+
+    def _console_inputs(self, outcome: TurnOutcome) -> ConsoleInputs:
+        """What the console row is made from. The tool names are checked against the registry's
+        (the model writes them), and no input summary, answer text beyond the not-found reading,
+        or explanation goes on."""
+        # The outcome's counts are the main model's (already totaled); the safety check's are added.
+        guard = self.guard_usage or Usage(0, 0, 0, 0)
+        usage = Usage(
+            outcome.input_tokens + guard.input_tokens,
+            outcome.output_tokens + guard.output_tokens,
+            outcome.cache_read_tokens + guard.cache_read_tokens,
+            outcome.cache_write_tokens + guard.cache_write_tokens,
+        )
+        view = self.deps.actor_view
+        return ConsoleInputs(
+            status=outcome.status,
+            error_code=outcome.error_code,
+            guard_verdict=outcome.guard_verdict,
+            sensitive=self.sensitive,
+            refusal=outcome.refusal,
+            refusal_category=self.refusal_category,
+            injection_suspected=outcome.injection_suspected,
+            tool_calls=[
+                ToolCallMeta(
+                    # "skipped" passes through: the builder drops it.
+                    name=entry["name"]
+                    if entry["name"] in _KNOWN_TOOLS or entry["name"] == "skipped"
+                    else UNKNOWN_TOOL,
+                    ok=bool(entry["ok"]),
+                    duration_ms=int(entry["durationMs"]),
+                )
+                for entry in outcome.tool_calls
+            ],
+            sections_retrieved=[entry["sectionId"] for entry in outcome.sections_retrieved],
+            sections_cited=[entry["sectionId"] for entry in outcome.citations],
+            card_action=self.card_action,
+            answer_text=outcome.answer_text,
+            role=view.role,
+            location_label=location_label(view.city, view.state),
+            served_by=outcome.served_by_models,
+            fallback=outcome.fallback,
+            effort=outcome.effort,
+            prompt_version=outcome.prompt_version,
+            toolset_version=outcome.toolset_version,
+            usage=usage,
+            cost_usd=outcome.cost_usd,
+            guard_ms=self.guard_ms,
+            first_text_ms=self.first_text_ms,
+            total_ms=outcome.total_ms,
+            occurred_at=self.now,
+            hq_timezone=ZoneInfo(HQ_TIMEZONE),
+        )
 
     async def _cancel_cards(self, db: AsyncSession) -> None:
         """Cancel the turn's pending cards that its stored history doesn't back, in the ending's own

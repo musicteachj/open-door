@@ -30,6 +30,7 @@ KNOWN_TABLES = {
     "cases",
     "case_summaries",
     "case_events",
+    "ai_console_turns",
 }
 # Global tables: no tenant_id, so they sit outside row-level security. The handbook is read-only to
 # the API. ai_spend_daily holds only a day and an amount, so every sandbox's spending can be summed

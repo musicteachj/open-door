@@ -247,6 +247,28 @@ From Phase 6 a person can send HR a confidential case from the panel or the My c
 - **Everything is encrypted at rest** (case words, summaries, and all conversation text), with a
   key per case and per conversation ([ADR 0015](adr/0015-envelope-encryption.md)).
 
+## The AI Ops console
+
+From Phase 7, HR sees what the assistant did on each turn in its own sandbox: the safety check's
+category, the tools, the handbook sections, tokens, cost, and timing
+([ADR 0016](adr/0016-console-rows-redacted-at-write.md)). Its page arrives in Stage 6; its data,
+from Stage 1:
+
+- **Each finished turn writes a console row,** a copy of its metadata taken when the turn ends.
+  No row holds a person ID, a conversation ID, a name, or any text a person or the model wrote: the
+  asker is a role and a location ("Employee · Oakland, CA"), and a refusal keeps only its category.
+- **A flagged turn (sensitive or crisis) is a date-only row:** its date and its counts (tokens,
+  cost, timings, model). The database refuses a flagged row that holds anything more, and a turn
+  whose process died mid-turn (so no verdict was stored) gets the same row. A turn the safety
+  check never screened (it was down, or the spending cap stopped the turn first) is an ordinary
+  row with no verdict, tools, or sections, so a guard outage shows.
+- **Only HR reads the rows,** in its own sandbox, by a database rule; nobody can change or delete
+  them, and they go with the sandbox.
+- **Its limits:** role and location are coarse, not anonymous. In a small team, or a four-persona
+  demo, a person can be recognized by hand. A flagged row hides the turn's details, not the fact
+  or the time of an HR offer: HR could already see that a person was offered help, and when,
+  from Phase 6's audit log.
+
 ## What is sent to Anthropic and Voyage
 
 [`DATA-INVENTORY.md`](DATA-INVENTORY.md) lists exactly what each vendor receives. In short:

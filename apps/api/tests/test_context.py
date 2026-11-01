@@ -21,6 +21,7 @@ def view(**changes: object) -> ActorView:
         "given_name": "Priya",
         "role": "employee",
         "location_name": "Oakland store",
+        "city": "Oakland",
         "state": "CA",
         "location_code": "oak",
         "timezone": "America/Los_Angeles",
@@ -265,3 +266,7 @@ def test_the_case_line_goes_where_an_outcome_line_goes() -> None:
 
     assert lines.index(line) == lines.index("Handbook version: v3.") + 1
     assert context(outcomes=(line,)).count("Since the last message:") == 1
+
+
+def test_the_city_is_not_in_the_models_context() -> None:
+    assert "Zzyzx" not in context(view(city="Zzyzx"))

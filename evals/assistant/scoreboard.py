@@ -46,6 +46,7 @@ from decimal import Decimal
 from typing import TYPE_CHECKING, Any
 from uuid import UUID
 
+from app.core.stats import percentile
 from assistant.graders import ItemGrade
 from assistant.judge import JudgeInput, JudgeOutcome, section_texts
 
@@ -239,12 +240,6 @@ def _in_section(cited: str, section: str) -> bool:
     ).replace("\n", "")
 
 
-def _nearest_rank(sorted_values: Sequence[int], percent: int) -> int:
-    """The `percent`th percentile of values already sorted, by the nearest-rank method."""
-    # ceil(percent * n / 100) in integers, so no float rounding can move the rank.
-    return sorted_values[-(-percent * len(sorted_values) // 100) - 1]
-
-
 def guard_latency(calls: Iterable[Mapping[str, Any]]) -> dict[str, int | None]:
     """The count, p50, p95, and max of the live guard calls' durations in milliseconds. With none,
     the count is 0 and the rest are None."""
@@ -257,8 +252,8 @@ def guard_latency(calls: Iterable[Mapping[str, Any]]) -> dict[str, int | None]:
         return {"count": 0, "p50": None, "p95": None, "max": None}
     return {
         "count": len(durations),
-        "p50": _nearest_rank(durations, 50),
-        "p95": _nearest_rank(durations, 95),
+        "p50": percentile(durations, 50),
+        "p95": percentile(durations, 95),
         "max": durations[-1],
     }
 

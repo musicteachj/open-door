@@ -22,6 +22,11 @@ import type {
 
 import { apiFetch } from '../lib/api-fetch'
 import type { ErrorType } from '../lib/api-fetch'
+export interface ActionCountOut {
+  action: string
+  count: number
+}
+
 /**
  * The fixed refusals the composer shows before a request is sent, so the web app holds no
  * copy of the words.
@@ -484,6 +489,126 @@ export interface ConfirmIn {
   note?: string | null
 }
 
+export interface FirstTokenTileOut {
+  p50Ms: number | null
+  p95Ms: number | null
+  targetMs: number
+  sampleSize: number
+  smallSample: boolean
+}
+
+export interface SafetyCheckTileOut {
+  p95Ms: number | null
+  targetMs: number
+  sampleSize: number
+  smallSample: boolean
+}
+
+export interface CostTileOut {
+  perAnsweredQuestionUsd: number | null
+  answeredCount: number
+  sandboxSpendUsd: number
+  sandboxCapUsd: number
+  smallSample: boolean
+}
+
+export interface EscalationTileOut {
+  rate: number | null
+  flaggedCount: number
+  turns: number
+  smallSample: boolean
+}
+
+export interface RefusalsTileOut {
+  rate: number | null
+  refusedCount: number
+  fallbackCount: number
+  affectedCount: number
+  turns: number
+  smallSample: boolean
+}
+
+export interface SectionCountOut {
+  sectionId: string
+  count: number
+}
+
+export interface NotFoundTileOut {
+  count: number
+  turns: number
+  sections: SectionCountOut[]
+  smallSample: boolean
+}
+
+export interface InjectionTileOut {
+  count: number
+  turns: number
+  smallSample: boolean
+}
+
+export interface ConsoleMetricsOut {
+  /** Every console row in the sandbox, flagged ones included. */
+  turns: number
+  smallSample: boolean
+  firstToken: FirstTokenTileOut
+  safetyCheck: SafetyCheckTileOut
+  cost: CostTileOut
+  escalation: EscalationTileOut
+  refusals: RefusalsTileOut
+  notFound: NotFoundTileOut
+  cardsConfirmed: ActionCountOut[]
+  injections: InjectionTileOut
+}
+
+/**
+ * A tool the turn called: its name, whether it worked, and its time. Never its input.
+ */
+export interface ToolOut {
+  name: string
+  ok: boolean
+  durationMs: number
+}
+
+/**
+ * One console row. A flagged row has only its date, its counts, and the model's labels: every
+ * other field is null. `id` is the row's own and never a turn's.
+ */
+export interface ConsoleTurnOut {
+  id: string
+  occurredOn: string
+  occurredAt: string | null
+  flagged: boolean
+  abandoned: boolean
+  askerRole: string | null
+  askerLocation: string | null
+  outcome: string | null
+  refusalCategory: string | null
+  guardCategory: string | null
+  injectionSuspected: boolean | null
+  tools: ToolOut[] | null
+  sectionsRetrieved: string[] | null
+  sectionsCited: string[] | null
+  cardAction: string | null
+  servedBy: string[]
+  fallback: boolean
+  effort: string | null
+  promptVersion: string | null
+  toolsetVersion: string | null
+  inputTokens: number
+  outputTokens: number
+  cacheReadTokens: number
+  cacheWriteTokens: number
+  costUsd: number
+  guardMs: number | null
+  firstTextMs: number | null
+  totalMs: number | null
+}
+
+export interface ConsoleTurnsPageOut {
+  items: ConsoleTurnOut[]
+  nextCursor: string | null
+}
+
 export type TurnOutStatus = (typeof TurnOutStatus)[keyof typeof TurnOutStatus]
 
 export const TurnOutStatus = {
@@ -667,6 +792,7 @@ export interface LocationRef {
   id: string
   code: string
   name: string
+  city: string
   state: string
   timezone: string
 }
@@ -1159,6 +1285,10 @@ export type GetTimeOffCalendarParams = {
 
 export type ListCasesParams = {
   status?: QueueFilter | null
+  cursor?: string | null
+}
+
+export type ListConsoleTurnsParams = {
   cursor?: string | null
 }
 
@@ -5705,4 +5835,252 @@ export const useChangeCaseStatus = <TError = ErrorType<Problem>, TContext = unkn
   TContext
 > => {
   return useMutation(getChangeCaseStatusMutationOptions(options), queryClient)
+}
+
+export const getListConsoleTurnsUrl = (params?: ListConsoleTurnsParams) => {
+  const normalizedParams = new URLSearchParams()
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  })
+
+  const stringifiedParams = normalizedParams.toString()
+
+  return stringifiedParams.length > 0
+    ? `/api/v1/console/turns?${stringifiedParams}`
+    : `/api/v1/console/turns`
+}
+
+/**
+ * @summary HR's turn list: labels, counts, and timings, newest first, no words
+ */
+export const listConsoleTurns = async (
+  params?: ListConsoleTurnsParams,
+  options?: Parameters<typeof apiFetch>[1],
+): Promise<ConsoleTurnsPageOut> => {
+  return apiFetch<ConsoleTurnsPageOut>(getListConsoleTurnsUrl(params), {
+    ...options,
+    method: 'GET',
+  })
+}
+
+export const getListConsoleTurnsQueryKey = (params?: ListConsoleTurnsParams) => {
+  return [`/api/v1/console/turns`, ...(params ? [params] : [])] as const
+}
+
+export const getListConsoleTurnsQueryOptions = <
+  TData = Awaited<ReturnType<typeof listConsoleTurns>>,
+  TError = ErrorType<Problem>,
+>(
+  params?: ListConsoleTurnsParams,
+  options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof listConsoleTurns>>, TError, TData>>
+    request?: SecondParameter<typeof apiFetch>
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {}
+
+  const queryKey = queryOptions?.queryKey ?? getListConsoleTurnsQueryKey(params)
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof listConsoleTurns>>> = ({ signal }) =>
+    listConsoleTurns(params, { signal, ...requestOptions })
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof listConsoleTurns>>,
+    TError,
+    TData
+  > & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type ListConsoleTurnsQueryResult = NonNullable<Awaited<ReturnType<typeof listConsoleTurns>>>
+export type ListConsoleTurnsQueryError = ErrorType<Problem>
+
+export function useListConsoleTurns<
+  TData = Awaited<ReturnType<typeof listConsoleTurns>>,
+  TError = ErrorType<Problem>,
+>(
+  params: undefined | ListConsoleTurnsParams,
+  options: {
+    query: Partial<UseQueryOptions<Awaited<ReturnType<typeof listConsoleTurns>>, TError, TData>> &
+      Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof listConsoleTurns>>,
+          TError,
+          Awaited<ReturnType<typeof listConsoleTurns>>
+        >,
+        'initialData'
+      >
+    request?: SecondParameter<typeof apiFetch>
+  },
+  queryClient?: QueryClient,
+): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useListConsoleTurns<
+  TData = Awaited<ReturnType<typeof listConsoleTurns>>,
+  TError = ErrorType<Problem>,
+>(
+  params?: ListConsoleTurnsParams,
+  options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof listConsoleTurns>>, TError, TData>> &
+      Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof listConsoleTurns>>,
+          TError,
+          Awaited<ReturnType<typeof listConsoleTurns>>
+        >,
+        'initialData'
+      >
+    request?: SecondParameter<typeof apiFetch>
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useListConsoleTurns<
+  TData = Awaited<ReturnType<typeof listConsoleTurns>>,
+  TError = ErrorType<Problem>,
+>(
+  params?: ListConsoleTurnsParams,
+  options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof listConsoleTurns>>, TError, TData>>
+    request?: SecondParameter<typeof apiFetch>
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary HR's turn list: labels, counts, and timings, newest first, no words
+ */
+
+export function useListConsoleTurns<
+  TData = Awaited<ReturnType<typeof listConsoleTurns>>,
+  TError = ErrorType<Problem>,
+>(
+  params?: ListConsoleTurnsParams,
+  options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof listConsoleTurns>>, TError, TData>>
+    request?: SecondParameter<typeof apiFetch>
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+  const queryOptions = getListConsoleTurnsQueryOptions(params, options)
+
+  const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
+    queryKey: DataTag<QueryKey, TData, TError>
+  }
+
+  return withQueryKey(query, queryOptions.queryKey)
+}
+
+export const getGetConsoleMetricsUrl = () => {
+  return `/api/v1/console/metrics`
+}
+
+/**
+ * @summary HR's tiles over the sandbox's life: counts, percentiles, and sums, no words
+ */
+export const getConsoleMetrics = async (
+  options?: Parameters<typeof apiFetch>[1],
+): Promise<ConsoleMetricsOut> => {
+  return apiFetch<ConsoleMetricsOut>(getGetConsoleMetricsUrl(), {
+    ...options,
+    method: 'GET',
+  })
+}
+
+export const getGetConsoleMetricsQueryKey = () => {
+  return [`/api/v1/console/metrics`] as const
+}
+
+export const getGetConsoleMetricsQueryOptions = <
+  TData = Awaited<ReturnType<typeof getConsoleMetrics>>,
+  TError = ErrorType<Problem>,
+>(options?: {
+  query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof getConsoleMetrics>>, TError, TData>>
+  request?: SecondParameter<typeof apiFetch>
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {}
+
+  const queryKey = queryOptions?.queryKey ?? getGetConsoleMetricsQueryKey()
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getConsoleMetrics>>> = ({ signal }) =>
+    getConsoleMetrics({ signal, ...requestOptions })
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getConsoleMetrics>>,
+    TError,
+    TData
+  > & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type GetConsoleMetricsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getConsoleMetrics>>
+>
+export type GetConsoleMetricsQueryError = ErrorType<Problem>
+
+export function useGetConsoleMetrics<
+  TData = Awaited<ReturnType<typeof getConsoleMetrics>>,
+  TError = ErrorType<Problem>,
+>(
+  options: {
+    query: Partial<UseQueryOptions<Awaited<ReturnType<typeof getConsoleMetrics>>, TError, TData>> &
+      Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getConsoleMetrics>>,
+          TError,
+          Awaited<ReturnType<typeof getConsoleMetrics>>
+        >,
+        'initialData'
+      >
+    request?: SecondParameter<typeof apiFetch>
+  },
+  queryClient?: QueryClient,
+): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetConsoleMetrics<
+  TData = Awaited<ReturnType<typeof getConsoleMetrics>>,
+  TError = ErrorType<Problem>,
+>(
+  options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof getConsoleMetrics>>, TError, TData>> &
+      Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getConsoleMetrics>>,
+          TError,
+          Awaited<ReturnType<typeof getConsoleMetrics>>
+        >,
+        'initialData'
+      >
+    request?: SecondParameter<typeof apiFetch>
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetConsoleMetrics<
+  TData = Awaited<ReturnType<typeof getConsoleMetrics>>,
+  TError = ErrorType<Problem>,
+>(
+  options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof getConsoleMetrics>>, TError, TData>>
+    request?: SecondParameter<typeof apiFetch>
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary HR's tiles over the sandbox's life: counts, percentiles, and sums, no words
+ */
+
+export function useGetConsoleMetrics<
+  TData = Awaited<ReturnType<typeof getConsoleMetrics>>,
+  TError = ErrorType<Problem>,
+>(
+  options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof getConsoleMetrics>>, TError, TData>>
+    request?: SecondParameter<typeof apiFetch>
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+  const queryOptions = getGetConsoleMetricsQueryOptions(options)
+
+  const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
+    queryKey: DataTag<QueryKey, TData, TError>
+  }
+
+  return withQueryKey(query, queryOptions.queryKey)
 }

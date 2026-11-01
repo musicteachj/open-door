@@ -24,6 +24,8 @@ class LocationRef(CamelModel):
     # The handbook's name for the place ("oak", "den", "aus", "atl"), which its audiences use.
     code: str
     name: str
+    # The place's city, for "Oakland, CA". A place, not personal data.
+    city: str
     state: str
     # An IANA zone, such as "America/Denver". Not personal: it describes the place, not the person.
     timezone: str
