@@ -51,6 +51,13 @@ version (`0.x.y` while the app is being built, `1.0.0` when it is complete).
 
 ### Fixed
 
+- **Two checks that failed on timing, not on the change** (between Phase 7 stages, CI). The
+  changelog check read a pull request's labels from the event's copy, taken when the event fired,
+  so a pull request Dependabot opened and labeled seconds apart got a failing run beside the
+  skipped ones; it now reads the labels when it runs, and a newer run for the same pull request
+  cancels an older one. The persona-switch test checked for the
+  "Now viewing as" toast in the same moment as the switcher's new name, and with the latest web
+  packages the toast can render a moment later on CI's runners; it now waits for it.
 - **Controls are now named by what they show** (between Phase 7 stages, accessibility). The
   `@axe-core/playwright` bump to 4.14 turns on axe's "Label in Name" rule (WCAG 2.5.3): a
   control's accessible name must contain its visible text, so a person using voice control can say

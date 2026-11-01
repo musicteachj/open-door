@@ -7,19 +7,50 @@ on:
 
 permissions:
   contents: read
+  pull-requests: read # to read the pull request's labels when the job runs (see below)
+
+# One run per pull request: a newer event (Dependabot labels a pull request seconds after opening
+# it) cancels the run still going, so the check that stays is the one that saw the labels last.
+concurrency:
+  group: changelog-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
 
 jobs:
   changelog:
     name: Changelog updated
-    if: ${{ !contains(github.event.pull_request.labels.*.name, 'skip-changelog') }}
+    # No job-level `if` on the labels: the event's copy of them is taken when the event fires, so a
+    # pull request opened and labeled seconds apart got a failing run from "opened" beside the
+    # skipped ones from "labeled". The first step reads the labels when the job runs.
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
+      - name: Read the labels
+        id: labels
+        env:
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          for attempt in 1 2 3; do
+            if labels=$(gh api "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER" --jq '.labels[].name'); then
+              break
+            fi
+            if [ "$attempt" = 3 ]; then
+              echo "::error::Couldn't read this pull request's labels from the GitHub API. Re-run the check."
+              exit 1
+            fi
+            sleep 5
+          done
+          if echo "$labels" | grep -qx 'skip-changelog'; then
+            echo "The skip-changelog label is on this pull request: no entry needed."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          fi
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        if: steps.labels.outputs.skip != 'true'
         with:
           persist-credentials: false
           fetch-depth: 0
       - name: Code changes need a CHANGELOG.md entry
+        if: steps.labels.outputs.skip != 'true'
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}

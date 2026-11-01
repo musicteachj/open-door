@@ -321,7 +321,9 @@ describe('the shell: switching', () => {
     // The conversation is empty.
     expect(useChatStore.getState().draft).toBe('')
     expect(useChatStore.getState().status).toBe('idle')
-    expect(toast()).toHaveTextContent('Now viewing as Marcus Bell.')
+    // The toast renders after the identity reset remounts the shell, so it can come a moment after
+    // the switcher's new name; the app doesn't promise the two appear together.
+    await waitFor(() => expect(toast()).toHaveTextContent('Now viewing as Marcus Bell.'))
     expect(within(toast()!).getByRole('button', { name: 'Dismiss' })).toBeInTheDocument()
     holdMe.resolve()
   })
