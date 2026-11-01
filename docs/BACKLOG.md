@@ -172,6 +172,14 @@ should pick it up. When one is done, delete it here and record it in the changel
   long in a links list. The persona card's name changes to its starting text while the live region
   announces the same words. A citation marker and its chip name the same source two ways.
   (`/code-review medium` on `fix/label-in-name`.)
+- **Fail a web test that makes an unanswered request.** MSW's `onUnhandledRequest: 'error'` only
+  makes the request reject, which React Router's error boundary catches, so a test that renders a
+  page without its fakes still passes. On 2026-11-01 five such tests broke the web job once React
+  19.3.1 began reporting recovered render errors. A shared `afterEach` that fails on any unhandled
+  request would catch the next one, but a request left running by an earlier test file in the same
+  worker is reported under a later, innocent test (seen with `query-client.test.ts`), so the guard
+  needs a way to tell those apart first, or `isolate`d workers. (`/code-review medium` on
+  `fix/shell-test-directory-fakes`.)
 
 ## Handbook content
 

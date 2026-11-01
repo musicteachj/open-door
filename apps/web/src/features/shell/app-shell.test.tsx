@@ -9,7 +9,7 @@ import { installFakeApi } from '@/test/fake-api'
 import { installFakeHandbook } from '@/test/fake-handbook'
 import { installFakeTimeOff } from '@/test/fake-time-off'
 import { PRIYA_WAITING } from '@/app/gallery/fixtures/timeoff'
-import { DIRECTORY_PEOPLE, installFakeDirectory } from '@/test/fake-directory'
+import { DIRECTORY_PEOPLE, fullNameOf, installFakeDirectory } from '@/test/fake-directory'
 import { meFor } from '@/test/fixtures'
 import { useShellLayout } from './shell-layout-store'
 import { useShellToast } from './toast-store'
@@ -66,9 +66,10 @@ describe('the shell: layout', () => {
   it('has no rail on the directory or a profile, and shows the indicator in the page header', async () => {
     installFakeApi('priya')
     installFakeDirectory('priya')
-    const { router } = renderApp({ at: '/directory' })
+    const { router, queryClient } = renderApp({ at: '/directory' })
     const main = await screen.findByRole('main')
     await screen.findByRole('list', { name: 'People' })
+    await waitFor(() => expect(queryClient.isFetching()).toBe(0))
     expect(screen.queryByRole('complementary', { name: 'Sandbox status' })).not.toBeInTheDocument()
     const inList = within(main).getByText(/^Sandbox resets in/)
     expect(inList.closest('header')).not.toBeNull()
@@ -77,6 +78,7 @@ describe('the shell: layout', () => {
 
     await act(() => router.navigate(`/directory/${DIRECTORY_PEOPLE[0]!.id}`))
     await screen.findByRole('heading', { level: 1, name: /\w/ })
+    await waitFor(() => expect(queryClient.isFetching()).toBe(0))
     expect(screen.queryByRole('complementary', { name: 'Sandbox status' })).not.toBeInTheDocument()
     expect(
       within(screen.getByRole('main'))
@@ -87,16 +89,27 @@ describe('the shell: layout', () => {
 
   it('keeps exactly one main on the pages, the profile, and not found', async () => {
     installFakeApi('priya')
-    const { router } = renderApp({ at: '/ask' })
+    // It visits the directory and a profile, whose requests need answers too.
+    installFakeDirectory('priya')
+    const { router, queryClient } = renderApp({ at: '/ask' })
     await screen.findByRole('complementary', { name: 'Sidebar' })
-    for (const path of [
-      '/directory',
-      '/directory/0f8fad5b-d9cb-469f-a165-70867728950e',
-      '/nowhere',
-    ]) {
-      await act(() => router.navigate(path))
-      expect(screen.getAllByRole('main')).toHaveLength(1)
-    }
+    const someone = DIRECTORY_PEOPLE[0]!
+    await act(() => router.navigate('/directory'))
+    await screen.findByRole('list', { name: 'People' })
+    await waitFor(() => expect(queryClient.isFetching()).toBe(0))
+    expect(screen.getAllByRole('main')).toHaveLength(1)
+    await act(() => router.navigate(`/directory/${someone.id}`))
+    await screen.findByRole('heading', { level: 1, name: fullNameOf(someone) })
+    await waitFor(() => expect(queryClient.isFetching()).toBe(0))
+    expect(screen.getAllByRole('main')).toHaveLength(1)
+    // A profile the directory doesn't have shows its own not-found state, still in one main.
+    await act(() => router.navigate('/directory/0f8fad5b-d9cb-469f-a165-70867728950e'))
+    await screen.findByRole('heading', { level: 1, name: "We couldn't find that page." })
+    await waitFor(() => expect(queryClient.isFetching()).toBe(0))
+    expect(screen.getAllByRole('main')).toHaveLength(1)
+    await act(() => router.navigate('/nowhere'))
+    expect(router.state.location.pathname).toBe('/nowhere')
+    expect(screen.getAllByRole('main')).toHaveLength(1)
   })
 
   it('lists the navigation for this person, in the main navigation', async () => {
@@ -112,10 +125,16 @@ describe('the shell: layout', () => {
 
   it('marks the page you are on, and Directory for a profile below it', async () => {
     installFakeApi('priya')
-    const { router } = renderApp({ at: '/ask' })
+    // It visits a profile, whose request needs an answer too.
+    installFakeDirectory('priya')
+    const { router, queryClient } = renderApp({ at: '/ask' })
     const nav = await screen.findByRole('navigation', { name: 'Main' })
     expect(within(nav).getByRole('link', { name: 'Ask' })).toHaveAttribute('aria-current', 'page')
-    await act(() => router.navigate('/directory/0f8fad5b-d9cb-469f-a165-70867728950e'))
+    const someone = DIRECTORY_PEOPLE[0]!
+    await act(() => router.navigate(`/directory/${someone.id}`))
+    // Wait for the profile itself, so no request of its own is still out when the test ends.
+    await screen.findByRole('heading', { level: 1, name: fullNameOf(someone) })
+    await waitFor(() => expect(queryClient.isFetching()).toBe(0))
     expect(within(nav).getByRole('link', { name: 'Directory' })).toHaveAttribute(
       'aria-current',
       'page',
@@ -281,6 +300,8 @@ describe('the shell: the navigation scrolls on a narrow screen', () => {
 describe('the shell: switching', () => {
   it('shows "Switching to Marcus…", which the menu will not open on, then lands on /ask as Marcus with the toast', async () => {
     const api = installFakeApi('priya')
+    // The test starts on the directory, so its two requests need answers too.
+    installFakeDirectory('priya')
     const hold = gate()
     // Every /me after the first waits for this gate, so Marcus can only come from the switch's own
     // answer being stored, not from a refetch.
@@ -299,6 +320,10 @@ describe('the shell: switching', () => {
     )
     const { user, router, queryClient } = renderApp({ at: '/directory' })
     await screen.findByRole('complementary', { name: 'Sidebar' })
+    // The directory's own requests (the list and the facets) settle before the switch, so none
+    // is still out at the end.
+    await screen.findByRole('list', { name: 'People' })
+    await waitFor(() => expect(queryClient.isFetching()).toBe(0))
     holdingMe = true
     useChatStore.getState().setDraft('a half-typed question')
     const countBefore = getSessionStatus().resetCount
@@ -502,9 +527,11 @@ describe('the shell: the countdown and the banner', () => {
 
   it('remembers a dismissal for the session, under a key that holds the expiry', async () => {
     const api = installFakeApi('priya')
+    // It moves around to the directory, whose requests need answers too.
+    installFakeDirectory('priya')
     const expiry = hoursFromNow(2.5)
     api.setExpiry(expiry)
-    const { user, router } = renderApp({ at: '/ask' })
+    const { user, router, queryClient } = renderApp({ at: '/ask' })
     await screen.findByRole('complementary', { name: 'Sidebar' })
     await user.click(screen.getByRole('button', { name: 'Dismiss for this session' }))
     expect(banner()).toBeNull()
@@ -514,6 +541,8 @@ describe('the shell: the countdown and the banner', () => {
     expect(localStorage.length).toBe(0)
     // Still dismissed after moving around.
     await act(() => router.navigate('/directory'))
+    await screen.findByRole('list', { name: 'People' })
+    await waitFor(() => expect(queryClient.isFetching()).toBe(0))
     expect(banner()).toBeNull()
   })
 

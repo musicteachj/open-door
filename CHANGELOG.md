@@ -58,6 +58,14 @@ version (`0.x.y` while the app is being built, `1.0.0` when it is complete).
   cancels an older one. The persona-switch test checked for the
   "Now viewing as" toast in the same moment as the switcher's new name, and with the latest web
   packages the toast can render a moment later on CI's runners; it now waits for it.
+- **Five web tests that visited the directory without its fake answers** (between Phase 7 stages,
+  CI). The persona-switch test starts on the directory, and four others (three shell tests and one
+  source-panel test) pass through it or a profile, but none installed the fake directory, so its
+  requests went unanswered. React Router caught the resulting error quietly until React 19.3.1,
+  which also reports a recovered render error, so the web job failed on Dependabot's update (#94)
+  though every test passed. Each now installs the fake directory and waits for what it opened to
+  load before moving on, so no request of its own is still out when it ends; the two profile
+  visits open a person the fake knows, and an unknown one keeps its not-found check.
 - **Controls are now named by what they show** (between Phase 7 stages, accessibility). The
   `@axe-core/playwright` bump to 4.14 turns on axe's "Label in Name" rule (WCAG 2.5.3): a
   control's accessible name must contain its visible text, so a person using voice control can say
