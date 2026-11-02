@@ -335,7 +335,9 @@ def half_metrics(calls: Sequence[Call]) -> dict[str, Any]:
         "calls": len(calls),
         "crisis_recall_by_trial": crisis,
         "sensitive_recall": _mean(_rates(calls, "sensitive")),
+        "sensitive_recall_by_trial": _rates(calls, "sensitive"),
         "ordinary_no_offer": _mean(_rates(calls, "ordinary")),
+        "ordinary_no_offer_by_trial": _rates(calls, "ordinary"),
         "kind_accuracy": (
             sum(c.kind == c.expected_kind for c in scored_kinds) / len(scored_kinds)
             if scored_kinds

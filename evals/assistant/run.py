@@ -3,8 +3,8 @@
 Run it from apps/api (it imports the API's own modules):
 
     uv run python ../../evals/assistant/run.py --mode offline|live --set smoke|full|effort
-        [--check] [--json PATH] [--traces PATH] [--compare LOW_SCOREBOARD]
-        [--fixtures-dir DIR] [--yes]
+        [--check] [--json PATH] [--traces PATH] [--compare RUN_FILE] [--model MODEL_ID]
+        [--fixtures-dir DIR] [--boards-dir DIR] [--yes]
 
 The first half of this file is the harness. It runs a list of items through `run_turn`, with the
 model behind whichever transport the caller hands in:
@@ -58,14 +58,14 @@ from typing import Any, Literal
 from uuid import UUID
 
 import anyio
-from sqlalchemy import func, select
+from sqlalchemy import func, select, text
 from sqlalchemy.exc import DBAPIError, SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 
 from app.ai import anthropic_transport
 from app.ai.anthropic_transport import AnthropicSummarizer, AnthropicTransport
 from app.ai.budget import DAY_SUM, Caps
-from app.ai.case_summary import SUMMARY_MODEL, Summarizer
+from app.ai.case_summary import SUMMARY_MODEL, Summarizer, SummaryAnswer, SummaryRequest
 from app.ai.context import actor_view
 from app.ai.conversations import CURRENT_PINS, Pins, create_conversation
 from app.ai.embeddings import (
@@ -77,7 +77,14 @@ from app.ai.embeddings import (
     InputType,
     VoyageEmbedder,
 )
-from app.ai.pricing import IterationUsage, is_priced, turn_call_cost
+from app.ai.pricing import (
+    LEDGER_PLACES,
+    SCRIPTED_MODEL,
+    IterationUsage,
+    Usage,
+    is_priced,
+    turn_call_cost,
+)
 from app.ai.prompts.versions import (
     CASE_SUMMARY_PROMPT_VERSION,
     GUARD_PROMPT_VERSION,
@@ -154,6 +161,7 @@ if str(EVALS_ROOT) not in sys.path:
 
 from assistant import (  # noqa: E402
     action_graders,
+    boards,
     case_summary,
     datasets,
     escalation,
@@ -170,6 +178,9 @@ FIXTURES_DIR = EVAL_DIR / "fixtures"
 EMBEDDINGS_PATH = FIXTURES_DIR / "embeddings.jsonl"
 # The effort comparison's recordings (git-ignored): kept only if medium effort is adopted.
 EFFORT_FIXTURES_DIR = EVAL_DIR / "fixtures-effort"
+# The recordings of a run of another model (`--model`; git-ignored): they are for comparing models
+# on one commit, and the committed fixtures are the default model's.
+MODEL_FIXTURES_DIR = EVAL_DIR / "fixtures-sonnet"
 
 # --- The fixed sandbox ------------------------------------------------------------------------
 
@@ -190,9 +201,8 @@ logger = logging.getLogger(__name__)
 # So large that the product's caps ($1 a sandbox, $3 a day) never stop an eval.
 EVAL_CAPS = Caps(sandbox_usd=Decimal(1000), daily_usd=Decimal(1000))
 
-# The pinned models for every eval conversation (ADR 0005: model IDs are pinned). They are the
-# app's own pins, so the evals always test what a new conversation gets.
-MODEL_ID = CURRENT_PINS.model
+# The guard's pinned model (ADR 0005: model IDs are pinned), the app's own pin. The assistant's
+# model comes from the run's set (`SetConfig.model`, which `--model` replaces).
 GUARD_MODEL_ID = CURRENT_PINS.guard_model
 
 Mode = Literal["scripted", "live", "replay"]
@@ -338,6 +348,16 @@ async def _clean_up(app_engine: AsyncEngine, owner_engine: AsyncEngine) -> list[
         logger.error("Removing the eval sandbox failed: %s", error)
         problems.append(error)
     return problems
+
+
+# What the fixed sandbox's ledger holds that is dated today (UTC), the share of the day's total that
+# is this run's. Not exact: a settle is dated in the daily ledger by its reservation's day but here
+# by when it was written, so a reservation made before midnight UTC and settled after it is
+# counted as one settle off. That error is small and only for the one call that crossed midnight.
+OWN_SPEND_TODAY = text(
+    "SELECT coalesce(sum(amount_usd), 0) FROM ai_spend"
+    " WHERE (created_at AT TIME ZONE 'UTC')::date = (now() AT TIME ZONE 'UTC')::date"
+)
 
 
 async def measured_spend_usd(app_engine: AsyncEngine) -> Decimal:
@@ -530,15 +550,24 @@ class LiveCallMeter:
     def __init__(self, inner: Transport) -> None:
         self.inner = inner
         self.total_usd = Decimal(0)
+        # How many calls reached the real transport and ended with no price: a stream that never
+        # finished (cut by the deadline, closed on a canary, a transient error) or a guard error
+        # that reported no usage. The call may have been billed, and the turn keeps its reservation
+        # in the ledger for it, so the run counts that as spent now (`SpendCap.add_kept_live`).
+        self.unpriced_calls = 0
 
     async def stream(self, request: ModelRequest) -> AsyncIterator[ModelEvent]:
         events = self.inner.stream(request)
+        finished = False
         try:
             async for event in events:
                 if isinstance(event, Finished):
+                    finished = True
                     self.total_usd += turn_call_cost(event.iterations)
                 yield event
         finally:
+            if not finished:
+                self.unpriced_calls += 1
             close = getattr(events, "aclose", None)
             if close is not None:
                 await close()
@@ -551,6 +580,12 @@ class LiveCallMeter:
             # reports its usage. An error or a timeout reports none: the cost is unknown.
             if error.usage is not None:
                 self.total_usd += turn_call_cost([IterationUsage(request.model, error.usage)])
+            else:
+                self.unpriced_calls += 1
+            raise
+        except (Exception, asyncio.CancelledError):
+            # A cancellation (the guard's outer timeout) leaves a billed call with no price too.
+            self.unpriced_calls += 1
             raise
         # As the turn prices it: the model that served the call when it has a pinned price.
         model = result.served_by if is_priced(result.served_by) else request.model
@@ -645,7 +680,8 @@ async def run_items(
     app_engine: AsyncEngine,
     owner_engine: AsyncEngine,
     keys: KeyProvider,
-    caps: Caps | Callable[[], Caps] = EVAL_CAPS,
+    model: str = CURRENT_PINS.model,
+    caps: Caps | Callable[[], Awaitable[Caps]] = EVAL_CAPS,
     on_item: ItemHook | None = None,
     on_finish: Callable[[], None] | None = None,
 ) -> list[ItemTrace]:
@@ -654,10 +690,11 @@ async def run_items(
     `keys` seals each conversation's text, as the API's does.
     `mode` says what `transport` must be: a `ReplayTransport` for replay, a `RecordingTransport`
     for live, and anything else for scripted (a `ValueError` otherwise). `on_item` runs after each
-    item (the runner checks its spend cap there). `caps` can be a function, called before each item,
-    for a run whose caps shrink as it spends. `on_finish` runs when the run ends however it ends
-    (the runner saves the embedding cache there). An item that can't be run raises `EvalFailure`
-    naming it; a replay miss raises `ReplayMiss` naming it. The sandbox is removed in every case.
+    item (the runner checks its spend cap there). `caps` can be an async function, called before
+    each item, for a run whose caps shrink as it spends. `on_finish` runs when the run ends however
+    it ends (the runner saves the embedding cache there). An item that can't be run raises
+    `EvalFailure` naming it; a replay miss raises `ReplayMiss` naming it. The sandbox is removed in
+    every case.
     """
     _check_mode(mode, transport)
     watched = WatchedEmbedder(embedder)
@@ -666,13 +703,15 @@ async def run_items(
         async with fixed_sandbox(app_engine, owner_engine, keys) as company:
             for item in items:
                 _name_item(transport, item.id)
+                item_caps = await caps() if callable(caps) else caps
                 trace = await _run_item(
                     item,
                     company=company,
                     transport=transport,
                     embedder=watched,
                     effort=effort,
-                    caps=caps() if callable(caps) else caps,
+                    model=model,
+                    caps=item_caps,
                     app_engine=app_engine,
                     keys=keys,
                 )
@@ -718,6 +757,7 @@ async def _run_item(
     transport: Transport,
     embedder: Embedder,
     effort: Effort,
+    model: str,
     caps: Caps,
     app_engine: AsyncEngine,
     keys: KeyProvider,
@@ -725,7 +765,7 @@ async def _run_item(
     person_id = _person_id(company, item)
     ctx = TenantContext(company.tenant_id, person_id)
     pins = Pins(
-        model=MODEL_ID,
+        model=model,
         guard_model=GUARD_MODEL_ID,
         effort=effort,
         prompt_version=PROMPT_VERSION,
@@ -1026,7 +1066,7 @@ NO_HANDBOOK = "No published handbook in the database. Run `make db` first."
 # What a live run of each set costs, from the plan's token budget (Opus 5.5 at low effort for the
 # answers, Haiku 5.5 for the guard, Sonnet 5.5 at medium effort for the judge). They are estimates
 # to print before spending anything, not limits: the caps below are the limits.
-SMOKE_ESTIMATE_USD = Decimal("1.40")
+SMOKE_ESTIMATE_USD = Decimal("0.95")
 FULL_ESTIMATE_USD = Decimal("14.00")
 # The medium-effort half of the effort comparison. The low half is the smoke run.
 EFFORT_ESTIMATE_USD = Decimal("1.75")
@@ -1039,7 +1079,7 @@ EFFORT_CAP_USD = Decimal("2.00")
 AGREEMENT_ESTIMATE_PER_ENTRY_USD = Decimal("0.01")
 AGREEMENT_CAP_USD = Decimal("1.00")
 # The share of rubric lines the judge must match the owner on to be accepted.
-MIN_AGREEMENT = 0.90
+MIN_AGREEMENT = boards.MIN_AGREEMENT
 
 
 @dataclass(frozen=True)
@@ -1053,6 +1093,8 @@ class SetConfig:
     estimate_usd: Decimal
     # Whether it runs only the items smoke.yaml lists, rather than every item.
     smoke_only: bool
+    # The assistant's model. `--model` replaces it for one run.
+    model: str = CURRENT_PINS.model
 
 
 SETS: Mapping[str, SetConfig] = {
@@ -1175,6 +1217,8 @@ class RunEnv:
     keys: KeyProvider | None = None
     # Where the effort set records and replays when no folder is named.
     effort_fixtures_dir: Path = EFFORT_FIXTURES_DIR
+    # Where a run of another model (`--model`) records and replays when no folder is named.
+    model_fixtures_dir: Path = MODEL_FIXTURES_DIR
     sets: Mapping[str, SetConfig] = field(default_factory=lambda: dict(SETS))
 
 
@@ -1194,6 +1238,7 @@ class SpendCap:
     def __init__(self, cap_usd: Decimal | None) -> None:
         self.cap_usd = cap_usd
         self._live_usd = Decimal(0)
+        self._kept_live_usd = Decimal(0)
         self.judge_recorded_usd = Decimal(0)
         self._carried_usd = Decimal(0)
         self._measured_usd = Decimal(0)
@@ -1215,15 +1260,22 @@ class SpendCap:
 
     @property
     def assistant_live_usd(self) -> Decimal:
-        return self._live_usd
+        return self._live_usd + self._kept_live_usd
 
     @property
     def assistant_recorded_usd(self) -> Decimal:
-        return max(self.assistant_total_usd - self._live_usd, Decimal(0))
+        return max(self.assistant_total_usd - self.assistant_live_usd, Decimal(0))
 
     def note_live_assistant(self, total: Decimal) -> None:
         """What the live meter has counted so far: the calls that reached the real transport."""
         self._live_usd = total
+
+    def add_kept_live(self, amount_usd: Decimal) -> None:
+        """Count reservations a live call left in the ledger as spent now. A call cut after it was
+        billed settles to nothing: the turn keeps its reservation, which the ledger (and so the
+        cap) counts at its amount, but the live meter prices only streams that finish. Without
+        this the report would file that money under the recordings reused."""
+        self._kept_live_usd += max(amount_usd, Decimal(0))
 
     def start_segment(self) -> None:
         """A new sandbox begins: its ledger starts at zero, so keep what the last one spent."""
@@ -1459,7 +1511,8 @@ class EvalRun:
         self.unjudged: list[str] = []
         # The same, for trial 1 only: it is the only trial recorded, so it alone gates the save.
         self.unjudged_in_trial_1: list[str] = []
-        self.daily_baseline_usd = Decimal(0)
+        # How many of the live meter's unpriced calls earlier items already accounted for.
+        self._unpriced_seen = 0
         self.prune = prune
         self.stop_cause: str | None = None
         self.fresh = fresh
@@ -1492,8 +1545,6 @@ class EvalRun:
         """Run every planned item, or as many as the cap allows. In a live run the recordings and
         the query embeddings are saved however the run ends."""
         embeddings, inner, caller = self.embeddings, self.inner, self.caller
-        if self.live:
-            self.daily_baseline_usd = await self._read_daily_baseline()
 
         # A live run starts from what is committed, and a request that is already recorded gets
         # its recording back (no live call), so only new requests cost anything and a shared
@@ -1594,6 +1645,7 @@ class EvalRun:
 
         async def after_item(trace: ItemTrace) -> None:
             item = by_id[trace.item_id]
+            self._count_kept_reservations(trace)
             if trace.console_limit:
                 # The turn's own `spend-limit` code. It is not the run's cap and no setting here
                 # lifts it.
@@ -1634,6 +1686,7 @@ class EvalRun:
             transport=transport,
             embedder=embeddings.embedder,
             effort=self.config.effort,
+            model=self.config.model,
             app_engine=self.app_engine,
             owner_engine=self.owner_engine,
             keys=self.keys,
@@ -1645,23 +1698,76 @@ class EvalRun:
         """Take the sandbox ledger's total into the run's spend before the sandbox is removed."""
         self.cap.observe(await self.env.measure_spend(self.app_engine))
 
-    def _caps(self) -> Caps:
+    def _count_kept_reservations(self, trace: ItemTrace) -> None:
+        """A live call that billed something but was never priced (cut by the deadline, closed on
+        a canary, a transient error) left its reservation in the ledger. That money was spent now,
+        so move it from the recordings reused to the live cost.
+
+        The reservations are what the turn's cost holds beyond the priced calls (`trace.usage`).
+        The turn does not say which of its kept reservations were live, so an item with a live
+        unpriced call has all of them counted as live: a recorded call that was also cut in the
+        same item (a canary stop followed by a live call) would be counted live too, which only
+        reports more as spent now."""
+        meter = self.inner
+        if not isinstance(meter, LiveCallMeter):
+            return
+        new = meter.unpriced_calls - self._unpriced_seen
+        self._unpriced_seen = meter.unpriced_calls
+        if new <= 0:
+            return
+        priced = sum(
+            (
+                turn_call_cost(
+                    [
+                        IterationUsage(
+                            call.model
+                            if call.kind == "model" or is_priced(call.model)
+                            else GUARD_MODEL_ID,
+                            Usage(
+                                call.input_tokens,
+                                call.output_tokens,
+                                call.cache_read_tokens,
+                                call.cache_write_tokens,
+                            ),
+                        )
+                    ]
+                )
+                for call in trace.usage
+            ),
+            Decimal(0),
+        )
+        kept = trace.cost_usd - priced
+        # Less than the ledgers' smallest place is rounding dust, not a kept reservation.
+        if kept >= LEDGER_PLACES:
+            self.cap.add_kept_live(kept)
+
+    async def _caps(self) -> Caps:
         """The caps the ledger enforces for the next item: what is left of the run's cap. A call
         that cannot fit is refused by the ledger's own reservation check. No cap, no limit."""
         remaining = self.cap.sandbox_cap_usd()
         if remaining is None:
             return EVAL_CAPS
         left = max(remaining, Decimal(0))
-        # The daily ledger sums every sandbox's spend today, this run's and everyone else's. Other
-        # spend (what was there when the run began) is added to the cap so it never counts against
-        # the run, while the run's own spend still does.
-        return Caps(sandbox_usd=left, daily_usd=left + self.daily_baseline_usd)
+        # The daily ledger sums every sandbox's spend today, this run's and everyone else's. What
+        # other sandboxes have spent, as it stands now, is added to the cap so it never counts
+        # against the run (a `make dev` session may spend while the run goes on), while the run's
+        # own spend still does. It is read before each item, not once at the start.
+        other = await self._other_spend_today_usd()
+        return Caps(sandbox_usd=left, daily_usd=left + other)
 
-    async def _read_daily_baseline(self) -> Decimal:
-        """What all sandboxes have spent today, before this run spends anything."""
+    async def _other_spend_today_usd(self) -> Decimal:
+        """What every sandbox but this run's has spent today: the day's ledger total less what the
+        current sandbox's ledger holds dated today. Finished sandboxes are not subtracted:
+        removing a sandbox deletes its daily rows (`remove_sandboxes`), so the total no longer
+        holds their spend. Only today's rows count: past midnight UTC the sandbox's whole ledger
+        can be more than the day's total."""
         async with self.owner_engine.connect() as connection:
             total = await connection.scalar(DAY_SUM)
-        return Decimal(total or 0)
+        # The sandbox's own rows are read as the sandbox, under row-level security, as
+        # `measured_spend_usd` does: the owner login only sees them because it is a superuser here.
+        async with tenant_session(self.app_engine, TenantContext(TENANT_ID, None)) as session:
+            own = await session.scalar(OWN_SPEND_TODAY)
+        return max(Decimal(total or 0) - Decimal(own or 0), Decimal(0))
 
     def _grade(
         self,
@@ -1848,17 +1954,33 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--json", type=Path, metavar="PATH", help="write the scoreboard here")
     parser.add_argument("--traces", type=Path, metavar="PATH", help="write every item's trace here")
     parser.add_argument(
+        "--boards-dir",
+        type=Path,
+        default=boards.SCOREBOARDS_DIR,
+        help="where a live run's board is committed (default: evals/scoreboards)",
+    )
+    parser.add_argument(
         "--compare",
         type=Path,
-        metavar="LOW_SCOREBOARD",
+        metavar="RUN_FILE",
         help="print each metric beside this earlier run's, and the items the judge saw differently",
+    )
+    parser.add_argument(
+        "--model",
+        default=None,
+        metavar="MODEL_ID",
+        help="the assistant model for this run (default: the app's pinned model). A model other"
+        " than the default records into evals/assistant/fixtures-sonnet/, never the committed"
+        " fixtures. It applies to the smoke, full, effort, and case-summary sets, not escalation"
+        " (that measures the guard)",
     )
     parser.add_argument(
         "--fixtures-dir",
         type=Path,
         default=None,
         help="where recordings are read and written (default: evals/assistant/fixtures, and"
-        " evals/assistant/fixtures-effort for --set effort, which is never committed)",
+        " evals/assistant/fixtures-effort for --set effort and evals/assistant/fixtures-sonnet for"
+        " --model, which are never committed)",
     )
     parser.add_argument(
         "--force",
@@ -1895,25 +2017,55 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def resolve_fixtures_dir(args: argparse.Namespace, env: RunEnv) -> Path:
-    """The folder a run reads and writes: the one named, else the effort set's own, else the
-    committed one. The effort set's recordings are not committed unless medium effort is adopted."""
-    if args.fixtures_dir is not None:
-        return Path(args.fixtures_dir)
-    if args.set == "effort" and not (args.agreement or args.write_hand_grades_todo):
+def uses_other_model(args: argparse.Namespace) -> bool:
+    """Whether the run asked for a model other than its set's default: the app's pinned
+    assistant model, or the summarizer's for the case-summary set."""
+    model = getattr(args, "model", None)
+    summarizing = getattr(args, "set", None) == "case-summary"
+    default = case_summary_model() if summarizing else CURRENT_PINS.model
+    return model is not None and model != default
+
+
+def default_fixtures_dir(args: argparse.Namespace, env: RunEnv) -> Path:
+    """The folder a run owns when none is named: the other model's, else the effort set's, else
+    the committed one. The effort set's recordings are not committed unless medium effort is
+    adopted, and another model's never are. The hand-grade commands always use the committed one.
+    A board is written only for a run in this folder."""
+    if getattr(args, "agreement", False) or getattr(args, "write_hand_grades_todo", None):
+        return env.committed_fixtures_dir
+    if uses_other_model(args):
+        return env.model_fixtures_dir
+    if args.set == "effort":
         return env.effort_fixtures_dir
     return env.committed_fixtures_dir
+
+
+def resolve_fixtures_dir(args: argparse.Namespace, env: RunEnv) -> Path:
+    """The folder a run reads and writes: the one named, else its own default."""
+    if args.fixtures_dir is not None:
+        return Path(args.fixtures_dir)
+    return default_fixtures_dir(args, env)
 
 
 def _plural(count: int, word: str) -> str:
     return f"{count} {word}{'' if count == 1 else 's'}"
 
 
+def _model_note(model: str) -> str:
+    return "" if model == CURRENT_PINS.model else f", model {model}"
+
+
+def _model_estimate_note(model: str) -> str:
+    return (
+        "" if model == CURRENT_PINS.model else " (priced for the default model; yours may differ)"
+    )
+
+
 def estimate_text(config: SetConfig, item_count: int) -> str:
     return (
         f"Live run of the {config.name} set: {_plural(item_count, 'item')},"
-        f" {_plural(config.trials, 'trial')}, effort {config.effort}.\n"
-        f"Estimated cost ${config.estimate_usd:.2f}."
+        f" {_plural(config.trials, 'trial')}, effort {config.effort}{_model_note(config.model)}.\n"
+        f"Estimated cost ${config.estimate_usd:.2f}{_model_estimate_note(config.model)}."
         f" The run stops at its ${config.cap_usd:.2f} cap.\n"
         "Nothing was called. Add --yes to run it (`make eval-live YES=1`)."
     )
@@ -2053,7 +2205,6 @@ def _read_baseline(path: Path) -> dict[str, Any]:
     data = _read_json(path, what)
     bad = (
         not isinstance(data.get("metrics"), dict)
-        or not isinstance(data.get("effort"), str)
         or not isinstance(data.get("commit"), str)
         or not isinstance(data.get("items"), list)
         or any(
@@ -2065,8 +2216,8 @@ def _read_baseline(path: Path) -> dict[str, Any]:
     )
     if bad:
         raise EvalFailure(
-            f"{what} {path} is not a full scoreboard: it needs 'metrics' (an object), 'effort' and"
-            " 'commit' (text), and 'items' (a list of objects with 'trial', 'item', and 'judge',"
+            f"{what} {path} is not a full scoreboard: it needs 'metrics' (an object), 'commit'"
+            " (text), and 'items' (a list of objects with 'trial', 'item', and 'judge',"
             " which is null or a verdict)"
         )
     return data
@@ -2075,6 +2226,42 @@ def _read_baseline(path: Path) -> dict[str, Any]:
 def _write_json(path: Path, data: Mapping[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
+
+
+def _write_board(args: argparse.Namespace, env: RunEnv, document: Mapping[str, Any]) -> None:
+    """A live run's committed board, beside its run file and in evals/scoreboards/. Every run that
+    gets none says why: a scratch fixtures folder (anything but the set's own:
+    the committed one, the effort set's, or the other model's), a tuning-half escalation run (its
+    figures are not the held-out ones the scoreboard shows), a smoke run, a replay, and a run file
+    with no stamp."""
+    own = default_fixtures_dir(args, env)
+    reason: str | None = None
+    if Path(args.fixtures_dir).resolve() != Path(own).resolve():
+        reason = "the fixtures folder is a scratch folder, not the set's own"
+    else:
+        reason = boards.skip_reason(args.json, document)
+    if reason is not None:
+        print(f"No board: {reason}.")
+        return
+    written = boards.write_boards(args.json, document, args.boards_dir)
+    print(f"Board: {written}")
+    if document.get("partial"):
+        print("The run is partial, so its board is written but won't be shown on the scoreboard.")
+
+
+def _write_board_last(args: argparse.Namespace, env: RunEnv, document: Mapping[str, Any]) -> None:
+    """Write the run's board after every other output, and never let it fail the run: the run file
+    is the record, and the board can be rebuilt from it."""
+    if args.json is None:
+        return
+    try:
+        _write_board(args, env, document)
+    except Exception as error:
+        print(
+            f"The board could not be written ({type(error).__name__}): {error}. The run file"
+            f" {args.json} is the record; rebuild the board with evals/backfill_boards.py.",
+            file=sys.stderr,
+        )
 
 
 def seed_embeddings(fixtures_dir: Path, committed_dir: Path) -> bool:
@@ -2104,8 +2291,55 @@ def validate_startup(env: RunEnv) -> str:
     return system
 
 
+def check_model_priced(args: argparse.Namespace) -> None:
+    """Refuse a `--model` with no pinned price before anything starts: the cap and the cost report
+    are priced from the table, and a call at an unknown price would be counted at the dearest."""
+    model = getattr(args, "model", None)
+    if model == SCRIPTED_MODEL:
+        raise EvalFailure(
+            "--model scripted is the stand-in that makes no paid call and is priced at $0: a live"
+            " run on it would record nothing real and its cap would never stop it"
+        )
+    if model is not None and not is_priced(model):
+        raise EvalFailure(
+            f"--model {model} has no pinned price (app/ai/pricing.py): add its price first, so the"
+            " run's cap and cost report are right"
+        )
+
+
+def check_model_folder(args: argparse.Namespace, env: RunEnv) -> None:
+    """Refuse a live run of another model that would record into the committed fixtures: they
+    belong to the default model, and the other model's recordings would replace them. And refuse
+    the default model named with the other model's folder (`MODEL=` set to the default), which
+    would record the default model where nothing is boarded."""
+    if (
+        getattr(args, "model", None) is not None
+        and not uses_other_model(args)
+        and Path(args.fixtures_dir).resolve() == Path(env.model_fixtures_dir).resolve()
+    ):
+        raise EvalFailure(
+            f"--model {args.model} is the default model, so it records into"
+            f" {Path(default_fixtures_dir(args, env)).name}/, not the other-model folder:"
+            " leave MODEL (--model) unset"
+        )
+    if (
+        args.mode == "live"
+        and uses_other_model(args)
+        and Path(args.fixtures_dir).resolve() == Path(env.committed_fixtures_dir).resolve()
+    ):
+        raise EvalFailure(
+            f"--model {args.model} would write into the committed fixtures folder, which holds the"
+            " default model's recordings: leave --fixtures-dir off to use"
+            f" {Path(env.model_fixtures_dir).name}/"
+        )
+
+
 async def eval_command(args: argparse.Namespace, env: RunEnv) -> int:
     config = env.sets[args.set]
+    if args.model is not None:
+        config = replace(config, model=args.model)
+    check_model_priced(args)
+    check_model_folder(args, env)
     if args.fresh and args.mode != "live":
         raise EvalFailure("--fresh is for live runs only: an offline run calls nothing")
     if args.prune and not (args.mode == "live" and args.set == "full"):
@@ -2224,7 +2458,7 @@ def report(
         trials=run.trials,
         commit=commit,
         date=now.isoformat(timespec="seconds"),
-        models={"assistant": MODEL_ID, "guard": GUARD_MODEL_ID, "judge": judge.JUDGE_MODEL},
+        models={"assistant": run.config.model, "guard": GUARD_MODEL_ID, "judge": judge.JUDGE_MODEL},
         versions={
             "prompt": PROMPT_VERSION,
             "toolset": TOOLSET_VERSION,
@@ -2258,6 +2492,7 @@ def report(
             "trials": run.trials,
         }
         _write_json(args.traces, scoreboard.traces_document(meta, result.records))
+    _write_board_last(args, env, board)
     if baseline is not None:
         # After the files are written, so a failure here can't lose a paid run's results; the
         # scoreboard is then written again with the comparison in it.
@@ -2387,6 +2622,11 @@ async def escalation_command(args: argparse.Namespace, env: RunEnv) -> int:
     file is committed, a missing recording is a failure like any other set's. Live (with --yes) it
     records all three trials' first, and keeps the other two in memory."""
     live = args.mode == "live"
+    if args.model is not None:
+        raise EvalFailure(
+            "--model does not apply to the escalation set: it measures the guard, whose model is"
+            " pinned"
+        )
     if args.fresh and not live:
         raise EvalFailure("--fresh is for live runs only: an offline run calls nothing")
     if args.prune:
@@ -2463,6 +2703,7 @@ async def escalation_command(args: argparse.Namespace, env: RunEnv) -> int:
         _write_json(args.json, board)
     if args.traces is not None:
         _write_json(args.traces, escalation.traces_document(facts, outcome.calls))
+    _write_board_last(args, env, board)
     if not args.check:
         return 0
     problems = escalation.check_problems(board)
@@ -2484,6 +2725,9 @@ async def case_summary_command(args: argparse.Namespace, env: RunEnv) -> int:
         raise EvalFailure("--fresh is for live runs only: an offline run calls nothing")
     if args.prune:
         raise EvalFailure("--prune is for --set full: use --fresh to start the set over")
+    check_model_priced(args)
+    check_model_folder(args, env)
+    summary_model = args.model or case_summary_model()
     items = case_summary.load_narratives(env.paths.case_summary)
     path = args.fixtures_dir / case_summary.FIXTURE_NAME
     if not live and not path.exists():
@@ -2523,10 +2767,20 @@ async def case_summary_command(args: argparse.Namespace, env: RunEnv) -> int:
     def store_of(trial: int) -> FixtureStore:
         return stores.setdefault(trial, scratch_for(trial))
 
+    def with_model(summarizer: Summarizer) -> Summarizer:
+        # The default model's path is the summarizer itself; another model's is wrapped.
+        return (
+            summarizer
+            if summary_model == case_summary_model()
+            else (_SummaryModel(summarizer, summary_model))
+        )
+
     def summarizer_for_trial(trial: int) -> Summarizer:
         if real is None:
-            return ReplaySummarizer(store)
-        return RecordingSummarizer(real, store_of(trial))
+            return with_model(ReplaySummarizer(store))
+        # The model override is outside the recorder, so a recording is fingerprinted with the
+        # request as it was sent, the run's model included (as a replay finds it).
+        return with_model(RecordingSummarizer(real, store_of(trial)))
 
     def judge_for_trial(trial: int) -> case_summary.SummaryJudge:
         return case_summary.SummaryJudge(
@@ -2551,7 +2805,7 @@ async def case_summary_command(args: argparse.Namespace, env: RunEnv) -> int:
         "trials": trials,
         "commit": commit,
         "date": utc_now().isoformat(timespec="seconds"),
-        "models": {"summary": case_summary_model(), "judge": judge.JUDGE_MODEL},
+        "models": {"summary": summary_model, "judge": judge.JUDGE_MODEL},
         "summary_prompt": CASE_SUMMARY_PROMPT_VERSION,
         "judge_version": case_summary.judge_version(),
         "dataset_sha256": {"narratives.yaml": case_summary.dataset_sha256(env.paths.case_summary)},
@@ -2567,6 +2821,7 @@ async def case_summary_command(args: argparse.Namespace, env: RunEnv) -> int:
         _write_json(seeded_path, case_summary.seeded_document(facts, outcome.seeded))
     if args.traces is not None:
         _write_json(args.traces, case_summary.traces_document(facts, outcome.calls))
+    _write_board_last(args, env, board)
     if not args.check:
         return 0
     problems = case_summary.check_problems(board)
@@ -2577,6 +2832,29 @@ async def case_summary_command(args: argparse.Namespace, env: RunEnv) -> int:
 
 def case_summary_model() -> str:
     return SUMMARY_MODEL
+
+
+class _SummaryModel:
+    """Sends every summary request with the run's model. The model is part of the request's
+    fingerprint, so a recording of another model is found only by a run of that model.
+
+    It is transparent otherwise: the case-summary runner reads `live_calls`, `skipped`, and
+    `raise_if_missed` from the summarizer and sets `current_item` on it, so reads and that write
+    go to the wrapped summarizer."""
+
+    def __init__(self, inner: Summarizer, model: str) -> None:
+        object.__setattr__(self, "inner", inner)
+        object.__setattr__(self, "model", model)
+
+    def __getattr__(self, name: str) -> Any:
+        return getattr(self.inner, name)
+
+    def __setattr__(self, name: str, value: Any) -> None:
+        setattr(self.inner, name, value)
+
+    async def summarize(self, request: SummaryRequest) -> SummaryAnswer:
+        answer: SummaryAnswer = await self.inner.summarize(replace(request, model=self.model))
+        return answer
 
 
 async def run_cli(argv: Sequence[str] | None = None, *, env: RunEnv | None = None) -> int:

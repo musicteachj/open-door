@@ -589,10 +589,36 @@ def _judge_state(verdict: Mapping[str, Any] | None) -> str:
     return "pass" if verdict["passed"] else "fail"
 
 
+def _fact_rows(baseline: Mapping[str, Any], current: Mapping[str, Any]) -> list[dict[str, Any]]:
+    """Every fact that differs between two runs: the effort, the trial count, each model, each
+    version, and each dataset's hash. A run that lacks a fact (an older or other kind of run) reads
+    as null for it."""
+
+    def flat(run: Mapping[str, Any]) -> dict[str, Any]:
+        facts: dict[str, Any] = {"effort": run.get("effort"), "trials": run.get("trials")}
+        for group in ("models", "versions", "dataset_sha256"):
+            for key, value in (run.get(group) or {}).items():
+                facts[f"{group}.{key}"] = value
+        return facts
+
+    before, after = flat(baseline), flat(current)
+    names = [*FACT_ORDER, *sorted((set(before) | set(after)) - set(FACT_ORDER))]
+    return [
+        {"fact": name, "baseline": before.get(name), "current": after.get(name)}
+        for name in names
+        if (name in before or name in after) and before.get(name) != after.get(name)
+    ]
+
+
+# The first facts a comparison lists: what the run is, before the versions and dataset hashes.
+FACT_ORDER = ("models.assistant", "models.guard", "models.judge", "effort", "trials")
+
+
 def compare(baseline: Mapping[str, Any], current: Mapping[str, Any]) -> dict[str, Any]:
-    """Each metric's mean in the baseline run beside this one's, and the per-item judge differences
-    (an item whose pass or fail, or any rubric line, changed). Built for the effort comparison:
-    the baseline is the low-effort run."""
+    """Two runs side by side: every fact that differs (model, effort, versions, dataset hashes,
+    trials), each metric's mean in the baseline beside this run's, and the per-item judge
+    differences (an item whose pass or fail, or any rubric line, changed). Built for the effort
+    comparison and the model comparison; the baseline is the run being compared against."""
     before, after = _flat_means(baseline["metrics"]), _flat_means(current["metrics"])
     metrics: dict[str, Any] = {}
     for name in sorted(set(before) | set(after)):
@@ -621,25 +647,33 @@ def compare(baseline: Mapping[str, Any], current: Mapping[str, Any]) -> dict[str
                 }
             )
     return {
-        "baseline_effort": baseline["effort"],
-        "current_effort": current["effort"],
+        "baseline_effort": baseline.get("effort"),
+        "current_effort": current.get("effort"),
         "baseline_commit": baseline["commit"],
+        "facts": _fact_rows(baseline, current),
         "metrics": metrics,
         "judge_differences": differences,
     }
 
 
 def render_compare(result: Mapping[str, Any]) -> str:
-    """The comparison as text: one line per metric, then each item the judge saw differently."""
-    low, high = result["baseline_effort"], result["current_effort"]
-    lines = [
-        f"Effort comparison: {low} (baseline) against {high}",
-        f"  {'metric':44} {low:>10} {high:>10}",
-    ]
+    """The comparison as text: the facts that differ, one line per metric, then each item the
+    judge saw differently."""
 
     def cell(value: float | None) -> str:
         return "-" if value is None else f"{value:.3f}"
 
+    def fact(value: Any) -> str:
+        return "-" if value is None else str(value)
+
+    lines = [f"Comparison with the baseline run (commit {result['baseline_commit']})"]
+    if result["facts"]:
+        lines.append("Facts that differ:")
+        for row in result["facts"]:
+            lines.append(f"  {row['fact']}: {fact(row['baseline'])} -> {fact(row['current'])}")
+    else:
+        lines.append("The runs have the same facts.")
+    lines.append(f"  {'metric':44} {'baseline':>10} {'current':>10}")
     for name, row in result["metrics"].items():
         lines.append(f"  {name:44} {cell(row['baseline']):>10} {cell(row['current']):>10}")
     if not result["judge_differences"]:
@@ -647,8 +681,8 @@ def render_compare(result: Mapping[str, Any]) -> str:
     for diff in result["judge_differences"]:
         changed = f" (lines: {', '.join(diff['lines_changed'])})" if diff["lines_changed"] else ""
         lines.append(
-            f"  {diff['item']}: judge {diff['baseline']} at {low},"
-            f" {diff['current']} at {high}{changed}"
+            f"  {diff['item']}: judge {diff['baseline']} in the baseline,"
+            f" {diff['current']} now{changed}"
         )
     return "\n".join(lines)
 

@@ -35,6 +35,31 @@ version (`0.x.y` while the app is being built, `1.0.0` when it is complete).
   medium (a flagged row can be matched to its turn through the spend ledger and the audit log HR
   already reads) is recorded in ADR 0016's amendment. No paid AI calls; every recorded eval
   fixture still replays.
+- **Committed eval boards and a generated scoreboard** (Phase 7, Stage 2). Every live eval run
+  except a smoke run (and a retrieval run with `make eval-retrieval WRITE=1`) now also writes a
+  small board to `evals/scoreboards/`: the metrics (mean and lowest trial), the run's facts, the
+  IDs of failed items, and the cost, with no answer text and no traces. A replay, a scratch
+  fixtures folder, and a tuning-half escalation run write none, and say why. A partial run's board
+  is written but never shown on the scoreboard. The judge agreement shows when it is below its 90%
+  bar. The escalation run now records its
+  sensitive-recall and ordinary-no-offer figures per trial. `evals/backfill_boards.py` built the
+  boards of the runs the roadmap quotes (the full runs of Oct 19, Oct 25, and Oct 29, the effort
+  comparison, the escalation run, and the case-summary run) from the local run files by the same
+  writer. `make scoreboard` reads the boards and writes the README's new "How we know it works"
+  section and `apps/web/src/generated/scoreboard.json` for the console; `make check-api` and CI
+  run it with `--check` and fail on a difference. No paid AI calls; every recorded eval fixture
+  still replays.
+- **A model option for the evals** (Phase 7, Stage 2). `make eval-live MODEL=<model id>` (or
+  `--model`) runs the smoke, full, effort, or case-summary set on another model, for the model
+  comparison on one commit. The conversations are pinned to that model and the run and its board
+  record it. Its recordings go to the git-ignored `evals/assistant/fixtures-sonnet/`; a run of
+  another model that would write into the committed fixtures is refused, as is a model with no pinned price, and the escalation set
+  refuses `--model` (it measures the guard). `--compare` now lists every fact that differs between
+  two runs (model, effort, each version, the dataset hashes, the trial count) beside the metric
+  deltas and the items the judge saw differently; the run it compares with no longer needs an
+  effort. The price table gains Claude Sonnet 5, the fallback target when Sonnet 5.5 declines a
+  request, so a fallback call is priced by the model that served it. No paid AI calls; nothing the
+  model sees changed, and every recorded eval fixture still replays.
 
 ### Changed
 
@@ -48,9 +73,21 @@ version (`0.x.y` while the app is being built, `1.0.0` when it is complete).
   scoreboard, and the owner's site links the code. The spec, the plan, the roadmap, the brief, and
   ADR 0017 record the change; the landing's link and the nav item are removed in Stage 6 instead
   of turned on, and the tour ends on the console.
+- **A new eval rule** (Phase 7, Stage 2). A run whose recordings are committed commits its board
+  in the same change and then runs `make scoreboard`; `CLAUDE.md` says so, and calls a live eval
+  what it is, a local `make eval-live` run with a cap. `evals/README.md` explains the boards, the
+  generator, and the model option, and its judge-agreement line now gives the latest full run's
+  figure (183 of 204, below the 90% bar) beside the original one.
 
 ### Fixed
 
+- **Two eval cost-report gaps** (Phase 7, Stage 2; from the Phase 4 phase review). A billed call
+  that kept its reservation (cut by the deadline, closed on a canary, a transient error) was
+  reported as the cost of the recordings reused; it now counts as spent now. And the run's daily
+  cap no longer charges it for another sandbox's spend during the run (a `make dev` session): the
+  other spend is read again before each item instead of once at the start, while the run's own
+  spend still counts. The smoke set's estimate is now $0.95 (it was $1.40 in the runner and the
+  evals README, and $0.65 in the Makefile), matching `CLAUDE.md`.
 - **Two checks that failed on timing, not on the change** (between Phase 7 stages, CI). The
   changelog check read a pull request's labels from the event's copy, taken when the event fired,
   so a pull request Dependabot opened and labeled seconds apart got a failing run beside the

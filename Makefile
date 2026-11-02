@@ -14,7 +14,7 @@ ZIZMOR := zizmor@1.30.1
 GITLEAKS := ghcr.io/gitleaks/gitleaks:v8.30.1
 
 .DEFAULT_GOAL := help
-.PHONY: help setup keyring db db-stop migrate bootstrap-db ingest embed eval-retrieval eval-offline eval-live migrations-roundtrip dev dev-api dev-web openapi check check-api check-web e2e proxy-check captures check-docs check-workflows audit
+.PHONY: help setup keyring db db-stop migrate bootstrap-db ingest embed eval-retrieval eval-offline eval-live scoreboard migrations-roundtrip dev dev-api dev-web openapi check check-api check-web e2e proxy-check captures check-docs check-workflows audit
 
 help: ## List the available commands
 	@grep -E '^[a-zA-Z_-]+:.*## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*## "}; {printf "  %-22s %s\n", $$1, $$2}'
@@ -55,8 +55,9 @@ embed: ## Fetch missing handbook and eval embeddings from Voyage (needs VOYAGE_A
 
 # Reads the committed query embeddings, so it needs no key and no network. After changing a question
 # in evals/retrieval/dataset.yaml, run `make embed` first and commit the cache.
-eval-retrieval: ## Score handbook search against the labeled questions (needs `make db`); see evals/README.md
-	cd $(API) && uv run python ../../evals/retrieval/run.py
+# WRITE=1 also writes the run's board to evals/scoreboards/ (commit it, then run `make scoreboard`).
+eval-retrieval: ## Score handbook search against the labeled questions (needs `make db`); WRITE=1 also writes a board; see evals/README.md
+	cd $(API) && uv run python ../../evals/retrieval/run.py $(if $(filter 1,$(WRITE)),--write-board)
 
 # Replays the recorded assistant answers through the real loop, tools, graders, and judge reading, so
 # it needs no key and no network. A prompt, tool, or retrieval change makes a request miss its
@@ -71,7 +72,7 @@ eval-offline: ## Replay the recorded assistant evals (needs `make db`); no netwo
 
 # SET=case-summary (3 trials of the case summarizer and its judge, about $0.75, cap $3).
 # PAID. Without YES=1 (exactly 1: YES=0 or YES=no still only prints) it prints the set, the item count, the estimated cost, and the cap, and calls
-# nothing. SET=smoke (about $0.65, cap $2), SET=full (about $14, cap $16), or SET=effort (the smoke
+# nothing. SET=smoke (about $0.95, cap $2), SET=full (about $14, cap $16), or SET=effort (the smoke
 # items at medium effort, about $1.75, cap $2; its recordings go to a git-ignored folder, and
 # COMPARE=<a low-effort scoreboard> prints the two side by side). A run reuses the recordings it
 # already has and calls only requests that changed. FRESH=1 calls everything live again. PRUNE=1
@@ -80,19 +81,28 @@ eval-offline: ## Replay the recorded assistant evals (needs `make db`); no netwo
 # traces into the git-ignored evals/assistant/runs/. The key is read from apps/api/.env (an empty
 # one exported in the shell is ignored). FIXTURES_DIR=<folder> records into that folder instead (the
 # escalation tuning half goes to a scratch folder this way: `SET=escalation HALF=tuning FIXTURES_DIR=...`).
+# MODEL=<model id> runs the assistant (or, for SET=case-summary, the summarizer) on another model for
+# a model comparison on one commit; it records into the git-ignored evals/assistant/fixtures-sonnet/
+# (never the committed fixtures) and is still boarded. It does not apply to SET=escalation.
 # One run at a time; don't start it in the middle of `make check`.
 SET ?= smoke
 STAMP := $(shell date -u +%Y%m%dT%H%M%SZ)
 RUNS := ../../evals/assistant/runs
-eval-live: ## PAID: record the assistant evals. SET=smoke|full|effort|escalation|case-summary, YES=1 to run, COMPARE=<scoreboard.json>, HALF=tuning|held_out (escalation), FIXTURES_DIR=<scratch folder to record into>
+eval-live: ## PAID: record the assistant evals. SET=smoke|full|effort|escalation|case-summary, YES=1 to run, COMPARE=<scoreboard.json>, HALF=tuning|held_out (escalation), FIXTURES_DIR=<scratch folder to record into>, MODEL=<model id> (compare models; records into fixtures-sonnet/)
 	cd $(API) && uv run python ../../evals/assistant/run.py --mode live --set $(SET) \
 		$(if $(HALF),--half $(HALF)) \
-		$(if $(FIXTURES_DIR),--fixtures-dir $(abspath $(FIXTURES_DIR)),$(if $(filter effort,$(SET)),--fixtures-dir ../../evals/assistant/fixtures-effort)) \
+		$(if $(MODEL),--model $(MODEL)) \
+		$(if $(FIXTURES_DIR),--fixtures-dir $(abspath $(FIXTURES_DIR)),$(if $(MODEL),--fixtures-dir ../../evals/assistant/fixtures-sonnet,$(if $(filter effort,$(SET)),--fixtures-dir ../../evals/assistant/fixtures-effort))) \
 		$(if $(COMPARE),--compare $(abspath $(COMPARE))) \
 		--json $(RUNS)/$(STAMP)-$(SET).json --traces $(RUNS)/$(STAMP)-$(SET)-traces.json \
 		$(if $(or $(filter 1,$(FRESH)),$(filter 1,$(PRUNE))),--fresh) \
 		$(if $(filter 1,$(PRUNE)),--prune) \
 		$(if $(filter 1,$(YES)),--yes)
+
+# Pure: reads the committed run boards in evals/scoreboards/, no database and no network. CI and
+# `make check-api` run it with --check and fail if the README or the JSON differs.
+scoreboard: ## Regenerate the README scoreboard and apps/web/src/generated/scoreboard.json from the run boards
+	cd $(API) && uv run python ../../evals/scoreboard_gen.py
 
 # Not part of check-api: it deletes every row, including the sandboxes you're working in.
 migrations-roundtrip: ## Undo every migration, apply them again, recreate the logins, and reload the handbook (wipes data)
@@ -129,6 +139,7 @@ check-api: ## Lint, type-check, migrate, load the handbook, and test the API; co
 	cd $(API) && uv run python ../../evals/retrieval/run.py --check
 	cd $(API) && uv run python ../../evals/assistant/run.py --mode offline --set full --check
 	cd $(API) && uv run python scripts/export_openapi.py --check
+	cd $(API) && uv run python ../../evals/scoreboard_gen.py --check
 
 check-web: ## Lint, format-check, type-check, test, and build the web app; confirm the client
 	cd $(WEB) && npm run lint

@@ -124,7 +124,7 @@ def test_the_three_sets_have_their_trials_caps_efforts_and_estimates() -> None:
     assert (smoke.trials, smoke.cap_usd, smoke.effort) == (1, Decimal("2.00"), "low")
     assert (full.trials, full.cap_usd, full.effort) == (3, Decimal("16.00"), "low")
     assert (effort.trials, effort.cap_usd, effort.effort) == (1, Decimal("2.00"), "medium")
-    assert smoke.estimate_usd == Decimal("1.40")
+    assert smoke.estimate_usd == Decimal("0.95")
     assert full.estimate_usd == Decimal("14.00")
     assert effort.estimate_usd == Decimal("1.75")
     assert smoke.smoke_only is True
@@ -1067,7 +1067,7 @@ async def test_live_without_yes_prints_the_estimate_and_makes_no_call(
     assert "smoke" in out
     assert "39 items" in out
     assert "1 trial" in out
-    assert "$1.40" in out
+    assert "$0.95" in out
     assert "$2.00" in out
     assert "--yes" in out
     assert not os.listdir(tmp_path)
@@ -1076,7 +1076,7 @@ async def test_live_without_yes_prints_the_estimate_and_makes_no_call(
 @pytest.mark.parametrize(
     ("name", "items", "trials", "estimate", "cap", "effort"),
     [
-        ("smoke", 39, 1, "$1.40", "$2.00", "low"),
+        ("smoke", 39, 1, "$0.95", "$2.00", "low"),
         ("effort", 39, 1, "$1.75", "$2.00", "medium"),
     ],
 )
@@ -2407,5 +2407,6 @@ def test_the_evals_pin_the_models_a_new_conversation_gets() -> None:
 
     source = (EVAL_DIR / "run.py").read_text(encoding="utf-8")
 
-    assert (CURRENT_PINS.model, CURRENT_PINS.guard_model) == (run.MODEL_ID, run.GUARD_MODEL_ID)
+    assert CURRENT_PINS.guard_model == run.GUARD_MODEL_ID
+    assert all(c.model == CURRENT_PINS.model for c in run.SETS.values())
     assert 'MODEL_ID = "claude-opus-5-5"' not in source

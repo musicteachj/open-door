@@ -673,3 +673,109 @@ def test_the_scoreboard_reports_the_summarys_own_model(monkeypatch: pytest.Monke
     monkeypatch.setattr(run, "SUMMARY_MODEL", "the-summary-model")
 
     assert run.case_summary_model() == "the-summary-model"
+
+
+async def test_a_run_with_a_model_records_and_replays_requests_that_carry_that_model(
+    tmp_path: Path,
+) -> None:
+    import dataclasses
+
+    from app.ai.replay import summary_fingerprint
+
+    other = "claude-sonnet-5-5"
+    folder = tmp_path / "sonnet"
+
+    def env(summarizer: Any, caller: Any) -> Any:
+        return run.RunEnv(
+            paths=run.EvalPaths(case_summary=cs.NARRATIVES_PATH),
+            committed_fixtures_dir=tmp_path / "committed",
+            model_fixtures_dir=folder,
+            git=lambda: "abc1234",
+            transport_factory=lambda settings: cast(Any, object()),
+            summarizer_factory=lambda transport: summarizer,
+            judge_caller_factory=lambda transport: caller,
+        )
+
+    summarizer = FakeSummarizer()
+    code = await run.run_cli(
+        ["--mode", "live", "--set", "case-summary", "--yes", "--model", other],
+        env=env(summarizer, FakeJudgeCaller()),
+    )
+
+    assert code == 0
+    assert {r.model for r in summarizer.requests} == {other}
+    stored = FixtureStore.load(folder / cs.FIXTURE_NAME).records()
+    recorded = {r.fingerprint for r in stored if r.kind == "summary"}
+    carrying = {
+        summary_fingerprint(dataclasses.replace(r, model=other)) for r in summarizer.requests
+    }
+    assert recorded == carrying
+    replayed = await run.run_cli(
+        ["--mode", "offline", "--set", "case-summary", "--check", "--model", other],
+        env=env(None, None),
+    )
+    assert replayed == 0
+
+
+async def test_a_board_that_cannot_be_written_leaves_every_other_output_and_the_exit_code(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    blocked = tmp_path / "boards"
+    blocked.write_text("a file where the boards folder should be", encoding="utf-8")
+    stamped = tmp_path / "20261101T120000Z-case-summary.json"
+
+    code = await run.run_cli(
+        ["--mode", "live", "--set", "case-summary", "--yes", "--fixtures-dir", str(tmp_path),
+         "--json", str(stamped), "--traces", str(tmp_path / "traces.json"),
+         "--boards-dir", str(blocked)],
+        env=runner_env(tmp_path, FakeSummarizer(), FakeJudgeCaller()),
+    )  # fmt: skip
+
+    assert code == 0
+    assert stamped.exists()
+    assert (tmp_path / "traces.json").exists()
+    assert (tmp_path / "20261101T120000Z-case-summary-seeded.json").exists()
+    err = capsys.readouterr().err
+    assert "The board could not be written" in err
+    assert "backfill_boards.py" in err
+
+
+@pytest.mark.parametrize("extra", [(), ("--model", "claude-sonnet-5-5")])
+async def test_a_live_run_counts_the_summaries_cost_and_names_each_item_on_the_recorder(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, extra: tuple[str, ...]
+) -> None:
+    from app.ai.pricing import cost_usd
+    from app.ai.replay import RecordingSummarizer
+
+    recorders: list[Any] = []
+
+    class Spy(RecordingSummarizer):
+        def __init__(self, *args: Any, **kwargs: Any) -> None:
+            super().__init__(*args, **kwargs)
+            recorders.append(self)
+
+    monkeypatch.setattr(run, "RecordingSummarizer", Spy)
+    folder = tmp_path / "folder"
+    env = run.RunEnv(
+        paths=run.EvalPaths(case_summary=cs.NARRATIVES_PATH),
+        committed_fixtures_dir=tmp_path / "committed" if extra else folder,
+        model_fixtures_dir=folder,
+        git=lambda: "abc1234",
+        transport_factory=lambda settings: cast(Any, object()),
+        summarizer_factory=lambda transport: FakeSummarizer(),
+        judge_caller_factory=lambda transport: FakeJudgeCaller(),
+    )
+
+    code = await run.run_cli(
+        ["--mode", "live", "--set", "case-summary", "--yes", "--fixtures-dir", str(folder),
+         "--json", str(tmp_path / "board.json"), *extra],
+        env=env,
+    )  # fmt: skip
+
+    assert code == 0
+    summaries = len(items()) * 3 * cost_usd("claude-opus-5-5", USAGE)
+    board = json.loads((tmp_path / "board.json").read_text())
+    assert Decimal(board["cost_usd"]) >= summaries
+    assert recorders
+    assert all(r.live_calls > 0 for r in recorders)
+    assert {r.current_item for r in recorders} <= {i.id for i in items()}

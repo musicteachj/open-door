@@ -165,6 +165,10 @@ the owner's explicit agreement first.
   and a smoke run re-records only its own items, so CI stays red until the full run is committed.
   Use smoke runs (`make eval-live YES=1`, about $0.95, cap $2) to try wording before that. Put the
   scoreboard change in the PR description.
+  - **A run whose recordings are committed commits its board in the same change,** then
+    `make scoreboard` regenerates the README's scoreboard and the app's copy (CI fails if they're
+    stale). Every live run except smoke writes a board to `evals/scoreboards/`; a run into a
+    scratch folder (`FIXTURES_DIR`) writes none.
   - **A change to the guard's prompt (`guard.md`) also re-records the escalation set**
     (`make eval-live SET=escalation FRESH=1 YES=1`, about $0.05, cap $0.50). Tune on the tuning
     half into a scratch folder (`HALF=tuning`, with `--fixtures-dir`), never on the held-out half.
@@ -173,8 +177,8 @@ the owner's explicit agreement first.
     seeded summaries are copied from that run (`scripts/apply_seeded_summaries.py`).
   **A release gets the full run too**, unless the last one already covers everything it ships.
 - **Model IDs are pinned.** A new model is adopted only after an eval comparison.
-- **No paid AI calls on push or PR.** CI replays recorded fixtures. Live evals are a manual
-  workflow with a budget cap.
+- **No paid AI calls on push or PR.** CI replays recorded fixtures. A live eval is a local
+  `make eval-live` run with a cap.
 - **Every paid run needs the owner's OK,** with its estimate and its cap. Use the fake transport
   for UI and most development work.
 - **Tool results that contain user-written text are untrusted data.** Turns that process them get no
@@ -249,6 +253,7 @@ make embed      fetch missing embeddings from Voyage (needs VOYAGE_API_KEY); com
 make eval-retrieval  score handbook search against the labeled questions (needs `make db`; no network)
 make eval-offline  replay the recorded assistant evals (needs `make db`; no network)
 make eval-live  paid; smoke by default, `SET=full` or `SET=effort`, and `YES=1` to run
+make scoreboard  rebuild the README's scoreboard and apps/web/src/generated/scoreboard.json from the boards
 make dev        Postgres, migrations, API (:8000) and web app (:5173) together
 make check      everything CI runs; needs `make db` first
 make e2e        the browser tests (Playwright, Chromium) against the real API on :8100

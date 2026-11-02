@@ -269,13 +269,6 @@ conversation-page glitches are fixed with browser tests (stage 6).
   sometimes contradict themselves ("sits before marker [2] ... which is fine; however ..."). Before
   Phase 7's model comparison leans on the judge, look at those 10 and decide whether the rubric's
   "at or before a marker" wording needs tightening. (Phase 4 answer-quality follow-up.)
-- **Two eval cost-report gaps.** The scoreboard's "reused recordings" cost is the ledger total
-  minus what the live meter saw, and the meter prices only streams that finish, so a billed call
-  that kept its reservation (cut by the deadline, a canary, or a transient error) is reported as
-  recorded cost, not spent now. And the run's daily cap is its remaining cap plus a baseline read
-  at the start, so spend from another sandbox during the run (a `make dev` session) is charged to
-  the run and can stop it as if it reached its own cap. Evals run one at a time against the dev
-  database, so neither has mattered yet. (Phase 4 phase review.)
 
 ## Phase 8: hardening and deploy-readiness
 
