@@ -86,7 +86,9 @@ jobs:
     needs: changes
     if: needs.changes.outputs.api == 'true' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    # The test suite alone takes 11 to 14 minutes on a hosted runner (2026-11-02), so 15 left no
+    # room. A hang still stops well before the 6-hour default.
+    timeout-minutes: 25
     defaults:
       run:
         working-directory: apps/api

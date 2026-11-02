@@ -81,6 +81,9 @@ version (`0.x.y` while the app is being built, `1.0.0` when it is complete).
 
 ### Fixed
 
+- **CI's API job had no room left in its time limit** (Phase 7, Stage 2). Its test suite takes 11
+  to 14 minutes on a hosted runner, and the limit was 15, so Stage 2's added eval tests pushed it
+  over (every step had passed). The limit is now 25 minutes.
 - **Two eval cost-report gaps** (Phase 7, Stage 2; from the Phase 4 phase review). A billed call
   that kept its reservation (cut by the deadline, closed on a canary, a transient error) was
   reported as the cost of the recordings reused; it now counts as spent now. And the run's daily
