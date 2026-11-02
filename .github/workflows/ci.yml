@@ -50,6 +50,9 @@ jobs:
             api:
               - 'apps/api/**'
               - 'apps/web/openapi.json'
+              # The generated scoreboard is checked against the boards in evals/scoreboards/.
+              - 'README.md'
+              - 'apps/web/src/generated/**'
               - 'evals/**'
               - 'handbook/**'
               - 'scripts/proxy-check/**'
@@ -83,7 +86,9 @@ jobs:
     needs: changes
     if: needs.changes.outputs.api == 'true' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    # The test suite alone takes 11 to 14 minutes on a hosted runner (2026-11-02), so 15 left no
+    # room. A hang still stops well before the 6-hour default.
+    timeout-minutes: 25
     defaults:
       run:
         working-directory: apps/api
@@ -168,6 +173,10 @@ jobs:
         run: uv run python ../../evals/assistant/run.py --mode offline --set case-summary --check
       - name: The committed OpenAPI schema matches the API
         run: uv run python scripts/export_openapi.py --check
+      # The README's scoreboard and the console's JSON are generated from the committed run boards.
+      # A board that changed without `make scoreboard` fails here.
+      - name: The README scoreboard and its JSON match the run boards
+        run: uv run python ../../evals/scoreboard_gen.py --check
 
   web:
     name: Web

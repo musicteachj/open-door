@@ -52,6 +52,15 @@ def load_scoreboard() -> ModuleType:
     return load_eval_module("scoreboard.py")
 
 
+def load_boards() -> ModuleType:
+    return load_eval_module("boards.py")
+
+
+def load_evals_script(name: str) -> ModuleType:
+    """A script directly under evals/ (the backfill, the scoreboard generator), imported by name."""
+    return importlib.import_module(name)
+
+
 def make_trace(
     *,
     person_id: UUID,

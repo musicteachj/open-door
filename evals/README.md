@@ -2,6 +2,28 @@
 
 How we know the assistant's building blocks work. Each eval has its own folder here.
 
+## Boards and the scoreboard (`evals/scoreboards/`)
+
+A run file under `runs/` is long and git-ignored. Its **board** is the small, committed summary
+([ADR 0017](../docs/adr/0017-scoreboards-from-committed-boards.md)): the metrics (each the mean
+over trials with its lowest trial), the run's facts (models, effort, prompt, tool-set, guard-prompt,
+and judge versions, the dataset hashes, the commit, trials, date), the failing item IDs, and the
+cost. It holds no answer text, no reasons, and no traces.
+
+- **Who writes one.** Every live run except smoke writes `evals/scoreboards/<stamp>-<set>.json`,
+  and a copy beside its run file. A replay, a smoke run, and a run into a scratch folder
+  (`FIXTURES_DIR`, or a tuning-half escalation run) write none, and each says why ("No board:
+  ..."). A retrieval run writes one with `make eval-retrieval WRITE=1`.
+- **Commit it with the recordings** of the run that made it, then run `make scoreboard`.
+- **`make scoreboard`** (`scoreboard_gen.py`, no database, no network) rebuilds the README's "How
+  we know it works" section, between its markers, and `apps/web/src/generated/scoreboard.json`
+  for the console. Each set's row comes from its newest board on the pinned model; a partial run
+  and a tuning-half escalation run are never shown. The history lists every full run. CI runs
+  `scoreboard_gen.py --check` and fails when either output is stale.
+- **The first boards** were built once from the earlier run files by `backfill_boards.py`, with the
+  same writer: the full runs of 2026-10-19, 2026-10-25, and 2026-10-29, the effort comparison of
+  2026-10-16, the escalation run of 2026-10-27, and the case-summary run of 2026-10-30.
+
 ## Retrieval eval (`evals/retrieval/`)
 
 **What it measures.** When an employee asks a question in plain words, does handbook search put
@@ -55,6 +77,10 @@ the git commit, the date (UTC), the handbook version label, and the results (ove
 misses, negatives). Paste the change into a PR description when search, the chunking, or the
 handbook changes.
 
+**`make eval-retrieval WRITE=1`** also writes the run's board to `evals/scoreboards/` (see
+[Boards and the scoreboard](#boards-and-the-scoreboard-evalsscoreboards)); commit it, then run
+`make scoreboard`.
+
 **In CI.** The API job runs `run.py --check` after the tests, against the Postgres service and
 the committed cache. It makes no network call and needs no Voyage key.
 
@@ -78,7 +104,7 @@ Today is Thursday, October 15, 2026, and the seed counts back from that same day
 
 | Set | What it runs | Trials | Cost (about) | Hard cap | Effort |
 |---|---|---|---|---|---|
-| `smoke` | the 20 Q&A, 13 red-team, and 6 action items listed in `smoke.yaml` | 1 | $1.40 | $2.00 | low |
+| `smoke` | the 20 Q&A, 13 red-team, and 6 action items listed in `smoke.yaml` | 1 | $0.95 | $2.00 | low |
 | `full` | every item in `qa.yaml`, `redteam.yaml`, and `actions.yaml` | 3 | $14 | $16 | low |
 | `effort` | the smoke items at medium effort, compared with a low-effort smoke run | 1 | $1.75 | $2.00 | medium |
 
@@ -214,7 +240,7 @@ of a cent) or a changed guard prompt.
 make db                          # once: Postgres, migrations, the handbook
 make eval-offline                # replay the recorded answers: no key, no network, no cost
 make eval-live                   # print the smoke set's item count, estimate, and cap; call nothing
-make eval-live YES=1             # run the smoke set for real (about $1.40, cap $2)
+make eval-live YES=1             # run the smoke set for real (about $0.95, cap $2)
 make eval-live SET=full YES=1    # the full run (about $14, cap $16): before a release
 make eval-live SET=effort YES=1 COMPARE=evals/assistant/runs/<a low-effort smoke scoreboard>.json
 ```
@@ -223,7 +249,8 @@ Direct use, from `apps/api`:
 
 ```
 uv run python ../../evals/assistant/run.py --mode offline|live --set smoke|full|effort \
-    [--check] [--json PATH] [--traces PATH] [--compare LOW_SCOREBOARD] [--fixtures-dir DIR] [--yes]
+    [--check] [--json PATH] [--traces PATH] [--compare RUN_FILE] [--model MODEL_ID] \
+    [--fixtures-dir DIR] [--yes]
 ```
 
 **One run at a time.** The runs use one fixed sandbox. The cleanup deletes only the daily-ledger
@@ -332,6 +359,14 @@ because medium effort's recordings are kept only if medium is adopted. Its query
 as a copy of the committed `embeddings.jsonl`, so only new queries are fetched from Voyage. Each
 live run also writes its scoreboard and traces into `evals/assistant/runs/` (git-ignored).
 
+A model comparison runs the same commit on another model: `make eval-live SET=full MODEL=<model id>
+YES=1` (or `--model`). It applies to the smoke, full, effort, and case-summary sets, not the
+escalation set (that measures the guard). It records into `evals/assistant/fixtures-sonnet/`
+(git-ignored; the committed fixtures are the default model's, and the runner refuses to write another
+model's recordings there), and is still boarded, with the model on the board. `COMPARE=<run file>`
+(`--compare`) then lists every fact that differs between the two runs (model, effort, versions,
+dataset hashes, trials), the metric deltas, and the items the judge saw differently.
+
 ### Checking the judge against independent grades
 
 The judge is accepted when it agrees with independent grades on at least 90% of rubric lines.
@@ -339,7 +374,8 @@ The judge is accepted when it agrees with independent grades on at least 90% of 
 **Who graded the current file.** The plan had the owner grade by hand; the owner chose not to. The
 grades in `hand-grades.yaml` (2026-10-16) were written by a separate Claude Opus grader that saw
 only the answers, the rubric, and the handbook, never the judge's verdicts or the key, and it
-caught all four planted flaws. The judge agrees with it on 188 of 204 lines (92.2%). That is a
+caught all four planted flaws. The judge agreed with it on 188 of 204 lines (92.2%) when it was
+made, and on 183 of 204 (89.7%, below the bar) in the full run of 2026-10-29. That is a
 weaker check than a person's: two Claude models can share blind spots, so read the agreement
 figure as "consistent with another careful model", not "matches a human reviewer". A person can
 regrade the file at any time and rerun `--agreement`.

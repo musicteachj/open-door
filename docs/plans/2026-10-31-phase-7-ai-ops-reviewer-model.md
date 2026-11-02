@@ -903,6 +903,37 @@ Recorded at each stage's close.
   is where a guard outage shows.
 - **Stage 1, `AI-GOVERNANCE.md`** gained "The AI Ops console" (its redaction and its limits),
   which no task named.
+- **Stage 2 (2026-11-01), what the code forced:**
+  - The tests live flat in `apps/api/tests/` (`test_eval_boards.py`, `test_scoreboard_gen.py`,
+    `test_eval_model_option.py`, `test_eval_cost_report.py`, and two in `tests/integration/`),
+    as every other eval test does, not in `tests/evals/`.
+  - The board writer is its own module, `evals/assistant/boards.py`, with one adapter per run
+    file's shape: the assistant sets, escalation (which kept only means for two figures, so new
+    runs now record them per trial), case summary (counts per trial, no metrics), and retrieval
+    (one pass, no cost). A fact an older run file lacks is null. The dataset hash is a map of file
+    to hash, since the runs hash several files.
+  - Which runs get a board: every live run but smoke; none for a replay, a scratch fixtures
+    folder, or a tuning-half escalation run, and each skip prints why. A partial run's board is
+    written but never shown.
+  - The generator's set rows come from the newest board on the pinned model, so Stage 4's Sonnet
+    board can't become the headline while Opus is the default; the history lists every full run
+    with its model. Fairness shows "Not run yet" until Stage 3. The history has the three full
+    runs the spec names (the design's mock showed five).
+  - The judge agreement shows "(below the 90% bar)" when it isn't accepted, which the design didn't
+    show.
+  - `apps/web/src/generated/` is in `.prettierignore`, so the drift check compares the
+    generator's own output.
+  - `--compare` still reads run files, not boards: Stage 4's spot check needs the per-item judge
+    results, which boards don't carry. It now reports every fact that differs.
+  - Sonnet 5.5's `fallbacks: "default"` target: Anthropic's refusals page doesn't publish the
+    routing per model; the API guide names Claude Sonnet 5 for `cyber` and `frontier_llm`, so
+    `claude-sonnet-5` is priced (pricing page, read 2026-11-01). Any other served model is priced
+    at the dearest rate with a warning, as before.
+  - `MODEL=` set to the default model is refused with the other model's folder, so Opus
+    recordings never land in `fixtures-sonnet/`.
+  - The daily cap's other spend is today's ledger total less the current sandbox's own spend, not
+    the run's: a finished sandbox's daily rows are deleted with it (the batch B review's high
+    finding, fixed before the close).
 
 ## Backlog
 
@@ -949,3 +980,32 @@ Recorded at each stage's close, then moved to `docs/BACKLOG.md`.
   loading the rows, `hq_timezone`).
 - **Stage 1:** the metrics route loads every console row's narrow columns for the tiles. A
   sandbox's rows are bounded (24 hours, a capped spend), so it's fine until sandboxes live longer.
+- **Stage 2, the reviews (2026-11-01):** the batch reviews found two mediums in batch A (a partial
+  run's board could become the headline; a tuning-half escalation run could replace the held-out
+  figures) and one high in batch B (the daily cap subtracted the run's earlier sandboxes twice),
+  all fixed. `/code-review medium` ran four rounds. Round 1: a case-summary run on another model
+  recorded under the default model's key, and its board could replace the shipped row (fixed).
+  Round 2: a metric with no data crashed the board writer and lost the paid run's traces (fixed:
+  a missing metric is null, and the board is written last, a failure only reported). Round 3: the
+  model wrapper hid the summarizer's live-call count, so a default case-summary run didn't count
+  its summaries toward the cap (fixed: the default path isn't wrapped and the wrapper forwards),
+  and a mean of uncited claims below one showed as 0 (fixed). Round 4: nothing high or medium, so
+  the loop stopped; its cheap lows were fixed.
+- **Stage 2, recorded, not fixed:**
+  - The kept-reservation figure is worked out from the turn's cost less its priced usage, so it
+    can over-count live spend (a guard error that reported usage and a cut stream in one item, a
+    fallback's usage carrying the requested model, rounding, a recorded cut call beside a live
+    one), and a stream the loop abandons without closing counts its call on the next item. It
+    errs toward "spent now". The turn reporting its kept reservations, each marked live or not,
+    would remove the guesswork.
+  - The run's own spend for the daily cap is dated by when each ledger row was written, and the
+    daily ledger dates a settle by its reservation's day, so a call reserved before midnight UTC
+    and settled after it is one settle off.
+  - The daily cap reads the ledger once per item on its own connection (about 500 reads in a full
+    run).
+  - Every other-model run records into `fixtures-sonnet/`, whatever the model; a second model
+    with `PRUNE=1` would prune the first's recordings. Only Sonnet 5.5 is planned.
+  - A case-summary run on another model writes its seeded-summaries file like a default run;
+    Stage 4 copies them only if Sonnet 5.5 is chosen, so check the run's model before
+    `scripts/apply_seeded_summaries.py`.
+  - A README-only change runs the API job, since the scoreboard check lives there.

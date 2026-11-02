@@ -704,7 +704,9 @@ async def test_compare_prints_both_efforts_and_is_stored_in_the_scoreboard(
     assert board["effort"] == "medium"
     assert board["compare"]["baseline_effort"] == "low"
     assert "redteam_pass_rate" in board["compare"]["metrics"]
-    assert "Effort comparison: low (baseline) against medium" in capsys.readouterr().out
+    out = capsys.readouterr().out
+    assert "Facts that differ:" in out
+    assert "effort: low -> medium" in out
 
 
 async def test_the_scoreboards_commit_is_read_before_the_run_saves_its_fixtures(
@@ -736,7 +738,6 @@ async def test_the_scoreboards_commit_is_read_before_the_run_saves_its_fixtures(
     [
         {"effort": "low", "commit": "abc", "items": []},
         {"metrics": [], "effort": "low", "commit": "abc", "items": []},
-        {"metrics": {}, "commit": "abc", "items": []},
         {"metrics": {}, "effort": "low", "items": []},
         {"metrics": {}, "effort": "low", "commit": "abc", "items": {}},
         {"metrics": {}, "effort": "low", "commit": "abc", "items": [{"trial": 1}]},

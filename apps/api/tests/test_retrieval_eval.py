@@ -387,3 +387,52 @@ async def test_no_published_handbook_is_unavailable_not_a_traceback(
     monkeypatch.setattr(run, "tenant_session", refusing_session)
     with pytest.raises(run.EvalUnavailableError, match="Run `make db` first"):
         await run.run_searches_on(object(), [], [])
+
+
+async def test_write_board_commits_a_board_only_when_asked(tmp_path: Path) -> None:
+    dataset = write_dataset(tmp_path / "d.yaml", GOOD)
+    cache = cache_for(tmp_path, QUESTIONS)
+    runner = fake_runner({"a": ("1.1", "4.3"), "b": ("CA-3.2",)})
+    out = tmp_path / "scoreboards"
+
+    await run.run(["--boards-dir", str(out)], dataset=dataset, cache_path=cache, runner=runner)
+    assert not out.exists()
+
+    code = await run.run(
+        ["--write-board", "--boards-dir", str(out)],
+        dataset=dataset,
+        cache_path=cache,
+        runner=runner,
+    )
+
+    (written,) = out.glob("*-retrieval.json")
+    board = json.loads(written.read_text(encoding="utf-8"))
+    assert code == 0
+    assert board["set"] == "retrieval"
+    assert board["facts"]["handbookVersion"] == "2026.10"
+    assert board["facts"]["trials"] == 1
+
+
+def test_a_board_of_a_run_with_full_text_fallbacks_is_marked_partial(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    document = {
+        "model": "voyage-3",
+        "datasetSha256": "ee",
+        "commit": "f00",
+        "date": "2026-11-01T12:00:00+00:00",
+        "handbookVersion": "2026.11.1",
+        "overall": {"questions": 2, "hits": 2, "hitRateAt5": 1.0, "meanReciprocalRank": 1.0},
+        "misses": [],
+        "negatives": [],
+        "fulltextFallbacks": ["q-2"],
+    }
+
+    written = run.write_board(document, tmp_path)
+    clean = run.write_board(
+        {**document, "fulltextFallbacks": [], "date": "2026-11-01T13:00:00+00:00"}, tmp_path
+    )
+
+    assert json.loads(written.read_text(encoding="utf-8"))["facts"]["partial"] is True
+    assert "full-text" in capsys.readouterr().out
+    assert json.loads(clean.read_text(encoding="utf-8"))["facts"]["partial"] is False

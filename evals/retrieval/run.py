@@ -2,7 +2,7 @@
 
 Run it from apps/api:
 
-    uv run python ../../evals/retrieval/run.py [--check] [--json PATH]
+    uv run python ../../evals/retrieval/run.py [--check] [--json PATH] [--write-board]
 
 It reads `dataset.yaml`, embeds each question from the committed cache (never from Voyage), and
 runs `embed_query` then `search_handbook` for the question's asker, taking the top 5 chunks. It
@@ -50,6 +50,14 @@ from app.modules.sandbox.seed_data import LOCATIONS
 from app.modules.sandbox.service import is_no_published_handbook
 
 EVAL_DIR = Path(__file__).resolve().parent
+# The board writer is the package `assistant` under evals/. Run as a script, only this folder is on
+# the path, so put its parent there too (the assistant runner does the same).
+EVALS_ROOT = EVAL_DIR.parent
+if str(EVALS_ROOT) not in sys.path:
+    sys.path.insert(0, str(EVALS_ROOT))
+
+from assistant import boards  # noqa: E402
+
 DATASET_PATH = EVAL_DIR / "dataset.yaml"
 CACHE_PATH = EVAL_DIR / "embeddings" / f"{MODEL}-{DIMENSIONS}.jsonl"
 
@@ -486,6 +494,24 @@ async def run_searches(
         await engine.dispose()
 
 
+def write_board(document: dict[str, Any], boards_dir: Path) -> Path:
+    """Write the run's committed board, `<stamp>-retrieval.json`, named by the run's own date (a
+    retrieval run has no run file). The stamp is the run's UTC time, to the second."""
+    if document.get("fulltextFallbacks"):
+        # Questions that fell back to full-text search (missing embeddings) were not scored on
+        # vector search, so the board is kept but not shown on the scoreboard.
+        print(
+            f"{len(document['fulltextFallbacks'])} question(s) fell back to full-text search:"
+            " the board is marked partial and won't be shown on the scoreboard."
+        )
+        document = {**document, "partial": True}
+    target = boards.write_boards(
+        None, document, boards_dir, stamp=boards.stamp_of_date(document["date"])
+    )
+    assert target is not None  # noqa: S101 (a run with no run file always gets a board)
+    return target
+
+
 def _git(*args: str) -> str:
     done = subprocess.run(  # noqa: S603
         ["git", *args],  # noqa: S607
@@ -518,6 +544,17 @@ async def run(
     parser = argparse.ArgumentParser(description="Run the handbook retrieval eval.")
     parser.add_argument("--check", action="store_true", help="exit 1 if the eval fails")
     parser.add_argument("--json", type=Path, metavar="PATH", help="write the scoreboard here")
+    parser.add_argument(
+        "--write-board",
+        action="store_true",
+        help="also write this run's committed board (`make eval-retrieval WRITE=1`)",
+    )
+    parser.add_argument(
+        "--boards-dir",
+        type=Path,
+        default=boards.SCOREBOARDS_DIR,
+        help="where --write-board puts the board (default: evals/scoreboards)",
+    )
     args = parser.parse_args(argv)
 
     try:
@@ -550,7 +587,7 @@ async def run(
     summary = summarize(result.outcomes)
     print(f"Handbook {result.version_label}, {len(questions)} questions.\n")
     print(render(summary))
-    if args.json is not None:
+    if args.json is not None or args.write_board:
         board = scoreboard(
             summary,
             dataset=dataset,
@@ -558,8 +595,11 @@ async def run(
             commit=git_commit(),
             when=datetime.now(UTC),
         )
-        args.json.parent.mkdir(parents=True, exist_ok=True)
-        args.json.write_text(json.dumps(board, indent=2) + "\n", encoding="utf-8")
+        if args.json is not None:
+            args.json.parent.mkdir(parents=True, exist_ok=True)
+            args.json.write_text(json.dumps(board, indent=2) + "\n", encoding="utf-8")
+        if args.write_board:
+            print(f"Board: {write_board(board, args.boards_dir)}")
     return 1 if args.check and failures(summary) else 0
 
 
