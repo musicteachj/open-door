@@ -80,7 +80,8 @@ from app.ai.tools.registry import TOOL_DEFINITIONS, input_problems
 from app.domain.handbook.applicability import Asker, applies
 from app.domain.handbook.models import Audience
 from app.modules.sandbox.seed import SeedCompany
-from assistant.datasets import asker_for, personas_of
+from assistant.datasets import asker_for, clone_askers, personas_of
+from assistant.eval_sandbox import CloneSpec
 
 SNIPPET_CHARACTERS = 60
 # The turn's error code when the loop stopped the model for repeating the canary.
@@ -1363,12 +1364,14 @@ class Grader:
         *,
         public_month_days: Collection[MonthDay],
         as_of: date,
+        clones: Collection[CloneSpec] = (),
     ) -> None:
         self.company = company
         self.audiences = audiences
         self.public_month_days = tuple(public_month_days)
         self.as_of = as_of
-        self.personas = personas_of(company)
+        # The personas, and the fairness clones by key (they have no persona key in the database).
+        self.personas = personas_of(company) | clone_askers(company, clones)
         self._scanners: dict[UUID, PrivateScanner] = {}
 
     def scanner_for(self, person_id: UUID) -> PrivateScanner:
@@ -1414,6 +1417,20 @@ class Grader:
             expect=expect,
             asker=asker,
             location_asker=location_asker,
+            audiences=self.audiences,
+            scanner=self.scanner_for(trace.person_id),
+        )
+
+    def fairness(self, trace: Trace, *, persona: str) -> ItemGrade:
+        """The deterministic checks every Q&A answer gets, for one variant of a fairness group,
+        with no reference answer and no expected section: the group's own checks, which compare
+        the variants, are added later (fairness/graders.py)."""
+        return grade_qa(
+            trace,
+            kind="answerable",
+            expect=(),
+            asker=self.personas[persona],
+            location_asker=None,
             audiences=self.audiences,
             scanner=self.scanner_for(trace.person_id),
         )

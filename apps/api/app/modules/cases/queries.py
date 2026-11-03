@@ -13,7 +13,18 @@ from typing import Any, NamedTuple
 from uuid import UUID
 from zoneinfo import ZoneInfo
 
-from sqlalchemy import ColumnElement, Date, and_, case, cast, func, insert, or_, select, tuple_
+from sqlalchemy import (
+    ColumnElement,
+    Date,
+    and_,
+    case,
+    cast,
+    func,
+    insert,
+    or_,
+    select,
+    tuple_,
+)
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.ai.guard import CRISIS_KINDS, FLAGGED_CATEGORIES
@@ -400,17 +411,11 @@ def status_clause(status: str | None) -> ColumnElement[bool] | None:
     return Case.status == status
 
 
-async def queue_rows(
-    db: AsyncSession,
-    tenant_id: UUID,
-    status: str | None,
-    cursor: tuple[int, date, datetime, UUID] | None,
-    limit: int,
-) -> list[Any]:
-    query = (
+def _queue_select() -> Any:
+    """The queue's columns and joins. The metadata columns only: the encrypted words and their
+    key never leave the database for a queue read."""
+    return (
         select(
-            # The metadata columns only: the encrypted words and their key never leave the
-            # database for a queue read.
             Case.id,
             Case.category,
             Case.person_id,
@@ -429,6 +434,18 @@ async def queue_rows(
             Location,
             (Location.tenant_id == Person.tenant_id) & (Location.id == Person.location_id),
         )
+    )
+
+
+async def queue_rows(
+    db: AsyncSession,
+    tenant_id: UUID,
+    status: str | None,
+    cursor: tuple[int, date, datetime, UUID] | None,
+    limit: int,
+) -> list[Any]:
+    query = (
+        _queue_select()
         .where(Case.tenant_id == tenant_id)
         .order_by(_NEW_FIRST, _REPLY_KEY, Case.created_at, Case.id)
         .limit(limit + 1)
@@ -440,6 +457,48 @@ async def queue_rows(
         query = query.where(
             tuple_(_NEW_FIRST, _REPLY_KEY, Case.created_at, Case.id) > tuple_(*cursor)
         )
+    return list((await db.execute(query)).all())
+
+
+def queue_order_key(row: Any) -> tuple[int, date, datetime, UUID]:
+    """The queue's sort key for a row, the same four values `queue_rows` orders by."""
+    is_new = row.status == "new"
+    return (
+        0 if is_new else 1,
+        row.reply_by if is_new else date(1970, 1, 1),
+        row.created_at,
+        row.id,
+    )
+
+
+async def assistant_rows(
+    db: AsyncSession,
+    tenant_id: UUID,
+    status: str | None,
+    *,
+    leaving_out: UUID,
+    limit: int,
+    in_queue_order: bool,
+) -> list[Any]:
+    """Up to `limit` cases of a status, a person's own left out before the cut, with the queue's
+    columns. With `in_queue_order` they are the queue's first rows, in its order. Otherwise they
+    are the most recently changed rows (by when the case last changed status, ties by ID), most
+    recent first, and a caller that wants the queue's order sorts them with `queue_order_key`.
+    A case opened long ago and closed this week is recent; `created_at` would drop it."""
+    order = (
+        (_NEW_FIRST, _REPLY_KEY, Case.created_at, Case.id)
+        if in_queue_order
+        else (Case.status_changed_at.desc(), Case.id.desc())
+    )
+    query = (
+        _queue_select()
+        .where(Case.tenant_id == tenant_id, Case.person_id != leaving_out)
+        .order_by(*order)
+        .limit(limit)
+    )
+    clause = status_clause(status)
+    if clause is not None:
+        query = query.where(clause)
     return list((await db.execute(query)).all())
 
 

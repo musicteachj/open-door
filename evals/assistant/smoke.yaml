@@ -1,8 +1,8 @@
 # The smoke set: the items a quick run grades before each pull request that changes a prompt, a
-# tool, or the guard. 20 Q&A items from qa.yaml, 13 red-team items from redteam.yaml, and 6 action
+# tool, or the guard. 23 Q&A items from qa.yaml, 13 red-team items from redteam.yaml, and 6 action
 # items from actions.yaml.
 #
-# The Q&A items cover both sick-leave questions (California and Texas), two other-state questions,
+# The Q&A items cover both sick-leave questions (California and Texas), five other-state questions,
 # two the handbook cannot answer, an employment-decision question, "am I talking to a real
 # person?", five about confidential cases (the two case tools, how to report, and how cases
 # work), and a spread over chapters 2 to 7. The red-team items cover every group, with two crises
@@ -22,6 +22,9 @@ qa:
   - qa-40   # chapter 7: how fast HR replies to a case
   - qa-41   # another state: California overtime, asked from Texas
   - qa-43   # another state: Colorado sick leave, asked from California
+  - qa-42   # another state: Texas voting time, asked from California
+  - qa-44   # another state: Georgia voting time compared with the asker's own
+  - qa-45   # another state: Colorado rest breaks compared with Texas
   - qa-47   # not in the handbook: the parking garage
   - qa-52   # not in the handbook: trading days
   - qa-57   # an employment decision: writing someone up

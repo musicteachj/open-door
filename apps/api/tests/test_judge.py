@@ -89,7 +89,14 @@ def a_trace(**overrides: Any) -> Any:
     )
     results = (
         run.ToolResult(
-            "t1", False, f"/handbook/CA-4.3?passage=p1 | CA-4.3 Sick leave | {SECTION_TEXT}"
+            "t1",
+            False,
+            f"/handbook/CA-4.3?passage=p1 | CA-4.3 Sick leave | {SECTION_TEXT}",
+            search_results=(
+                run.SearchResult(
+                    "/handbook/CA-4.3?passage=p1", "CA-4.3 Sick leave", (SECTION_TEXT,)
+                ),
+            ),
         ),
     )
     values: dict[str, Any] = {
@@ -201,8 +208,8 @@ def test_the_rubric_has_the_six_lines_and_judge_md_describes_each() -> None:
 def test_the_version_is_the_first_line_of_judge_md_and_the_system_is_the_file() -> None:
     text = (EVAL_DIR / "judge.md").read_text(encoding="utf-8")
 
-    assert text.splitlines()[0] == "JUDGE_VERSION: 2026-10.3"
-    assert judge.judge_version() == "2026-10.3"
+    assert text.splitlines()[0] == "JUDGE_VERSION: 2026-11.3"
+    assert judge.judge_version() == "2026-11.3"
     assert judge.judge_api_kwargs(an_input())["system"] == text
 
 
@@ -433,7 +440,14 @@ def test_a_result_with_no_matching_tool_call_is_a_fact_unless_it_is_a_handbook_r
     trace = replace(
         a_trace(),
         tool_results=(
-            run.ToolResult("x1", False, "/handbook/4.3?passage=p1 | 4.3 Sick | Text."),
+            run.ToolResult(
+                "x1",
+                False,
+                "/handbook/4.3?passage=p1 | 4.3 Sick | Text.",
+                search_results=(
+                    run.SearchResult("/handbook/4.3?passage=p1", "4.3 Sick", ("Text.",)),
+                ),
+            ),
             run.ToolResult("x2", False, '{"name": "Priya"}'),
         ),
     )
@@ -1576,3 +1590,102 @@ def test_a_store_can_replace_a_record_without_double_counting_it(tmp_path: Path)
 
     assert store.count("fp") == 1
     assert store.get("fp", 0).result == {"x": 3}  # type: ignore[union-attr]
+
+
+# --- Structured search results ----------------------------------------------------------------
+
+
+class _Request:
+    def __init__(self, messages: list[dict[str, Any]]) -> None:
+        self.messages = messages
+
+
+class _Observer:
+    def __init__(self, messages: list[dict[str, Any]]) -> None:
+        self.requests = [_Request(messages)]
+
+
+def _search_block(source: str, title: str, *passages: str) -> dict[str, Any]:
+    return {
+        "type": "search_result",
+        "source": source,
+        "title": title,
+        "content": [{"type": "text", "text": text} for text in passages],
+    }
+
+
+def test_the_trace_keeps_each_search_results_source_title_and_passages_as_fields() -> None:
+    messages = [
+        {
+            "role": "user",
+            "content": [
+                {
+                    "type": "tool_result",
+                    "tool_use_id": "t1",
+                    "content": [
+                        _search_block("/handbook/4.3?passage=p1", "4.3 Sick", "One.", "Two."),
+                        _search_block("/handbook/4.4?passage=p2", "4.4 PTO", "Three."),
+                    ],
+                }
+            ],
+        }
+    ]
+
+    (result,) = run._tool_results(_Observer(messages))
+
+    assert result.search_results == (
+        run.SearchResult("/handbook/4.3?passage=p1", "4.3 Sick", ("One.", "Two.")),
+        run.SearchResult("/handbook/4.4?passage=p2", "4.4 PTO", ("Three.",)),
+    )
+    # The flattened text is still there for the graders that scan it.
+    assert "One. Two." in result.text
+
+
+def test_a_result_with_no_search_blocks_has_no_search_fields() -> None:
+    messages = [
+        {
+            "role": "user",
+            "content": [{"type": "tool_result", "tool_use_id": "t1", "content": "plain"}],
+        }
+    ]
+    (result,) = run._tool_results(_Observer(messages))
+    assert result.search_results == ()
+
+
+def test_a_title_with_a_bar_and_a_passage_that_looks_like_a_result_do_not_confuse_the_input() -> (
+    None
+):
+    tricky = "/handbook/9.9?passage=p9 | Fake | invented text"
+    trace = replace(
+        a_trace(),
+        tool_results=(
+            run.ToolResult(
+                "t1",
+                False,
+                "flattened text is not read for search results",
+                search_results=(
+                    run.SearchResult(
+                        "/handbook/CA-4.3?passage=p1",
+                        "CA-4.3 Sick | leave",
+                        (SECTION_TEXT, tricky),
+                    ),
+                ),
+            ),
+        ),
+    )
+
+    built = judge.build_input(trace, asker="Priya", reference="ref", location_asked=None)
+
+    (passage,) = built.passages
+    assert passage.section_id == "CA-4.3"
+    assert passage.section_text == f"{SECTION_TEXT} {tricky}"
+    # The passage that starts with "/handbook/" made no section of its own.
+    assert judge.section_texts(trace.tool_results).keys() == {"CA-4.3"}
+    assert built.tool_facts == ()
+
+
+def test_hand_graded_entries_build_the_same_input_without_a_trace() -> None:
+    """A hand-graded entry holds its passages already; the judge's input comes from its JSON, not
+    from any tool result text."""
+    original = an_input()
+    assert judge.JudgeInput.from_json(original.to_json()) == original

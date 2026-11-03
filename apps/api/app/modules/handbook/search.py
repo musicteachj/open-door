@@ -52,6 +52,8 @@ class Hit:
     # 1-based place in each search's results; None where the search didn't return it.
     fulltext_rank: int | None
     vector_rank: int | None
+    # The `##` heading the chunk sits under; None for text before the section's first heading.
+    heading: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -163,7 +165,9 @@ async def _hits(
     group_names = group_names or {}
     rows = (
         await db.execute(
-            select(HandbookChunk.id, HandbookChunk.passage_ids, HandbookSection)
+            select(
+                HandbookChunk.id, HandbookChunk.passage_ids, HandbookChunk.heading, HandbookSection
+            )
             .join(HandbookSection, HandbookSection.id == HandbookChunk.section_id)
             .where(HandbookChunk.id.in_([f.key.chunk_id for f in fused]))
         )
@@ -191,6 +195,7 @@ async def _hits(
                 deep_link=f"/handbook/{section.section_key}?passage={passage_ids[0]}",
                 fulltext_rank=item.ranks[0],
                 vector_rank=item.ranks[1],
+                heading=row.heading,
             )
         )
     return tuple(hits)

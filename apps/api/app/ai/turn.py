@@ -92,6 +92,7 @@ from app.ai.guard import (
     build_guard_request,
     guard_cost,
     guard_reservation_usd,
+    notes_for_role,
     offers_case,
     screen,
 )
@@ -1162,7 +1163,7 @@ class TurnRun:
             self.deps.actor_view,
             now=self.now,
             handbook_label=self.deps.handbook_label,
-            operator_notes=outcome.operator_notes,
+            operator_notes=notes_for_role(outcome.operator_notes, self.deps.actor_view.role),
             outcomes=self.outcomes,
         )
         question_message = {"role": "user", "content": self.question_message.content}

@@ -48,6 +48,7 @@ from decimal import Decimal
 from functools import cache
 from pathlib import Path
 from typing import Any, NamedTuple
+from uuid import UUID
 
 from anthropic import (
     APIConnectionError,
@@ -70,7 +71,7 @@ from app.ai.replay import (
     encode_usage,
     fingerprint,
 )
-from app.modules.sandbox.seed import SeedCompany
+from app.modules.sandbox.seed import PersonRow, SeedCompany
 
 EVAL_DIR = Path(__file__).resolve().parent
 JUDGE_MD_PATH = EVAL_DIR / "judge.md"
@@ -353,6 +354,15 @@ def asker_line(company: SeedCompany, persona: str) -> str:
     judge doesn't mistake an HR person's "since you're on the HR team" for a made-up claim. A
     manager is anyone who has a report other than themselves (as `load_actor` counts reports)."""
     person = next(p for p in company.people if p.persona_key == persona)
+    return _person_line(company, person)
+
+
+def person_line(company: SeedCompany, person_id: UUID) -> str:
+    """The same line for a person named by ID: a fairness clone, who has no persona key."""
+    return _person_line(company, next(p for p in company.people if p.id == person_id))
+
+
+def _person_line(company: SeedCompany, person: PersonRow) -> str:
     place = next(loc for loc in company.locations if loc.id == person.location_id)
     role = role_for(
         is_hr_admin=person.is_hr_admin,
@@ -375,24 +385,25 @@ def location_line(company: SeedCompany, code: str | None) -> str | None:
 
 # --- Building the input from a trace ----------------------------------------------------------
 
-_RESULT_START = re.compile(r"\n(?=/handbook/)")
-_RESULT = re.compile(r"/handbook/(?P<section>[^?\s|]+)\?passage=[^\s|]*\s\|\s(?P<rest>.*)", re.S)
+_SOURCE = re.compile(r"/handbook/(?P<section>[^?\s|]+)\?passage=")
 
 
 def section_texts(tool_results: Iterable[Any]) -> dict[str, str]:
     """The handbook's text for each section the tools returned, by section ID.
 
-    A search result is written into the tool result as `source | title | passages`, one result to a
-    block (see run.py `_result_text`). A section that came back twice (two searches) is kept once.
+    Read from each result's `search_results` fields (source, title, passages; see run.py
+    `_search_results_of`), never from the flattened text, so a "|" in a title or a passage that
+    starts with "/handbook/" can't be taken for a result. A section that came back twice (two
+    searches) is kept once.
     """
     found: dict[str, list[str]] = {}
     for result in tool_results:
-        for block in _RESULT_START.split("\n" + result.text)[1:]:
-            match = _RESULT.fullmatch(block.strip())
+        for hit in result.search_results:
+            match = _SOURCE.match(hit.source)
             if match is None:
                 continue
-            _title, _, passages = match.group("rest").partition(" | ")
             texts = found.setdefault(match.group("section"), [])
+            passages = " ".join(hit.passages)
             if passages not in texts:
                 texts.append(passages)
     return {section: " ".join(texts) for section, texts in found.items()}
@@ -421,13 +432,13 @@ def tool_facts_of(trace: Any) -> tuple[ToolFact, ...]:
     """The turn's tool results that are not handbook searches, in the order they were sent.
 
     A result belongs to the search tool by its call's name. A result with no call in the trace is a
-    search result when its text holds handbook passages (`/handbook/...` lines), and a fact
+    search result when it holds search results (its `search_results` fields), and a fact
     otherwise."""
     names = {use.id: use.name for use in trace.tool_uses}
     facts: list[ToolFact] = []
     for result in trace.tool_results:
         name = names.get(result.tool_use_id)
-        if name == SEARCH_TOOL or (name is None and "/handbook/" in result.text):
+        if name == SEARCH_TOOL or (name is None and bool(result.search_results)):
             continue
         facts.append(ToolFact(name or UNKNOWN_TOOL, result.text, bool(result.is_error)))
     return tuple(facts)

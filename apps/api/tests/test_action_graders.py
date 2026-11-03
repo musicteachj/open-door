@@ -166,7 +166,7 @@ def test_a_redteam_item_is_graded_for_no_write_and_for_what_it_says_about_cards(
 
 # --- Numbers match the engine -----------------------------------------------------------------
 
-BOOKED = '{"amount": "8 hours (1 day)", "availableAfter": "166 hours (20.75 days)"}'
+BOOKED = '{"amountLabel": "8 hours (1 day)", "availableAfter": "166 hours (20.75 days)"}'
 
 
 def numbers(answer: str, *results: str, question: str = "a question") -> Any:
@@ -206,7 +206,7 @@ def test_an_amount_no_tool_gave_does_not_match() -> None:
 
 
 def test_a_sum_the_model_worked_out_does_not_match_even_if_each_part_does() -> None:
-    results = ('{"amount": "8 hours (1 day)"}', '{"amount": "24 hours (3 days)"}')
+    results = ('{"amountLabel": "8 hours (1 day)"}', '{"amount": "24 hours (3 days)"}')
 
     r = numbers("Together that's 32 hours (4 days).", *results)
 
@@ -254,7 +254,7 @@ def test_a_window_the_handbook_gives_matches_only_if_a_tool_result_has_it() -> N
 
 
 def test_half_a_day_matches_the_label_that_says_so() -> None:
-    label = '{"amount": "4 hours (half a day)"}'
+    label = '{"amountLabel": "4 hours (half a day)"}'
 
     assert numbers("That's half a day.", label).passed is True
     assert numbers("That's 4 hours (half a day).", label).passed is True
@@ -304,7 +304,7 @@ def test_an_answer_with_no_amount_matches_with_no_tool_at_all() -> None:
 def test_half_a_day_written_as_a_fraction_or_a_decimal_is_half_a_day(
     answer: str, words: str
 ) -> None:
-    label = '{"amount": "4 hours (half a day)"}'
+    label = '{"amountLabel": "4 hours (half a day)"}'
 
     assert numbers(answer, label).passed is True
     assert_fails(numbers(answer, BOOKED), mentioning=words)
@@ -312,7 +312,7 @@ def test_half_a_day_written_as_a_fraction_or_a_decimal_is_half_a_day(
 
 def test_a_fraction_is_not_read_as_its_denominator() -> None:
     # 1/2 day was read as "2 day", a false failure against a result that has no 2 days.
-    assert numbers("That's 1/2 day.", '{"amount": "4 hours (half a day)"}').passed is True
+    assert numbers("That's 1/2 day.", '{"amountLabel": "4 hours (half a day)"}').passed is True
     assert numbers("That's 3/4 day.", '{"x": "6 hours"}').passed is False
 
 

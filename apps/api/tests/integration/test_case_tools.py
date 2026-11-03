@@ -19,8 +19,10 @@ from app.ai.embeddings import FakeEmbedder
 from app.ai.tools.base import ToolContext
 from app.ai.tools.cases import ONLY_HR_TEXT
 from app.ai.tools.registry import ToolOutcome, run_tool
+from app.core.problems import ProblemError
 from app.db.models import Tenant
-from app.db.tenancy import TenantContext, tenant_session
+from app.db.tenancy import TenantContext, set_is_hr, tenant_session
+from app.modules.cases import queries, service
 from app.modules.handbook.asker import load_asker
 from app.modules.handbook.search import pinned_version_id
 from app.modules.identity.actor import load_actor
@@ -188,6 +190,238 @@ async def test_list_cases_returns_the_seeded_four_for_dana_in_the_queues_order(
     assert {c["id"] for rows in everything.values() for c in rows} == {
         str(c.id) for c in company.cases
     }
+
+
+def many_cases(
+    company: SeedCompany, *, status: str, extra: int, start: int = 0, later: bool = True
+) -> SeedCompany:
+    """The company with `extra` more cases of `status`, cloned from Lucia's closed case, each sent
+    one hour after the last, all later than any seeded case. `start` offsets the hours and the
+    reply-by dates, so a second call adds cases after the first call's. A new case's reply-by date
+    grows with its sent time, so the soonest dates belong to the oldest cases. Event rows are
+    dropped (not read)."""
+    base, _ = seeded_case_of(company, "Lucia")
+    latest = max(case.created_at for case in company.cases)
+    clones = tuple(
+        replace(
+            base,
+            id=uuid4(),
+            submission_id=uuid4(),
+            summary_id=uuid4(),
+            status=status,
+            created_at=latest + timedelta(hours=start + n + 1),
+            status_changed_at=latest + timedelta(hours=start + n + 1),
+            reply_by=date(2027, 1, 4) + timedelta(days=start + n),
+            events=(),
+        )
+        for n in range(extra)
+    )
+    return replace(company, cases=(*company.cases, *clones))
+
+
+async def seed_built(engine: AsyncEngine, created: list[UUID], build: Any) -> SeedCompany:
+    """A fresh sandbox holding `build(base_company)`."""
+    tenant_id = uuid4()
+    created.append(tenant_id)
+    company: SeedCompany = build(build_company(tenant_id, ANCHOR))
+    async with tenant_session(engine, TenantContext(tenant_id, None)) as session:
+        session.add(
+            Tenant(
+                id=tenant_id, expires_at=datetime.now(UTC) + timedelta(hours=24), anchor_date=ANCHOR
+            )
+        )
+        await session.flush()
+        await insert_company(session, company, TEST_KEYS)
+    return company
+
+
+def queue_key(case: Any) -> tuple[int, date, datetime, UUID]:
+    """The queue's order, written out here from the spec, not taken from the code under test."""
+    is_new = case.status == "new"
+    return (
+        0 if is_new else 1,
+        case.reply_by if is_new else date(1970, 1, 1),
+        case.created_at,
+        case.id,
+    )
+
+
+@pytest.mark.parametrize("status", ["closed", "in_review"])
+async def test_a_cut_list_holds_the_newest_twenty_in_the_queues_order(
+    app_engine: AsyncEngine, created_tenant_ids: list[UUID], status: str
+) -> None:
+    company = await seed_built(
+        app_engine,
+        created_tenant_ids,
+        lambda base: many_cases(base, status=status, extra=25),
+    )
+    ctx = await context_for(app_engine, company, "dana")
+
+    data = data_of(await run_tool("list_cases", {"status": status}, ctx))
+
+    of_status = [c for c in company.cases if c.status == status]
+    assert len(of_status) >= 26
+    newest = sorted(of_status, key=lambda c: (c.created_at, c.id), reverse=True)[:20]
+    assert data["truncated"] is True
+    assert len(data["cases"]) == 20
+    assert {c["id"] for c in data["cases"]} == {str(c.id) for c in newest}
+    # Then in the queue's order: oldest first among the cases that are not new.
+    expected = [str(c.id) for c in sorted(newest, key=lambda c: (c.created_at, c.id))]
+    assert [c["id"] for c in data["cases"]] == expected
+
+
+@pytest.mark.parametrize("status", ["closed", "in_review"])
+async def test_a_cut_list_keeps_a_case_opened_long_ago_and_changed_most_recently(
+    app_engine: AsyncEngine, created_tenant_ids: list[UUID], status: str
+) -> None:
+    held: list[UUID] = []
+
+    def build(base: SeedCompany) -> SeedCompany:
+        many = many_cases(base, status=status, extra=25)
+        of_status = [c for c in many.cases if c.status == status]
+        earliest = min(of_status, key=lambda c: (c.created_at, c.id))
+        held.append(earliest.id)
+        latest_change = max(c.status_changed_at for c in many.cases) + timedelta(hours=1)
+        # The earliest-opened case changed status last: by created_at it is the first to be cut.
+        cases = tuple(
+            replace(c, status_changed_at=latest_change) if c.id == earliest.id else c
+            for c in many.cases
+        )
+        return replace(many, cases=cases)
+
+    company = await seed_built(app_engine, created_tenant_ids, build)
+    ctx = await context_for(app_engine, company, "dana")
+
+    data = data_of(await run_tool("list_cases", {"status": status}, ctx))
+
+    ids = [c["id"] for c in data["cases"]]
+    assert data["truncated"] is True
+    assert len(ids) == 20
+    assert str(held[0]) in ids
+    # Still in the queue's order: the oldest-opened first, so the kept case leads the list.
+    assert ids[0] == str(held[0])
+
+
+async def test_a_cut_new_list_holds_the_soonest_reply_dates_in_the_queues_order(
+    app_engine: AsyncEngine, created_tenant_ids: list[UUID]
+) -> None:
+    company = await seed_built(
+        app_engine, created_tenant_ids, lambda base: many_cases(base, status="new", extra=25)
+    )
+    ctx = await context_for(app_engine, company, "dana")
+
+    data = data_of(await run_tool("list_cases", {"status": "new"}, ctx))
+
+    ours = sorted((c for c in company.cases if c.status == "new"), key=queue_key)
+    assert len(ours) >= 26
+    assert data["truncated"] is True
+    # The first twenty in the queue's order, not the newest twenty: the soonest dates survive.
+    assert [c["id"] for c in data["cases"]] == [str(c.id) for c in ours[:20]]
+    newest = sorted(ours, key=lambda c: (c.created_at, c.id), reverse=True)[:20]
+    assert {c.id for c in ours[:20]} != {c.id for c in newest}
+
+
+async def test_hr_own_case_is_left_out_before_the_cut(
+    app_engine: AsyncEngine, created_tenant_ids: list[UUID]
+) -> None:
+    def build(base: SeedCompany) -> SeedCompany:
+        many = many_cases(base, status="new", extra=25)
+        dana = next(p.id for p in base.people if p.given_name == "Dana")
+        # Dana's own new case with the soonest reply-by date of all: it would head the list.
+        own = replace(
+            seeded_case_of(base, "Lucia")[0],
+            id=uuid4(),
+            submission_id=uuid4(),
+            summary_id=uuid4(),
+            person_id=dana,
+            status="new",
+            reply_by=date(2020, 1, 1),
+            events=(),
+        )
+        return replace(many, cases=(*many.cases, own))
+
+    company = await seed_built(app_engine, created_tenant_ids, build)
+    dana = next(p.id for p in company.people if p.given_name == "Dana")
+    ctx = await context_for(app_engine, company, "dana")
+
+    data = data_of(await run_tool("list_cases", {"status": "new"}, ctx))
+
+    others = sorted(
+        (c for c in company.cases if c.status == "new" and c.person_id != dana), key=queue_key
+    )
+    assert data["truncated"] is True
+    assert [c["id"] for c in data["cases"]] == [str(c.id) for c in others[:20]]
+
+
+async def test_a_cut_open_list_holds_the_queues_first_twenty(
+    app_engine: AsyncEngine, created_tenant_ids: list[UUID]
+) -> None:
+    def build(base: SeedCompany) -> SeedCompany:
+        first = many_cases(base, status="new", extra=10)
+        return many_cases(first, status="in_review", extra=25, start=100)
+
+    company = await seed_built(app_engine, created_tenant_ids, build)
+    ctx = await context_for(app_engine, company, "dana")
+
+    data = data_of(await run_tool("list_cases", {"status": "open"}, ctx))
+
+    ours = sorted((c for c in company.cases if c.status in {"new", "in_review"}), key=queue_key)
+    expected = ours[:20]
+    assert data["truncated"] is True
+    assert [c["id"] for c in data["cases"]] == [str(c.id) for c in expected]
+    # All the new cases come first, then the oldest in-review ones.
+    kinds = [c.status for c in expected]
+    assert kinds == sorted(kinds, key=lambda s: 0 if s == "new" else 1)
+    assert "in_review" in kinds
+
+
+async def test_the_python_queue_key_orders_rows_as_the_queues_sql_does(
+    app_engine: AsyncEngine, created_tenant_ids: list[UUID]
+) -> None:
+    def build(base: SeedCompany) -> SeedCompany:
+        base_sent = min(c.created_at for c in base.cases)
+        first = many_cases(base, status="new", extra=6)
+        # In-review cases sent later than the new ones, with reply-by dates that would reverse the
+        # order if the key used them.
+        mixed = many_cases(first, status="in_review", extra=6, start=3)
+        # Give the in-review cases reply-by dates that run opposite to their sent times, so a key
+        # that used them would reorder the rows.
+        flipped = tuple(
+            replace(c, reply_by=date(2028, 1, 1) - timedelta(days=(c.created_at - base_sent).days))
+            if c.status == "in_review"
+            else c
+            for c in mixed.cases
+        )
+        return replace(mixed, cases=flipped)
+
+    company = await seed_built(app_engine, created_tenant_ids, build)
+    async with tenant_session(app_engine, TenantContext(company.tenant_id, None)) as db:
+        await set_is_hr(db, True)
+        rows = await queries.queue_rows(db, company.tenant_id, None, None, 100)
+    assert len(rows) >= 14
+    assert {r.status for r in rows} == {"new", "in_review", "closed"}
+    shuffled = sorted(rows, key=lambda r: (r.created_at, r.id), reverse=True)
+    assert [r.id for r in sorted(shuffled, key=queries.queue_order_key)] == [r.id for r in rows]
+
+
+async def test_an_unknown_status_is_refused_as_the_queue_refuses_it(
+    app_engine: AsyncEngine, company: SeedCompany
+) -> None:
+    ctx = await context_for(app_engine, company, "dana")
+    async with tenant_session(app_engine, ctx.tenant_ctx) as db:
+        await set_is_hr(db, True)
+        with pytest.raises(ProblemError) as excinfo:
+            await service.cases_for_assistant(db, ctx.actor, "everything", limit=20)
+    assert (excinfo.value.status_code, excinfo.value.code) == (422, "case-invalid")
+
+
+async def test_a_list_that_fits_is_not_marked_cut(
+    app_engine: AsyncEngine, company: SeedCompany
+) -> None:
+    ctx = await context_for(app_engine, company, "dana")
+    data = data_of(await run_tool("list_cases", {"status": "open"}, ctx))
+    assert data["truncated"] is False
+    assert len(data["cases"]) == 3
 
 
 async def test_list_cases_gives_the_metadata_the_spec_names_and_nothing_else(

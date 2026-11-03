@@ -136,6 +136,138 @@ def test_the_effort_board_is_not_a_scoreboard_row() -> None:
     assert "20261016" not in rendered
 
 
+# --- The fairness row -------------------------------------------------------------------------
+
+FAIRNESS_FIXTURES = Path(__file__).parent / "fixtures" / "scoreboard-fairness"
+
+
+def regenerate_fairness_golden() -> None:  # pragma: no cover (run by hand when the wording changes)
+    data = gen.build(gen.load_boards(FAIRNESS_FIXTURES / "boards"), pinned_model=PINNED)
+    (FAIRNESS_FIXTURES / "expected-section.md").write_text(gen.render_section(data), "utf-8")
+    (FAIRNESS_FIXTURES / "expected.json").write_text(gen.dumps_json(data), encoding="utf-8")
+
+
+def fairness_row(boards: list[dict[str, Any]]) -> dict[str, Any]:
+    row: dict[str, Any] = {r["key"]: r for r in gen.build(boards, pinned_model=PINNED)["sets"]}[
+        "fairness"
+    ]
+    return row
+
+
+def test_a_board_with_fairness_figures_gives_the_golden_section_and_json() -> None:
+    data = gen.build(gen.load_boards(FAIRNESS_FIXTURES / "boards"), pinned_model=PINNED)
+
+    assert gen.render_section(data) == (FAIRNESS_FIXTURES / "expected-section.md").read_text(
+        "utf-8"
+    )
+    assert gen.dumps_json(data) == (FAIRNESS_FIXTURES / "expected.json").read_text("utf-8")
+
+
+def test_the_fairness_row_carries_the_groups_the_assumptions_and_the_judge() -> None:
+    row = fairness_row(gen.load_boards(FAIRNESS_FIXTURES / "boards"))
+
+    assert row["notRun"] is False
+    assert row["name"] == "Fairness"
+    assert row["headline"] == {
+        "label": "Groups consistent",
+        "value": 1.0,
+        "display": "12 of 12",
+    }
+    assert row["lowest"] == {"value": None, "display": "Groups are judged across all trials."}
+    assert "No identity assumption in any trial" in row["also"]
+    assert "Judge equivalence 95% (lowest trial 93%)" in row["also"]
+    assert any(
+        line.startswith("Groups consistent by attribute: ") and "name 100%" in line
+        for line in row["also"]
+    )
+    assert row["facts"]["stamp"] == "20261105T140000Z"
+
+
+def test_identity_assumptions_and_unavailable_comparisons_are_said_plainly(tmp_path: Path) -> None:
+    def worse(board: dict[str, Any]) -> None:
+        board["metrics"]["fairness_identity_assumptions"] = {"mean": 1.0, "min": 0.0, "max": 2.0}
+        board["metrics"]["fairness_judge_unavailable"] = {"mean": 1.0, "min": 0.0, "max": 3.0}
+        board["metrics"]["fairness_groups_consistent"] = {
+            "mean": 11 / 12,
+            "min": 11 / 12,
+            "itemsPerTrial": 12,
+        }
+
+    boards = fairness_boards(tmp_path, worse)
+
+    row = fairness_row(boards)
+    assert row["headline"]["display"] == "11 of 12"
+    assert "2 identity assumptions in the worst trial" in row["also"]
+    assert "Up to 3 comparisons unavailable in a trial" in row["also"]
+
+
+def test_one_identity_assumption_is_singular(tmp_path: Path) -> None:
+    def one(board: dict[str, Any]) -> None:
+        board["metrics"]["fairness_identity_assumptions"] = {"mean": 0.33, "min": 0.0, "max": 1.0}
+
+    assert (
+        "1 identity assumption in the worst trial"
+        in fairness_row(fairness_boards(tmp_path, one))["also"]
+    )
+
+
+def fairness_boards(tmp_path: Path, edit: Any) -> list[dict[str, Any]]:
+    """The fairness fixture board, edited, as the only board in a folder."""
+    boards_dir = tmp_path / "boards"
+    shutil.copytree(FAIRNESS_FIXTURES / "boards", boards_dir)
+    path = next(boards_dir.glob("*.json"))
+    board = json.loads(path.read_text())
+    edit(board)
+    path.write_text(json.dumps(board))
+    loaded: list[dict[str, Any]] = gen.load_boards(boards_dir)
+    return loaded
+
+
+def test_a_full_board_without_fairness_figures_is_not_run_yet() -> None:
+    row = fairness_row(gen.load_boards(BOARDS))
+
+    assert row["notRun"] is True
+    assert row["headline"] is None
+
+
+def test_the_row_comes_from_the_newest_full_board_that_has_fairness_figures(
+    tmp_path: Path,
+) -> None:
+    def no_fairness(board: dict[str, Any]) -> None:
+        board["stamp"] = "20261110T000000Z"
+        board["metrics"] = {
+            k: v for k, v in board["metrics"].items() if not k.startswith("fairness")
+        }
+
+    boards = fairness_boards(tmp_path, lambda b: None)
+    newer = json.loads(json.dumps(boards[0]))
+    no_fairness(newer)
+    (tmp_path / "boards" / "20261110T000000Z-full.json").write_text(json.dumps(newer))
+
+    row = fairness_row(gen.load_boards(tmp_path / "boards"))
+
+    # The newest full board has no fairness figures, so the older board's stand.
+    assert row["notRun"] is False
+    assert row["facts"]["stamp"] == "20261105T140000Z"
+
+
+def test_a_partial_or_other_model_fairness_board_is_not_the_row(tmp_path: Path) -> None:
+    def partial(board: dict[str, Any]) -> None:
+        board["facts"]["partial"] = True
+
+    def other_model(board: dict[str, Any]) -> None:
+        board["facts"]["model"] = "claude-sonnet-5-5"
+
+    assert fairness_row(fairness_boards(tmp_path, partial))["notRun"] is True
+    assert fairness_row(fairness_boards(tmp_path / "again", other_model))["notRun"] is True
+
+
+def test_the_fairness_row_has_no_em_dash() -> None:
+    data = gen.build(gen.load_boards(FAIRNESS_FIXTURES / "boards"), pinned_model=PINNED)
+    for text in (gen.render_section(data), gen.dumps_json(data)):
+        assert chr(0x2014) not in text
+
+
 # --- Boards that must not become rows ---------------------------------------------------------
 
 

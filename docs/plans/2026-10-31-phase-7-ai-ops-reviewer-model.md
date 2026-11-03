@@ -935,6 +935,48 @@ Recorded at each stage's close.
     the run's: a finished sandbox's daily rows are deleted with it (the batch B review's high
     finding, fixed before the close).
 
+- **Stage 3 (2026-11-02 and 03), what the code forced:**
+  - The prompt is one file for every role and the safety check never sees the actor, so HR's topic
+    note (`TOPIC_NOTE_HR`) is swapped in where the turn renders its notes, and the prompt's case
+    paragraph states both routes. The HR note stays shorter than the sensitive note, which sizes
+    the cost reservation.
+  - **`list_cases`, the owner's call (2026-11-02):** only a cut `in_review` or `closed` list takes
+    the newest 20; a cut `new` or `open` list keeps the queue's own first 20, so the soonest
+    reply-by dates are never dropped (spec amended). An unknown status is refused as the queue
+    refuses it.
+  - Structured search results: the hand-graded entries store a finished judge input, so they
+    needed no change.
+  - **The judge's rubric took three versions** (2026-11.1 to 11.3) and three agreement runs, one
+    more than planned, on the owner's OK each: the replay of judge 2026-10.3 showed 14 of its 21
+    disagreements were uncited-claim calls (a claim before its marker read as uncited, opening
+    summaries and a rule applied to the asker's own facts counted as new claims, verdicts that
+    contradicted their reasons). 11.1 reached 92.6%; 11.2 exempted the assistant's own abilities
+    and Open Door's screens (92.2%); 11.3 restored "the passage that marker cites holds it" after
+    the review found an invented sentence between two cited ones would pass (91.2%). The
+    agreement command isn't a `make` target, and its runner cap stayed $1.
+  - Two smoke runs, not three: the second came after three targeted prompt edits, and the
+    owner chose a rubric fix over a third. The smoke set gained qa-42, qa-44, and qa-45 (42 items,
+    about $1.00; the effort set about $1.85). qa-69's reference was loosened on the owner's OK.
+  - **Colorado's carryover passage** ranked 1st by meaning but 19th by keywords, so 8th overall;
+    renaming its heading to "Carryover of unused sick hours" (the owner's choice, simulated first)
+    made it 1st. Handbook 2026.11.3, one passage re-embedded. The retrieval eval gained
+    `expect_heading`, since a section-level question passed even before the fix.
+  - **The fairness set:** clones can't carry a persona key (a database check), so a clone's ID is
+    derived from the tenant and its key, and the harness resolves askers through it. Clones copy
+    their template's schedule, balances, and time-off requests; their name, emails, phone, street
+    number, and manager differ (the private-data scanner and the team trees need that). They
+    report to the Denver HQ Marketing Manager, outside every persona's team. "Meal breaks,
+    Oakland" uses three hourly Oakland clones, since Priya is salaried. The parental group says
+    "going to be a mom / dad / parent" rather than "new mom", which reads as a pregnancy cue.
+  - "States the same figures" is graded per unit: two variants fail only when they give
+    different figures in a unit both use; a figure one answer leaves out is the pairwise judge's
+    call. Figures an answer echoes from its own question (an age) are dropped. Without both, the
+    first run would have split groups on correct answers.
+  - The pairwise judge is its own module (`evals/assistant/pairwise.py`) with its own rubric and
+    recordings; a group is recorded whole or not at all, and a cap stop mid-group marks the run
+    partial.
+  - The full set's cap moved from $16 to $18 before its run.
+
 ## Backlog
 
 Recorded at each stage's close, then moved to `docs/BACKLOG.md`.
@@ -1009,3 +1051,45 @@ Recorded at each stage's close, then moved to `docs/BACKLOG.md`.
     Stage 4 copies them only if Sonnet 5.5 is chosen, so check the run's model before
     `scripts/apply_seeded_summaries.py`.
   - A README-only change runs the API job, since the scoreboard check lives there.
+- **Stage 3, the reviews (2026-11-02 and 03):** batch A's review found one medium (a cut `new`
+  or `open` case list dropped the most urgent cases; the owner chose the split by status), batch
+  B's two (the prompt's "start every paragraph cited" against a plain yes-or-no opener; the
+  judge's rewrite dropping "the passage that marker cites holds it"), and batch C's three (clones
+  without their template's time-off requests, an echoed age counted as a figure, exact figure
+  sets), all fixed. The full run's first fairness grades then mixed two real findings with three
+  grading problems (a partial "couldn't find" read as "not found", the asker's own balance
+  compared as policy, a PTO citation required of the religious group); on the owner's no-cost
+  call they were fixed and the run's fairness re-graded from its saved traces. `/code-review
+  medium` round 1 found the run's clones read from the committed groups file instead of the
+  loaded one, the re-grade not checking that a question was unchanged, and a cut `closed` list
+  ordered by when a case was opened rather than changed (all fixed); round 2 found the re-grade
+  dropping an unregraded variant's failure, "2 times a month" read as a pay multiplier, and an
+  orphan search result counted as the asker's own data (fixed).
+- **Stage 3, recorded, not fixed:**
+  - HR's topic note is swapped in by matching `TOPIC_NOTE`'s text, not chosen from the role when
+    the notes are built; a test covers every note the guard gives, so an edit to one but not the
+    swap fails it.
+  - The queue's order is written three times (the SQL, `queue_order_key`, `encode_cursor`).
+  - A clone's asker card is built with `Me.model_construct` and two extra queries, since `Me`
+    requires a persona key; eval-only.
+  - `EvalRun` reads the fairness rubric even when a test's paths have no fairness set.
+  - The clone manager and templates are found by copying the seed's private seat-ID rule.
+  - A retrieval runner that doesn't fill `headings` fails every `expect_heading` question.
+  - The pairwise recordings hold trial 1 only (what CI replays); the run file keeps every trial's
+    verdicts, which the re-grade reads.
+  - The full run's red-team item rt-49 hit a transient model error in trial 3 and wasn't
+    recorded; CI replays trial 1, so nothing misses.
+  - Fairness's two findings (Good Friday, the age remark) wait for a prompt fix, decided before
+    the release with Stage 4's model (`docs/BACKLOG.md`).
+- **Stage 3, `/code-review medium` rounds 3 and 4.** Round 3 found a fairness group whose
+  variants could be recorded in part after the shared-request filter (now whole or not at all)
+  and the full run's estimate still at $14 after it cost $15.20 (now about $15.50, checked
+  against the docs by a test), both fixed; HR's topic note naming a form that may not show and
+  `list_cases`'s "newest" wording wait for the next prompt change (`docs/BACKLOG.md`). Round 4
+  found nothing high or medium, so the loop stopped; its cheap lows were fixed (the scoreboard's
+  Fairness row labels, a missing seed seat now a clear error, `cases_for_assistant`). Recorded:
+  the re-graded board keeps the run's original `groups.yaml` hash in `datasetSha256` (the
+  re-grade's hash is in `fairnessRegraded`); smoke and escalation runs still read
+  `groups.yaml` and add the clones; which fairness groups are recordable is worked out three
+  times per run; `insert_people` lives in the app's seed module, used only by the harness (a
+  test keeps the app from calling it).

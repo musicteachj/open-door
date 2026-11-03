@@ -72,8 +72,8 @@ eval-offline: ## Replay the recorded assistant evals (needs `make db`); no netwo
 
 # SET=case-summary (3 trials of the case summarizer and its judge, about $0.75, cap $3).
 # PAID. Without YES=1 (exactly 1: YES=0 or YES=no still only prints) it prints the set, the item count, the estimated cost, and the cap, and calls
-# nothing. SET=smoke (about $0.95, cap $2), SET=full (about $14, cap $16), or SET=effort (the smoke
-# items at medium effort, about $1.75, cap $2; its recordings go to a git-ignored folder, and
+# nothing. SET=smoke (about $1.00, cap $2), SET=full (about $15.50, cap $18), or SET=effort (the smoke
+# items at medium effort, about $1.85, cap $2; its recordings go to a git-ignored folder, and
 # COMPARE=<a low-effort scoreboard> prints the two side by side). A run reuses the recordings it
 # already has and calls only requests that changed. FRESH=1 calls everything live again. PRUNE=1
 # (SET=full only) also drops the old recordings no item asked for, and implies FRESH=1: with

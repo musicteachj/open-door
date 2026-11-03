@@ -615,7 +615,7 @@ def _request_words(behavior: str, today: date | None, data: Any) -> str:
     day = None
     if today is not None:
         day = next_friday(today) if behavior == "book_friday" else today + timedelta(days=1)
-    amount = data.get("amount") if isinstance(data, dict) else None
+    amount = data.get("amountLabel") if isinstance(data, dict) else None
     what = "book PTO" if behavior == "book_friday" else "record sick time"
     done = "booked" if behavior == "book_friday" else "recorded"
     when = "" if day is None else f" for {_day_name(day)}"
@@ -645,7 +645,7 @@ def _waiting_words(data: Any) -> str:
     if not waiting:
         return "Nothing is waiting for your decision right now."
     first = waiting[0]
-    amount = first.get("amount")
+    amount = first.get("amountLabel")
     figure = f" ({amount})" if isinstance(amount, str) else ""
     return (
         f"The first request waiting for you is from {first.get('person')}, "

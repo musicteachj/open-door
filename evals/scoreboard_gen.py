@@ -47,6 +47,7 @@ SCHEMA = 1
 
 NOT_RUN = "Not run yet"
 NO_TRIALS = "No trials: retrieval is exact."
+GROUPS_ACROSS_TRIALS = "Groups are judged across all trials."
 MONTHS = ("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec")
 NUMBER_WORDS = {
     2: "two",
@@ -193,13 +194,21 @@ def _lowest(metric: Mapping[str, Any], text: str | None = None) -> dict[str, Any
     return {"value": low, "display": "-" if low is None else pct(low)}
 
 
-def _newest(boards: Sequence[Mapping[str, Any]], set_name: str, model: str | None) -> Any:
+def _newest(
+    boards: Sequence[Mapping[str, Any]],
+    set_name: str,
+    model: str | None,
+    *,
+    has: str | None = None,
+) -> Any:
+    """The newest board of the set on the model; with `has`, the newest that has that metric."""
     matching = [
         b
         for b in boards
         if _shown(b)
         and b["set"] == set_name
         and (model is None or b["facts"].get("model") == model)
+        and (has is None or _metric(b, has) is not None)
     ]
     return matching[-1] if matching else None
 
@@ -345,6 +354,73 @@ def _actions_row(board: Mapping[str, Any] | None) -> dict[str, Any]:
     )
 
 
+# The order the attributes are listed in (evals/fairness/groups.yaml).
+ATTRIBUTE_ORDER = ("name", "parent", "religion", "age", "origin", "spouse")
+
+
+def _plural_of(count: float, word: str) -> str:
+    whole = round(count)
+    return f"{whole} {word}{'' if whole == 1 else 's'}"
+
+
+def _fairness_row(board: Mapping[str, Any] | None) -> dict[str, Any]:
+    groups = _metric(board, "fairness_groups_consistent")
+    if board is None or groups is None:
+        return _not_run("fairness", "Fairness")
+    also = []
+    assumptions = _metric(board, "fairness_identity_assumptions")
+    if assumptions is not None:
+        worst = assumptions.get("max")
+        worst = assumptions["mean"] if worst is None else worst
+        also.append(
+            "No identity assumption in any trial"
+            if worst == 0
+            else f"{_plural_of(worst, 'identity assumption')} in the worst trial"
+        )
+    equivalence = _metric(board, "fairness_judge_equivalence")
+    if equivalence is not None:
+        text = f"Judge equivalence {pct(equivalence['mean'])}"
+        if equivalence.get("min") is not None:
+            text += f" (lowest trial {pct(equivalence['min'])})"
+        also.append(text)
+    unavailable = _metric(board, "fairness_judge_unavailable")
+    if unavailable is not None:
+        most = unavailable.get("max")
+        most = unavailable["mean"] if most is None else most
+        if most:
+            also.append(f"Up to {_plural_of(most, 'comparison')} unavailable in a trial")
+    by_attribute = {
+        name: value
+        for name, value in _group_names(board["metrics"], "fairness_consistent_by_group.")
+        if value and value.get("mean") is not None
+    }
+    ordered = [a for a in ATTRIBUTE_ORDER if a in by_attribute] + sorted(
+        a for a in by_attribute if a not in ATTRIBUTE_ORDER
+    )
+    if ordered:
+        also.append(
+            "Groups consistent by attribute: "
+            + ", ".join(f"{a} {pct(by_attribute[a]['mean'])}" for a in ordered)
+            + "."
+        )
+    regraded = board["facts"].get("fairnessRegraded")
+    if regraded:
+        # The run's traces and pairwise verdicts are the recorded ones; the checks are newer.
+        day = regraded["date"]
+        also.append(f"Graded again from the saved run on {day}; no new model calls")
+    return _row(
+        "fairness",
+        "Fairness",
+        _stamp_date(board["stamp"]),
+        board,
+        _figure(
+            "Groups consistent", groups["mean"], _count(groups["mean"], groups.get("itemsPerTrial"))
+        ),
+        _lowest(groups, GROUPS_ACROSS_TRIALS),
+        also,
+    )
+
+
 def _escalation_row(board: Mapping[str, Any] | None) -> dict[str, Any]:
     crisis = _metric(board, "crisis_recall")
     if board is None or crisis is None:
@@ -431,8 +507,7 @@ def build(
         _quality_row(full),
         _redteam_row(full),
         _actions_row(full),
-        # Fairness joins when its first board is committed (Phase 7, stage 3).
-        _not_run("fairness", "Fairness"),
+        _fairness_row(_newest(boards, "full", pinned_model, has="fairness_groups_consistent")),
         _escalation_row(_newest(boards, "escalation", None)),
         _case_summary_row(_newest(boards, "case-summary", summary_model or pinned_model)),
     ]

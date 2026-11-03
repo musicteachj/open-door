@@ -42,7 +42,7 @@ from sqlalchemy.ext.asyncio import AsyncEngine
 from app.ai.embeddings import DIMENSIONS, MODEL, CachedEmbedder, EmbeddingCache
 from app.core.config import get_settings
 from app.db.engine import create_engine
-from app.db.models import HandbookSection, HandbookVersion, Location, Tenant
+from app.db.models import HandbookChunk, HandbookSection, HandbookVersion, Location, Tenant
 from app.db.tenancy import TenantContext, tenant_session
 from app.domain.handbook.applicability import Asker
 from app.modules.handbook.search import clean_query, embed_query, pinned_version_id, search_handbook
@@ -95,6 +95,8 @@ class Question:
     expect: tuple[str, ...]
     must_not: tuple[str, ...]
     location_code: str | None
+    # The `##` heading the winning chunk must sit under (one `expect` section only), or None.
+    expect_heading: str | None = None
 
     @property
     def is_negative(self) -> bool:
@@ -103,11 +105,13 @@ class Question:
 
 @dataclass(frozen=True, slots=True)
 class Outcome:
-    """What one search returned: the section of each chunk, best first."""
+    """What one search returned: the section of each chunk, best first, and the `##` heading each
+    chunk sits under (empty when the runner didn't report headings)."""
 
     question: Question
     mode: str
     sections: tuple[str, ...]
+    headings: tuple[str | None, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -226,23 +230,49 @@ def parse_dataset(path: Path) -> list[Question]:
             problems.append(f"{where}: unknown location_code {location_code!r}")
             location_code = None
 
+        expect_heading = item.get("expect_heading")
+        if "expect_heading" in item:
+            if not isinstance(expect_heading, str) or not expect_heading.strip():
+                problems.append(f"{where}: expect_heading must be a non-empty string")
+                expect_heading = None
+            elif has_must_not:
+                problems.append(f"{where}: expect_heading can't go with `must_not`")
+            elif len(expect) != 1:
+                problems.append(f"{where}: expect_heading needs `expect` with exactly one section")
+
         who = _asker(item.get("asker"), f"{where} asker", problems)
         if who is not None and isinstance(qid, str) and (expect or must_not):
-            questions.append(Question(qid, who[0], who[1], text, expect, must_not, location_code))
+            questions.append(
+                Question(qid, who[0], who[1], text, expect, must_not, location_code, expect_heading)
+            )
 
     if problems:
         raise DatasetError("\n".join(problems))
     return questions
 
 
-def check_sections(questions: Sequence[Question], section_ids: set[str]) -> None:
-    """Raises `DatasetError` for any `expect` or `must_not` ID the loaded version doesn't have."""
+def check_sections(
+    questions: Sequence[Question],
+    section_ids: set[str],
+    headings: dict[str, set[str]] | None = None,
+) -> None:
+    """Raises `DatasetError` for any `expect` or `must_not` ID the loaded version doesn't have,
+    and for any `expect_heading` no chunk of its section sits under. `headings` maps each section
+    key to the `##` headings of its chunks."""
     problems = [
         f"{q.id}: no section {section} in the loaded handbook"
         for q in questions
         for section in (*q.expect, *q.must_not)
         if section not in section_ids
     ]
+    for q in questions:
+        if q.expect_heading is None or q.expect[0] not in section_ids:
+            continue
+        if q.expect_heading not in (headings or {}).get(q.expect[0], set()):
+            problems.append(
+                f"{q.id}: no heading {q.expect_heading!r} in section {q.expect[0]} "
+                "of the loaded handbook"
+            )
     if problems:
         raise DatasetError("\n".join(problems))
 
@@ -256,12 +286,37 @@ def dataset_hash(path: Path) -> str:
 
 
 def first_hit_rank(outcome: Outcome) -> int | None:
-    """The 1-based place of the first chunk from an expected section, or None."""
-    expected = set(outcome.question.expect)
+    """The 1-based place of the first chunk from an expected section, or None. With an
+    `expect_heading`, the chunk must also sit under that heading."""
+    question = outcome.question
+    expected = set(question.expect)
     for place, section in enumerate(outcome.sections, start=1):
-        if section in expected:
+        if section not in expected:
+            continue
+        if question.expect_heading is None:
+            return place
+        heading = outcome.headings[place - 1] if place <= len(outcome.headings) else None
+        if heading == question.expect_heading:
             return place
     return None
+
+
+def _wanted(question: Question) -> str:
+    wanted = ", ".join(question.expect)
+    if question.expect_heading is not None:
+        wanted += f" under heading {question.expect_heading!r}"
+    return wanted
+
+
+def _got(outcome: Outcome) -> str:
+    if not outcome.sections:
+        return "nothing"
+    if not outcome.headings:
+        return ", ".join(outcome.sections)
+    return ", ".join(
+        f"{section} ({heading})" if heading else section
+        for section, heading in zip(outcome.sections, outcome.headings, strict=False)
+    )
 
 
 def _stats(outcomes: Sequence[Outcome]) -> Stats:
@@ -320,7 +375,7 @@ def render(summary: Summary) -> str:
         q = outcome.question
         lines += [
             f"  {q.id} [{q.asker_label}] {q.text}",
-            f"    wanted {', '.join(q.expect)}; got {', '.join(outcome.sections) or 'nothing'}",
+            f"    wanted {_wanted(q)}; got {_got(outcome)}",
         ]
     lines += ["", f"Negatives ({len(summary.negatives)}):"]
     for outcome, violations in summary.negatives:
@@ -366,6 +421,11 @@ def scoreboard(
                 "asker": o.question.asker_label,
                 "question": o.question.text,
                 "expect": list(o.question.expect),
+                **(
+                    {"expectHeading": o.question.expect_heading}
+                    if o.question.expect_heading
+                    else {}
+                ),
                 "returned": list(o.sections),
             }
             for o in summary.misses
@@ -398,6 +458,8 @@ class RunResult:
     version_label: str
     section_ids: set[str]
     outcomes: list[Outcome]
+    # Each section key's chunk headings, to validate `expect_heading` against.
+    headings: dict[str, set[str]] = field(default_factory=dict)
 
 
 class _Discard(Exception):  # noqa: N818 (it's a signal, not an error)
@@ -461,7 +523,19 @@ async def run_searches_on(
                     )
                 )
             )
-            check_sections(questions, section_ids)
+            heading_rows = (
+                await db.execute(
+                    select(HandbookChunk.section_key, HandbookChunk.heading).where(
+                        HandbookChunk.version_id == version_id,
+                        HandbookChunk.heading.is_not(None),
+                    )
+                )
+            ).all()
+            headings: dict[str, set[str]] = {}
+            for key, heading in heading_rows:
+                if heading is not None:  # the query already leaves these out; this is for mypy
+                    headings.setdefault(key, set()).add(heading)
+            check_sections(questions, section_ids, headings)
             outcomes = []
             for question, vector in zip(questions, vectors, strict=True):
                 found = await search_handbook(
@@ -474,9 +548,14 @@ async def run_searches_on(
                     limit=TOP_K,
                 )
                 outcomes.append(
-                    Outcome(question, found.mode, tuple(hit.section_id for hit in found.hits))
+                    Outcome(
+                        question,
+                        found.mode,
+                        tuple(hit.section_id for hit in found.hits),
+                        tuple(hit.heading for hit in found.hits),
+                    )
                 )
-            result = RunResult(label or "", section_ids, outcomes)
+            result = RunResult(label or "", section_ids, outcomes, headings)
             raise _Discard
     except _Discard:
         pass
@@ -576,7 +655,7 @@ async def run(
     vectors = await embed_questions(questions, cache)
     try:
         result = await runner(questions, vectors)
-        check_sections(questions, result.section_ids)
+        check_sections(questions, result.section_ids, result.headings)
     except DatasetError as error:
         print(f"The dataset is invalid for this handbook:\n{error}", file=sys.stderr)
         return 2

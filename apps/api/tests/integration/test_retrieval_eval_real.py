@@ -24,7 +24,7 @@ async def test_the_real_dataset_is_valid_and_its_sections_exist_in_the_loaded_ha
 
     result = await run.run_searches_on(app_engine, questions, vectors)
 
-    run.check_sections(questions, result.section_ids)
+    run.check_sections(questions, result.section_ids, result.headings)
     assert len(result.outcomes) == len(questions)
     assert result.version_label
     # No vectors, so every search is full-text only, and the report says so.

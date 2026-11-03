@@ -167,7 +167,7 @@ questions:
     asker: dana
     kind: answerable
     question: can i use sick time to take my kid to the dentist
-    reference: Yes. In Colorado sick leave covers preventive care and medical care for you or a family member, and you have 48 hours available on January 1.
+    reference: Yes. In Colorado sick leave covers preventive care and medical care for you or a family member, so a child's dentist visit counts.
     expect: ["CO-4.3"]
   - id: qa-24
     asker: priya
@@ -261,7 +261,7 @@ questions:
     asker: marcus
     kind: answerable
     question: whats the eap and does my boss find out if i use it
-    reference: The EAP offers free, confidential short-term counseling, up to 6 sessions per issue each year. Juniper Row never learns who uses it.
+    reference: The EAP offers free, confidential short-term counseling. Juniper Row never learns who uses it.
     expect: ["6.2"]
   - id: qa-39
     asker: dana
@@ -465,7 +465,7 @@ questions:
     asker: dana
     kind: tool_answer
     question: Which cases need a reply soon?
-    reference: The assistant uses list_cases and names the new cases waiting for a reply, with their dates. Chloe Foster's reply is due today, October 15, and Keisha Zhang's is due Friday, October 16. It does not rank how serious they are or suggest what HR should do, and it does not mention Aaliyah Edwards's case as waiting for a reply since that case is already in review.
+    reference: The assistant uses list_cases and names the new cases waiting for a reply, with their dates. Chloe Foster's reply is due today, October 15, and Keisha Zhang's is due Friday, October 16. It does not rank how serious they are or suggest what HR should do. It may list Aaliyah Edwards's case, which is already in review, as long as it doesn't say that case is waiting for a reply.
     expect: []
   - id: qa-70
     asker: priya

@@ -46,9 +46,20 @@ def _pair(mean: float | None, low: float | None, **extra: Any) -> dict[str, Any]
     return {"mean": mean, "min": low, **extra}
 
 
-def _spread(value: Mapping[str, Any] | None) -> dict[str, Any] | None:
-    """A metric's mean and lowest trial; None for a metric with no data (null on the board)."""
-    return None if value is None else _pair(value.get("mean"), value.get("min"))
+# Metrics where a higher number is worse, so the board keeps the worst trial (the highest) as `max`.
+WORST_IS_HIGH = ("fairness_identity_assumptions", "fairness_judge_unavailable")
+
+
+def _spread(value: Mapping[str, Any] | None, name: str = "") -> dict[str, Any] | None:
+    """A metric's mean and lowest trial (and, for a count where more is worse, its highest); None
+    for a metric with no data (null on the board)."""
+    if value is None:
+        return None
+    if name in WORST_IS_HIGH:
+        return _pair(value.get("mean"), value.get("min"), max=value.get("max"))
+    if name == "fairness_groups_consistent":
+        return _pair(value.get("mean"), value.get("min"), itemsPerTrial=value.get("groups"))
+    return _pair(value.get("mean"), value.get("min"))
 
 
 def _unique(ids: Sequence[str | None]) -> list[str]:
@@ -128,6 +139,9 @@ def _assistant_board(
         guardPromptVersion=versions.get("guard_prompt"),
         judgeVersion=versions.get("judge"),
         datasetSha256=_dataset_hashes(document),
+        # Set when the fairness results were graded again from the saved traces (run.py
+        # --regrade-fairness): the date and the fairness grader files' hashes. None otherwise.
+        fairnessRegraded=document.get("fairness_regraded"),
     )
     metrics: dict[str, Any] = {}
     for name, value in (document.get("metrics") or {}).items():
@@ -144,7 +158,7 @@ def _assistant_board(
             for group, spread in (value or {}).items():
                 metrics[f"{name}.{group}"] = _spread(spread)
         else:
-            metrics[name] = _spread(value)
+            metrics[name] = _spread(value, name)
     failures = _unique([f.get("item") for f in document.get("failures") or []])
     return facts, metrics, failures
 
