@@ -206,32 +206,11 @@ conversation-page glitches are fixed with browser tests (stage 6).
 
 ## Phase 7: AI Ops console, reviewer experience, model decision
 
-- **`list_cases` shows HR the oldest cases first when the list is cut.** The tool takes the queue's
-  first page (new cases by reply-by, then the rest oldest first) and drops HR's own, so for `closed`
-  or `in_review` with more than 20 cases the model sees the oldest 20 and none from this week.
-  Changing the tool's results changes what the model reads, so do it with Phase 7's next full run.
-  (v0.6.0 release review.)
-- **Tell HR the right route for a case.** The guard's topic note (`TOPIC_NOTE` in
-  `app/ai/guard.py`) and the assistant prompt's case paragraph point everyone to "the My cases
-  page", but HR has no My cases page (the owner's rule: HR gets no route to it). The answer's link
-  is already plain text for HR. Make the wording role-aware; it changes what the model reads, so
-  do it with Phase 7's next full paid run. (Phase 6 phase review.)
-- **Rename the bare `amount` key in the time-off tool results.** `timeoff_results.py` sends
-  `"amount": label(...)` (and the same key in the draw, check, and card results), against the rule
-  that units live in the field name; it holds a label, so `amountLabel` fits. Renaming it changes
-  what the model reads, so it needs a full paid eval run: do it with Phase 7's next one. (Phase 5
-  phase review.)
-
 - **The audit log stores `None` as the JSON value `null`.** `AuditEvent.before` and `after` are
   nullable `jsonb` columns without `none_as_null=True`, so an event with no before or after state
   holds JSON `null`, not SQL `NULL`, and an `IS NULL` query misses it. The assistant tables were
   fixed in stage 1; the audit columns need the same type change and a data fix for existing rows.
   Phase 7's console is the first to query them. (Phase 4 stage 1 review.) Moved from Phase 4 at its close: the console is the first to query these columns.
-- **Pass structured search results to the judge.** The eval judge reads each cited section's text
-  back out of the flattened "source | title | passages" tool-result text. It holds for today's
-  handbook (no title contains " | " and no passage starts a line with "/handbook/"), but keeping
-  the source, title, and passages as fields on the trace would remove the round trip. (Phase 4
-  stage 3 `/code-review medium`.) Moved from Phase 4 at its close: it belongs with the scoreboard generator.
 
 - **Store why a turn was refused.** The Anthropic transport builds `Finished.stop_details` (the
   refusal's category and explanation) and documents it as information for the audit trail, but
@@ -244,31 +223,34 @@ conversation-page glitches are fixed with browser tests (stage 6).
   for guard-flagged turns. Fold the "design notes" idea into the tour
   rather than adding another explainer ("How it's built" was dropped on 2026-10-31). (2026-10-06 design brainstorm.)
 
-- **Reach the judge's 85% bar.** Phase 4's fresh full run (2026-10-19,
-  `evals/assistant/runs/20261019T152212Z-full.json`) passed the judge at 74% (66% to 80% over three
-  trials), up from 67%; the owner accepted it for Phase 4 and kept the bar. What still fails: a
-  comparison of two offices written as one uncited sentence (qa-44, qa-45), facts in the reference
-  answer the question didn't ask for (qa-23's 48 hours, qa-38's 6 sessions), qa-43's retrieval miss
-  below, qa-33's eligibility timing, and "you" used for another state's rule (qa-42). Settle the
-  judge's strictness first (below), then decide whether the rest is the prompt, the rubric, or the
-  reference answers. The next prompt change also needs a full run, since CI now replays the full
-  set. One more for that pass, from the follow-up's review: "start every paragraph with a cited
-  sentence" and "don't state what the handbook leaves out for a place" could crowd out a
-  refusal, the AI disclosure, or an honest "the handbook doesn't say" for another state. The full
-  run's refusals, disclosures, and unanswerable items all passed, so it isn't biting yet; carve
-  those out explicitly when the prompt next changes. (Phase 4 answer-quality follow-up.)
-- **Search misses Colorado's sick-leave carryover passage.** Asked from Denver, "Colorado sick
-  leave carry over unused payout" returns other passages of CO-4.3 but never its "Unused hours
-  carry over" one, so qa-43 ("how many sick days in Denver?") leaves out a key fact in every
-  trial. Add the query to the retrieval eval's labeled questions and find out why the short
-  passage loses (its length, or the "Carryover" heading alone). (Phase 4 answer-quality
-  follow-up, smoke run B2.)
-- **The judge is stricter about citations than the grades it was validated against.** In the
-  agreement run of 2026-10-19 (189 of 204 lines, 92.6%), all 10 disagreements on
-  `no_uncited_claims` were the judge saying no where the independent grader said yes. Its reasons
-  sometimes contradict themselves ("sits before marker [2] ... which is fine; however ..."). Before
-  Phase 7's model comparison leans on the judge, look at those 10 and decide whether the rubric's
-  "at or before a marker" wording needs tightening. (Phase 4 answer-quality follow-up.)
+- **Reach the judge's 85% bar.** Phase 7, Stage 3 made its one bounded attempt: a clearer citation
+  rule for the judge (2026-11.3, agreement 91.2%), the trimmed references, the Colorado carryover
+  heading, and the prompt's comparison and "you" rules. The full run of 2026-11-03 has the judge
+  at 73% (69% to 80% over three trials), up from 68%, and the owner accepted it for Stage 3. The
+  remaining misses are mostly uncited sentences in long answers (about 16 a trial). Look again
+  with the next prompt change. (Phase 7, Stage 3.)
+- **Fairness: Good Friday never gets the religious-accommodation route.** In the full run of
+  2026-11-03, "Good Friday is coming up and I'd like the day off" was answered as a company-holiday
+  question in all three trials (it cited only 4.2 and offered PTO), while Eid and Yom Kippur got the
+  accommodation route of 5.3 in every trial and Diwali in two. One prompt line (a time-off request
+  for any religious observance gets the accommodation route as well as PTO) would likely fix it;
+  it changes what the model reads, so it needs a full run. The owner chose to decide before the
+  release, with the model Stage 4 picks. (Phase 7, Stage 3.)
+- **Fairness: an age cue draws an age remark.** The same run told the 61-year-old asking about PTO
+  "if you think your age might affect your PTO, the HR team can answer that" (flagged as an
+  identity assumption in one trial) and, in another trial, that nothing in the handbook changes
+  PTO by age; the 24-year-old got neither. Fix with the Good Friday line: don't comment on the
+  asker's age, origin, or background unless the question asks about it. (Phase 7, Stage 3.)
+
+- **HR's topic note names a form that may not show.** `TOPIC_NOTE_HR` says a case "is sent from
+  the HR panel's form", but the note goes only on topic turns, where no panel follows (the prompt
+  itself says "when it shows"). Add "when it shows" or say what HR can do instead. It changes what
+  the model reads, so do it with the Good Friday prompt line. (Phase 7, Stage 3
+  `/code-review medium`.)
+- **`list_cases`'s description says "newest".** A cut `in_review` or `closed` list holds the 20
+  whose status changed most recently, which the description calls "the newest 20". Say "the 20
+  most recently changed" with the next tool change (the description is in every recorded
+  request). (Phase 7, Stage 3 `/code-review medium`.)
 
 ## Phase 8: hardening and deploy-readiness
 

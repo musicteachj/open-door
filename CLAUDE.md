@@ -160,11 +160,11 @@ the owner's explicit agreement first.
 ## AI development rules
 
 - **A change to a prompt, a tool description or schema, the guard, or the retrieval needs a full
-  run before its PR** (`make eval-live SET=full FRESH=1 PRUNE=1 YES=1`, estimated at $14, cap $16;
-  with Phase 6's 166 items, the run of 2026-10-29 cost $10.93). CI replays the full set offline,
-  and a smoke run re-records only its own items, so CI stays red until the full run is committed.
-  Use smoke runs (`make eval-live YES=1`, about $0.95, cap $2) to try wording before that. Put the
-  scoreboard change in the PR description.
+  run before its PR** (`make eval-live SET=full FRESH=1 PRUNE=1 YES=1`, estimated at $15.50 with
+  the fairness set, cap $18; with Phase 6's 166 items, the run of 2026-10-29 cost $10.93). CI
+  replays the full set offline, and a smoke run re-records only its own items, so CI stays red until
+  the full run is committed. Use smoke runs (`make eval-live YES=1`, about $1.00, cap $2) to try
+  wording before that. Put the scoreboard change in the PR description.
   - **A run whose recordings are committed commits its board in the same change,** then
     `make scoreboard` regenerates the README's scoreboard and the app's copy (CI fails if they're
     stale). Every live run except smoke writes a board to `evals/scoreboards/`; a run into a

@@ -122,11 +122,11 @@ def test_the_three_sets_have_their_trials_caps_efforts_and_estimates() -> None:
     smoke, full, effort = run.SETS["smoke"], run.SETS["full"], run.SETS["effort"]
 
     assert (smoke.trials, smoke.cap_usd, smoke.effort) == (1, Decimal("2.00"), "low")
-    assert (full.trials, full.cap_usd, full.effort) == (3, Decimal("16.00"), "low")
+    assert (full.trials, full.cap_usd, full.effort) == (3, Decimal("18.00"), "low")
     assert (effort.trials, effort.cap_usd, effort.effort) == (1, Decimal("2.00"), "medium")
-    assert smoke.estimate_usd == Decimal("0.95")
-    assert full.estimate_usd == Decimal("14.00")
-    assert effort.estimate_usd == Decimal("1.75")
+    assert smoke.estimate_usd == Decimal("1.00")
+    assert full.estimate_usd == Decimal("15.50")
+    assert effort.estimate_usd == Decimal("1.85")
     assert smoke.smoke_only is True
     assert effort.smoke_only is True
     assert full.smoke_only is False
@@ -145,7 +145,7 @@ def test_smoke_runs_the_smoke_lists_and_full_runs_every_item() -> None:
     assert [i.id for i in smoke_rt] == [i.id for i in redteam if i.id in smoke.redteam]
     assert [i.id for i in smoke_qa] == [i.id for i in qa if i.id in smoke.qa]
     assert [i.id for i in smoke_ac] == [i.id for i in actions if i.id in smoke.actions]
-    assert (len(smoke_rt), len(smoke_qa), len(smoke_ac)) == (13, 20, 6)
+    assert (len(smoke_rt), len(smoke_qa), len(smoke_ac)) == (13, 23, 6)
     assert (len(full_rt), len(full_qa), len(full_ac)) == (len(redteam), len(qa), len(actions))
     effort_rt, effort_qa, effort_ac = run.items_for_set(
         run.SETS["effort"], redteam, qa, actions, smoke
@@ -323,6 +323,7 @@ def test_the_scoreboard_has_every_field() -> None:
         "cost_usd",
         "metrics",
         "failures",
+        "fairness",
         "judge_unavailable",
         "recording_gaps",
         "live_evidence",
@@ -416,7 +417,14 @@ def usage(kind: str, read: int, write: int = 0) -> Any:
 
 
 def result_text(section: str, text: str) -> Any:
-    return run.ToolResult("t", False, f"/handbook/{section}?passage=p1 | {section} Title | {text}")
+    return run.ToolResult(
+        "t",
+        False,
+        f"/handbook/{section}?passage=p1 | {section} Title | {text}",
+        search_results=(
+            run.SearchResult(f"/handbook/{section}?passage=p1", f"{section} Title", (text,)),
+        ),
+    )
 
 
 def cite(section: str, cited: str) -> dict[str, Any]:
@@ -1065,9 +1073,9 @@ async def test_live_without_yes_prints_the_estimate_and_makes_no_call(
     out = capsys.readouterr().out
     assert code == 0
     assert "smoke" in out
-    assert "39 items" in out
+    assert "42 items" in out
     assert "1 trial" in out
-    assert "$0.95" in out
+    assert "$1.00" in out
     assert "$2.00" in out
     assert "--yes" in out
     assert not os.listdir(tmp_path)
@@ -1076,8 +1084,8 @@ async def test_live_without_yes_prints_the_estimate_and_makes_no_call(
 @pytest.mark.parametrize(
     ("name", "items", "trials", "estimate", "cap", "effort"),
     [
-        ("smoke", 39, 1, "$0.95", "$2.00", "low"),
-        ("effort", 39, 1, "$1.75", "$2.00", "medium"),
+        ("smoke", 42, 1, "$1.00", "$2.00", "low"),
+        ("effort", 42, 1, "$1.85", "$2.00", "medium"),
     ],
 )
 async def test_each_live_set_estimates_its_own_cost_and_cap(
@@ -1111,11 +1119,16 @@ async def test_the_full_sets_estimate_names_three_trials_and_every_item(
     )
 
     out = capsys.readouterr().out
-    expected = len(datasets.load_redteam()) + len(datasets.load_qa()) + len(datasets.load_actions())
+    expected = (
+        len(datasets.load_redteam())
+        + len(datasets.load_qa())
+        + len(datasets.load_actions())
+        + len(datasets.load_fairness().items)
+    )
     assert f"{expected} items" in out
     assert "3 trials" in out
-    assert "$14.00" in out
-    assert "$16.00" in out
+    assert "$15.50" in out
+    assert "$18.00" in out
 
 
 async def test_a_bad_dataset_is_exit_2_before_anything_runs(
@@ -2410,3 +2423,48 @@ def test_the_evals_pin_the_models_a_new_conversation_gets() -> None:
     assert CURRENT_PINS.guard_model == run.GUARD_MODEL_ID
     assert all(c.model == CURRENT_PINS.model for c in run.SETS.values())
     assert 'MODEL_ID = "claude-opus-5-5"' not in source
+
+
+def test_a_group_is_recorded_whole_after_the_shared_request_rule_too() -> None:
+    # F1 finished but shares K with F4, a different group's item that kept its old recordings, so
+    # F1 drops. F2 and F3 (its group's other variants) shared nothing and finished: they must go
+    # too, or a pairwise comparison of F1's old answer with their new ones would never be recorded.
+    f1 = used_record("fair-01", ("K", 0))
+    f2, f3 = used_record("fair-02", ("A", 0)), used_record("fair-03", ("B", 0))
+    f4 = used_record("fair-04", ("K", 0))
+
+    recordable, dropped = run.recordable_through_shared_keys(
+        [f1, f2, f3, f4],
+        complete={"fair-01", "fair-02", "fair-03"},
+        linked=[["fair-01", "fair-02", "fair-03"]],
+    )
+
+    assert recordable == set()
+    assert set(dropped) == {"fair-01", "fair-02", "fair-03"}
+    assert "group" in dropped["fair-02"]
+
+
+def test_a_dropped_group_member_takes_other_items_sharing_its_requests_with_it() -> None:
+    # The group rule feeds the shared-request rule: G2 drops with its group, and G2's shared
+    # request then takes H, an item of another group, out as well.
+    g1, g2 = used_record("fair-01", ("K", 0)), used_record("fair-02", ("S", 0))
+    h = used_record("fair-05", ("S", 0))
+
+    recordable, _ = run.recordable_through_shared_keys(
+        [g1, g2, h],
+        complete={"fair-02", "fair-05"},
+        linked=[["fair-01", "fair-02"]],
+    )
+
+    assert recordable == set()
+
+
+def test_each_trials_uncompared_variants_are_named_with_their_trial() -> None:
+    names = run.unpaired_names([(1, "fair-02"), (2, "fair-02"), (2, "fair-03")], trials=3)
+
+    assert names == [
+        "fair-02 (not compared, trial 1)",
+        "fair-02 (not compared, trial 2)",
+        "fair-03 (not compared, trial 2)",
+    ]
+    assert run.unpaired_names([(1, "fair-02")], trials=1) == ["fair-02 (not compared)"]

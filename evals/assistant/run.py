@@ -24,8 +24,9 @@ grading, the judge, the scoreboard, and the exit codes.
 back. `run_turn` commits through sessions of its own, so a turn can't sit inside one. The harness
 creates a sandbox with a fixed tenant ID, anchor date, and "today", so the seeded IDs repeat and the
 request fingerprints repeat (the anchor is the date of every turn, so the seed's "last week" is the
-questions' last week), adds the two time-off requests the action items need (eval_sandbox.py), and
-it removes the sandbox when the run ends, even when an item raises.
+questions' last week), adds the two time-off requests the action items need and the fairness
+set's ten eval-only people (eval_sandbox.py), and it removes the sandbox when the run ends, even
+when an item raises.
 The cleanup runs through the database owner (`MIGRATION_DATABASE_URL`): deleting the tenant cascades
 to every table that holds its rows, but the daily spend ledger has no tenant, so the rows the run
 added to it are deleted by hand: exactly the ones that match the eval tenant's own spend rows (see
@@ -53,6 +54,7 @@ from contextlib import asynccontextmanager
 from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
+from functools import cache
 from pathlib import Path
 from typing import Any, Literal
 from uuid import UUID
@@ -134,6 +136,7 @@ from app.db.models import (
     AiTurn,
     HandbookSection,
     HandbookVersion,
+    Person,
     Tenant,
     TimeOffRequest,
 )
@@ -144,11 +147,13 @@ from app.main import build_key_provider
 from app.modules.handbook.asker import load_asker
 from app.modules.handbook.search import pinned_version_id
 from app.modules.identity.actor import load_actor
-from app.modules.people.queries import get_me
+from app.modules.people.queries import get_card, get_me
+from app.modules.people.schemas import Me
 from app.modules.sandbox.seed import (
     SeedCompany,
     build_company,
     insert_company,
+    insert_people,
     insert_time_off_requests,
 )
 from app.modules.sandbox.service import is_no_published_handbook
@@ -158,6 +163,8 @@ from app.modules.sandbox.service import is_no_published_handbook
 EVALS_ROOT = Path(__file__).resolve().parent.parent
 if str(EVALS_ROOT) not in sys.path:
     sys.path.insert(0, str(EVALS_ROOT))
+
+from fairness import graders as fairness_graders  # noqa: E402
 
 from assistant import (  # noqa: E402
     action_graders,
@@ -169,6 +176,8 @@ from assistant import (  # noqa: E402
     graders,
     handgrades,
     judge,
+    pairwise,
+    regrade,
     scoreboard,
 )
 from assistant.judge import ConsoleSpendLimit  # noqa: E402
@@ -222,11 +231,22 @@ class EvalItem:
     question: str
 
 
+@cache
+def committed_clones() -> tuple[eval_sandbox.CloneSpec, ...]:
+    """The fairness set's eval-only people (evals/fairness/groups.yaml), whom every eval sandbox
+    gets after the seed. The demo's sandbox never does."""
+    return datasets.load_fairness().clones
+
+
 async def create_fixed_sandbox(
-    app_engine: AsyncEngine, keys: KeyProvider | None = None
+    app_engine: AsyncEngine,
+    keys: KeyProvider | None = None,
+    *,
+    clones: Sequence[eval_sandbox.CloneSpec] | None = None,
 ) -> SeedCompany:
-    """Create the fixed tenant with the full seed company and the eval's own requests (see
-    eval_sandbox.py), as the API's own login. Returns the company with those requests in it.
+    """Create the fixed tenant with the full seed company, the eval's own requests, and its
+    fairness people (see eval_sandbox.py), as the API's own login. Returns the company with those
+    rows in it. `clones` defaults to the committed fairness set's people.
 
     With `keys` the seed's four cases go in too, sealed with them, so `list_cases` has data. Their
     IDs come from the fixed tenant's ID (`make_id` in seed.py), so they repeat from run to run and
@@ -234,8 +254,12 @@ async def create_fixed_sandbox(
     seeded = build_company(TENANT_ID, ANCHOR_DATE)
     if keys is None:
         seeded = replace(seeded, cases=())
-    company = eval_sandbox.with_eval_requests(seeded)
-    extra = company.time_off_requests[len(seeded.time_off_requests) :]
+    with_requests = eval_sandbox.with_eval_requests(seeded)
+    extra = with_requests.time_off_requests[len(seeded.time_off_requests) :]
+    company = eval_sandbox.with_eval_clones(
+        with_requests, committed_clones() if clones is None else clones
+    )
+    added_people = eval_sandbox.clone_rows(with_requests, company)
     expires_at = datetime.now(UTC) + SANDBOX_LIFETIME
     async with tenant_session(app_engine, TenantContext(TENANT_ID, None)) as session:
         session.add(Tenant(id=TENANT_ID, expires_at=expires_at, anchor_date=ANCHOR_DATE))
@@ -243,6 +267,8 @@ async def create_fixed_sandbox(
         await session.flush()
         await insert_company(session, seeded, keys)
         await insert_time_off_requests(session, extra)
+        await insert_people(session, *added_people[:3])
+        await insert_time_off_requests(session, added_people[3])
     return company
 
 
@@ -254,7 +280,11 @@ async def _remove_fixed_sandbox(owner_engine: AsyncEngine, rows: Sequence[SpendR
 
 @asynccontextmanager
 async def fixed_sandbox(
-    app_engine: AsyncEngine, owner_engine: AsyncEngine, keys: KeyProvider | None = None
+    app_engine: AsyncEngine,
+    owner_engine: AsyncEngine,
+    keys: KeyProvider | None = None,
+    *,
+    clones: Sequence[eval_sandbox.CloneSpec] | None = None,
 ) -> AsyncIterator[SeedCompany]:
     """The fixed sandbox for the length of the block, removed (with the ledger rows it wrote) when
     it ends however it ends.
@@ -283,7 +313,7 @@ async def fixed_sandbox(
     await _remove_fixed_sandbox(owner_engine, leftover)
     body_error: BaseException | None = None
     try:
-        yield await create_fixed_sandbox(app_engine, keys)
+        yield await create_fixed_sandbox(app_engine, keys, clones=clones)
     except BaseException as error:
         body_error = error
         raise
@@ -392,12 +422,23 @@ class ToolUse:
 
 
 @dataclass(frozen=True)
+class SearchResult:
+    """One search result the model read, with its fields kept apart."""
+
+    source: str
+    title: str
+    passages: tuple[str, ...]
+
+
+@dataclass(frozen=True)
 class ToolResult:
     tool_use_id: str
     is_error: bool
     # The text of every block the model read: text blocks as written, and for each search result
-    # its source, title, and passages.
+    # its source, title, and passages. For the graders that scan text. The judge reads
+    # `search_results` instead, so a "|" in a title or a passage can't change what it sees.
     text: str
+    search_results: tuple[SearchResult, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -684,6 +725,7 @@ async def run_items(
     caps: Caps | Callable[[], Awaitable[Caps]] = EVAL_CAPS,
     on_item: ItemHook | None = None,
     on_finish: Callable[[], None] | None = None,
+    clones: Sequence[eval_sandbox.CloneSpec] | None = None,
 ) -> list[ItemTrace]:
     """Run each item as a new conversation in the fixed sandbox and return what each one did.
 
@@ -699,8 +741,9 @@ async def run_items(
     _check_mode(mode, transport)
     watched = WatchedEmbedder(embedder)
     traces: list[ItemTrace] = []
+    clone_keys = [spec.key for spec in (committed_clones() if clones is None else clones)]
     try:
-        async with fixed_sandbox(app_engine, owner_engine, keys) as company:
+        async with fixed_sandbox(app_engine, owner_engine, keys, clones=clones) as company:
             for item in items:
                 _name_item(transport, item.id)
                 item_caps = await caps() if callable(caps) else caps
@@ -714,6 +757,7 @@ async def run_items(
                     caps=item_caps,
                     app_engine=app_engine,
                     keys=keys,
+                    clone_keys=clone_keys,
                 )
                 watched.check(item.id)
                 if isinstance(transport, ReplayTransport | RecordingTransport):
@@ -742,12 +786,44 @@ def _name_item(transport: Transport, item_id: str) -> None:
         transport.current_item = item_id
 
 
-def _person_id(company: SeedCompany, item: EvalItem) -> UUID:
+def _person_id(company: SeedCompany, item: EvalItem, clone_keys: Sequence[str] = ()) -> UUID:
+    """The person who asks: a persona, or a fairness clone named by its key. A clone has no persona
+    key (the people table allows only the four personas), so its ID comes from its key."""
     for person in company.people:
         if person.persona_key == item.persona:
             return person.id
+    clone_id = eval_sandbox.clone_person_id(company.tenant_id, item.persona)
+    if any(person.id == clone_id for person in company.people):
+        return clone_id
     known = sorted({p.persona_key for p in company.people if p.persona_key})
-    raise EvalFailure(f"item {item.id}: no persona {item.persona!r} (known: {', '.join(known)})")
+    clones = sorted(clone_keys)
+    raise EvalFailure(
+        f"item {item.id}: no persona {item.persona!r} (known: {', '.join(known + clones)})"
+    )
+
+
+async def _me_of(db: AsyncSession, actor: Any, tenant_expires_at: datetime) -> Me:
+    """The actor's own card. A fairness clone has no persona key (the people table allows only the
+    four personas) and `Me` requires one, so a clone's card is built without that check. The turn
+    reads only the card's name, office, employment type, and role (`actor_view`)."""
+    persona_key = await db.scalar(select(Person.persona_key).where(Person.id == actor.person_id))
+    if persona_key is not None:
+        return await get_me(db, actor, tenant_expires_at)
+    card = await get_card(db, actor.person_id)
+    employment_type = await db.scalar(
+        select(Person.employment_type).where(Person.id == actor.person_id)
+    )
+    if card is None or employment_type is None:
+        raise EvalFailure("the asker has no card in the sandbox")
+    fields: dict[str, Any] = {
+        **dict(card),
+        "employment_type": employment_type,
+        "is_manager": actor.is_manager,
+        "is_hr_admin": actor.is_hr_admin,
+        "persona_key": None,
+        "tenant_expires_at": tenant_expires_at,
+    }
+    return Me.model_construct(**fields)
 
 
 async def _run_item(
@@ -761,8 +837,9 @@ async def _run_item(
     caps: Caps,
     app_engine: AsyncEngine,
     keys: KeyProvider,
+    clone_keys: Sequence[str] = (),
 ) -> ItemTrace:
-    person_id = _person_id(company, item)
+    person_id = _person_id(company, item, clone_keys)
     ctx = TenantContext(company.tenant_id, person_id)
     pins = Pins(
         model=model,
@@ -775,7 +852,7 @@ async def _run_item(
         actor = await load_actor(db, company.tenant_id, person_id)
         if actor is None:
             raise EvalFailure(f"item {item.id}: the persona {item.persona!r} has no actor")
-        me = await get_me(db, actor, NOW + SANDBOX_LIFETIME)
+        me = await _me_of(db, actor, NOW + SANDBOX_LIFETIME)
         version_id = await pinned_version_id(db)
         if version_id is None:
             raise EvalFailure("the sandbox is not pinned to a handbook version: run `make ingest`")
@@ -976,8 +1053,21 @@ def _tool_results(observer: ObservingTransport) -> tuple[ToolResult, ...]:
                         block["tool_use_id"],
                         bool(block.get("is_error", False)),
                         _result_text(block),
+                        _search_results_of(block),
                     )
     return tuple(found.values())
+
+
+def _search_results_of(block: dict[str, Any]) -> tuple[SearchResult, ...]:
+    """The block's search results with source, title, and passages as fields."""
+    return tuple(
+        SearchResult(
+            str(result.get("source", "")),
+            str(result.get("title", "")),
+            tuple(str(p.get("text", "")) for p in result.get("content", ())),
+        )
+        for result in iter_search_results(block.get("content") or ())
+    )
 
 
 def _result_text(block: dict[str, Any]) -> str:
@@ -1056,8 +1146,16 @@ REDTEAM_FIXTURE = "redteam.jsonl.gz"
 QA_FIXTURE = "qa.jsonl.gz"
 ACTIONS_FIXTURE = "actions.jsonl.gz"
 # Each dataset's recordings file, by the dataset's name in a record.
-FIXTURE_FILES = {"redteam": REDTEAM_FIXTURE, "qa": QA_FIXTURE, "actions": ACTIONS_FIXTURE}
+FAIRNESS_FIXTURE = "fairness.jsonl.gz"
+FIXTURE_FILES = {
+    "redteam": REDTEAM_FIXTURE,
+    "qa": QA_FIXTURE,
+    "actions": ACTIONS_FIXTURE,
+    "fairness": FAIRNESS_FIXTURE,
+}
 JUDGE_FIXTURE = "judge.jsonl.gz"
+# The pairwise judge's recordings (the fairness set), apart from the main judge's.
+PAIRWISE_FIXTURE = "judge-fairness.jsonl.gz"
 # The judge's recordings of the hand-graded answers. No run merges into or prunes this file:
 # `--agreement` reads and writes it alone, so the agreement never depends on a smoke or effort run.
 HAND_GRADE_FIXTURE = "judge-hand-grades.jsonl.gz"
@@ -1066,13 +1164,13 @@ NO_HANDBOOK = "No published handbook in the database. Run `make db` first."
 # What a live run of each set costs, from the plan's token budget (Opus 5.5 at low effort for the
 # answers, Haiku 5.5 for the guard, Sonnet 5.5 at medium effort for the judge). They are estimates
 # to print before spending anything, not limits: the caps below are the limits.
-SMOKE_ESTIMATE_USD = Decimal("0.95")
-FULL_ESTIMATE_USD = Decimal("14.00")
+SMOKE_ESTIMATE_USD = Decimal("1.00")
+FULL_ESTIMATE_USD = Decimal("15.50")
 # The medium-effort half of the effort comparison. The low half is the smoke run.
-EFFORT_ESTIMATE_USD = Decimal("1.75")
+EFFORT_ESTIMATE_USD = Decimal("1.85")
 
 SMOKE_CAP_USD = Decimal("2.00")
-FULL_CAP_USD = Decimal("16.00")
+FULL_CAP_USD = Decimal("18.00")
 EFFORT_CAP_USD = Decimal("2.00")
 
 # Judging the 34 hand-graded entries again (`--agreement`): about a cent each.
@@ -1123,6 +1221,16 @@ def items_for_set(
     )
 
 
+def fairness_for_set(
+    config: SetConfig, fairness: datasets.FairnessSet | None
+) -> tuple[datasets.FairnessGroup, ...]:
+    """The fairness groups a set runs: all of them in a set that runs every item (the full set),
+    none in a smoke-only set (smoke and effort), and none when there is no fairness file."""
+    if fairness is None or config.smoke_only:
+        return ()
+    return fairness.groups
+
+
 @dataclass(frozen=True)
 class EvalPaths:
     """The files a run reads. The defaults are the committed ones; tests point them elsewhere."""
@@ -1136,14 +1244,36 @@ class EvalPaths:
     todo: Path = handgrades.TODO_PATH
     escalation: Path = escalation.ESCALATION_PATH
     case_summary: Path = case_summary.NARRATIVES_PATH
+    # The fairness groups and their pairwise rubric. A run with fairness None asks no fairness
+    # items (a test's tiny set).
+    fairness: Path | None = datasets.FAIRNESS_PATH
+    fairness_judge_md: Path = pairwise.FAIRNESS_JUDGE_MD_PATH
+
+
+def run_clones(paths: EvalPaths) -> tuple[eval_sandbox.CloneSpec, ...]:
+    """The eval-only people of the groups file this run loads (`paths.fairness`): the sandbox and
+    the grader take theirs from here, so they always match the groups the run asks. None without
+    a fairness file, and then the committed file is not read."""
+    if paths.fairness is None:
+        return ()
+    return datasets.load_fairness(paths.fairness).clones
+
+
+FAIRNESS_JUDGE_HASH_KEY = "fairness-judge.md"
 
 
 def dataset_hashes(paths: EvalPaths) -> dict[str, str]:
-    """The SHA-256 of each file a run's results depend on, by file name."""
+    """The SHA-256 of each file a run's results depend on, by file name (the fairness rubric under
+    `fairness-judge.md`, since it shares a file name with the main rubric)."""
     files = [paths.redteam, paths.qa, paths.actions, paths.smoke, paths.judge_md]
+    if paths.fairness is not None:
+        files.append(paths.fairness)
     if paths.hand_grades.exists():
         files.append(paths.hand_grades)
-    return {path.name: datasets.dataset_hash(path) for path in files}
+    hashes = {path.name: datasets.dataset_hash(path) for path in files}
+    if paths.fairness is not None and paths.fairness_judge_md.exists():
+        hashes[FAIRNESS_JUDGE_HASH_KEY] = datasets.dataset_hash(paths.fairness_judge_md)
+    return hashes
 
 
 def _git(*args: str) -> str:
@@ -1307,6 +1437,14 @@ class SpendCap:
         self._last_total_usd = self.total_usd
         return self.should_stop()
 
+    def add_judge_call(self, cost_usd: Decimal) -> bool:
+        """Count a judge call made between items (a pairwise comparison) and return whether the run
+        should stop before another. Like an item, its cost counts toward the largest single step."""
+        self.judge_total_usd += cost_usd
+        self._largest_usd = max(self._largest_usd, self.total_usd - self._last_total_usd)
+        self._last_total_usd = self.total_usd
+        return self.should_stop()
+
     def should_stop(self) -> bool:
         return self.cap_usd is not None and self.total_usd + self._largest_usd > self.cap_usd
 
@@ -1384,7 +1522,9 @@ def judge_key_of(record: scoreboard.ItemRecord) -> str | None:
 
 
 def recordable_through_shared_keys(
-    records: Sequence[scoreboard.ItemRecord], complete: set[str]
+    records: Sequence[scoreboard.ItemRecord],
+    complete: set[str],
+    linked: Sequence[Sequence[str]] = (),
 ) -> tuple[set[str], dict[str, str]]:
     """Which finished items may replace their old recordings, given that items can share requests.
 
@@ -1395,8 +1535,9 @@ def recordable_through_shared_keys(
     on the new answer, can't be saved beside it. So it is all or nothing: an item is recordable only
     if it finished and no request it used was also used by an item that is not recordable. That is
     worked out to a fixed point, because one item dropping out can take others with it through the
-    requests they share. Returns the recordable items, and the reason for each finished item that
-    was dropped."""
+    requests they share. `linked` names sets of items recorded whole or not at all (a fairness
+    group): when one of a set is dropped, the rest go too, at every step of the fixed point.
+    Returns the recordable items, and the reason for each finished item that was dropped."""
     first = [r for r in records if r.trial == 1]
     recordable = set(complete)
     dropped: dict[str, str] = {}
@@ -1417,7 +1558,22 @@ def recordable_through_shared_keys(
                         f"it shares a recorded request with {shared}, which kept its old recordings"
                     )
                     changed = True
+        for members in linked:
+            if any(m not in recordable for m in members):
+                for m in members:
+                    if m in recordable:
+                        recordable.discard(m)
+                        dropped[m] = "another item of its group kept its old recordings"
+                        changed = True
     return recordable, dropped
+
+
+def unpaired_names(unpaired: Sequence[tuple[int, str]], trials: int) -> list[str]:
+    """The variants never compared with their group's first, each named with its trial."""
+    return [
+        f"{name} (not compared)" if trials == 1 else f"{name} (not compared, trial {trial})"
+        for trial, name in unpaired
+    ]
 
 
 def recordable_qa_items(
@@ -1444,6 +1600,46 @@ def recordable_qa_items(
             skipped[r.item_id] = "its answer has no judge recording"
         else:
             complete.add(r.item_id)
+    return complete, skipped
+
+
+def recordable_fairness_items(
+    records: Sequence[scoreboard.ItemRecord],
+    groups: Sequence[datasets.FairnessGroup],
+    pairwise_store: FixtureStore,
+) -> tuple[set[str], dict[str, str]]:
+    """The fairness items whose first-trial recordings may replace the old ones, and why the others
+    may not.
+
+    A group is recorded whole or not at all: every comparison holds the group's first answer and
+    one other, so one re-recorded answer beside an old one would leave a comparison that replays
+    from neither. A group is recordable when every variant ran with every call recorded and every
+    comparison has its recording. Any other group keeps its old answers and comparisons."""
+    first = {r.item_id: r for r in records if r.trial == 1 and r.dataset == "fairness"}
+    complete: set[str] = set()
+    skipped: dict[str, str] = {}
+    for group in groups:
+        variants = [first.get(v.id) for v in group.variants]
+        if all(r is None for r in variants):
+            continue
+        reason = None
+        if any(r is None for r in variants):
+            reason = "the run stopped before every variant of its group ran"
+        elif any(r.trace.recording_gaps for r in variants if r is not None):
+            reason = "not all the calls of its group were recorded"
+        elif any(
+            r.pairwise is None or pairwise_store.get(r.pairwise.fingerprint, 0) is None
+            for r in variants[1:]
+            if r is not None
+        ):
+            reason = "a comparison in its group has no judge recording"
+        for r in variants:
+            if r is None:
+                continue
+            if reason is None:
+                complete.add(r.item_id)
+            else:
+                skipped[r.item_id] = reason
     return complete, skipped
 
 
@@ -1474,6 +1670,7 @@ class EvalRun:
         redteam: Sequence[datasets.RedTeamItem],
         qa: Sequence[datasets.QaItem],
         actions: Sequence[datasets.ActionItem] = (),
+        fairness: Sequence[datasets.FairnessGroup] = (),
         fixtures_dir: Path,
         env: RunEnv,
         app_engine: AsyncEngine,
@@ -1486,12 +1683,18 @@ class EvalRun:
         caller: judge.JudgeCaller | None,
         prune: bool = False,
         fresh: bool = False,
+        clones: Sequence[eval_sandbox.CloneSpec] | None = None,
     ) -> None:
         self.config = config
         self.mode = mode
+        # Read once by the caller (with the groups) and shared by every segment; the groups file
+        # is read here only when the caller gave none.
+        self.clones = run_clones(env.paths) if clones is None else tuple(clones)
         self.redteam = list(redteam)
         self.qa = list(qa)
         self.actions = list(actions)
+        self.fairness_groups = list(fairness)
+        self.fairness = [item for group in self.fairness_groups for item in group.variants]
         self.fixtures_dir = fixtures_dir
         self.env = env
         self.app_engine = app_engine
@@ -1517,7 +1720,11 @@ class EvalRun:
         self.stop_cause: str | None = None
         self.fresh = fresh
         self.system = env.paths.judge_md.read_text(encoding="utf-8")
+        self.pairwise_system = env.paths.fairness_judge_md.read_text(encoding="utf-8")
         self.judge_store: FixtureStore | None = None
+        self.pairwise_store: FixtureStore | None = None
+        # The fairness comparisons the cap left out, so the run is marked partial.
+        self.unpaired: list[tuple[int, str]] = []
 
     def _datasets(
         self,
@@ -1526,12 +1733,18 @@ class EvalRun:
             str,
             Sequence[datasets.RedTeamItem]
             | Sequence[datasets.QaItem]
-            | Sequence[datasets.ActionItem],
+            | Sequence[datasets.ActionItem]
+            | Sequence[datasets.FairnessItem],
         ],
         ...,
     ]:
         """The datasets this run asks, in the order a trial runs them."""
-        return (("redteam", self.redteam), ("qa", self.qa), ("actions", self.actions))
+        return (
+            ("redteam", self.redteam),
+            ("qa", self.qa),
+            ("actions", self.actions),
+            ("fairness", self.fairness),
+        )
 
     def _planned(self) -> list[tuple[int, str, str]]:
         return [
@@ -1558,6 +1771,8 @@ class EvalRun:
         stores = {dataset: start(name) for dataset, name in FIXTURE_FILES.items()}
         judge_store = start(JUDGE_FIXTURE)
         self.judge_store = judge_store
+        pairwise_store = start(PAIRWISE_FIXTURE)
+        self.pairwise_store = pairwise_store
         # Offline, each dataset replays from its own file, as it was recorded (these same stores,
         # each file read once): a request the two datasets share, such as the same words in a
         # red-team message and a question, was answered separately for each.
@@ -1591,12 +1806,22 @@ class EvalRun:
                         )
                         self.cap.start_segment()
                         await self._segment(trial, dataset, items, transport, embeddings, judge_for)
+                        if dataset == "fairness":
+                            await self._compare_groups(
+                                trial,
+                                pairwise.PairwiseJudge(
+                                    store=pairwise_store if first else scratch,
+                                    caller=caller,
+                                    record=first,
+                                    system=self.pairwise_system,
+                                ),
+                            )
             except _CapReached:
                 pass
         finally:
             if self.live:
                 embeddings.save()
-                self._save_recordings(stores, judge_store)
+                self._save_recordings(stores, judge_store, pairwise_store)
         return self.result()
 
     def result(self) -> RunResult:
@@ -1609,6 +1834,8 @@ class EvalRun:
             if (trial, dataset, item_id) not in done
         ]
         not_run += [f"{name} (not judged)" for name in self.unjudged]
+        not_run += unpaired_names(self.unpaired, self.trials)
+        not_run += self._uncompared_groups(done)
         gaps = [
             f"{r.item_id} (trial {r.trial}): {gap}"
             + ("" if r.trial == 1 else " (not counted for recording)")
@@ -1626,9 +1853,38 @@ class EvalRun:
                 for item, reason in skipped.items()
                 if item not in with_gaps
             ]
+            _, unfinished = recordable_fairness_items(
+                self.records,
+                self.fairness_groups,
+                self.pairwise_store or FixtureStore(self.fixtures_dir / PAIRWISE_FIXTURE),
+            )
+            gaps += [
+                f"{item} (trial 1): {reason}"
+                for item, reason in unfinished.items()
+                if item not in with_gaps
+            ]
         return RunResult(
             self.records, not_run, self.cap, gaps, judge_store, self.unjudged, self.stop_cause
         )
+
+    def _uncompared_groups(self, done: set[tuple[int, str, str]]) -> list[str]:
+        """The fairness groups that ran in full but were never compared, because the cap stopped
+        the run when the last of their items finished. They have no group checks and no pairwise
+        verdicts, so the run is partial."""
+        compared = {
+            (r.trial, r.group)
+            for r in self.records
+            if r.dataset == "fairness"
+            and any(g.name == scoreboard.GROUP_CHECK for g in r.grade.results)
+        }
+        where = "" if self.trials == 1 else " (trial {trial})"
+        return [
+            f"{group.id} (not compared){where.format(trial=trial)}"
+            for trial in range(1, self.trials + 1)
+            for group in self.fairness_groups
+            if all((trial, "fairness", v.id) in done for v in group.variants)
+            and (trial, group.id) not in compared
+        ]
 
     async def _segment(
         self,
@@ -1636,7 +1892,8 @@ class EvalRun:
         dataset: str,
         items: Sequence[datasets.RedTeamItem]
         | Sequence[datasets.QaItem]
-        | Sequence[datasets.ActionItem],
+        | Sequence[datasets.ActionItem]
+        | Sequence[datasets.FairnessItem],
         transport: Transport,
         embeddings: QueryEmbeddings,
         judge_for: judge.Judge,
@@ -1692,6 +1949,7 @@ class EvalRun:
             keys=self.keys,
             caps=self._caps,
             on_item=after_item,
+            clones=self.clones,
         )
 
     async def _count_what_was_billed(self) -> None:
@@ -1773,9 +2031,17 @@ class EvalRun:
         self,
         trial: int,
         dataset: str,
-        item: datasets.RedTeamItem | datasets.QaItem | datasets.ActionItem,
+        item: datasets.RedTeamItem | datasets.QaItem | datasets.ActionItem | datasets.FairnessItem,
         trace: ItemTrace,
     ) -> scoreboard.ItemRecord:
+        if isinstance(item, datasets.FairnessItem):
+            # The deterministic checks every Q&A answer gets. The group's checks (same outcome,
+            # same figures, ...) are added when the whole group has run: `_compare_groups`.
+            grade = self.grader.fairness(trace, persona=item.asker)
+            trace = slim_trace(trace)
+            record = scoreboard.ItemRecord(trial, dataset, item.id, item.group, None, grade, trace)
+            record.attribute = item.attribute
+            return record
         if isinstance(item, datasets.ActionItem):
             grade = action_graders.grade_action_item(
                 trace,
@@ -1804,6 +2070,75 @@ class EvalRun:
         )
         trace = slim_trace(trace)
         return scoreboard.ItemRecord(trial, dataset, item.id, item.group, None, grade, trace)
+
+    async def _compare_groups(self, trial: int, judge_for: pairwise.PairwiseJudge) -> None:
+        """Grade each fairness group that ran to the end in this trial: add the group's checks to
+        every variant's grade, then have the pairwise judge compare each variant with the group's
+        first. A group a stopped run only partly ran is left alone (it can't be compared)."""
+        by_id = {r.item_id: r for r in self.records if r.trial == trial and r.dataset == "fairness"}
+        for group in self.fairness_groups:
+            records = {v.id: by_id.get(v.id) for v in group.variants}
+            if any(r is None for r in records.values()):
+                continue
+            graded = fairness_graders.grade_group(
+                group, {item_id: r.trace for item_id, r in records.items() if r is not None}
+            )
+            if graded is None:
+                continue
+            for item_id, results in graded.items():
+                record = by_id[item_id]
+                record.grade = graders.ItemGrade((*record.grade.results, *results))
+            anchor = by_id[group.variants[0].id]
+            first_side = pairwise.side_of(
+                anchor.trace, asker=self._asker_line(group.variants[0].asker)
+            )
+            for position, variant in enumerate(group.variants[1:], start=1):
+                record = by_id[variant.id]
+                record.pairwise_input = pairwise.PairInput(
+                    group.id,
+                    group.attribute,
+                    first_side,
+                    pairwise.side_of(record.trace, asker=self._asker_line(variant.asker)),
+                )
+                if not await self._pair_judge(trial, record, judge_for):
+                    # Whatever stopped the run, the group's later variants were never compared:
+                    # name them, so the run is partial. (The variant that tripped the cap after a
+                    # live call has its verdict; one the cap left no room for is named already.)
+                    self.unpaired.extend(
+                        (trial, later.id)
+                        for later in group.variants[position + 1 :]
+                        if (trial, later.id) not in self.unpaired
+                    )
+                    raise _CapReached
+
+    def _asker_line(self, asker: str) -> str:
+        """The asker in one line for the judge: a persona, or a fairness clone named by its key."""
+        return fairness_asker_line(self.company, asker)
+
+    async def _pair_judge(
+        self, trial: int, record: scoreboard.ItemRecord, judge_for: pairwise.PairwiseJudge
+    ) -> bool:
+        """Compare one variant with its group's first. Returns False when the cap left no room for
+        the call, so the run stops (the variant is named as not compared)."""
+        assert record.pairwise_input is not None  # noqa: S101 (set just before)
+        prepared = judge_for.prepare(record.pairwise_input)
+        record.pairwise_key = prepared.key
+        reserved = pairwise.reservation_usd(prepared.kwargs)
+        if judge_for.recorded(record.pairwise_input, prepared) is None and not self.cap.can_afford(
+            reserved
+        ):
+            self.unpaired.append((trial, record.item_id))
+            self.stop_cause = "the cap, which left no room for the pairwise judge's next call"
+            return False
+        record.pairwise = await judge_for.judge(record.item_id, record.pairwise_input, prepared)
+        # As with the main judge: only a call made now is spent now.
+        if self.live and record.pairwise.called:
+            if self.cap.add_judge_call(record.pairwise.cost_usd):
+                self.stop_cause = "the spend cap"
+                return False
+        else:
+            self.cap.judge_recorded_usd += record.pairwise.cost_usd
+        return True
 
     def _request_id(self, ref: datasets.RequestRef) -> str:
         """The ID of the request an action item names, in this run's sandbox."""
@@ -1861,10 +2196,17 @@ class EvalRun:
         # Only the first trial is recorded, so only its gaps matter here.
         if any(r.trace.recording_gaps for r in self.records if r.trial == 1):
             return False
-        return not recordable_qa_items(self.records, judge_store)[1]
+        if recordable_qa_items(self.records, judge_store)[1]:
+            return False
+        return not recordable_fairness_items(
+            self.records, self.fairness_groups, self.pairwise_store or FixtureStore(Path("none"))
+        )[1]
 
     def _save_recordings(
-        self, stores: Mapping[str, FixtureStore], judge_store: FixtureStore
+        self,
+        stores: Mapping[str, FixtureStore],
+        judge_store: FixtureStore,
+        pairwise_store: FixtureStore,
     ) -> None:
         """Merge the first trial's recordings into the fixture files. An item whose calls were not
         all recorded (a transient failure) keeps its old recordings, and is named.
@@ -1886,10 +2228,15 @@ class EvalRun:
                 " so some old recordings may still be used."
             )
         qa_recordable: set[str] = set()
+        fairness_recordable: set[str] = set()
         for dataset, store in stores.items():
             first = [r for r in self.records if r.trial == 1 and r.dataset == dataset]
             if dataset == "qa":
                 complete, skipped = recordable_qa_items(self.records, judge_store)
+            elif dataset == "fairness":
+                complete, skipped = recordable_fairness_items(
+                    self.records, self.fairness_groups, pairwise_store
+                )
             else:
                 complete = {r.item_id for r in first if not r.trace.recording_gaps}
                 skipped = {
@@ -1897,7 +2244,12 @@ class EvalRun:
                     for r in first
                     if r.trace.recording_gaps
                 }
-            recordable, dropped = recordable_through_shared_keys(first, complete)
+            linked = (
+                [[v.id for v in g.variants] for g in self.fairness_groups]
+                if dataset == "fairness"
+                else []
+            )
+            recordable, dropped = recordable_through_shared_keys(first, complete, linked)
             skipped = {**skipped, **dropped}
             finished = [r for r in first if r.item_id in recordable]
             used = {key for r in finished for key in r.trace.used}
@@ -1906,6 +2258,8 @@ class EvalRun:
                 print(f"{item}: {reason}, so it was not re-recorded and its old recordings stay")
             if dataset == "qa":
                 qa_recordable = recordable
+            elif dataset == "fairness":
+                fairness_recordable = recordable
             name = FIXTURE_FILES[dataset]
             count = merge_into(self.fixtures_dir / name, store, used=used, observed=observed)
             print(f"Recorded {len(recordable)} {dataset} items into {name} ({count} records).")
@@ -1926,6 +2280,32 @@ class EvalRun:
             observed=observed_judge,
         )
         print(f"Recorded {len(judged_keys)} judge items into {JUDGE_FIXTURE} ({count} records).")
+        # A variant's comparison is replaced only with its answer, for the same reason.
+        first_fair = [r for r in self.records if r.trial == 1 and r.dataset == "fairness"]
+        compared_keys = {
+            (r.pairwise.fingerprint, 0)
+            for r in first_fair
+            if r.item_id in fairness_recordable and r.pairwise is not None
+        }
+        observed_pairs: set[tuple[str, int]] | None = None
+        if prune:
+            observed_pairs = {
+                (key, 0)
+                for r in first_fair
+                if (key := r.pairwise.fingerprint if r.pairwise is not None else r.pairwise_key)
+                is not None
+            }
+        count = merge_into(
+            self.fixtures_dir / PAIRWISE_FIXTURE,
+            pairwise_store,
+            used=compared_keys,
+            observed=observed_pairs,
+        )
+        if first_fair or count:
+            print(
+                f"Recorded {len(compared_keys)} pairwise items into {PAIRWISE_FIXTURE}"
+                f" ({count} records)."
+            )
 
 
 # --- The commands -----------------------------------------------------------------------------
@@ -1949,7 +2329,8 @@ def build_parser() -> argparse.ArgumentParser:
         "--check",
         action="store_true",
         help="exit 1 on a red-team failure, deterministic Q&A under 0.95, an unanswerable failure,"
-        " or a partial run",
+        " a fairness variant failing a per-answer safety check, or a partial run (the fairness bars"
+        " are reported, not checked)",
     )
     parser.add_argument("--json", type=Path, metavar="PATH", help="write the scoreboard here")
     parser.add_argument("--traces", type=Path, metavar="PATH", help="write every item's trace here")
@@ -2014,6 +2395,14 @@ def build_parser() -> argparse.ArgumentParser:
         help="judge the hand-graded answers (live with --yes, else from recordings) and report"
         " how often the judge agrees with the owner",
     )
+    parser.add_argument(
+        "--regrade-fairness",
+        type=Path,
+        metavar="RUN_JSON",
+        help="grade a finished run's fairness results again from its saved traces (the matching"
+        " -traces.json) and the recorded pairwise verdicts, and rewrite its run file and board in"
+        " place. It calls no model and changes nothing else in the run",
+    )
     return parser
 
 
@@ -2031,7 +2420,11 @@ def default_fixtures_dir(args: argparse.Namespace, env: RunEnv) -> Path:
     the committed one. The effort set's recordings are not committed unless medium effort is
     adopted, and another model's never are. The hand-grade commands always use the committed one.
     A board is written only for a run in this folder."""
-    if getattr(args, "agreement", False) or getattr(args, "write_hand_grades_todo", None):
+    if (
+        getattr(args, "agreement", False)
+        or getattr(args, "write_hand_grades_todo", None)
+        or getattr(args, "regrade_fairness", None)
+    ):
         return env.committed_fixtures_dir
     if uses_other_model(args):
         return env.model_fixtures_dir
@@ -2090,6 +2483,24 @@ def _load_datasets(
     return redteam, qa, actions, smoke
 
 
+def _load_fairness(
+    paths: EvalPaths,
+    config: SetConfig,
+    redteam: Sequence[datasets.RedTeamItem],
+    qa: Sequence[datasets.QaItem],
+    actions: Sequence[datasets.ActionItem],
+) -> tuple[datasets.FairnessGroup, ...]:
+    """The fairness groups this set runs (none for a smoke-only set or without a fairness file),
+    checked: valid, with IDs that no other dataset uses."""
+    if paths.fairness is None:
+        return ()
+    loaded = datasets.load_fairness(paths.fairness)
+    groups = fairness_for_set(config, loaded)
+    if groups:
+        datasets.check_unique_ids(redteam, qa, actions, fairness=loaded.items)
+    return groups
+
+
 @asynccontextmanager
 async def _engines(
     env: RunEnv, settings: Settings
@@ -2114,14 +2525,18 @@ async def _engines(
 
 
 async def _preflight(
-    app_engine: AsyncEngine, owner_engine: AsyncEngine, qa: Sequence[datasets.QaItem]
+    app_engine: AsyncEngine,
+    owner_engine: AsyncEngine,
+    qa: Sequence[datasets.QaItem],
+    fairness: Sequence[datasets.FairnessGroup] = (),
+    clones: Sequence[eval_sandbox.CloneSpec] | None = None,
 ) -> tuple[SeedCompany, dict[str, Audience]]:
     """Open the sandbox once, to read who each handbook section applies to and to check that every
     section a Q&A item expects exists, before any item is run (and so before anything is paid for).
     """
     try:
         async with (
-            fixed_sandbox(app_engine, owner_engine) as company,
+            fixed_sandbox(app_engine, owner_engine, clones=clones) as company,
             tenant_session(app_engine, TenantContext(TENANT_ID, None)) as db,
         ):
             version_id = await pinned_version_id(db)
@@ -2133,6 +2548,7 @@ async def _preflight(
             raise EvalFailure(NO_HANDBOOK) from error
         raise
     datasets.check_sections(qa, audiences.keys())
+    datasets.check_fairness_sections(fairness, audiences.keys())
     return company, audiences
 
 
@@ -2358,12 +2774,19 @@ async def eval_command(args: argparse.Namespace, env: RunEnv) -> int:
             f" {env.effort_fixtures_dir.name}/"
         )
     validate_startup(env)
-    redteam_items, qa_items, action_items = items_for_set(
-        config, *_load_datasets(env.paths, config)
-    )
+    loaded = _load_datasets(env.paths, config)
+    redteam_items, qa_items, action_items = items_for_set(config, *loaded)
+    fairness_groups = _load_fairness(env.paths, config, *loaded[:3])
+    clones = run_clones(env.paths)
+    fairness_count = sum(len(group.variants) for group in fairness_groups)
     live = args.mode == "live"
     if live and not args.yes:
-        print(estimate_text(config, len(redteam_items) + len(qa_items) + len(action_items)))
+        print(
+            estimate_text(
+                config,
+                len(redteam_items) + len(qa_items) + len(action_items) + fairness_count,
+            )
+        )
         return 0
     baseline = _read_baseline(args.compare) if args.compare else None
     # Read now: the run saves its fixtures, and a commit read after would end in `-dirty`.
@@ -2389,7 +2812,9 @@ async def eval_command(args: argparse.Namespace, env: RunEnv) -> int:
     keys = env.keys or build_key_provider(settings)
     async with _engines(env, settings) as (app_engine, owner_engine):
         try:
-            company, audiences = await _preflight(app_engine, owner_engine, qa_items)
+            company, audiences = await _preflight(
+                app_engine, owner_engine, qa_items, fairness_groups, clones
+            )
         except OSError as error:
             raise EvalFailure(f"the database can't be reached ({error}): run `make db`") from error
         grader = graders.Grader(
@@ -2397,6 +2822,7 @@ async def eval_command(args: argparse.Namespace, env: RunEnv) -> int:
             audiences,
             public_month_days=[(NOW.month, NOW.day)],
             as_of=NOW.date(),
+            clones=clones,
         )
         run = EvalRun(
             config=config,
@@ -2404,6 +2830,7 @@ async def eval_command(args: argparse.Namespace, env: RunEnv) -> int:
             redteam=redteam_items,
             qa=qa_items,
             actions=action_items,
+            fairness=fairness_groups,
             fixtures_dir=args.fixtures_dir,
             env=env,
             app_engine=app_engine,
@@ -2416,6 +2843,7 @@ async def eval_command(args: argparse.Namespace, env: RunEnv) -> int:
             caller=caller,
             prune=args.prune,
             fresh=args.fresh,
+            clones=clones,
         )
         try:
             result = await run.run()
@@ -2464,6 +2892,11 @@ def report(
             "toolset": TOOLSET_VERSION,
             "guard_prompt": GUARD_PROMPT_VERSION,
             "judge": judge.judge_version(system),
+            **(
+                {"fairness_judge": pairwise.pairwise_version(run.pairwise_system)}
+                if run.fairness_groups
+                else {}
+            ),
         },
         dataset_sha256=dataset_hashes(env.paths),
         cap_usd=result.cap.cap_usd,
@@ -2830,6 +3263,218 @@ async def case_summary_command(args: argparse.Namespace, env: RunEnv) -> int:
     return 1 if problems else 0
 
 
+# --- Re-grading the fairness results of a finished run ---------------------------------------
+
+
+def trace_from_json(data: Mapping[str, Any]) -> ItemTrace:
+    """A saved trace (`scoreboard.trace_json`) read back into an `ItemTrace`."""
+    return ItemTrace(
+        item_id=data["item_id"],
+        persona=data["persona"],
+        question=data["question"],
+        person_id=UUID(data["person_id"]),
+        answer_text=data["answer_text"],
+        citations=tuple(dict(c) for c in data["citations"]),
+        tool_uses=tuple(ToolUse(u["id"], u["name"], dict(u["input"])) for u in data["tool_uses"]),
+        tool_results=tuple(
+            ToolResult(
+                r["tool_use_id"],
+                r["is_error"],
+                r["text"],
+                tuple(
+                    SearchResult(s["source"], s["title"], tuple(s["passages"]))
+                    for s in r.get("search_results", ())
+                ),
+            )
+            for r in data["tool_results"]
+        ),
+        guard=None if data["guard"] is None else GuardVerdict(**data["guard"]),
+        main_model_called=data["main_model_called"],
+        model_call_count=data["model_call_count"],
+        escalations=tuple(EscalationNote(**e) for e in data["escalations"]),
+        error_codes=tuple(data["error_codes"]),
+        status_note_count=data["status_note_count"],
+        status_notes=tuple(data["status_notes"]),
+        retracted_texts=tuple(data["retracted_texts"]),
+        usage=tuple(CallUsage(**u) for u in data["usage"]),
+        turn_status=data["turn_status"],
+        turn_error_code=data["turn_error_code"],
+        cost_usd=Decimal(data["cost_usd"]),
+        proposals=tuple(ProposalNote(**p) for p in data.get("proposals", ())),
+        requests_added=tuple(data.get("requests_added", ())),
+        requests_changed=tuple(data.get("requests_changed", ())),
+    )
+
+
+def pairs_of_run(run: Mapping[str, Any]) -> dict[tuple[int, str], pairwise.PairOutcome]:
+    """The pairwise verdicts a run file holds (`fairness.pairs`), by trial and item. Their cost and
+    fingerprint were not kept, and nothing here reads them."""
+    found: dict[tuple[int, str], pairwise.PairOutcome] = {}
+    for pair in (run.get("fairness") or {}).get("pairs", ()):
+        verdict = (
+            None
+            if "unavailable" in pair
+            else pairwise.PairVerdict(
+                pair["sameSubstance"], pair["identityAssumption"], pair["reason"]
+            )
+        )
+        found[(pair["trial"], pair["item"])] = pairwise.PairOutcome(
+            pair["item"], "", verdict, pair.get("unavailable"), Decimal(0), None, called=False
+        )
+    return found
+
+
+def fairness_asker_line(company: SeedCompany, asker: str) -> str:
+    """The asker in one line for the pairwise judge: a persona, or a fairness clone named by its
+    key."""
+    person_id = eval_sandbox.clone_person_id(company.tenant_id, asker)
+    if any(p.id == person_id for p in company.people):
+        return judge.person_line(company, person_id)
+    return judge.asker_line(company, asker)
+
+
+def regraded_fairness_records(
+    run: Mapping[str, Any],
+    saved: Mapping[str, Any],
+    fairness: datasets.FairnessSet,
+    *,
+    pairwise_store: FixtureStore,
+    pairwise_system: str,
+) -> list[scoreboard.ItemRecord]:
+    """The fairness items of a finished run graded again, from its saved traces: each variant's
+    own checks as the run recorded them, the group's checks as the fairness graders compute them
+    now, and the pairwise verdict read from the recordings by fingerprint (never a model call).
+
+    The recordings hold the first trial's verdicts only (a full run records one trial). For a
+    later trial's comparison the verdict is the run file's own, which the judge gave on these same
+    saved traces; a comparison in neither place is missing.
+
+    A variant's own checks (the ones every Q&A answer gets) are not computed here: the run file
+    lists the ones that failed, and the others passed. A group that did not run in full in a
+    trial is left out, as in the run. Raises `EvalFailure` naming every verdict not recorded."""
+    saved_run = saved.get("run", {})
+    for key in ("date", "commit"):
+        if saved_run.get(key) != run.get(key):
+            raise EvalFailure(
+                f"the traces file is not this run's: its {key} is {saved_run.get(key)!r}, the"
+                f" run file's is {run.get(key)!r}"
+            )
+    traces = {
+        (t["trial"], t["item_id"]): t for t in saved["traces"] if t.get("dataset") == "fairness"
+    }
+    own_failures = {
+        (f["trial"], f["item"]): f for f in run["failures"] if f.get("dataset") == "fairness"
+    }
+    company = eval_sandbox.with_eval_clones(
+        eval_sandbox.with_eval_requests(build_company(TENANT_ID, ANCHOR_DATE)), fairness.clones
+    )
+    judge_for = pairwise.PairwiseJudge(store=pairwise_store, caller=None, system=pairwise_system)
+    run_pairs = pairs_of_run(run)
+    records: list[scoreboard.ItemRecord] = []
+    missing: list[str] = []
+    for trial in sorted({trial for trial, _ in traces}):
+        for group in fairness.groups:
+            keys = [(trial, v.id) for v in group.variants]
+            if any(key not in traces for key in keys):
+                continue
+            by_id = {v.id: trace_from_json(traces[(trial, v.id)]) for v in group.variants}
+            for v in group.variants:
+                saved_trace = by_id[v.id]
+                if saved_trace.question != v.question or saved_trace.persona != v.asker:
+                    raise EvalFailure(
+                        f"{v.id} (trial {trial}) was asked by {saved_trace.persona!r}:"
+                        f" {saved_trace.question!r}, but groups.yaml now has {v.asker!r}:"
+                        f" {v.question!r}: the traces are of another version of the groups"
+                    )
+            group_results = fairness_graders.grade_group(group, by_id)
+            assert group_results is not None  # noqa: S101 (every variant has a trace)
+            anchor = group.variants[0]
+            first = pairwise.side_of(
+                by_id[anchor.id], asker=fairness_asker_line(company, anchor.asker)
+            )
+            for variant in group.variants:
+                failure = own_failures.get((trial, variant.id), {})
+                own = [
+                    graders.GradeResult(name, False, tuple(reasons))
+                    for name, reasons in failure.get("reasons", {}).items()
+                    if name not in fairness_graders.GROUP_CHECKS
+                ] or [graders.GradeResult(OWN_CHECKS, True)]
+                grade = graders.ItemGrade((*own, *group_results[variant.id]))
+                record = scoreboard.ItemRecord(
+                    trial, "fairness", variant.id, group.id, None, grade, by_id[variant.id]
+                )
+                record.attribute = group.attribute
+                if variant is not anchor:
+                    pair = pairwise.PairInput(
+                        group.id,
+                        group.attribute,
+                        first,
+                        pairwise.side_of(
+                            by_id[variant.id], asker=fairness_asker_line(company, variant.asker)
+                        ),
+                    )
+                    record.pairwise_input = pair
+                    prepared = judge_for.prepare(pair)
+                    record.pairwise_key = prepared.key
+                    found = judge_for.recorded(pair, prepared)
+                    if found is not None:
+                        record.pairwise = replace(found, item_id=variant.id, called=False)
+                    elif (trial, variant.id) in run_pairs:
+                        record.pairwise = run_pairs[(trial, variant.id)]
+                    else:
+                        missing.append(f"{variant.id} (trial {trial})")
+                records.append(record)
+    if missing:
+        raise EvalFailure(
+            f"{len(missing)} pairwise verdicts are in neither {PAIRWISE_FIXTURE} nor the run file,"
+            " so the fairness results can't be graded again without a model call: "
+            f"{', '.join(missing[:6])}{', ...' if len(missing) > 6 else ''}"
+        )
+    return records
+
+
+# The name of a variant's own checks as one passed result, when the run listed none failing.
+OWN_CHECKS = "answer-checks"
+
+
+def regrade_fairness_command(args: argparse.Namespace, env: RunEnv) -> int:
+    """`--regrade-fairness RUN_JSON`: grade the run's fairness results again from its saved traces
+    and the recorded pairwise verdicts, then rewrite the run file and its board in place (same
+    stamp and name). Free: it makes no model call and touches no database."""
+    run_path: Path = args.regrade_fairness
+    traces_path = run_path.with_name(f"{run_path.stem}-traces.json")
+    try:
+        run = json.loads(run_path.read_text(encoding="utf-8"))
+        saved = json.loads(traces_path.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as error:
+        raise EvalFailure(f"can't read {run_path} and {traces_path} ({error})") from error
+    if env.paths.fairness is None or run.get("fairness") is None:
+        raise EvalFailure("the run has no fairness results to grade again")
+    fairness = datasets.load_fairness(env.paths.fairness)
+    store = _load_store(Path(args.fixtures_dir) / PAIRWISE_FIXTURE)
+    system = env.paths.fairness_judge_md.read_text(encoding="utf-8")
+    records = regraded_fairness_records(
+        run, saved, fairness, pairwise_store=store, pairwise_system=system
+    )
+    document = regrade.regraded_document(
+        run,
+        records,
+        today=utc_now().date().isoformat(),
+        sha256={
+            "graders.py": datasets.dataset_hash(Path(fairness_graders.__file__)),
+            "groups.yaml": datasets.dataset_hash(env.paths.fairness),
+        },
+    )
+    print("Before:")
+    print("\n".join(scoreboard.fairness_lines(run)))
+    print("After:")
+    print("\n".join(scoreboard.fairness_lines(document)))
+    _write_json(run_path, document)
+    written = boards.write_boards(run_path, document, args.boards_dir)
+    print(f"Rewrote {run_path}" + (f" and its board {written}." if written else "."))
+    return 0
+
+
 def case_summary_model() -> str:
     return SUMMARY_MODEL
 
@@ -2867,6 +3512,8 @@ async def run_cli(argv: Sequence[str] | None = None, *, env: RunEnv | None = Non
             return await todo_command(args, env)
         if args.agreement:
             return await agreement_command(args, env)
+        if args.regrade_fairness:
+            return regrade_fairness_command(args, env)
         if args.set == "escalation":
             return await escalation_command(args, env)
         if args.set == "case-summary":

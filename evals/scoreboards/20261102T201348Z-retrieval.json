@@ -1,0 +1,39 @@
+{
+  "schema": 1,
+  "set": "retrieval",
+  "stamp": "20261102T201348Z",
+  "facts": {
+    "model": "voyage-4",
+    "models": null,
+    "effort": null,
+    "promptVersion": null,
+    "toolsetVersion": null,
+    "guardPromptVersion": null,
+    "judgeVersion": null,
+    "datasetSha256": {
+      "dataset.yaml": "5f1bf69cf082b08ca846055c7e17370147e5a08e739e8cea2f83541796646a4d"
+    },
+    "commit": "5d3aaf6d7398ae8d83b3892df3afbaea94859931-dirty",
+    "trials": 1,
+    "date": "2026-11-02",
+    "live": true,
+    "partial": false,
+    "handbookVersion": "2026.11.3"
+  },
+  "metrics": {
+    "hit_rate_at_5": {
+      "mean": 1.0,
+      "min": 1.0
+    },
+    "negatives_passing": {
+      "mean": 1.0,
+      "min": 1.0
+    },
+    "mean_reciprocal_rank": {
+      "mean": 0.8522,
+      "min": 0.8522
+    }
+  },
+  "failures": [],
+  "costUsd": null
+}

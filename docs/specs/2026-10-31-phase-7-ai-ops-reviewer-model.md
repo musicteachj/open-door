@@ -390,7 +390,10 @@ All three change what the model reads, so they land in Stage 3 with the full run
   and HR's own cases are read-only in the queue.
 - **`list_cases` newest first when the list is cut:** the tool reads the newest 20 of the asked
   status, then orders them as the queue does, so a `closed` or `in_review` list never hides this
-  week's cases.
+  week's cases. **Changed in Stage 3 (owner, 2026-11-02):** only `in_review` and `closed` work
+  this way, and "newest" is by when the case's status last changed, so a case closed this week
+  stays in. A cut `new` or `open` list keeps the queue's own first 20, so the cases with the
+  soonest reply-by dates are never the ones dropped.
 - **`amount` becomes `amountLabel`** in every time-off tool result and card result.
 
 ### The model comparison

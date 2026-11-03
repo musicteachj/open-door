@@ -48,6 +48,9 @@ GOLDEN_HASHES = {
     # Phase 6, Stage 4: the assistant learns the case rules, and the two case tools join the nine.
     ("assistant", "2026-11.2"): "def9eb8c43d41ed4e97eb34ac304eac505a4fbb932d0a9465db01629580d7b19",
     ("tools", "2026-11.2"): "4244b3cae306188bb23c0609de24b90fb62108f34ac4843afcb9fdb8599d8759",
+    # Phase 7, Stage 3: HR's case route, list_cases keeps the newest, amount is amountLabel.
+    ("assistant", "2026-11.3"): "ae6278751b35edb2156090129ad3f8a743a535ad01e193e969bbf2073db47e53",
+    ("tools", "2026-11.3"): "6ec2cf3d6a39b43334f31f55759a5278c6b39e28a6689783cb3779b77692c54b",
     # Phase 6, Stage 4: the guard gets the labeling rule (ordinary asks, sensitive reports).
     ("guard", "2026-11.1"): "16acbc4016dccc688d102133264faff606be20fba0ae2742863a5f942bc6689b",
     # Phase 6, Stage 4: the case summary's own prompt.
@@ -79,8 +82,8 @@ CURRENT: dict[str, tuple[str, Callable[[], str]]] = {
 
 def test_versions_are_date_based_strings() -> None:
     assert (PROMPT_VERSION, TOOLSET_VERSION, GUARD_PROMPT_VERSION) == (
-        "2026-11.2",
-        "2026-11.2",
+        "2026-11.3",
+        "2026-11.3",
         "2026-11.1",
     )
 
@@ -217,11 +220,27 @@ def test_system_prompt_carries_the_canary_and_the_guard_prompt_does_not() -> Non
         # (invariants 1, 3, and 5).
         "You can't open a case, and a message to you doesn't reach HR",
         "a person on the HR team handles it",
-        'the "Open a confidential case" button on the HR panel, when it shows,',
-        "or the My cases page, sends it",
+        'For an employee or a manager, the "Open a',
+        'confidential case" button on the HR panel, when it shows, or the My cases page, sends it',
+        "a case is sent from the HR panel's form, when it shows",
+        "HR has no My cases page, and HR's own cases",
+        "are read-only in the queue",
         "Never say you opened a case or will open one",
         "You can't read what anyone wrote in a case, or its summary",
         "Never say or guess whether someone has a case",
+        # Phase 7: one cited sentence per location in a comparison, "you" only for the asker's own
+        # rule, and the citation rules never crowd out a refusal, the AI disclosure, or "not found".
+        "state each location's rule in its own cited sentence",
+        'Say "you" only for the asker\'s',
+        'never "you get"',
+        "These citation rules are for sentences about policy.",
+        "a paragraph may start with one of them",
+        "a plain yes or no that opens an answer and states no rule or figure need no citation",
+        "(for HR, give only the HR panel's route from it)",
+        "Open a comparison with a plain yes or no and",
+        "don't end it with a list of what differs or what is the same",
+        'When a passage for another location says "you" or "your", write it as the people',
+        "cite the handbook's passage on how to",
         "`get_my_cases`",
         "`list_cases` only when the asker is on the HR team",
         "list cases in the order the tool gives",

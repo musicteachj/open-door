@@ -66,17 +66,27 @@ async def test_the_meter_counts_a_stream_that_never_finished_as_an_unpriced_live
     assert meter.total_usd == Decimal(0)
 
 
-def test_the_smoke_estimate_is_95_cents_and_the_docs_agree() -> None:
-    assert Decimal("0.95") == run.SMOKE_ESTIMATE_USD
-    assert run.SETS["smoke"].estimate_usd == Decimal("0.95")
+def test_the_smoke_estimate_is_a_dollar_and_the_docs_agree() -> None:
+    assert Decimal("1.00") == run.SMOKE_ESTIMATE_USD
+    assert run.SETS["smoke"].estimate_usd == Decimal("1.00")
     makefile = (ROOT / "Makefile").read_text(encoding="utf-8")
     readme = (ROOT / "evals" / "README.md").read_text(encoding="utf-8")
     claude = (ROOT / "CLAUDE.md").read_text(encoding="utf-8")
-    assert re.search(r"SET=smoke \(about \$0\.95, cap \$2\)", makefile)
+    assert re.search(r"SET=smoke \(about \$1\.00, cap \$2\)", makefile)
     assert "$0.65" not in makefile
     assert "$1.40" not in readme
-    assert readme.count("$0.95") == 2
-    assert "about $0.95" in claude
+    assert readme.count("$1.00") == 2
+    assert "about $1.00" in claude
+
+
+def test_the_effort_estimate_is_185_and_the_docs_agree() -> None:
+    assert Decimal("1.85") == run.EFFORT_ESTIMATE_USD
+    assert run.SETS["effort"].estimate_usd == Decimal("1.85")
+    makefile = (ROOT / "Makefile").read_text(encoding="utf-8")
+    readme = (ROOT / "evals" / "README.md").read_text(encoding="utf-8")
+    assert "about $1.85, cap $2" in makefile
+    assert "| $1.85 | $2.00 | medium |" in readme
+    assert "$1.75" not in makefile + readme
 
 
 def test_rounding_dust_is_not_counted_as_live_spend() -> None:
@@ -109,3 +119,16 @@ async def test_the_meter_counts_a_canceled_guard_call_as_unpriced_and_lets_it_pr
         await meter.classify(object())
 
     assert meter.unpriced_calls == 1
+
+
+def test_the_full_estimate_is_1550_and_the_docs_agree() -> None:
+    assert Decimal("15.50") == run.FULL_ESTIMATE_USD
+    assert run.SETS["full"].estimate_usd == Decimal("15.50")
+    makefile = (ROOT / "Makefile").read_text(encoding="utf-8")
+    readme = (ROOT / "evals" / "README.md").read_text(encoding="utf-8")
+    claude = (ROOT / "CLAUDE.md").read_text(encoding="utf-8")
+    assert "SET=full (about $15.50, cap $18)" in makefile
+    assert "| $15.50 | $18 |" in readme
+    assert "(about $15.50, cap $18)" in readme
+    assert "estimates $15.50, cap $18" in readme
+    assert "estimated at $15.50 with" in claude

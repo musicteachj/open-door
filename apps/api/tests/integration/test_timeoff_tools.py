@@ -211,7 +211,7 @@ async def test_the_balance_is_every_figure_as_a_label_with_its_rules(
         "ceiling",
         "nextEarning",
     }
-    assert set(result["pto"]["nextEarning"]) == {"date", "amount"}
+    assert set(result["pto"]["nextEarning"]) == {"date", "amountLabel"}
     assert all(isinstance(v, str) for k, v in result["pto"].items() if k != "nextEarning")
     # The current year only, until a recorded sick day falls in the next one.
     assert [year["year"] for year in result["sick"]] == [2026]
@@ -392,7 +392,7 @@ async def test_a_person_lists_their_own_requests_with_names_labels_and_ids(
     assert half_day["person"] == "Priya Raman"
     assert half_day["type"] == "pto"
     assert half_day["endDate"] == "2026-09-22"
-    assert half_day["amount"] == "4 hours (half a day)"
+    assert half_day["amountLabel"] == "4 hours (half a day)"
     assert half_day["status"] == "approved"
     assert half_day["decidedBy"] is None or isinstance(half_day["decidedBy"], str)
     assert UUID(half_day["id"])
@@ -402,7 +402,7 @@ async def test_a_person_lists_their_own_requests_with_names_labels_and_ids(
         "type",
         "startDate",
         "endDate",
-        "amount",
+        "amountLabel",
         "status",
         "decidedBy",
     }
@@ -428,7 +428,7 @@ async def test_a_manager_lists_the_team_and_what_waits_for_them(
         "2026-10-27",
         "2026-10-28",
     )
-    assert only["amount"] == "16 hours (2 days)"
+    assert only["amountLabel"] == "16 hours (2 days)"
 
 
 async def test_nothing_waits_for_someone_with_no_reports(
@@ -633,15 +633,15 @@ async def test_a_check_gives_the_engines_answer_and_writes_nothing(
     assert answer["ok"] is True
     assert answer["countedDays"] == ["2026-11-16"]
     assert answer["skippedDays"] == []
-    assert answer["amount"] == "8 hours (1 day)"
+    assert answer["amountLabel"] == "8 hours (1 day)"
     [draw] = answer["draws"]
     assert draw["year"] is None
-    assert draw["amount"] == "8 hours (1 day)"
+    assert draw["amountLabel"] == "8 hours (1 day)"
     assert draw["availableBefore"] != draw["availableAfter"]
     assert answer["warnings"] == []
     assert answer["problems"] == []
     assert answer["rules"]
-    assert body(half)["amount"] == "4 hours (half a day)"
+    assert body(half)["amountLabel"] == "4 hours (half a day)"
     # A refusal is an answer to "would this work", with the engine's sentence.
     no = body(refused)
     assert no["ok"] is False
@@ -661,7 +661,7 @@ async def test_a_check_flags_short_notice_and_skips_with_reasons(
 
     assert "short-notice" in [w["code"] for w in week["warnings"]]
     assert all(w["text"] for w in week["warnings"])
-    assert week["amount"].endswith("days)")
+    assert week["amountLabel"].endswith("days)")
     assert weekend["countedDays"] == ["2026-11-16"]
     assert [s["date"] for s in weekend["skippedDays"]] == ["2026-11-14", "2026-11-15"]
     assert all(s["reason"] for s in weekend["skippedDays"])
@@ -682,7 +682,7 @@ async def test_sick_time_across_new_year_shows_one_draw_per_year(
 
     assert answer["ok"] is True
     assert [d["year"] for d in answer["draws"]] == [2026, 2027]
-    assert [d["amount"] for d in answer["draws"]] == ["8 hours (1 day)", "8 hours (1 day)"]
+    assert [d["amountLabel"] for d in answer["draws"]] == ["8 hours (1 day)", "8 hours (1 day)"]
     assert "2027-01-01" in [s["date"] for s in answer["skippedDays"]]
 
 
@@ -707,8 +707,8 @@ async def test_sick_hours_become_a_partial_day(
         )
     )
 
-    assert three["amount"] == "3 hours"
-    assert half["amount"] == "4 hours (half a day)"
+    assert three["amountLabel"] == "3 hours"
+    assert half["amountLabel"] == "4 hours (half a day)"
     assert [p["code"] for p in on_a_range["problems"]] == ["bad-partial"]
 
 
@@ -765,7 +765,7 @@ async def test_a_request_proposal_writes_one_proposal_and_one_audit_event_and_no
     answer = body(outcome)
     assert answer["note"] == CONFIRM_SENTENCE
     assert answer["ok"] is True
-    assert answer["amount"] == "8 hours (1 day)"
+    assert answer["amountLabel"] == "8 hours (1 day)"
     assert answer["countedDays"] == ["2026-11-16"]
     [stored] = await proposals_of(owner_engine, seeded_sandbox)
     assert (stored["action"], stored["status"]) == ("timeoff.request", "pending")
@@ -810,7 +810,7 @@ async def test_a_sick_request_proposal_stores_the_hours_as_a_partial_day(
         ctx, "propose_time_off_request", check_input(date(2026, 10, 2), type="sick", hours=3)
     )
 
-    assert body(outcome)["amount"] == "3 hours"
+    assert body(outcome)["amountLabel"] == "3 hours"
     assert outcome.proposal is not None
     assert outcome.proposal.card.partial_minutes == 180
     [stored] = await proposals_of(owner_engine, seeded_sandbox)
@@ -972,7 +972,7 @@ async def test_a_decision_proposal_gives_the_summary_and_never_the_team_coverage
     assert answer["title"] == "Department Lead, Apparel"
     assert answer["type"] == "pto"
     assert (answer["startDate"], answer["endDate"]) == ("2026-10-27", "2026-10-28")
-    assert answer["amount"] == "16 hours (2 days)"
+    assert answer["amountLabel"] == "16 hours (2 days)"
     assert answer["decision"] == "approve"
     assert answer["note"].startswith("A confirm card is shown to the person.")
     assert answer["rules"]
@@ -1069,7 +1069,7 @@ async def test_a_cancel_proposal_gives_the_request_and_what_returns(
     assert answer["type"] == "pto"
     assert (answer["startDate"], answer["endDate"]) == ("2026-11-09", "2026-11-09")
     assert answer["status"] == "pending"
-    assert answer["amount"] == "8 hours (1 day)"
+    assert answer["amountLabel"] == "8 hours (1 day)"
     assert answer["returns"] == "8 hours (1 day)"
     assert isinstance(answer["availableAfter"], str)
     assert answer["note"].startswith("A confirm card is shown to the person.")
@@ -1277,7 +1277,7 @@ async def test_results_quote_labels_and_never_a_bare_number_of_minutes(
     assert parsed > 20
     # The label is the product's one, not a rewrite of it.
     answer = body(next(o for p, t, o in results if (p, t) == ("priya", "check") and not o.is_error))
-    assert answer["amount"] == label(480)
+    assert answer["amountLabel"] == label(480)
 
 
 async def test_only_proposal_tools_carry_a_proposal(
@@ -1319,3 +1319,32 @@ async def test_a_refusal_text_is_always_a_fixed_one() -> None:
         "status-changed",
         "already-started",
     }
+
+
+def key_paths(node: Any, key: str, path: str = "") -> list[str]:
+    """Every place a result holds `key`, at any depth."""
+    found: list[str] = []
+    if isinstance(node, dict):
+        for name, value in node.items():
+            if name == key:
+                found.append(f"{path}.{name}")
+            found.extend(key_paths(value, key, f"{path}.{name}"))
+    elif isinstance(node, list):
+        for index, value in enumerate(node):
+            found.extend(key_paths(value, key, f"{path}[{index}]"))
+    return found
+
+
+async def test_no_time_off_result_has_a_bare_amount_key_and_the_label_is_amount_label(
+    app_engine: AsyncEngine, owner_engine: AsyncEngine, seeded_sandbox: SeedCompany
+) -> None:
+    results = await every_result(app_engine, owner_engine, seeded_sandbox)
+
+    labeled = 0
+    for person, tool, outcome in results:
+        if outcome.is_error:
+            continue
+        data = json.loads(outcome.content[0]["text"])
+        assert key_paths(data, "amount") == [], (person, tool)
+        labeled += len(key_paths(data, "amountLabel"))
+    assert labeled > 10

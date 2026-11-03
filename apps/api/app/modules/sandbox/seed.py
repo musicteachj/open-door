@@ -956,6 +956,21 @@ async def insert_time_off_requests(session: AsyncSession, rows: Sequence[Request
     await _insert_rows(session, "time_off_requests", rows)
 
 
+async def insert_people(
+    session: AsyncSession,
+    people: Sequence[PersonRow],
+    private: Sequence[PersonPrivateRow],
+    openings: Sequence[OpeningRow],
+) -> None:
+    """Write more people into a sandbox the company is already in (each with their private
+    details and opening PTO balance), the same way the company's own are written. Their managers
+    must already be there. The eval harness adds its fairness set's people after the seed; the
+    demo's seed never does."""
+    await _insert_rows(session, "people", people)
+    await _insert_rows(session, "person_private", private)
+    await _insert_rows(session, "time_off_openings", openings)
+
+
 async def _insert_rows(session: AsyncSession, table_name: str, rows: Sequence[Row]) -> None:
     row_type = ROW_TYPES[table_name]
     array_columns = _ARRAY_COLUMNS[table_name]

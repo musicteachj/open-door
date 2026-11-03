@@ -178,6 +178,8 @@ def make_env(
             actions=data / "actions.yaml",
             smoke=data / "smoke.yaml",
             hand_grades=data / "hand-grades.yaml",
+            # The tiny runs ask no fairness items: test_fairness_eval_db.py runs the set.
+            fairness=None,
         ),
         "transport_factory": lambda _settings: ScriptedTransport(),
         "judge_caller_factory": lambda _transport: judge_caller,

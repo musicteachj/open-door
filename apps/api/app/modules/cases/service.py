@@ -15,7 +15,7 @@ flag set from the actor, as the session dependency does).
 
 import logging
 from datetime import date, datetime, timedelta
-from typing import Final, Literal, NamedTuple, Protocol
+from typing import Any, Final, Literal, NamedTuple, Protocol
 from uuid import UUID, uuid4
 
 from sqlalchemy import insert, select, update
@@ -394,12 +394,15 @@ async def my_cases(
     return [_status_view(row) for row in await db.execute(query)]
 
 
+_QUEUE_STATUSES: Final = frozenset({"open", "new", "in_review", "closed"})
+
+
 async def queue(
     db: AsyncSession, actor: Actor, status: str | None, cursor: str | None
 ) -> QueuePage:
     """HR's queue, one page. No text. A non-HR actor is refused as for a case that is not there."""
     _require_hr_queue(actor)
-    if status is not None and status not in {"open", "new", "in_review", "closed"}:
+    if status is not None and status not in _QUEUE_STATUSES:
         raise ProblemError(422, "case-invalid", texts.INVALID_FILTER_TEXT)
     try:
         position = None if cursor is None else queries.decode_cursor(cursor)
@@ -407,27 +410,56 @@ async def queue(
         raise ProblemError(422, "case-invalid-cursor", texts.INVALID_CURSOR_TEXT) from None
     rows = await queries.queue_rows(db, actor.tenant_id, status, position, queries.PAGE_SIZE)
     page = rows[: queries.PAGE_SIZE]
-    items = tuple(
-        QueueItem(
-            id=row.id,
-            category=row.category,
-            person_id=row.person_id,
-            given_name=row.given_name,
-            family_name=row.family_name,
-            title=row.title,
-            location_name=row.location_name,
-            sent_at=row.created_at,
-            reply_by=row.reply_by,
-            status=row.status,
-            status_changed_at=row.status_changed_at,
-            # HR's own case hides the verdict, as the opener's view does.
-            crisis=None if row.person_id == actor.person_id else (row.screening == "crisis"),
-            is_own=row.person_id == actor.person_id,
-        )
-        for row in page
-    )
+    items = tuple(_queue_item(row, actor) for row in page)
     more = len(rows) > queries.PAGE_SIZE
     return QueuePage(items, queries.encode_cursor(page[-1]) if more else None)
+
+
+def _queue_item(row: Any, actor: Actor) -> QueueItem:
+    return QueueItem(
+        id=row.id,
+        category=row.category,
+        person_id=row.person_id,
+        given_name=row.given_name,
+        family_name=row.family_name,
+        title=row.title,
+        location_name=row.location_name,
+        sent_at=row.created_at,
+        reply_by=row.reply_by,
+        status=row.status,
+        status_changed_at=row.status_changed_at,
+        # HR's own case hides the verdict, as the opener's view does.
+        crisis=None if row.person_id == actor.person_id else (row.screening == "crisis"),
+        is_own=row.person_id == actor.person_id,
+    )
+
+
+async def cases_for_assistant(
+    db: AsyncSession, actor: Actor, status: str, *, limit: int
+) -> tuple[list[QueueItem], bool]:
+    """Up to `limit` cases of a status, HR's own left out, in the queue's order, and whether more
+    exist. For a list the assistant reads and may cut. A cut `new` or `open` list keeps the
+    queue's first rows (the soonest reply-by dates first, so the most urgent are never dropped);
+    a cut `in_review` or `closed` list keeps the most recently changed (by when the case last
+    changed status), so this week's cases show. No text. A non-HR actor is refused as for a case
+    that is not there."""
+    _require_hr_queue(actor)
+    if status not in _QUEUE_STATUSES:
+        raise ProblemError(422, "case-invalid", texts.INVALID_FILTER_TEXT)
+    in_queue_order = status in {"new", "open"}
+    rows = await queries.assistant_rows(
+        db,
+        actor.tenant_id,
+        status,
+        leaving_out=actor.person_id,
+        limit=limit + 1,
+        in_queue_order=in_queue_order,
+    )
+    more = len(rows) > limit
+    kept = rows[:limit]
+    if not in_queue_order:
+        kept = sorted(kept, key=queries.queue_order_key)
+    return [_queue_item(row, actor) for row in kept], more
 
 
 async def counts(db: AsyncSession, actor: Actor) -> Counts:

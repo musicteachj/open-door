@@ -56,6 +56,15 @@ def load_boards() -> ModuleType:
     return load_eval_module("boards.py")
 
 
+def load_fairness_module(name: str) -> ModuleType:
+    """A module of the fairness set (evals/fairness/<name>.py), imported as `fairness.<name>`."""
+    return importlib.import_module(f"fairness.{name}")
+
+
+def load_pairwise() -> ModuleType:
+    return load_eval_module("pairwise.py")
+
+
 def load_evals_script(name: str) -> ModuleType:
     """A script directly under evals/ (the backfill, the scoreboard generator), imported by name."""
     return importlib.import_module(name)

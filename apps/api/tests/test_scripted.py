@@ -710,7 +710,7 @@ WAITING: dict[str, Any] = {
             "type": "pto",
             "startDate": "2026-10-27",
             "endDate": "2026-10-28",
-            "amount": "16 hours (2 days)",
+            "amountLabel": "16 hours (2 days)",
             "status": "pending",
             "decidedBy": None,
         },
@@ -720,7 +720,7 @@ WAITING: dict[str, Any] = {
             "type": "pto",
             "startDate": "2026-11-02",
             "endDate": "2026-11-02",
-            "amount": "8 hours (1 day)",
+            "amountLabel": "8 hours (1 day)",
             "status": "pending",
             "decidedBy": None,
         },
@@ -1007,7 +1007,7 @@ async def test_book_next_friday_asks_for_a_card_then_says_nothing_is_booked_yet(
     first = await collect(transport, a_request(*messages))
     card = {
         "ok": True,
-        "amount": "8 hours (1 day)",
+        "amountLabel": "8 hours (1 day)",
         "countedDays": ["2026-10-23"],
         "note": "A confirm card is shown to the person. Nothing is booked until they confirm.",
     }
@@ -1026,7 +1026,7 @@ async def test_im_sick_tomorrow_asks_for_a_sick_card() -> None:
     transport = ScriptedTransport()
     messages = with_context("I\u2019m sick tomorrow")  # A curly apostrophe works too.
     first = await collect(transport, a_request(*messages))
-    card = {"ok": True, "amount": "8 hours (1 day)", "countedDays": ["2026-10-16"]}
+    card = {"ok": True, "amountLabel": "8 hours (1 day)", "countedDays": ["2026-10-16"]}
     second = await collect(transport, a_request(*messages, *tool_round(first, result=card)))
 
     assert the_call(first).input == book_input(date(2026, 10, 16), "sick")
@@ -1126,7 +1126,7 @@ MINE: dict[str, Any] = {
             "type": "pto",
             "startDate": "2026-10-02",
             "endDate": "2026-10-02",
-            "amount": "8 hours (1 day)",
+            "amountLabel": "8 hours (1 day)",
             "status": "approved",
             "decidedBy": "Marcus Bell",
         },
@@ -1136,7 +1136,7 @@ MINE: dict[str, Any] = {
             "type": "pto",
             "startDate": "2026-10-30",
             "endDate": "2026-10-30",
-            "amount": "8 hours (1 day)",
+            "amountLabel": "8 hours (1 day)",
             "status": "pending",
             "decidedBy": None,
         },
@@ -1146,7 +1146,7 @@ MINE: dict[str, Any] = {
             "type": "pto",
             "startDate": "2026-11-20",
             "endDate": "2026-11-20",
-            "amount": "8 hours (1 day)",
+            "amountLabel": "8 hours (1 day)",
             "status": "canceled",
             "decidedBy": None,
         },

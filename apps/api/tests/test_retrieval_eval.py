@@ -6,6 +6,7 @@ tests/integration/test_retrieval_eval_real.py.
 
 import json
 from contextlib import asynccontextmanager
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -207,6 +208,70 @@ def test_the_report_names_misses_negatives_and_fulltext(tmp_path: Path) -> None:
     assert "n2 [mateo] FAILED, returned CA-4.3" in text
     assert "fell back to full-text only" in text
     assert "Check: FAILED" in text
+
+
+# --- expect_heading: the passage-level check ------------------------------------------------
+
+HEADING = """
+questions:
+  - id: h
+    asker: dana
+    question: carry over unused
+    expect: [CO-4.3]
+    expect_heading: Carryover of unused sick hours
+"""
+
+
+def heading_outcome(tmp_path: Path, headings: tuple[str | None, ...]) -> Any:
+    question = parse(tmp_path, HEADING)[0]
+    return run.Outcome(question, "hybrid", ("CO-4.3",) * len(headings), headings)
+
+
+def test_a_chunk_under_the_expected_heading_is_a_hit(tmp_path: Path) -> None:
+    hit = heading_outcome(tmp_path, ("How much", "Carryover of unused sick hours"))
+    assert run.first_hit_rank(hit) == 2
+
+
+def test_a_chunk_of_the_section_under_another_heading_is_a_miss(tmp_path: Path) -> None:
+    miss = heading_outcome(tmp_path, ("How much", None))
+    assert run.first_hit_rank(miss) is None
+    summary = run.summarize([miss])
+    text = run.render(summary)
+    assert "wanted CO-4.3 under heading 'Carryover of unused sick hours'" in text
+    assert "got CO-4.3 (How much), CO-4.3" in text
+
+
+def test_expect_heading_is_in_the_json_for_a_miss(tmp_path: Path) -> None:
+    summary = run.summarize([heading_outcome(tmp_path, ("How much",))])
+    dataset = write_dataset(tmp_path / "d.yaml", HEADING)
+    board = run.scoreboard(
+        summary, dataset=dataset, version_label="x", commit="c", when=datetime.now(UTC)
+    )
+    assert board["misses"][0]["expectHeading"] == "Carryover of unused sick hours"
+
+
+def test_a_question_without_expect_heading_still_counts_any_chunk(tmp_path: Path) -> None:
+    question = parse(tmp_path, GOOD)[0]
+    assert run.first_hit_rank(run.Outcome(question, "hybrid", ("4.3",))) == 1
+
+
+@pytest.mark.parametrize(
+    ("body", "expected"),
+    [
+        (HEADING.replace("expect: [CO-4.3]", "must_not: [CO-4.3]"), "can't go with `must_not`"),
+        (HEADING.replace("[CO-4.3]", "[CO-4.3, 4.3]"), "exactly one section"),
+        (HEADING.replace("Carryover of unused sick hours", '""'), "non-empty string"),
+    ],
+)
+def test_expect_heading_errors_are_named(tmp_path: Path, body: str, expected: str) -> None:
+    assert expected in problems(tmp_path, body)
+
+
+def test_an_expect_heading_the_loaded_handbook_lacks_is_named(tmp_path: Path) -> None:
+    questions = parse(tmp_path, HEADING)
+    run.check_sections(questions, {"CO-4.3"}, {"CO-4.3": {"Carryover of unused sick hours"}})
+    with pytest.raises(run.DatasetError, match=r"h: no heading 'Carryover of unused sick hours'"):
+        run.check_sections(questions, {"CO-4.3"}, {"CO-4.3": {"Carryover"}})
 
 
 # --- The whole run: exit codes and the scoreboard -------------------------------------------

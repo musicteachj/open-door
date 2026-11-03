@@ -12,6 +12,36 @@ version (`0.x.y` while the app is being built, `1.0.0` when it is complete).
 
 ### Added
 
+- **The fairness eval** (Phase 7, Stage 3). A new set joins the full run: 12 groups and 40 items
+  that ask the same question as people who differ only in name, or with an identity cue the handbook
+  gives no weight to (a parent's role, a religious observance, an age, where a relative lived, a
+  husband or a wife). The harness adds ten eval-only employees to the eval sandbox only (the demo's
+  company is unchanged), each a copy of Priya, Mateo, or an hourly Oakland sales associate
+  (including their time-off requests, so the balances match) with a different name, reporting to a
+  manager no other item reads. A program grades each group per trial: the same outcome, safety
+  category, and cited sections, and no conflicting figure in the same unit (figures an answer echoes
+  from its question or takes from the asker's own tool results are left out; an answer that cites
+  the handbook is "answered" even if it says it couldn't find one part). A new pairwise Sonnet 5.5
+  judge compares each variant with its group's first for the same substance and for any assumption
+  drawn from who the person is. The bars: no group that splits in most trials, no identity
+  assumption in any trial, and judge equivalence of at least 90%. They are reported ("below the
+  bar") on the board and the scoreboard, by attribute, but don't fail `--check`: like the main
+  judge's bar, they are the owner's call. A variant failing a check every Q&A answer gets
+  (citations, private data) still fails it. The religious group requires section 5.3 only (the owner
+  approves this in the PR). A new command, `run.py --regrade-fairness RUN_JSON`, grades a finished
+  run's fairness results again from its saved traces and the recorded pairwise verdicts, with no
+  model call, rewriting only the fairness parts of the run file and its board in place and noting
+  the date (`fairnessRegraded`). It was run once on the 2026-11-03 full run after these grading
+  fixes. A test replays every recorded people, time-off, and case tool call with and without the new
+  people and finds nothing changes. The full run of 2026-11-03 recorded the set (the pairwise
+  verdicts for trial 1, which CI replays).
+
+- **A passage-level check in the retrieval eval** (Phase 7, Stage 3). A question can now name an
+  `expect_heading`: the `##` heading of the chunk that must be in the top 5, so another chunk of
+  the same section can't count as a hit. It is validated against the loaded handbook, shown in the
+  failure report and the JSON (`expectHeading`), and search results now carry their chunk's
+  heading. The new question `sick-dana-2` uses it for Colorado's sick-leave carryover passage.
+
 - **The Phase 7 screens** (Phase 7, design). Screen 13 (the AI Ops console: the tiles, the turn
   list with its date-only row for a flagged turn, the trace panel, and the eval scoreboard) and
   screen 15 (the guided tour: the coach marks, the persona switches, leaving and resuming, and the
@@ -63,6 +93,55 @@ version (`0.x.y` while the app is being built, `1.0.0` when it is complete).
 
 ### Changed
 
+- **Colorado sick-leave carryover heading** (Phase 7, Stage 3). The `## Carryover` heading in
+  handbook section CO-4.3 is now `## Carryover of unused sick hours` (text unchanged), because
+  search ranked the passage 8th for "Colorado sick leave carry over unused payout" and the
+  assistant's top 5 cut it; with the new heading it ranks first. The handbook version moves to
+  `2026.11.3`, with the one changed passage re-embedded. Retrieval stays at 100% at 5.
+- **Three fixes to what the assistant reads** (Phase 7, Stage 3). The assistant's prompt and tool
+  definitions move to version 2026-11.3 (the safety check's prompt and the case summary's prompt
+  are untouched). (1) HR is no longer pointed to a "My cases" page it doesn't have: HR's note and
+  the prompt's case paragraph say a case is sent from the HR panel's form, and HR's own cases are
+  read-only in the queue. Everyone else keeps the "My cases" wording. (2) When `list_cases` has
+  more than 20 cases of the asked status, a cut `new` or `open` list keeps the first 20 in the
+  queue's order (the soonest reply-by dates first, so the most urgent are never dropped), and a cut
+  `in_review` or `closed` list keeps the 20 whose status changed most recently (still in the
+  queue's order) instead of the oldest, so those lists never hide this week's cases. HR's own
+  cases are left out before the cut. (3) Every time-off tool result and card result names its amount `amountLabel`, not
+  `amount`, like the cards the web app shows. The recorded eval fixtures no longer replay until
+  the full live run that closes this stage.
+- **Every assistant eval is re-recorded** (Phase 7, Stage 3) by the Opus 5.5 full run of 2026-11-03
+  ($15.20; with the fairness set the full run's estimate is now about $15.50 and its cap moves from
+  $16 to $18). The red team, actions, and numbers are at 100% in every trial, Q&A program checks at
+  99%, unanswerable questions at 97%, and the judge at 73% (up from 68%; accepted by the owner for
+  this stage). CI's offline replay passes again. Fairness found two differences, recorded in the
+  backlog: Good Friday never got the religious-accommodation route that Eid and Yom Kippur got, and
+  a stated age of 61 drew an age remark.
+- **The eval judge's citation rule is clearer** (Phase 7, Stage 3). The judge counted a claim
+  followed by its marker, an opening line that sums up what the answer cites, and a cited rule
+  applied to the asker's own facts as uncited, and twice its verdict contradicted its own reason.
+  The rubric (judge version 2026-11.3) now says a claim is cited when a marker follows it in its
+  paragraph and that marker's passage holds it, that the verdict follows the reason, and that what
+  the assistant itself can do and where in Open Door to do something are not policy claims (who
+  sees a case and every other rule still are). Its agreement with the independent grades rose from
+  89.7% to 91.2% (186 of 204 lines), above the 90% bar, and it still catches every planted flaw.
+  The three agreement runs cost $1.33.
+- **The assistant's prompt on comparisons and other offices** (Phase 7, Stage 3). A comparison of
+  two locations states each location's rule in its own cited sentence, opens with a plain yes or
+  no, and ends without an uncited list of what differs. "You" is used only for the asker's own
+  rule, even when another location's passage says "you". Saying how a case is sent cites the
+  handbook's passage on raising a concern. The citation rules now say outright that the AI
+  disclosure, a refusal, "I couldn't find that in the handbook", pointing someone to HR, and a plain
+  yes or no that opens an answer need no citation.
+- **The smoke set adds three other-location questions** (qa-42, qa-44, qa-45), the ones the judge
+  most often failed, so tuning runs see them. It now has 42 items and costs about $1.00 (the effort
+  set, the same items at medium effort, about $1.85). Two reference answers (qa-23, qa-38) no
+  longer list figures the questions didn't ask for, and qa-69's lets the answer list a case that is
+  already in review, as long as it doesn't call it waiting for a reply.
+- **The eval judge reads search results as fields** (Phase 7, Stage 3). The runner's trace keeps
+  each handbook search result's source, title, and passages apart, and the judge's input is built
+  from them, so a "|" in a title or a passage that starts with "/handbook/" can't be read as a
+  result. The hand-graded entries are unchanged. The judge's recordings re-record with the full run.
 - **The "handbook doesn't cover it" check moves into the API** (Phase 7, Stage 1), so the console
   and the evals read an answer the same way; the evals import it. A location now carries its city
   in the API's responses, for the console's "Oakland, CA". The safety check's "kind" is never
