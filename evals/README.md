@@ -113,7 +113,9 @@ Today is Thursday, October 15, 2026, and the seed counts back from that same day
 | `effort` | the smoke items at medium effort, compared with a low-effort smoke run | 1 | $1.85 | $2.00 | medium |
 
 The costs are estimates printed before anything is spent; the caps are limits (see "Costs and
-caps").
+caps"). `MODEL=claude-sonnet-5-5 SET=full` has its own figures: about $9.60, cap $13 (the Opus run of
+2026-11-03 cost $11.18 for the assistant and $4.02 for the judge; Sonnet 5.5 is half Opus's price per
+token, and the judge, already Sonnet, doesn't change).
 
 **The datasets.** `redteam.yaml` (about 50 items in five groups: other people's private details,
 injection and impersonation, prompt extraction, crisis and sensitive routing, and time-off actions
@@ -246,6 +248,7 @@ make eval-offline                # replay the recorded answers: no key, no netwo
 make eval-live                   # print the smoke set's item count, estimate, and cap; call nothing
 make eval-live YES=1             # run the smoke set for real (about $1.00, cap $2)
 make eval-live SET=full YES=1    # the full run (about $15.50, cap $18): before a release
+make eval-live SET=full MODEL=claude-sonnet-5-5 YES=1   # the Sonnet full run (about $9.60, cap $13)
 make eval-live SET=effort YES=1 COMPARE=evals/assistant/runs/<a low-effort smoke scoreboard>.json
 ```
 
@@ -254,7 +257,9 @@ Direct use, from `apps/api`:
 ```
 uv run python ../../evals/assistant/run.py --mode offline|live --set smoke|full|effort \
     [--check] [--json PATH] [--traces PATH] [--compare RUN_FILE] [--model MODEL_ID] \
-    [--fixtures-dir DIR] [--yes]
+    [--compare-case-summary RUN_FILE] [--fixtures-dir DIR] [--yes]
+uv run python ../../evals/assistant/run.py --rejudge BASELINE_RUN CURRENT_RUN \
+    --judge-model MODEL_ID [--mode live] [--yes]
 ```
 
 **One run at a time.** The runs use one fixed sandbox. The cleanup deletes only the daily-ledger
@@ -369,7 +374,26 @@ escalation set (that measures the guard). It records into `evals/assistant/fixtu
 (git-ignored; the committed fixtures are the default model's, and the runner refuses to write another
 model's recordings there), and is still boarded, with the model on the board. `COMPARE=<run file>`
 (`--compare`) then lists every fact that differs between the two runs (model, effort, versions,
-dataset hashes, trials), the metric deltas, and the items the judge saw differently.
+dataset hashes, trials), the metric deltas, and the items the judge saw differently. It also prints
+the time per item and per model call (median and 95th percentile, from each call's whole duration:
+no time to the first token is recorded), the calls a fallback model answered, the refusals (read
+from the traces file beside each run file), and the cost per run and per item. When the baseline
+is the default model and the current run another one, it ends with the decision rule of the
+Phase 7 spec, one bar per row (`--compare-case-summary RUN_FILE` fills the case-summary bar; the
+fairness bars are "no worse than the baseline", the owner's reading of 2026-11-03). The rule's
+first bar, "run complete", fails a partial or aborted run (either one), a different trial count,
+different prompt, tool set, guard, or judge versions, or different datasets. The case-summary bar
+compares with the newest committed case-summary board of the default model, and an incomplete
+case-summary run fails it. `--compare-case-summary` needs `--compare`, and is read before the run.
+
+The judge's bias is checked with a spot check: `run.py --rejudge BASELINE_RUN CURRENT_RUN
+--judge-model claude-opus-5-5` re-judges both arms' answers for every item whose judge result or
+rubric line differs between the two runs, from the answers saved in the traces files, with no
+assistant call. Offline it reads its recordings (a missing one is exit 2); `--mode live` prints the
+count and an upper-bound estimate, and `--mode live --yes` calls the judge, capped at $3 (it refuses runs judged under a different rubric version, and skips an arm with
+no saved answer, such as a refusal, saying so), recording
+into the git-ignored `fixtures-sonnet/judge-spot-check.jsonl.gz`. The comparison of 2026-11-03 is
+in [ADR 0018](../docs/adr/0018-default-model.md).
 
 ### Checking the judge against independent grades
 

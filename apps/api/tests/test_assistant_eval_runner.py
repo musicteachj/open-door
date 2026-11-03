@@ -1172,7 +1172,8 @@ def test_an_unknown_set_or_mode_is_refused_by_the_parser() -> None:
 def test_the_default_is_an_offline_smoke_run_with_the_committed_fixtures() -> None:
     args = run.build_parser().parse_args([])
 
-    assert (args.mode, args.set, args.check, args.yes) == ("offline", "smoke", False, False)
+    # --set has no parser default (`run_cli` resolves it to smoke), so a typed one shows.
+    assert (args.mode, args.set, args.check, args.yes) == ("offline", None, False, False)
     assert args.fixtures_dir is None  # the set decides: the committed folder, or the effort one
 
 

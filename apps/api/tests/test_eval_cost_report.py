@@ -132,3 +132,17 @@ def test_the_full_estimate_is_1550_and_the_docs_agree() -> None:
     assert "(about $15.50, cap $18)" in readme
     assert "estimates $15.50, cap $18" in readme
     assert "estimated at $15.50 with" in claude
+
+
+def test_the_sonnet_full_run_has_its_own_estimate_and_cap_and_the_docs_agree() -> None:
+    estimate, cap = run.MODEL_FULL_RUN_PRICES_USD["claude-sonnet-5-5"]
+    assert (estimate, cap) == (Decimal("9.60"), Decimal("13.00"))
+    makefile = (ROOT / "Makefile").read_text(encoding="utf-8")
+    readme = (ROOT / "evals" / "README.md").read_text(encoding="utf-8")
+    spec = (ROOT / "docs" / "specs" / "2026-10-31-phase-7-ai-ops-reviewer-model.md").read_text(
+        encoding="utf-8"
+    )
+    assert "SET=full: about $9.60, cap $13" in makefile
+    assert "MODEL=claude-sonnet-5-5 SET=full" in readme
+    assert "about $9.60, cap $13" in readme
+    assert "| Sonnet 5.5 full run, the same commit | 4 | about $9.60 | $13 |" in spec

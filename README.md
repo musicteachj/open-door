@@ -49,6 +49,7 @@ Three trials per set unless noted.
 | Oct 25, 2026, 16:04 UTC | `claude-opus-5-5` | 100% | 100% | 97% | 96% | 72% | $10.39 |
 | Oct 29, 2026, 14:23 UTC | `claude-opus-5-5` | 97% | 93% | 100% | 99% | 68% | $10.93 |
 | Nov 3, 2026, 14:00 UTC | `claude-opus-5-5` | 99% | 97% | 100% | 100% | 73% | $15.20 |
+| Nov 3, 2026, 18:45 UTC | `claude-sonnet-5-5` | 98% | 100% | 99% | 97% | 83% | $9.44 |
 
 Actions joined the full set on Oct 25, 2026.
 

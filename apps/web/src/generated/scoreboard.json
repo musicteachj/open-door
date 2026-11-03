@@ -451,6 +451,17 @@
       "actions": "100%",
       "judge": "73%",
       "cost": "$15.20"
+    },
+    {
+      "stamp": "20261103T184543Z",
+      "date": "Nov 3, 2026, 18:45 UTC",
+      "model": "claude-sonnet-5-5",
+      "qa": "98%",
+      "unanswerable": "100%",
+      "redteam": "99%",
+      "actions": "97%",
+      "judge": "83%",
+      "cost": "$9.44"
     }
   ]
 }

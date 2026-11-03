@@ -131,8 +131,11 @@ and an ADR, before it is built.
 | The eval judge (offline only) | `claude-sonnet-5-5` | `medium` | `evals/assistant/judge.py`, and `evals/case_summary/judge.md` for the summaries |
 
 - **Model IDs never carry a date suffix,** and a new model is adopted only after an eval
-  comparison (`CLAUDE.md`, "AI development rules"). Phase 7 compares Opus 5.5 with Sonnet 5.5 and
-  the owner picks the default.
+  comparison (`CLAUDE.md`, "AI development rules"). Phase 7 compared Opus 5.5 with Sonnet 5.5 on
+  one commit (2026-11-03), and **Opus 5.5 stays**: Sonnet 5.5 cost half as much per answer and was
+  faster, but it left a workplace-safety report unanswered in two of three trials (it wrote a tool
+  call as text, and again on the retry), so it failed the red team's 100% bar
+  ([ADR 0018](adr/0018-default-model.md)).
 - **A conversation keeps its pins for its whole life:** the model, the guard model, the effort,
   and the prompt and tool-set versions. A conversation whose prompt or tool set is out of date
   can't be continued; the person is offered a new one. This also keeps the history append-only,

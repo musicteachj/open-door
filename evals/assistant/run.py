@@ -1166,6 +1166,13 @@ NO_HANDBOOK = "No published handbook in the database. Run `make db` first."
 # to print before spending anything, not limits: the caps below are the limits.
 SMOKE_ESTIMATE_USD = Decimal("1.00")
 FULL_ESTIMATE_USD = Decimal("15.50")
+# What a full run of another model costs, where it is known: (estimate, cap), by model. The Opus
+# run of 2026-11-03 cost $11.18 for the assistant and $4.02 for the judge. Sonnet 5.5 is half
+# Opus's per-token price, so its assistant half is about $5.60, and the judge (already Sonnet)
+# doesn't change: about $9.60 in all, with a $13 cap.
+MODEL_FULL_RUN_PRICES_USD: Mapping[str, tuple[Decimal, Decimal]] = {
+    "claude-sonnet-5-5": (Decimal("9.60"), Decimal("13.00")),
+}
 # The medium-effort half of the effort comparison. The low half is the smoke run.
 EFFORT_ESTIMATE_USD = Decimal("1.85")
 
@@ -1178,6 +1185,12 @@ AGREEMENT_ESTIMATE_PER_ENTRY_USD = Decimal("0.01")
 AGREEMENT_CAP_USD = Decimal("1.00")
 # The share of rubric lines the judge must match the owner on to be accepted.
 MIN_AGREEMENT = boards.MIN_AGREEMENT
+
+# The judge spot check (`--rejudge`): another judge model re-judges both runs' answers on the pairs
+# the two judges split. Its recordings are apart from every other fixture file and never committed
+# (they sit in the other-model folder), and the model is part of each request's fingerprint.
+SPOT_CHECK_FIXTURE = "judge-spot-check.jsonl.gz"
+SPOT_CHECK_CAP_USD = Decimal("3.00")
 
 
 @dataclass(frozen=True)
@@ -1202,6 +1215,17 @@ SETS: Mapping[str, SetConfig] = {
         "effort", 1, EFFORT_CAP_USD, "medium", EFFORT_ESTIMATE_USD, smoke_only=True
     ),
 }
+
+
+def config_for_model(config: SetConfig, model: str) -> SetConfig:
+    """The set's config for a run of `model`: the model replaced and, where the model has its own
+    prices for this set (`MODEL_FULL_RUN_PRICES_USD`), its estimate and cap, which the run's
+    spend cap is built from."""
+    prices = MODEL_FULL_RUN_PRICES_USD.get(model) if config.name == "full" else None
+    if prices is None:
+        return replace(config, model=model)
+    estimate, cap = prices
+    return replace(config, model=model, estimate_usd=estimate, cap_usd=cap)
 
 
 def items_for_set(
@@ -2317,7 +2341,8 @@ def build_parser() -> argparse.ArgumentParser:
         description="Run the assistant evals: offline from recorded fixtures, or live (paid).",
     )
     parser.add_argument("--mode", choices=("offline", "live"), default="offline")
-    parser.add_argument("--set", choices=(*SETS, "escalation", "case-summary"), default="smoke")
+    # No parser default, so a typed --set can be told from none: `run_cli` resolves it to smoke.
+    parser.add_argument("--set", choices=(*SETS, "escalation", "case-summary"), default=None)
     parser.add_argument(
         "--half",
         choices=("both", "tuning", "held_out"),
@@ -2345,6 +2370,13 @@ def build_parser() -> argparse.ArgumentParser:
         type=Path,
         metavar="RUN_FILE",
         help="print each metric beside this earlier run's, and the items the judge saw differently",
+    )
+    parser.add_argument(
+        "--compare-case-summary",
+        type=Path,
+        metavar="RUN_FILE",
+        help="with --compare against the default model's run: the other model's case-summary run"
+        " file, for the decision rule's case-summary bar (without it that bar is 'not run')",
     )
     parser.add_argument(
         "--model",
@@ -2396,6 +2428,21 @@ def build_parser() -> argparse.ArgumentParser:
         " how often the judge agrees with the owner",
     )
     parser.add_argument(
+        "--rejudge",
+        nargs=2,
+        type=Path,
+        metavar=("BASELINE_RUN", "CURRENT_RUN"),
+        help="the judge spot check: judge both run files' answers again, on the pairs the two"
+        " judges split, with --judge-model (from each run's saved traces; live with --yes, else"
+        " from recordings). It never calls the assistant model",
+    )
+    parser.add_argument(
+        "--judge-model",
+        default=None,
+        metavar="MODEL_ID",
+        help="with --rejudge: the judge model for the spot check",
+    )
+    parser.add_argument(
         "--regrade-fairness",
         type=Path,
         metavar="RUN_JSON",
@@ -2426,7 +2473,7 @@ def default_fixtures_dir(args: argparse.Namespace, env: RunEnv) -> Path:
         or getattr(args, "regrade_fairness", None)
     ):
         return env.committed_fixtures_dir
-    if uses_other_model(args):
+    if getattr(args, "rejudge", None) or uses_other_model(args):
         return env.model_fixtures_dir
     if args.set == "effort":
         return env.effort_fixtures_dir
@@ -2448,17 +2495,18 @@ def _model_note(model: str) -> str:
     return "" if model == CURRENT_PINS.model else f", model {model}"
 
 
-def _model_estimate_note(model: str) -> str:
-    return (
-        "" if model == CURRENT_PINS.model else " (priced for the default model; yours may differ)"
+def _model_estimate_note(config: SetConfig) -> str:
+    priced = config.model == CURRENT_PINS.model or (
+        config.name == "full" and config.model in MODEL_FULL_RUN_PRICES_USD
     )
+    return "" if priced else " (priced for the default model; yours may differ)"
 
 
 def estimate_text(config: SetConfig, item_count: int) -> str:
     return (
         f"Live run of the {config.name} set: {_plural(item_count, 'item')},"
         f" {_plural(config.trials, 'trial')}, effort {config.effort}{_model_note(config.model)}.\n"
-        f"Estimated cost ${config.estimate_usd:.2f}{_model_estimate_note(config.model)}."
+        f"Estimated cost ${config.estimate_usd:.2f}{_model_estimate_note(config)}."
         f" The run stops at its ${config.cap_usd:.2f} cap.\n"
         "Nothing was called. Add --yes to run it (`make eval-live YES=1`)."
     )
@@ -2592,14 +2640,70 @@ def _agreement_block(env: RunEnv, judge_store: FixtureStore, system: str) -> dic
     }
 
 
-def _read_json(path: Path, what: str) -> dict[str, Any]:
+def _read_json(path: Path, what: str, shape: str = "a scoreboard") -> dict[str, Any]:
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, ValueError) as error:
         raise EvalFailure(f"{what} {path} can't be read: {error}") from error
     if not isinstance(data, dict):
-        raise EvalFailure(f"{what} {path} is not a scoreboard")
+        raise EvalFailure(f"{what} {path} is not {shape}")
     return data
+
+
+def _is_count(value: object) -> bool:
+    return isinstance(value, int | float) and not isinstance(value, bool)
+
+
+def check_case_summary_file(data: Mapping[str, Any], path: Path) -> None:
+    """Every key the decision rule reads of a case-summary run file or board, checked where the
+    file is read. A board has `metrics.passed_every_check` (a mean and a positive notes-per-trial
+    count); a run file has `by_trial` rows."""
+    what = f"the --compare-case-summary file {path}"
+    metrics = data.get("metrics")
+    if "metrics" in data:
+        if not isinstance(metrics, dict):
+            raise EvalFailure(f"{what}: 'metrics' must be an object")
+        metric = metrics.get("passed_every_check")
+        items = None if not isinstance(metric, dict) else metric.get("itemsPerTrial")
+        if not isinstance(metric, dict) or not _is_count(metric.get("mean")):
+            raise EvalFailure(f"{what} has no usable metrics.passed_every_check")
+        if not isinstance(items, int) or items <= 0:
+            raise EvalFailure(f"{what} has no notes per trial (itemsPerTrial must be above 0)")
+    else:
+        rows = data.get("by_trial")
+        if not isinstance(rows, list) or any(
+            not isinstance(r, dict)
+            or (
+                r.get("items")
+                and not (_is_count(r["items"]) and _is_count(r.get("program_passed")))
+            )
+            for r in rows
+        ):
+            raise EvalFailure(f"{what} has no usable by_trial rows (items and program_passed)")
+    for key in ("facts", "models", "dataset_sha256"):
+        if data.get(key) is not None and not isinstance(data[key], dict):
+            raise EvalFailure(f"{what}: '{key}' must be an object")
+
+
+def check_traces_file(data: Mapping[str, Any], path: Path) -> None:
+    """Every key the comparison reads of a traces file: `traces`, a list of objects."""
+    traces = data.get("traces")
+    if not isinstance(traces, list) or any(
+        not isinstance(t, dict)
+        or not isinstance(t.get("item_id"), str)
+        or not isinstance(t.get("trial"), int)
+        or isinstance(t.get("trial"), bool)
+        for t in traces
+    ):
+        raise EvalFailure(
+            f"the traces file {path} needs 'traces' to be a list of objects, each with a text"
+            " 'item_id' and an integer 'trial'"
+        )
+
+
+def traces_path_beside(run_file: Path) -> Path:
+    """Where a run file's traces are saved: `<stamp>-<set>-traces.json`, beside it."""
+    return run_file.with_name(run_file.stem + "-traces.json")
 
 
 def _is_judge_verdict(judge: object) -> bool:
@@ -2630,12 +2734,38 @@ def _read_baseline(path: Path) -> dict[str, Any]:
             for item in data["items"]
         )
     )
+    if not bad:
+        evidence, models = data.get("live_evidence"), data.get("models")
+        calls = evidence.get("calls") if isinstance(evidence, dict) else None
+        if (
+            (evidence is not None and not isinstance(evidence, dict))
+            or (models is not None and not isinstance(models, dict))
+            or (
+                calls is not None
+                and (not isinstance(calls, list) or not all(isinstance(c, dict) for c in calls))
+            )
+        ):
+            raise EvalFailure(
+                f"{what} {path}: 'live_evidence' and 'models' must be objects, and"
+                " 'live_evidence.calls' a list of objects"
+            )
     if bad:
         raise EvalFailure(
             f"{what} {path} is not a full scoreboard: it needs 'metrics' (an object), 'commit'"
             " (text), and 'items' (a list of objects with 'trial', 'item', and 'judge',"
             " which is null or a verdict)"
         )
+    return data
+
+
+def _read_traces_beside(run_file: Path, *, required: bool) -> dict[str, Any] | None:
+    """The traces file saved beside a run file. A missing one is an error when `required` and None
+    otherwise; one that is there but unreadable or the wrong shape is always an error."""
+    path = traces_path_beside(run_file)
+    if not required and not path.exists():
+        return None
+    data = _read_json(path, "the traces file", "a traces file (a JSON object)")
+    check_traces_file(data, path)
     return data
 
 
@@ -2710,15 +2840,19 @@ def validate_startup(env: RunEnv) -> str:
 def check_model_priced(args: argparse.Namespace) -> None:
     """Refuse a `--model` with no pinned price before anything starts: the cap and the cost report
     are priced from the table, and a call at an unknown price would be counted at the dearest."""
-    model = getattr(args, "model", None)
+    check_priced(getattr(args, "model", None), "--model")
+
+
+def check_priced(model: str | None, flag: str) -> None:
+    """The pinned-price check for the model named by `flag` (`--model` or `--judge-model`)."""
     if model == SCRIPTED_MODEL:
         raise EvalFailure(
-            "--model scripted is the stand-in that makes no paid call and is priced at $0: a live"
+            f"{flag} scripted is the stand-in that makes no paid call and is priced at $0: a live"
             " run on it would record nothing real and its cap would never stop it"
         )
     if model is not None and not is_priced(model):
         raise EvalFailure(
-            f"--model {model} has no pinned price (app/ai/pricing.py): add its price first, so the"
+            f"{flag} {model} has no pinned price (app/ai/pricing.py): add its price first, so the"
             " run's cap and cost report are right"
         )
 
@@ -2753,7 +2887,7 @@ def check_model_folder(args: argparse.Namespace, env: RunEnv) -> None:
 async def eval_command(args: argparse.Namespace, env: RunEnv) -> int:
     config = env.sets[args.set]
     if args.model is not None:
-        config = replace(config, model=args.model)
+        config = config_for_model(config, args.model)
     check_model_priced(args)
     check_model_folder(args, env)
     if args.fresh and args.mode != "live":
@@ -2789,6 +2923,16 @@ async def eval_command(args: argparse.Namespace, env: RunEnv) -> int:
         )
         return 0
     baseline = _read_baseline(args.compare) if args.compare else None
+    # Read now, with the baseline: a bad path must fail before anything is paid for.
+    args.baseline_traces = (
+        _read_traces_beside(args.compare, required=False) if args.compare else None
+    )
+    args.case_summary_run = None
+    if args.compare_case_summary:
+        args.case_summary_run = _read_json(
+            args.compare_case_summary, "the --compare-case-summary run"
+        )
+        check_case_summary_file(args.case_summary_run, args.compare_case_summary)
     # Read now: the run saves its fixtures, and a commit read after would end in `-dirty`.
     commit = env.git()
     settings = env.settings or get_settings()
@@ -2926,20 +3070,84 @@ def report(
         }
         _write_json(args.traces, scoreboard.traces_document(meta, result.records))
     _write_board_last(args, env, board)
-    if baseline is not None:
-        # After the files are written, so a failure here can't lose a paid run's results; the
-        # scoreboard is then written again with the comparison in it.
-        board["compare"] = scoreboard.compare(baseline, board)
-        print()
-        print(scoreboard.render_compare(board["compare"]))
-        if args.json is not None:
-            _write_json(args.json, board)
-    if not args.check or aborted is not None:
-        return 0
-    problems = scoreboard.check_problems(board)
+    # After the files are written, so a failure here can't lose a paid run's results; the
+    # scoreboard is then written again with the comparison in it. A failed comparison is exit 2.
+    comparison_ok = baseline is None or _report_comparison_safely(
+        args, baseline, board, result.records
+    )
+    return _final_code(args, board, aborted, comparison_ok)
+
+
+def _final_code(
+    args: argparse.Namespace, board: Mapping[str, Any], aborted: str | None, comparison_ok: bool
+) -> int:
+    """The exit code: the checks are always reported with --check (on a run that finished), and a
+    failed check is 1. Otherwise a failed comparison is 2, so it can't pass unnoticed."""
+    problems = scoreboard.check_problems(board) if args.check and aborted is None else []
     for line in problems:
         print(f"CHECK FAILED: {line}", file=sys.stderr)
-    return 1 if problems else 0
+    if problems:
+        return 1
+    return 0 if comparison_ok else 2
+
+
+def _report_comparison_safely(
+    args: argparse.Namespace,
+    baseline: Mapping[str, Any],
+    board: dict[str, Any],
+    records: Sequence[scoreboard.ItemRecord],
+) -> bool:
+    """Print the comparison and the decision rule. A bug in them must never lose a paid run: the
+    run file and board are already written, so an error is printed and the run goes on."""
+    try:
+        _report_comparison(args, baseline, board, records)
+    except Exception as error:
+        print(
+            f"The comparison failed ({_describe(error)}); the run's files are written.",
+            file=sys.stderr,
+        )
+        return False
+    return True
+
+
+def _report_comparison(
+    args: argparse.Namespace,
+    baseline: Mapping[str, Any],
+    board: dict[str, Any],
+    records: Sequence[scoreboard.ItemRecord],
+) -> None:
+    baseline_traces = args.baseline_traces
+    current_traces = scoreboard.traces_summary(records)
+    board["compare"] = scoreboard.compare(
+        baseline,
+        board,
+        baseline_traces=baseline_traces,
+        current_traces=current_traces,
+    )
+    print()
+    print(scoreboard.render_compare(board["compare"]))
+    if args.json is not None:
+        # Written now, so a failure in the decision below keeps the metric comparison.
+        _write_json(args.json, board)
+    models = (baseline.get("models") or {}, board.get("models") or {})
+    if models[0].get("assistant") == CURRENT_PINS.model != models[1].get("assistant"):
+        rule = scoreboard.decision_rule(
+            baseline,
+            board,
+            args.case_summary_run,
+            baseline_traces=baseline_traces,
+            current_traces=current_traces,
+        )
+        board["compare"]["decision"] = rule
+        print()
+        print(scoreboard.render_decision(rule))
+    elif args.case_summary_run is not None:
+        print(
+            "The --compare-case-summary run was not used: the decision rule prints only when"
+            " the baseline is the default model's run and this run is another model's."
+        )
+    if args.json is not None:
+        _write_json(args.json, board)
 
 
 async def todo_command(args: argparse.Namespace, env: RunEnv) -> int:
@@ -3045,6 +3253,191 @@ async def agreement_command(args: argparse.Namespace, env: RunEnv) -> int:
     accepted = total > 0 and share >= MIN_AGREEMENT
     print(f"The judge is {'accepted' if accepted else 'not accepted'} (needs {MIN_AGREEMENT:.0%}).")
     return 0 if accepted else 1
+
+
+def check_rejudge_folder(args: argparse.Namespace, env: RunEnv) -> None:
+    """Refuse a live spot check that would record into the committed fixtures folder."""
+    if Path(args.fixtures_dir).resolve() == Path(env.committed_fixtures_dir).resolve():
+        raise EvalFailure(
+            "--rejudge would write into the committed fixtures folder: leave --fixtures-dir off to"
+            f" use {Path(env.model_fixtures_dir).name}/"
+        )
+
+
+def _index_traces(document: Mapping[str, Any] | None) -> dict[tuple[str, int], Mapping[str, Any]]:
+    """A traces file's entries by (item_id, trial), built once."""
+    return {
+        (str(entry.get("item_id")), int(entry.get("trial", 0))): entry
+        for entry in (document or {}).get("traces") or []
+    }
+
+
+def _judge_input_of(
+    indexed: Mapping[tuple[str, int], Mapping[str, Any]], trial: int, item: str, what: str
+) -> judge.JudgeInput | None:
+    """The saved judge input of a trace, or None when the trace has none (an empty answer, such as
+    a refusal, is never judged). A trace missing altogether is an error: the files don't match."""
+    entry = indexed.get((item, trial))
+    if entry is None:
+        raise EvalFailure(f"{what}: no trace for {item} (trial {trial}) in the traces file")
+    if entry.get("judge_input") is None:
+        return None
+    try:
+        return judge.JudgeInput.from_json(entry["judge_input"])
+    except (KeyError, TypeError, ValueError) as error:
+        raise EvalFailure(
+            f"{what}: the judge input for {item} (trial {trial}) can't be read ({error})"
+        ) from error
+
+
+async def rejudge_command(args: argparse.Namespace, env: RunEnv) -> int:
+    """The judge spot check: the pairs (trial, item) the two runs' judge results or rubric lines
+    differ on are judged again, both arms, by `--judge-model`, from the judge inputs saved in each
+    run's traces file. It never calls the assistant model.
+
+    Offline it reads the recordings (`judge-spot-check.jsonl.gz`), and a missing one is exit 2. Live
+    without --yes it prints the counts and an upper estimate and calls nothing; with --yes it calls
+    only the missing ones, stopping before a call that could pass the cap."""
+    model = args.judge_model
+    if model is None:
+        raise EvalFailure("--rejudge needs --judge-model")
+    check_priced(model, "--judge-model")
+    system = validate_startup(env)
+    base_path, current_path = args.rejudge
+    baseline, current = _read_baseline(base_path), _read_baseline(current_path)
+    judges = {
+        (document.get("models") or {}).get("judge") or judge.JUDGE_MODEL
+        for document in (baseline, current)
+    }
+    if len(judges) > 1:
+        raise EvalFailure(
+            f"the two runs were judged by different models ({', '.join(sorted(judges))}): a spot"
+            " check needs the same judge on both sides"
+        )
+    if model in judges:
+        raise EvalFailure(
+            f"--judge-model {model} is the judge the runs used: a spot check with the same judge"
+            " is not independent"
+        )
+    today = judge.judge_version(system)
+    for name, document in (("baseline", baseline), ("current", current)):
+        recorded_version = (document.get("versions") or {}).get("judge")
+        if recorded_version is not None and recorded_version != today:
+            raise EvalFailure(
+                f"the {name} run was judged under rubric {recorded_version}, but the rubric is"
+                f" {today} now: a re-judge under a different rubric would mix a rubric change"
+                " with judge bias"
+            )
+    indexed = {
+        arm: _index_traces(_read_traces_beside(path, required=True))
+        for arm, path in (("baseline", base_path), ("current", current_path))
+    }
+    pairs = scoreboard.judge_differences(baseline, current)
+    work: list[tuple[dict[str, Any], str, judge.JudgeInput]] = []
+    no_answer: set[tuple[int, str, str]] = set()
+    for pair in pairs:
+        for arm in ("baseline", "current"):
+            found = _judge_input_of(indexed[arm], pair["trial"], pair["item"], f"the {arm} run")
+            if found is None:
+                no_answer.add((pair["trial"], pair["item"], arm))
+            else:
+                work.append((pair, arm, found))
+    live = args.mode == "live"
+    if live:
+        check_rejudge_folder(args, env)
+    store = _load_store(args.fixtures_dir / SPOT_CHECK_FIXTURE)
+    reader = judge.Judge(store=store, caller=None, system=system, model=model)
+    missing = [w for w in work if reader.recorded(w[2]) is None]
+    if live and not args.yes:
+        reservations = [judge.reservation_usd(reader.prepare(w[2]).kwargs) for w in missing]
+        upper = sum(reservations, Decimal(0))
+        fitting, running = 0, Decimal(0)
+        for reservation in reservations:
+            if running + reservation > SPOT_CHECK_CAP_USD:
+                break
+            running += reservation
+            fitting += 1
+        over_cap = (
+            f" That is over the cap: about {fitting} of {len(missing)} calls fit before it stops."
+            if upper > SPOT_CHECK_CAP_USD
+            else ""
+        )
+        print(
+            f"Judging {_plural(len(pairs), 'pair')} the judges split, both arms: "
+            f"{_plural(len(work), 'judge call')} in all, {len(missing)} with no recording, with"
+            f" {model}. At most ${upper:.2f} (the cap is ${SPOT_CHECK_CAP_USD:.2f}).{over_cap}"
+            " Nothing was called. Add --yes to run it."
+        )
+        return 0
+    caller: judge.JudgeCaller | None = None
+    if live:
+        settings = env.settings or get_settings()
+        caller = env.judge_caller_factory(env.transport_factory(settings))
+    judging = judge.Judge(store=store, caller=caller, system=system, model=model)
+    spent = Decimal(0)
+    recorded = Decimal(0)
+    states: dict[tuple[int, str, str], str] = {}
+    stopped: str | None = None
+    try:
+        for pair, arm, judge_input in work:
+            prepared = judging.prepare(judge_input)
+            if caller is not None and judging.recorded(judge_input, prepared) is None:
+                reserved = judge.reservation_usd(prepared.kwargs)
+                if spent + reserved > SPOT_CHECK_CAP_USD:
+                    stopped = (
+                        f"the next judge call could pass the ${SPOT_CHECK_CAP_USD:.2f} cap"
+                        f" (${spent:.2f} spent so far); what was judged is kept"
+                    )
+                    break
+            outcome = await judging.judge(f"{pair['item']}:{arm}", judge_input, prepared)
+            if outcome.called:
+                spent += outcome.cost_usd
+            else:
+                recorded += outcome.cost_usd
+            verdict = outcome.verdict
+            states[(pair["trial"], pair["item"], arm)] = (
+                "unavailable" if verdict is None else ("pass" if verdict.passed else "fail")
+            )
+    finally:
+        if live:
+            store.save()
+    label = scoreboard.model_label(model)
+    print(f"Judge spot check with {model}: {_plural(len(pairs), 'pair')} the judges split.")
+    for pair in pairs:
+        print(f"  {pair['item']} (trial {pair['trial']})")
+        for arm in ("baseline", "current"):
+            key = (pair["trial"], pair["item"], arm)
+            shown = "no answer to judge" if key in no_answer else states.get(key, "not judged")
+            print(f"    {arm}: judge {pair[arm]}, {label} judge {shown}")
+    print(f"Summary over {_plural(len(pairs), 'pair')} (pass share among the answers re-judged):")
+    for arm in ("baseline", "current"):
+        judged = [
+            pair
+            for pair in pairs
+            if states.get((pair["trial"], pair["item"], arm)) in ("pass", "fail")
+        ]
+        original = sum(1 for pair in judged if pair[arm] == "pass")
+        named = sum(1 for pair in judged if states[(pair["trial"], pair["item"], arm)] == "pass")
+        print(
+            f"  {arm}: {len(judged)} of {len(pairs)} re-judged ({len(pairs) - len(judged)} not"
+            f" judged); pass share under the original judge {original} of {len(judged)},"
+            f" pass share under {model} {named} of {len(judged)}"
+        )
+    if no_answer:
+        print(
+            f"  {_plural(len(no_answer), 'answer')} had no answer to judge"
+            " (no judge input was saved; left out of the named judge's counts)."
+        )
+    unavailable = sum(1 for state in states.values() if state == "unavailable")
+    if unavailable:
+        print(
+            f"  {_plural(unavailable, 'answer')} had no verdict and are left out of the shares"
+            f" ({model} gave none)."
+        )
+    print(f"Judge cost this run ${spent:.2f}, plus ${recorded:.2f} more when recorded.")
+    if stopped is not None:
+        raise EvalFailure(stopped)
+    return 0
 
 
 async def escalation_command(args: argparse.Namespace, env: RunEnv) -> int:
@@ -3442,7 +3835,7 @@ def regrade_fairness_command(args: argparse.Namespace, env: RunEnv) -> int:
     and the recorded pairwise verdicts, then rewrite the run file and its board in place (same
     stamp and name). Free: it makes no model call and touches no database."""
     run_path: Path = args.regrade_fairness
-    traces_path = run_path.with_name(f"{run_path.stem}-traces.json")
+    traces_path = traces_path_beside(run_path)
     try:
         run = json.loads(run_path.read_text(encoding="utf-8"))
         saved = json.loads(traces_path.read_text(encoding="utf-8"))
@@ -3502,16 +3895,47 @@ class _SummaryModel:
         return answer
 
 
+# The flags that belong to other commands, as (argparse dest, flag): --rejudge refuses them.
+REJUDGE_REFUSED_FLAGS = (
+    ("model", "--model"),
+    ("compare", "--compare"),
+    ("compare_case_summary", "--compare-case-summary"),
+    ("agreement", "--agreement"),
+    ("write_hand_grades_todo", "--write-hand-grades-todo"),
+    ("regrade_fairness", "--regrade-fairness"),
+    ("fresh", "--fresh"),
+    ("prune", "--prune"),
+    ("check", "--check"),
+    ("json", "--json"),
+    ("traces", "--traces"),
+)
+
+
 async def run_cli(argv: Sequence[str] | None = None, *, env: RunEnv | None = None) -> int:
     """The whole command. Returns the exit code: 0, 1 (`--check` failed), or 2 (it couldn't run)."""
     args = build_parser().parse_args(argv)
+    set_given = args.set is not None
+    if args.set is None:
+        args.set = "smoke"
     env = env or RunEnv()
     args.fixtures_dir = resolve_fixtures_dir(args, env)
     try:
+        if args.rejudge:
+            for dest, flag in REJUDGE_REFUSED_FLAGS:
+                if getattr(args, dest) not in (None, False, []):
+                    raise EvalFailure(f"{flag} does nothing with --rejudge: leave it off")
+            if set_given:
+                raise EvalFailure("--set does nothing with --rejudge: leave it off")
+        if args.judge_model is not None and not args.rejudge:
+            raise EvalFailure("--judge-model is for --rejudge only")
+        if args.compare_case_summary is not None and not args.compare:
+            raise EvalFailure("--compare-case-summary is for use with --compare")
         if args.write_hand_grades_todo:
             return await todo_command(args, env)
         if args.agreement:
             return await agreement_command(args, env)
+        if args.rejudge:
+            return await rejudge_command(args, env)
         if args.regrade_fairness:
             return regrade_fairness_command(args, env)
         if args.set == "escalation":

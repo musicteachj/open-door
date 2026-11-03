@@ -6,6 +6,7 @@ import argparse
 import dataclasses
 import json
 import os
+from decimal import Decimal
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
@@ -323,3 +324,43 @@ async def test_the_default_model_refusal_names_the_sets_own_default_folder(
 
     assert code == 2
     assert "fixtures-effort" in capsys.readouterr().err
+
+
+# --- The Sonnet full run's own estimate and cap -----------------------------------------------
+
+
+def test_the_sonnet_full_run_is_priced_for_sonnet_and_carries_the_13_dollar_cap() -> None:
+    config = run.config_for_model(run.SETS["full"], SONNET_55)
+
+    assert config.model == SONNET_55
+    assert (config.estimate_usd, config.cap_usd) == (Decimal("9.60"), Decimal("13.00"))
+    text = run.estimate_text(config, 10)
+    assert "$9.60" in text
+    assert "$13.00 cap" in text
+    assert "priced for the default model" not in text
+    # The spend cap the run builds is the config's.
+    assert run.SpendCap(config.cap_usd).cap_usd == Decimal("13.00")
+
+
+def test_other_models_and_sets_keep_the_default_prices_and_the_note() -> None:
+    other_model = run.config_for_model(run.SETS["full"], "claude-haiku-5-5")
+    smoke = run.config_for_model(run.SETS["smoke"], SONNET_55)
+
+    assert (other_model.estimate_usd, other_model.cap_usd) == (Decimal("15.50"), Decimal("18.00"))
+    assert "priced for the default model" in run.estimate_text(other_model, 10)
+    assert smoke.estimate_usd == Decimal("1.00")
+    assert "priced for the default model" in run.estimate_text(smoke, 10)
+
+
+async def test_the_dry_run_of_a_sonnet_full_run_prints_its_own_figures(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    code = await run.run_cli(
+        ["--mode", "live", "--set", "full", "--model", SONNET_55, "--fixtures-dir", str(tmp_path)],
+        env=raising_env(tmp_path),
+    )
+
+    out = capsys.readouterr().out
+    assert code == 0
+    assert "Estimated cost $9.60." in out
+    assert "$13.00 cap" in out
