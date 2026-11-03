@@ -977,6 +977,26 @@ Recorded at each stage's close.
     partial.
   - The full set's cap moved from $16 to $18 before its run.
 
+- **Stage 4 (2026-11-03), what the code and the results forced:**
+  - **The fairness line of the rule, settled before the run:** the Opus baseline fails the fairness
+    bars itself, so the owner read "meets every fairness bar" as "no worse than Opus on every
+    fairness measure" (spec amended).
+  - A full run with `MODEL=` used Opus's estimate and cap; Sonnet 5.5 now has its own (about $9.60,
+    cap $13, `MODEL_FULL_RUN_PRICES_USD`). The spot check (Task 22) is `run.py --rejudge`, not a
+    `make` target, like the agreement; its tests are `tests/test_eval_rejudge.py`, flat like the
+    others. The rule is a pure function (`scoreboard.decision_rule`) that `--compare` prints, with
+    a "run complete" bar the batch review added (a run the cap stopped could otherwise pass).
+  - No time to first token: the recorder times each call whole, and the baseline couldn't be timed
+    again, so the table gives time per item and per model call. Refusals are read from the traces
+    files; the unanswerable bar's item count too (run files don't record a Q&A item's kind).
+  - **The result:** Sonnet 5.5 ($9.44) failed the red team (rt-39, a safety report, empty in two of
+    three trials: it wrote tool-call markup as text, and again on the re-issue; qa-12 empty in all
+    three) and judge equivalence (83.3% against 84.5%, one pair). The owner kept Opus 5.5
+    (ADR 0018). So Task 24's "if Sonnet" steps didn't apply, and the spot check, the Sonnet
+    case-summary set, and the medium arm weren't run: none could change a red-team failure.
+  - The Sonnet board is committed and listed in the scoreboard's history with its model; its
+    recordings stay in the git-ignored `fixtures-sonnet/`.
+
 ## Backlog
 
 Recorded at each stage's close, then moved to `docs/BACKLOG.md`.
@@ -1093,3 +1113,36 @@ Recorded at each stage's close, then moved to `docs/BACKLOG.md`.
   `groups.yaml` and add the clones; which fairness groups are recordable is worked out three
   times per run; `insert_people` lives in the app's seed module, used only by the harness (a
   test keeps the app from calling it).
+- **Stage 4, recorded, not fixed:** the spot check's dry-run estimate is an upper bound (each
+  verdict priced at its full output limit); a spot-check verdict the named judge couldn't give
+  counts as not passing and the command still exits 0; an item's time can understate in a resumed
+  run whose other calls came from recordings; run files don't carry a Q&A item's kind, so the
+  unanswerable bar needs the traces files; the Sonnet case-summary run, if a later comparison
+  needs it, is fed to the rule by `--compare-case-summary`.
+- **Stage 4, the reviews (2026-11-03):** the batch review found two mediums (a run the cap stopped
+  could pass the rule; one answer with nothing to judge stopped the whole spot check), both fixed
+  before the paid run. `/code-review medium` then ran six rounds on the comparison tools, each
+  finding ways a later comparison could read two unlike runs as comparable or lose its result:
+  the "run complete" bar grew to cover versions, models, effort, both runs' completeness, and
+  dataset keys present in only one run; the case-summary bar checks its file's model, prompt, and
+  notes; the files given to `--compare` and `--compare-case-summary` are checked before anything
+  is spent; a comparison that fails still writes the run file and exits nonzero; the spot check
+  refuses the scripted stand-in, an unpriced model, or the runs' own judge, and runs under the
+  rubric both runs used. None of it changed the result on the real pair. The judge bar stays
+  one-sided (no more than 3 points below), as the rule meant; a commit-equality bar was declined,
+  since the two real runs carry different commit stamps and the replay shows they saw the same
+  requests.
+- **Stage 4, `/code-review medium` lows recorded, not fixed:** the spot check builds and
+  fingerprints each judge request two or three times, with two `Judge` objects; the newest
+  case-summary board is found by its own helper rather than `scoreboard_gen`'s; the case-summary
+  file's shape check and its figure repeat `boards._case_summary_board`'s math; the baseline's
+  traces and the case-summary run reach `report()` on the argument namespace; the run file is
+  written up to three times when a comparison runs. Round 7 found nothing new high or medium (its
+  medium repeated the recording-gaps and commit questions already decided: both real runs have
+  gaps the graders scored as misses), so the loop stopped. Its lows, recorded: "run complete"
+  doesn't check that both runs were live; the case-summary reference is read from the repository's
+  boards folder even with `--boards-dir`, and an unusable newest board doesn't fall back to an
+  older one; the spot check repeats the agreement's capped judge loop instead of sharing it; the
+  baseline's traces file is held whole in memory for the run; the estimate note re-derives
+  `config_for_model`'s condition; `--rejudge` ignores `--half`, `--boards-dir`, and an offline
+  `--yes` without saying so.

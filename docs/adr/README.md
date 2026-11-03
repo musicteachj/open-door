@@ -23,6 +23,7 @@ records are never rewritten.
 | [0015](0015-envelope-encryption.md) | Case text and conversation text are encrypted in the API, with a data key per record | Accepted | 2026-10-26 |
 | [0016](0016-console-rows-redacted-at-write.md) | The console reads its own rows, redacted when written, with no person ID | Accepted | 2026-10-31 |
 | [0017](0017-scoreboards-from-committed-boards.md) | Scoreboards are generated from committed run boards | Accepted | 2026-10-31 |
+| [0018](0018-default-model.md) | Claude Opus 5.5 stays the assistant's default model | Accepted | 2026-11-03 |
 
 New records copy this shape:
 

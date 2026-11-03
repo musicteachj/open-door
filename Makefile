@@ -82,7 +82,7 @@ eval-offline: ## Replay the recorded assistant evals (needs `make db`); no netwo
 # one exported in the shell is ignored). FIXTURES_DIR=<folder> records into that folder instead (the
 # escalation tuning half goes to a scratch folder this way: `SET=escalation HALF=tuning FIXTURES_DIR=...`).
 # MODEL=<model id> runs the assistant (or, for SET=case-summary, the summarizer) on another model for
-# a model comparison on one commit; it records into the git-ignored evals/assistant/fixtures-sonnet/
+# a model comparison on one commit (MODEL=claude-sonnet-5-5 SET=full: about $9.60, cap $13); it records into the git-ignored evals/assistant/fixtures-sonnet/
 # (never the committed fixtures) and is still boarded. It does not apply to SET=escalation.
 # One run at a time; don't start it in the middle of `make check`.
 SET ?= smoke

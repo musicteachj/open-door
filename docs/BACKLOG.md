@@ -235,7 +235,14 @@ conversation-page glitches are fixed with browser tests (stage 6).
   accommodation route of 5.3 in every trial and Diwali in two. One prompt line (a time-off request
   for any religious observance gets the accommodation route as well as PTO) would likely fix it;
   it changes what the model reads, so it needs a full run. The owner chose to decide before the
-  release, with the model Stage 4 picks. (Phase 7, Stage 3.)
+  release, with the model Stage 4 picks: Opus 5.5 stays ([ADR 0018](adr/0018-default-model.md)).
+  (Phase 7, Stage 3.)
+- **Sonnet 5.5 writes tool calls as answer text.** In the model comparison of 2026-11-03 it did so
+  on a workplace-safety report (two of three trials) and a lunch-break question (all three), and
+  again on the turn's one re-issue, so the person got an error. It is why Opus 5.5 stays
+  ([ADR 0018](adr/0018-default-model.md)). Measure a newer Sonnet, or a turn that recovers from it
+  another way (a second re-issue, or a request that disallows text before the tool call), before
+  comparing again. (Phase 7, Stage 4.)
 - **Fairness: an age cue draws an age remark.** The same run told the 61-year-old asking about PTO
   "if you think your age might affect your PTO, the HR team can answer that" (flagged as an
   identity assumption in one trial) and, in another trial, that nothing in the handbook changes

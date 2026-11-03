@@ -317,13 +317,17 @@ def user_message(judge_input: JudgeInput) -> str:
     return "\n".join(parts)
 
 
-def judge_api_kwargs(judge_input: JudgeInput, *, system: str | None = None) -> dict[str, Any]:
+def judge_api_kwargs(
+    judge_input: JudgeInput, *, system: str | None = None, model: str = JUDGE_MODEL
+) -> dict[str, Any]:
     """The keyword arguments for the judge's `client.messages.create`, as plain JSON-able data.
 
     Pure. The live caller sends exactly this and the recorder fingerprints exactly this, so a
-    recorded call is the call that was sent."""
+    recorded call is the call that was sent. `model` is the judge's model: only the spot check of
+    another judge (`run.py --rejudge`) names one. It is part of the fingerprint, so that judge's
+    recordings never answer the default judge."""
     return {
-        "model": JUDGE_MODEL,
+        "model": model,
         "max_tokens": JUDGE_MAX_TOKENS,
         "output_config": {
             "effort": JUDGE_EFFORT,
@@ -336,7 +340,8 @@ def judge_api_kwargs(judge_input: JudgeInput, *, system: str | None = None) -> d
 
 def reservation_usd(kwargs: Mapping[str, Any]) -> Decimal:
     """The most a judge call could cost: its full output allowance (`max_tokens`) plus an estimate
-    of its input. The runner checks that this fits under the spend cap before each judge call."""
+    of its input, priced at the request's own model (`kwargs["model"]`). The runner checks that
+    this fits under the spend cap before each judge call."""
     characters = len(json.dumps(kwargs))
     estimate = Usage(
         input_tokens=-(-characters // CHARACTERS_PER_TOKEN),
@@ -344,7 +349,7 @@ def reservation_usd(kwargs: Mapping[str, Any]) -> Decimal:
         cache_read_tokens=0,
         cache_write_tokens=0,
     )
-    return cost_usd(JUDGE_MODEL, estimate)
+    return cost_usd(str(kwargs.get("model", JUDGE_MODEL)), estimate)
 
 
 def asker_line(company: SeedCompany, persona: str) -> str:
@@ -673,9 +678,12 @@ class JudgeOutcome:
         return {"unavailable": self.unavailable}
 
 
-def _outcome(item_id: str, key: str, response: JudgeResponse) -> JudgeOutcome:
-    model = response.served_by if is_priced(response.served_by) else JUDGE_MODEL
-    cost = cost_usd(model, response.usage)
+def _outcome(
+    item_id: str, key: str, response: JudgeResponse, model: str = JUDGE_MODEL
+) -> JudgeOutcome:
+    """`model` prices a response served by a model with no pinned price."""
+    priced = response.served_by if is_priced(response.served_by) else model
+    cost = cost_usd(priced, response.usage)
     try:
         return JudgeOutcome(item_id, key, parse_response(response), None, cost, response.usage)
     except JudgeUnavailable as error:
@@ -703,7 +711,9 @@ class Judge:
         caller: JudgeCaller | None,
         record: bool = True,
         system: str | None = None,
+        model: str = JUDGE_MODEL,
     ) -> None:
+        self.model = model
         self.store = store
         self.caller = caller
         self.record = record
@@ -712,7 +722,7 @@ class Judge:
     def prepare(self, judge_input: JudgeInput) -> Prepared:
         """The request for this input and its fingerprint. Built once, then handed to `recorded`,
         `judge`, and `reservation_usd`, which would each build it again."""
-        kwargs = judge_api_kwargs(judge_input, system=self.system)
+        kwargs = judge_api_kwargs(judge_input, system=self.system, model=self.model)
         return Prepared(kwargs, fingerprint("judge", kwargs))
 
     def _lookup(self, key: str) -> tuple[JudgeResponse | None, bool]:
@@ -733,7 +743,7 @@ class Judge:
         calls."""
         key = (prepared or self.prepare(judge_input)).key
         response, _ = self._lookup(key)
-        return None if response is None else _outcome("", key, response)
+        return None if response is None else _outcome("", key, response, self.model)
 
     async def judge(
         self, item_id: str, judge_input: JudgeInput, prepared: Prepared | None = None
@@ -742,7 +752,7 @@ class Judge:
         key = request.key
         response, damaged = self._lookup(key)
         if response is not None:
-            return replace(_outcome(item_id, key, response), called=False)
+            return replace(_outcome(item_id, key, response, self.model), called=False)
         if self.caller is None:
             what = "could not be read" if damaged else "is missing"
             raise ReplayMiss(
@@ -759,4 +769,4 @@ class Judge:
             self.store.put(
                 Record(key, "judge", item_id, 0, result=fresh.to_json()), replace=damaged
             )
-        return _outcome(item_id, key, fresh)
+        return _outcome(item_id, key, fresh, self.model)

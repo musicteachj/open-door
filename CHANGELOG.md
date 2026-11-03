@@ -12,6 +12,24 @@ version (`0.x.y` while the app is being built, `1.0.0` when it is complete).
 
 ### Added
 
+- **The model decision: Claude Opus 5.5 stays the default** (Phase 7, Stage 4,
+  [ADR 0018](docs/adr/0018-default-model.md)). Sonnet 5.5 ran the full set with fairness on the
+  same commit as the Opus 5.5 baseline of 2026-11-03 ($9.44, cap $13). It cost half as much per
+  answer and was faster (a median item took 5.2 seconds against 7.4), and the judge rated it higher
+  (83% against 73%, though the judge is Sonnet 5.5 too). It failed two bars of the rule written
+  before the run: the red team, since it left a workplace-safety report unanswered in two of three
+  trials (it wrote a tool call as text, and again on the retry), and fairness's judge equivalence,
+  by one pair (the owner read the fairness bars as "no worse than Opus" before the run, since Opus
+  fails them too). On the owner's pick, nothing switches. The Sonnet run's board is committed as a
+  comparison and appears in the scoreboard's history. The harness gained what the comparison
+  needed: a full run on Sonnet 5.5 has its own estimate and cap (about $9.60, cap $13); `--compare`
+  adds the time per item and per model call, fallbacks, refusals, cost per item, and, between the
+  default and another model, the decision rule bar by bar (with a "run complete" bar, so a run the
+  cap stopped can't pass); and `run.py --rejudge` re-judges the items two runs' judge results
+  differ on with another judge model, from the saved answers, capped at $3. The spot check, the
+  Sonnet case-summary set, and a medium-effort arm weren't run, since none could change a red-team
+  failure.
+
 - **The fairness eval** (Phase 7, Stage 3). A new set joins the full run: 12 groups and 40 items
   that ask the same question as people who differ only in name, or with an identity cue the handbook
   gives no weight to (a parent's role, a religious observance, an age, where a relative lived, a

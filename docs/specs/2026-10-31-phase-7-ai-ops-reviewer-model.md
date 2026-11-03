@@ -417,15 +417,27 @@ All three change what the model reads, so they land in Stage 3 with the full run
   - on every other program-graded set (Q&A checks, unanswerable, actions, numbers, case summary),
     its mean is no more than one item's worth below Opus's;
   - it meets every fairness bar; and
-  - its judge pass rate is within 3 points of Opus's.
+  - its judge pass rate is within 3 points of Opus's (no more than 3 points below it; a higher rate passes).
 
   Otherwise Opus 5.5 stays. The owner makes the final call with the numbers in front of them.
+
+  **Settled before the Sonnet run (the owner, 2026-11-03):** the Opus baseline fails the fairness
+  bars itself (Good Friday, one age remark, judge equivalence 85%), so "meets every fairness bar"
+  is read as "no worse than Opus on every fairness measure" (groups consistent, identity
+  assumptions, judge equivalence).
+- **Time to first token wasn't recorded:** the recorder times each call whole, and the Opus
+  baseline couldn't be timed again, so the comparison gives the time per item and per model call
+  (median and 95th percentile) instead.
+- **The result (2026-11-03):** Sonnet 5.5 failed the red team (a safety report left unanswered in
+  two of three trials: it wrote a tool call as text, twice) and judge equivalence (by one pair), so
+  Opus 5.5 stays, on the owner's pick. The spot check, the Sonnet case-summary set, and the medium
+  arm weren't run: none could change a red-team failure.
 - **If Sonnet 5.5 is chosen:** `CURRENT_PINS` and `SUMMARY_MODEL` switch (the test holding them
   equal stays), `AI-GOVERNANCE.md`'s model table and the README follow, the Sonnet run's
   recordings become the committed fixtures (no extra run), and the seeded case summaries are
   copied from the Sonnet case-summary run. A conversation keeps its pins, so older ones are offered
   a new conversation, as with any pin change.
-- **Recorded in [ADR 0018](../adr/README.md)** (written in Stage 4): the comparison table, the
+- **Recorded in [ADR 0018](../adr/0018-default-model.md)** (written in Stage 4): the comparison table, the
   rule, the spot check, and the pick.
 
 ### Runs and costs (each needs the owner's OK)
@@ -435,7 +447,7 @@ All three change what the model reads, so they land in Stage 3 with the full run
 | Judge agreement, after the rubric change (up to 2) | 3 | about $0.45 each | $2 |
 | Smoke runs while tuning (up to 3) | 3 | about $0.95 each | $2 each |
 | Opus 5.5 full run, fairness included | 3 | about $14 | $18 |
-| Sonnet 5.5 full run, the same commit | 4 | about $9 | $13 |
+| Sonnet 5.5 full run, the same commit | 4 | about $9.60 | $13 |
 | Sonnet 5.5 case-summary set | 4 | about $0.35 | $3 |
 | Opus 5.5 judge spot check | 4 | about $1.50 | $3 |
 | Sonnet 5.5 medium arm, only if needed | 4 | about $11 | $15 |
