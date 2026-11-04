@@ -279,6 +279,8 @@ describe('toolIcon', () => {
     expect(toolIcon('propose_time_off_request')).toBe('card')
     expect(toolIcon('propose_time_off_decision')).toBe('card')
     expect(toolIcon('propose_cancel_time_off')).toBe('card')
+    expect(toolIcon('get_my_cases')).toBe('cases')
+    expect(toolIcon('list_cases')).toBe('cases')
   })
 
   it('has a generic icon for an unknown tool', () => {

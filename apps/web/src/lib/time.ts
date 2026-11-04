@@ -79,3 +79,11 @@ export function formatMonthDay(isoDate: string): string {
   if (Number.isNaN(date.getTime())) return isoDate
   return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' })
 }
+
+/**
+ * Newer ICU puts a narrow no-break space before AM and PM; a plain space reads the same and
+ * matches the design's copy.
+ */
+export function plainSpaces(text: string): string {
+  return text.replace(/[\u202f\u00a0]/g, ' ')
+}

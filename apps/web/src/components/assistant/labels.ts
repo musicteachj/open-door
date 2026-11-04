@@ -126,7 +126,7 @@ export function sourceName(
   return `Source ${marker}: Handbook ${sectionNumber(citation.sectionId)}, ${citation.groupName}`
 }
 
-export type ToolIconKind = 'search' | 'profile' | 'people' | 'calendar' | 'card' | 'tool'
+export type ToolIconKind = 'search' | 'profile' | 'people' | 'calendar' | 'card' | 'cases' | 'tool'
 
 const TOOL_ICONS: Record<string, ToolIconKind> = {
   search_handbook: 'search',
@@ -138,6 +138,8 @@ const TOOL_ICONS: Record<string, ToolIconKind> = {
   propose_time_off_request: 'card',
   propose_time_off_decision: 'card',
   propose_cancel_time_off: 'card',
+  get_my_cases: 'cases',
+  list_cases: 'cases',
 }
 
 /** Which icon a tool gets in "Show your work". An unknown tool gets the generic one. */

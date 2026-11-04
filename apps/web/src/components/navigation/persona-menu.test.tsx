@@ -1,6 +1,8 @@
 import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
+import type { ReactNode } from 'react'
 import { describe, expect, it, vi } from 'vitest'
+import { DropdownMenuItem } from '@/components/ui/dropdown-menu'
 import { PersonaMenu, type PersonaOption } from './persona-menu'
 
 const PERSONAS: PersonaOption[] = [
@@ -62,6 +64,51 @@ describe('PersonaMenu', () => {
     expect(within(menu).getByText('Switching starts a new conversation.')).toBeInTheDocument()
     expect(within(menu).getByRole('separator')).toBeInTheDocument()
     expect(within(menu).getByRole('menuitem', { name: 'Sign out' })).toBeInTheDocument()
+  })
+
+  describe('the extra slot', () => {
+    const extra = <DropdownMenuItem onSelect={() => {}}>Take the tour</DropdownMenuItem>
+
+    it('puts the extra items between the note and Sign out, each side with its own separator', async () => {
+      const { user, trigger } = setup({ extra })
+      const menu = await open(user, trigger)
+      expect(within(menu).getAllByRole('separator')).toHaveLength(2)
+      const items = within(menu).getAllByRole('menuitem')
+      expect(items.map((item) => item.textContent)).toEqual(['Take the tour', 'Sign out'])
+      const note = within(menu).getByText('Switching starts a new conversation.')
+      const tour = within(menu).getByRole('menuitem', { name: 'Take the tour' })
+      expect(note.compareDocumentPosition(tour) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    })
+
+    it('keeps Sign out last, after the extra items', async () => {
+      const { user, trigger } = setup({ extra, currentKey: 'dana' })
+      const menu = await open(user, trigger)
+      const all = [...menu.querySelectorAll('[role^="menuitem"]')]
+      expect(all.at(-1)).toHaveTextContent('Sign out')
+      expect(all.at(-2)).toHaveTextContent('Take the tour')
+    })
+
+    it('lets an extra item run its own handler', async () => {
+      const onTake = vi.fn<() => void>()
+      const { user, trigger } = setup({
+        extra: <DropdownMenuItem onSelect={onTake}>Take the tour</DropdownMenuItem>,
+      })
+      await open(user, trigger)
+      await user.click(screen.getByRole('menuitem', { name: 'Take the tour' }))
+      expect(onTake).toHaveBeenCalledTimes(1)
+    })
+
+    it.each([false, 0, ''])('draws nothing extra for %j: one separator', async (empty) => {
+      const { user, trigger } = setup({ extra: empty as unknown as ReactNode })
+      const menu = await open(user, trigger)
+      expect(within(menu).getAllByRole('separator')).toHaveLength(1)
+    })
+
+    it('draws the same as before with no extra: one separator', async () => {
+      const { user, trigger } = setup()
+      const menu = await open(user, trigger)
+      expect(within(menu).getAllByRole('separator')).toHaveLength(1)
+    })
   })
 
   it('describes the menu with the note, so menu-mode screen readers hear it', async () => {

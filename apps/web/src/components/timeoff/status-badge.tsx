@@ -1,14 +1,25 @@
 import {
   Ban,
+  CircleAlert,
   CircleCheck,
+  CircleStop,
   CircleX,
   ClipboardCheck,
   Clock,
   FileSearch,
+  Gauge,
   type LucideIcon,
+  MessageCircle,
+  SearchX,
+  ShieldOff,
 } from 'lucide-react'
 import type { RequestOutStatus } from '@/api/generated'
 import { CASE_BADGE_WORDS, isCaseBadge, type CaseBadge } from '@/components/status/case-badges'
+import {
+  isOutcomeBadge,
+  OUTCOME_BADGE_WORDS,
+  type OutcomeBadge,
+} from '@/components/status/outcome-badges'
 import { cn } from '@/lib/utils'
 import { statusLabel, type TimeOffStatus } from './labels'
 
@@ -17,7 +28,7 @@ type StatusBadgeProps = {
    * A request's status (the API's `pending` reads as `waiting`), or a case's: `personBadge` and
    * `hrBadge` in `components/cases/labels` map the API's status to the right one.
    */
-  status: TimeOffStatus | RequestOutStatus | CaseBadge
+  status: TimeOffStatus | RequestOutStatus | CaseBadge | OutcomeBadge
   className?: string
 }
 
@@ -43,12 +54,28 @@ const CASE_ICONS: Record<
   'case-closed': { icon: CircleCheck, className: 'text-ink' },
 }
 
-function normalize(status: TimeOffStatus | RequestOutStatus | CaseBadge) {
+// A turn's outcome. Ink-muted icons; only Failed, an error, takes the danger color.
+const OUTCOME_ICONS: Record<OutcomeBadge, { icon: LucideIcon; className: string }> = {
+  'outcome-answered': { icon: MessageCircle, className: 'text-ink-muted' },
+  'outcome-not-covered': { icon: SearchX, className: 'text-ink-muted' },
+  'outcome-refused': { icon: Ban, className: 'text-ink-muted' },
+  'outcome-stopped': { icon: CircleStop, className: 'text-ink-muted' },
+  'outcome-failed': { icon: CircleAlert, className: 'text-danger' },
+  'outcome-cap': { icon: Gauge, className: 'text-ink-muted' },
+  'outcome-safety-unavailable': { icon: ShieldOff, className: 'text-ink-muted' },
+}
+
+function normalize(status: TimeOffStatus | RequestOutStatus | CaseBadge | OutcomeBadge) {
   return status === 'pending' ? 'waiting' : status
 }
 
 function RequestIcon({ status }: { status: TimeOffStatus }) {
   const { icon: Icon, className } = ICONS[status]
+  return <Icon aria-hidden="true" strokeWidth={2} className={cn('size-3.5', className)} />
+}
+
+function OutcomeIcon({ status }: { status: OutcomeBadge }) {
+  const { icon: Icon, className } = OUTCOME_ICONS[status]
   return <Icon aria-hidden="true" strokeWidth={2} className={cn('size-3.5', className)} />
 }
 
@@ -63,7 +90,9 @@ function CaseIcon({ status }: { status: Exclude<CaseBadge, 'case-new'> }) {
  */
 function StatusBadge({ status, className }: StatusBadgeProps) {
   const key = normalize(status)
-  const mark = isCaseBadge(key) ? (
+  const mark = isOutcomeBadge(key) ? (
+    <OutcomeIcon status={key} />
+  ) : isCaseBadge(key) ? (
     key === 'case-new' ? (
       <span
         data-slot="status-dot"
@@ -87,7 +116,11 @@ function StatusBadge({ status, className }: StatusBadgeProps) {
       )}
     >
       {mark}
-      {isCaseBadge(key) ? CASE_BADGE_WORDS[key] : statusLabel(key)}
+      {isOutcomeBadge(key)
+        ? OUTCOME_BADGE_WORDS[key]
+        : isCaseBadge(key)
+          ? CASE_BADGE_WORDS[key]
+          : statusLabel(key)}
     </span>
   )
 }

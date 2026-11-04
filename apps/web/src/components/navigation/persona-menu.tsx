@@ -1,5 +1,5 @@
 import { LogOut } from 'lucide-react'
-import { useId, useRef, useState } from 'react'
+import { useId, useRef, useState, type ReactNode } from 'react'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import {
   DropdownMenu,
@@ -29,6 +29,11 @@ type PersonaMenuProps = {
   onSignOut: () => void
   /** While a switch or sign-out runs, such as "Switching to Marcus…": the switcher shows it and the menu won't open. */
   busyLabel?: string
+  /**
+   * More rows, such as the tour's (`DropdownMenuItem`s), between the note and Sign out. They get a
+   * separator of their own above them; Sign out stays last.
+   */
+  extra?: ReactNode
 }
 
 /**
@@ -37,7 +42,14 @@ type PersonaMenuProps = {
  * `menuitemradio` and which one is checked. Focus starts on the checked persona. From
  * PersonaMenu.jsx.
  */
-function PersonaMenu({ personas, currentKey, onSwitch, onSignOut, busyLabel }: PersonaMenuProps) {
+function PersonaMenu({
+  personas,
+  currentKey,
+  onSwitch,
+  onSignOut,
+  busyLabel,
+  extra,
+}: PersonaMenuProps) {
   const [open, setOpen] = useState(false)
   const checkedRef = useRef<HTMLDivElement>(null)
   // No match means no one is current: the switcher says so, and no row is checked.
@@ -100,6 +112,12 @@ function PersonaMenu({ personas, currentKey, onSwitch, onSignOut, busyLabel }: P
           Switching starts a new conversation.
         </p>
         <DropdownMenuSeparator />
+        {Boolean(extra) && (
+          <>
+            {extra}
+            <DropdownMenuSeparator />
+          </>
+        )}
         <DropdownMenuItem onSelect={onSignOut}>
           <LogOut aria-hidden="true" className="size-4 text-ink-muted" />
           Sign out

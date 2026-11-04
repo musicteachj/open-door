@@ -251,7 +251,9 @@ export async function expectNoViolationsIn(
     // One host that can't be opened, scanned, or closed is reported, and the others still run.
     await test.step(`scan ${id} with its dialog open`, async () => {
       try {
-        const dialog = `[role="${host.role}"]`
+        // The tour's coach marks and end card are non-modal dialogs that the gallery always shows
+        // (`data-tour-own`), so they never count as the dialog a host opens.
+        const dialog = `[role="${host.role}"]:not([data-tour-own])`
         if (host.closes === 'timer') {
           // The gallery's demo then waits to be released instead of closing on its own timer, so
           // the scan runs on the real clock and takes as long as the machine needs.

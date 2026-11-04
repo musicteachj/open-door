@@ -12,6 +12,27 @@ version (`0.x.y` while the app is being built, `1.0.0` when it is complete).
 
 ### Added
 
+- **The AI Ops console's parts, the scoreboard, and the tour's parts** (Phase 7, Stage 5), in the
+  component gallery in every state, checked for accessibility at full width and at 390 px. No
+  page uses them yet; Stage 6 builds the console page and the tour.
+  - **The console (screen 13):** the eight tiles, each with its sample size and "Small sample"
+    under 20, and a figure above its target in normal ink with the target in words; the turn list
+    by day, each asker shown by role and location only, with outcome badges and the safety
+    check's verdict; the redacted row, after its day's timed rows and never focusable (an
+    abandoned turn has its own sentence, "This turn didn’t finish, so its safety check result
+    wasn’t kept.", and is never called flagged); the trace panel, docked beside the list at full
+    width and full screen on a phone; and the empty, loading, and error states. The parts take the
+    console routes' own data, so they can show nothing the rows don't carry.
+  - **The eval scoreboard:** each set's headline with its lowest trial, the history of full runs
+    with each run's model, and the two plain lines (CI replays recordings; the sets are small),
+    read from the generated `scoreboard.json`, whose shape a test checks.
+  - **The tour (screen 15):** the coach mark (a non-modal dialog that takes focus on each step,
+    leaves on Escape, and never covers the composer or the result it points at), its placement
+    rule, the target ring, the prompt chips with their sent state, the end card, the bottom sheet
+    on a phone, the persona menu's "Take the tour", "Resume the tour", and "Start the tour over"
+    items (the menu gained a slot for them), the "Start the tour?" dialog, and the landing's tour
+    button with its starting state.
+
 - **The model decision: Claude Opus 5.5 stays the default** (Phase 7, Stage 4,
   [ADR 0018](docs/adr/0018-default-model.md)). Sonnet 5.5 ran the full set with fairness on the
   same commit as the Opus 5.5 baseline of 2026-11-03 ($9.44, cap $13). It cost half as much per
@@ -177,6 +198,14 @@ version (`0.x.y` while the app is being built, `1.0.0` when it is complete).
   figure (183 of 204, below the 90% bar) beside the original one.
 
 ### Fixed
+
+- **A flaky test of the case queue's filter** (Phase 7, Stage 5). The test helper that holds an
+  arrow key down until focus moves gave up after half a second, which a loaded CI runner could
+  pass while the queue loaded the new filter (it failed once on #88's CI). It now waits up to 2
+  seconds; a key that moves nothing still returns. A new test moves focus after 800 ms and failed
+  with the old limit. The same test also checked the filter's selected state right after the key,
+  but the router applies the new filter in a transition, so on a busy machine the selection could
+  trail the focus (it failed that way during this stage's own check); it now waits for it.
 
 - **CI's API job had no room left in its time limit** (Phase 7, Stage 2). Its test suite takes 11
   to 14 minutes on a hosted runner, and the limit was 15, so Stage 2's added eval tests pushed it
