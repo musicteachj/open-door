@@ -1,19 +1,10 @@
-import {
-  CalendarCheck,
-  ChevronDown,
-  ChevronUp,
-  ClipboardCheck,
-  Search,
-  ShieldCheck,
-  User,
-  Users,
-  Wrench,
-} from 'lucide-react'
+import { ChevronDown, ChevronUp, ShieldCheck } from 'lucide-react'
 import { useId, useState } from 'react'
 import type { CitationOut, GuardOut, SectionOut, ToolCallOut } from '@/api/generated'
 import { sectionNumber } from '@/components/handbook/labels'
 import { cn } from '@/lib/utils'
-import { conversationCopy, toolCallLine, toolIcon, type ToolIconKind } from './labels'
+import { conversationCopy, toolCallLine, toolIcon } from './labels'
+import { TOOL_ICONS } from './tool-icons'
 
 type WorkTraceProps = {
   /** What the safety check decided. Null when the turn has no recorded result. */
@@ -33,15 +24,6 @@ type WorkTraceProps = {
   /** Opens with the panel showing, for a screen that draws that state. */
   defaultOpen?: boolean
   className?: string
-}
-
-const TOOL_ICONS: Record<ToolIconKind, typeof Search> = {
-  search: Search,
-  profile: User,
-  people: Users,
-  calendar: CalendarCheck,
-  card: ClipboardCheck,
-  tool: Wrench,
 }
 
 /** The safety line and its note, or null when the guard result says nothing we can stand behind. */

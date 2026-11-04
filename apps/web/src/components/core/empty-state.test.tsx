@@ -38,4 +38,32 @@ describe('EmptyState', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Ask' }))
     expect(onSecond).toHaveBeenCalledTimes(1)
   })
+
+  it('keeps a secondary action and a ghost second action by default', () => {
+    render(
+      <EmptyState
+        message="Nothing."
+        action={{ label: 'Clear', onAction: vi.fn<() => void>() }}
+        secondaryAction={{ label: 'Ask', onAction: vi.fn<() => void>() }}
+      />,
+    )
+    expect(screen.getByRole('button', { name: 'Clear' })).toHaveClass('bg-surface-raised')
+    expect(screen.getByRole('button', { name: 'Ask' })).toHaveClass('bg-transparent')
+  })
+
+  it('can make the action primary and the second action secondary', () => {
+    render(
+      <EmptyState
+        message="Nothing."
+        action={{ label: 'Ask a question', onAction: vi.fn<() => void>(), variant: 'primary' }}
+        secondaryAction={{
+          label: 'Take the tour',
+          onAction: vi.fn<() => void>(),
+          variant: 'secondary',
+        }}
+      />,
+    )
+    expect(screen.getByRole('button', { name: 'Ask a question' })).toHaveClass('bg-primary')
+    expect(screen.getByRole('button', { name: 'Take the tour' })).toHaveClass('bg-surface-raised')
+  })
 })

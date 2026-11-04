@@ -85,3 +85,32 @@ describe('StatusBadge', () => {
     expect(screen.getByText('Recorded')).toHaveClass('self-start')
   })
 })
+
+describe('StatusBadge outcomes', () => {
+  it.each([
+    ['outcome-answered', 'Answered'],
+    ['outcome-not-covered', 'Said the handbook doesn’t cover it'],
+    ['outcome-refused', 'Refused by the model'],
+    ['outcome-stopped', 'Stopped by the person'],
+    ['outcome-failed', 'Failed'],
+    ['outcome-cap', 'Spending cap reached'],
+    ['outcome-safety-unavailable', 'Safety check unavailable'],
+  ] as const)('shows %s as "%s" with a hidden icon', (status, word) => {
+    render(<StatusBadge status={status} />)
+    expect(screen.getByText(word).querySelector('svg')).toHaveAttribute('aria-hidden', 'true')
+  })
+
+  it('uses the danger color only on Failed; every other icon is ink-muted', () => {
+    const { container } = render(
+      <>
+        <StatusBadge status="outcome-failed" />
+        <StatusBadge status="outcome-answered" />
+        <StatusBadge status="outcome-refused" />
+      </>,
+    )
+    const icons = [...container.querySelectorAll('svg')]
+    expect(icons[0]).toHaveClass('text-danger')
+    expect(icons[1]).toHaveClass('text-ink-muted')
+    expect(icons[2]).toHaveClass('text-ink-muted')
+  })
+})

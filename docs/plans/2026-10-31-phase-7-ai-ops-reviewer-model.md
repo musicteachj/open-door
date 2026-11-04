@@ -684,7 +684,7 @@ Batches: **A** Tasks 26–28, **B** Tasks 29–31.
 
 ### Task 26: The acceptance criteria
 
-- [ ] copy every acceptance criterion from screens 13 and 15's `notes.md` into
+- [x] copy every acceptance criterion from screens 13 and 15's `notes.md` into
       [Self-review: acceptance criteria to tasks](#self-review-acceptance-criteria-to-tasks), each
       with the test that will prove it
 
@@ -692,18 +692,18 @@ Batches: **A** Tasks 26–28, **B** Tasks 29–31.
 
 **Files:** `components/scoreboard/`, tests.
 
-- [ ] renders every set row and the history from the generated JSON's types; each figure shows its
+- [x] renders every set row and the history from the generated JSON's types; each figure shows its
       lowest trial; the "CI replays recordings" and "small sets" lines always show
-- [ ] accessible as a table with a caption; fits 390 px without sideways scroll
+- [x] accessible as a table with a caption; fits 390 px without sideways scroll
 
 ### Task 28: The console parts
 
 **Files:** `components/console/` (tiles, turn list, trace panel, redacted row, empty, loading,
 error), tests.
 
-- [ ] each tile shows its value, its sample size, and "Small sample" under 20
-- [ ] a row shows role and location, never a name; the redacted row has no trace control
-- [ ] the trace shows tools in order with durations, sections retrieved against cited, the card,
+- [x] each tile shows its value, its sample size, and "Small sample" under 20
+- [x] a row shows role and location, never a name; the redacted row has no trace control
+- [x] the trace shows tools in order with durations, sections retrieved against cited, the card,
       the model and versions, the token breakdown, and the three timings, reusing "Show your work"
       pieces where they fit
 
@@ -718,17 +718,17 @@ The number is kept so later tasks keep theirs.
 **Files:** `components/tour/` (coach mark, step card, chip, end card, resume prompt, new-sandbox
 notice), tests.
 
-- [ ] the coach mark positions on a target, falls back to a centered card when the target is
+- [x] the coach mark positions on a target, falls back to a centered card when the target is
       missing, and shows the "what would have appeared" line
-- [ ] focus moves to the step's text and back on close; Escape closes; the step is announced;
+- [x] focus moves to the step's text and back on close; Escape closes; the step is announced;
       reduced motion stops the movement; 390 px fits
 
 ### Task 31: The gallery, and close Stage 5
 
-- [ ] gallery sections for every part in every state; `e2e/gallery-console.spec.ts` with axe at
+- [x] gallery sections for every part in every state; `e2e/gallery-console.spec.ts` with axe at
       1440 and 390 px
-- [ ] the self-review against each frame (screenshots compared, as the UI self-review rule says)
-- [ ] **the flaky arrow-key test** (from PR #88's CI, 2026-10-31): `cases-page.test.tsx`'s "the
+- [x] the self-review against each frame (screenshots compared, as the UI self-review rule says)
+- [x] **the flaky arrow-key test** (from PR #88's CI, 2026-10-31): `cases-page.test.tsx`'s "the
       queue filter ... arrow keys keep working" failed once on CI and passed on the rerun and 5 of 5
       times locally. `arrow()` in `src/test/arrow-key.ts` stops waiting for focus to move after
       500 ms, which a loaded runner can pass while the queue reloads the new filter. Raise the
@@ -837,7 +837,49 @@ checks see a spent sandbox.
 
 ## Self-review: acceptance criteria to tasks
 
-Filled in by Task 26 from screens 13 and 15's `notes.md`.
+Filled in by Task 26 from screens 13 and 15's `notes.md` (2026-11-03). "Gallery" means the
+component tests and `e2e/gallery-console.spec.ts` or `e2e/gallery-tour.spec.ts` (Stage 5);
+"page" and "browser" mean Stage 6's page tests and `e2e/console.spec.ts` or `e2e/tour.spec.ts`.
+
+**Screen 13, the AI Ops console**
+
+| Criterion | Proved by |
+|---|---|
+| Matches the screenshots at 1440 px | Stage 5's self-review against the component card and frames; Stage 6's capture row |
+| Usable at 390 px: tiles one per row, turns as stacked cards, the trace as a full-screen sheet, the scoreboard scrolling in its own container, no sideways page scroll | Gallery at 390 (no sideways scroll, the sheet); browser at 390 |
+| Only HR reaches `/console`; anyone else gets the same 404 | Page test and browser (Task 32); the routes' tests (Stage 1) |
+| No name, avatar, initials, question or answer text, tool input, or refusal explanation anywhere | Component tests (the props carry none); browser: Priya's turns, nothing on Dana's page holds "Priya" or her words (Task 32) |
+| A flagged row shows only its date, tokens, cost, and timings with "Flagged by the safety check. ...", isn't focusable, opens no trace, sits after its day's timed rows; an abandoned row has its own sentence and never says "Flagged" | Turn table and redacted row tests; gallery keyboard check |
+| Every tile shows its sample size and "Small sample" under 20; a figure above its target is in normal ink, the target in words | Tile tests |
+| A row opens the trace without a new request; focus to the panel heading; Escape or X closes and returns focus; another row swaps it | Trace host tests; gallery keyboard checks; page test (no request, Task 32) |
+| The trace shows tools in order with durations and OK or Failed, sections "Cited" or "Not cited", the card by its action, the model line, tokens with cache reads, the cost with "Includes the safety check", and the three timings | Trace panel tests |
+| Outcome badges and the injection tag carry their meaning in words; red only on Failed | Badge and safety label tests |
+| The empty state's sentence with "Ask a question" and "Take the tour"; loading and error keep the scoreboard | Gallery compositions; page test (Task 32) |
+| The scoreboard is one component: headlines with lowest trials, the history, both plain lines | Scoreboard tests (and its shape test on the real JSON) |
+| No link to code, a repository, an ADR, or any document | Component tests; page test (Task 32) |
+| Every interactive element reachable by keyboard with a visible focus ring | Gallery keyboard checks |
+| WCAG 2.2 AA contrast; axe reports no violations | Gallery axe at 1440 and 390; browser axe |
+
+**Screen 15, the guided tour**
+
+| Criterion | Proved by |
+|---|---|
+| Matches the screenshots at 1440 px | Stage 5's self-review; Stage 6's capture row |
+| Usable at 390 px: the coach mark and end card dock as sheets, the target scrolls into view above them | Placement tests; gallery at 390; browser at 390 |
+| "Take the 2-minute tour" starts a new sandbox as Priya and opens step 1; busy and announced while starting, persona cards disabled | Start button tests (busy, announced); page and browser (Task 34) |
+| The menu's "Take the tour" opens "Start the tour?" with Cancel first; starting keeps the old sandbox until it expires | Start dialog and menu item tests; page and browser (Task 34) |
+| Every step matches the script; the tour switches persona with the busy switcher and the toast | Browser walking `TOUR` (Task 35) |
+| A chip sends its text and then shows "Sent"; the visitor can type their own question; the page stays usable under a coach mark | Chip tests; gallery (no overlay); browser (Task 35) |
+| "Skip this step" until the result, then "Next"; no Back on step 1; no chips means Next from the start | Coach mark tests |
+| A missing card or panel shows the step's missing line and Next | Coach mark tests (`role="status"`); runner test (Task 34) |
+| Leave (X or Escape) closes with its toast and returns focus; the menu then offers "Resume the tour" with the step and "Start the tour over"; a reload resumes | Coach mark and menu item tests; store and runner tests (Task 34) |
+| The end card after step 9, with "Keep exploring as Dana" and "Choose who to be" | End card tests; browser (Task 35) |
+| The coach mark is a non-modal dialog labeled by its title; each step moves focus to the title and announces the count | Coach mark tests; gallery keyboard checks |
+| Reduced motion honored; no overlay, spotlight, or celebration | Placement has no animation; gallery check with reduced motion |
+| `e2e/tour.spec.ts` walks every step against the scripted model | Task 35 |
+| No "How it's built" link anywhere, and no link outside the app | Task 33's tests |
+| Keyboard reachable with a visible focus ring | Gallery keyboard checks |
+| WCAG 2.2 AA contrast; axe reports no violations | Gallery axe at 1440 and 390; browser axe |
 
 ---
 
@@ -997,6 +1039,65 @@ Recorded at each stage's close.
   - The Sonnet board is committed and listed in the scoreboard's history with its model; its
     recordings stay in the git-ignored `fixtures-sonnet/`.
 
+- **Stage 5 (2026-11-03), what the code and the design forced:**
+  - **The console parts take the API's own types** (`ConsoleTurnOut`, `ConsoleMetricsOut`), a
+    time zone, and a section-title lookup, so the gallery's fixtures are shaped like the routes'
+    answers and Stage 6 only adds the queries. Stage 6's lookup must give "CA-4.3" the title the
+    design shows ("Sick leave (California)"): the handbook's own title is "Sick leave", so the
+    lookup adds the group.
+  - **An abandoned row has its own sentence** (the owner's wording, 2026-11-03): "This turn
+    didn’t finish, so its safety check result wasn’t kept. Details are hidden to protect the
+    person." It never says "Flagged".
+  - **Tokens:** the row's `inputTokens` is plain input only. The trace's "Input" adds the cache
+    reads ("12,400 (10,200 from cache)") and keeps "Cache writes" as its own line; the redacted
+    row's one "input tokens" figure adds all three, since it has no breakdown.
+  - **The zone abbreviation** shows once per day, in that day's Time column header ("Time (MDT)"),
+    so the rows match the frames and a page across a clock change is right.
+  - **The scoreboard** has a hand-written type with a runtime check that a test runs on the real
+    generated file. Its history shows newest first with a Model column (the Sonnet 5.5 run is in
+    it), dates as the generator writes them, and "Actions joined the full set on ..." worked out
+    from the data. The "small sets" line reads the item count from the data (206 in the full set;
+    the design's 166 predates the fairness set), as the README's generator does.
+  - **`BottomSheet` gained a full-screen variant** for the trace at 640 px and below, and
+    `EmptyState` a primary action (the console's "Ask a question"); existing callers are
+    unchanged. `modelDisplayName` moved to `lib/models.ts`, since the scoreboard uses it too.
+  - **On a phone** each cell without a visible prefix gets a hidden one ("Cost", "First token"),
+    since the column headers are hidden there.
+  - **Tour steps 4, 5, and 8 have no designed body.** Stage 6 writes them in `script.ts` for the
+    owner's approval.
+  - **The batch A review** found nothing high or medium; its lows were fixed (above, plus "Under
+    1%" for a small nonzero rate, a 999.6 ms figure, a trace left open after its row went away,
+    the day heading read twice, and the "not run" placeholder shown for any missing figure).
+  - **The coach mark's placement** is a pure rule: beside a small target (200 px wide or less)
+    when there's room, else below, else above; never over the composer or the result it points
+    at. When the target sits inside its result (Confirm inside the card), the card is placed
+    against the whole result, which the batch B review's live check found covering the card's
+    figures before. With no clear side, the least overlap wins, the result counting ten times. On
+    a phone it docks as a sheet and scrolls the target above it. Nothing animates.
+  - **Escape leaves the tour** from anywhere on the page, except while a menu, dialog, or list
+    box handles it, or during an IME composition. The focus returns to where it was, or to a
+    fallback the caller gives.
+  - **Accessible names built from hidden text** (a sent chip's ", sent", "Resume the tour, Step 5
+    of 10") get a space before the hidden part in Chromium; the browser tests accept it, as
+    `approvals.spec.ts` does.
+  - **The flaky arrow-key test:** the helper waits up to 2 seconds (it was half a second), proved
+    by a new test whose focus moves after 800 ms. The stage's own `make check` then caught the
+    test's second weakness: it asserted the selected filter right after the key, but React
+    Router applies a navigation in a transition, so the selection can trail the focus. It now
+    waits for the selection.
+  - **The batch B review** found no high issues and two medium test gaps (the focus-return guard
+    and the dialog's button order went untested); both, and its lows, were fixed, each proved by
+    breaking the code.
+  - **`/code-review medium` ran two rounds.** Round 1 found two mediums, both fixed: the tour's
+    Escape didn't see an open Radix sheet (no `aria-modal`), so on a phone it would close the tour
+    and leave the sheet open; and "Start the tour" had no busy state, so a double press could
+    start two sandboxes. Its lows were fixed too (an unflagged row without a time, a trace closed
+    by a reload while loading, the "Cards confirmed" tile with no rows, Escape on the end card, a
+    shared empty cell, "Not measured yet." for any set not run). Round 2 found nothing high or
+    medium, so the loop stopped; its cheap lows were fixed ("Over 99%", focus after the open row
+    leaves the list, one tool-icon map with icons for the case tools, `aria-controls` only while
+    open, one `variant` prop on the empty state's actions, the scoreboard's shape check).
+
 ## Backlog
 
 Recorded at each stage's close, then moved to `docs/BACKLOG.md`.
@@ -1146,3 +1247,9 @@ Recorded at each stage's close, then moved to `docs/BACKLOG.md`.
   baseline's traces file is held whole in memory for the run; the estimate note re-derives
   `config_for_model`'s condition; `--rejudge` ignores `--half`, `--boards-dir`, and an offline
   `--yes` without saying so.
+- **Stage 5, recorded, not fixed:** the console's day heading is the HQ calendar date
+  (`occurredOn`, as the spec says) while each row's time is in the viewer's time zone, so an HR
+  viewer outside Denver could see a late-night turn under the next day. Dana is at Denver HQ, the
+  only HR person in the demo. A sent chip's and the resume item's accessible names have a space
+  before their hidden part in Chromium ("Book next Friday off. , sent"), as other names built
+  this way already do.
