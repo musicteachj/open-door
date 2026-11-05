@@ -285,7 +285,10 @@ phase makes it, since its full run covers them all.
   - the scoreboard's `pct` and `_count` each have their own float-noise tolerance, and the
     escalation run's terminal report keeps its own `_pct`, which can still print "100.0%" for a
     rate just under 1; a board holding NaN or Infinity (which `json` reads) isn't refused when
-    loaded.
+    loaded;
+  - an abandoned turn's console row shows no cost, tokens, or timings, though the dead turn's
+    safety check and model charges are already in the spend ledger, so the cost tile's sandbox
+    spend and the rows' costs drift apart with no row to explain it (the v0.7.0 release review).
 - **A case refusal that can't succeed still offers "Try again".** `use-open-case.ts` maps the
   waiting limit, a repeated submission, personal data, and empty words; any other refusal (a 404
   `case-turn-not-found`, a 422 `case-words-too-long` or `case-invalid`) shows "Your case wasn't

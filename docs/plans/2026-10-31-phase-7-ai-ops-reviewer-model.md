@@ -803,9 +803,9 @@ checks see a spent sandbox.
 
 ### Task 36: Close Stage 6 and Phase 7
 
-- [ ] `CHANGELOG.md`, the roadmap, `make db && make check`, `/code-review medium` loop; propose the
+- [x] `CHANGELOG.md`, the roadmap, `make db && make check`, `/code-review medium` loop; propose the
       commit and PR
-- [ ] after it merges: the phase review, `/code-review high` on the phase's application code,
+- [x] after it merges: the phase review, `/code-review high` on the phase's application code,
       migrations, scripts, and config against the base commit; real findings fixed in
       `fix/phase-7-review`; then the release (`v0.7.0`)
 
@@ -1186,6 +1186,14 @@ security reviewer. Nothing high was found.
   change. A full run must be started so that no time limit can stop it.
 - **Recorded, not fixed:** the review's other lows, all rare tour or console edge cases, are in
   `docs/BACKLOG.md` under Phase 8.
+
+### The release (`chore/release-0.7.0`, 2026-11-05)
+
+The phase review's fixes merged in #102. The release review (`/code-review medium` on what `dev`
+brings to `main`) found nothing new above low: five of its six findings were already recorded,
+and the sixth (an abandoned turn's console row shows no cost, though its charges are in the
+ledger) joins the Phase 8 backlog. No new live run: nothing the model reads changed after the full
+run of 2026-11-03, which the release ships on.
 
 ## Backlog
 
