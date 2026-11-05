@@ -118,6 +118,19 @@ describe('the tour store', () => {
     expect(useTourStore.getState().sent).toEqual([0])
   })
 
+  it('forgets that the last chip was issued when its send is given back', () => {
+    // A send the API refused after it went out: a press again that a reload interrupts before its
+    // own request must not read as lost.
+    const tour = useTourStore.getState()
+    tour.begin()
+    tour.goTo(2)
+    const { visit } = useTourStore.getState()
+    tour.markSent(0)
+    tour.markIssued(visit)
+    tour.unmarkSent(visit, 0)
+    expect(useTourStore.getState()).toMatchObject({ sent: [], issued: false })
+  })
+
   it('gives a chip back for the visit it was pressed in, and loses a send only while it has no turn', () => {
     const tour = useTourStore.getState()
     tour.begin()

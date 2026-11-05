@@ -53,6 +53,19 @@ export function ScoreboardSection({ data }: { data: unknown }) {
   )
 }
 
+/**
+ * The list's and the tiles' read options. A failed read shows in the section (with Retry), not on
+ * the route's error page: the scoreboard below it is still worth reading. No read again on window
+ * focus or a reconnect: a changed first page drops the held "Show more" pages and closes a trace
+ * open on one. The tiles match, so they never count turns the list does not show.
+ */
+const CONSOLE_QUERY = {
+  throwOnError: false,
+  refetchOnMount: 'always',
+  refetchOnWindowFocus: false,
+  refetchOnReconnect: false,
+} as const
+
 export function ConsolePage() {
   const { data: me } = useMe()
   if (!me) return null
@@ -69,12 +82,8 @@ function Console({ timeZone }: { timeZone: string }) {
     setStickyPanel(true)
     return () => setStickyPanel(false)
   }, [setStickyPanel])
-  // A failed read shows in the section (with Retry), not on the route's error page: the
-  // scoreboard below it is still worth reading.
-  const turns = useListConsoleTurns(undefined, {
-    query: { throwOnError: false, refetchOnMount: 'always' },
-  })
-  const metrics = useGetConsoleMetrics({ query: { throwOnError: false, refetchOnMount: 'always' } })
+  const turns = useListConsoleTurns(undefined, { query: CONSOLE_QUERY })
+  const metrics = useGetConsoleMetrics({ query: CONSOLE_QUERY })
   const more = useMoreTurns(turns.data)
   const sectionTitle = useSectionTitles()
 

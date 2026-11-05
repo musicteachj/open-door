@@ -202,6 +202,30 @@ describe('Scoreboard', () => {
     expect(screen.getByText(/120 items in the full set/)).toBeInTheDocument()
   })
 
+  it('reads an older run whose facts are null without printing "null"', () => {
+    const data: unknown = {
+      ...DATA,
+      sets: DATA.sets.map((s) => ({
+        ...s,
+        facts: {
+          ...s.facts,
+          itemsPerTrial: null,
+          trials: null,
+          date: null,
+          model: null,
+          models: { assistant: 'claude-opus-5-5', guard: null, judge: null },
+        },
+      })),
+    }
+    if (!isScoreboard(data)) throw new Error('null facts were refused')
+    const { container } = render(<Scoreboard data={data} />)
+    expect(container).not.toHaveTextContent(/null|undefined/)
+    expect(screen.getByText(/^Assistant/).closest('p')).toHaveTextContent(
+      /^Assistant claude-opus-5-5$/,
+    )
+    expect(screen.getByText(/a few hundred items/)).toBeInTheDocument()
+  })
+
   it('scrolls each table inside its own keyboard-focusable, labeled region at 640 px minimum', () => {
     render(<Scoreboard data={DATA} />)
     for (const name of ['Eval sets', 'History of full runs']) {

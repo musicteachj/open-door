@@ -75,18 +75,20 @@ export type SendDeps = {
 
 /**
  * How a send ended, for a caller that must know whether the server took the question.
- * `not-sent`: it was refused here, or the server refused it before taking it (still answering,
- * waiting, nothing to send to, 409 turn-running, 422 personal data, any failure with a response).
+ * `not-sent`: it was refused here, or the API refused it before taking it (still answering,
+ * waiting, nothing to send to, or a 4xx problem from the API: 409 turn-running, 422 personal data).
  * `accepted`: the server took it and this is its turn, resolved once the stream is over.
- * `failed-after-accept`: the server answered with a stream but its turn is not known (it ended
- * before saying which), so the server holds the question and a caller must not send it again.
+ * `failed-after-accept`: the server may hold the question but its turn is not known, so a caller
+ * must not send it again.
  * One rule: "never sent twice" wins over "always retryable". `not-sent` only when the request
- * certainly never reached the server: it was refused locally before it was issued, or the server
- * answered with an error status (409 turn running, 422 personal data). Anything after the request
- * was issued that is not such an answer is `failed-after-accept`: a network failure (a reset
- * connection cannot be told from being offline), or an abort (the visitor's Stop, leaving). The
- * server starts the turn's row before it streams and saves a turn whose client left as stopped,
- * so a Stop before any response can still leave a (stopped) turn there. The chat's own Stop puts
+ * certainly never reached the server: it was refused locally before it was issued, or the API
+ * itself answered with a 4xx problem (409 turn running, 422 personal data, 404, 429, 401, 403).
+ * Anything after the request was issued that is not such an answer is `failed-after-accept`: a 5xx,
+ * a response that is not the API's problem (a proxy's 502 or 504, a 200 HTML page), a stream that
+ * ended before it named its turn, a network failure (a reset connection cannot be told from being
+ * offline), or an abort (the visitor's Stop, leaving). The server starts the turn's row before it
+ * streams and saves a turn whose client left as stopped, so a Stop before any response can still
+ * leave a (stopped) turn there. The chat's own Stop puts
  * the question back in the box because nothing is shown for it, which is about the draft, not
  * about whether the server holds it; so a caller must not give the question back.
  */
@@ -321,6 +323,17 @@ function applyEvent(turn: LiveTurn, event: TurnStreamEvent): [LiveTurn, boolean]
   }
 }
 
+/**
+ * The API itself refused the question before taking it: a 4xx with its own problem document (401,
+ * 403, 404, 409, 422, 429). A 5xx, or a response that is not the API's problem (a proxy's 502 or
+ * 504, a 200 HTML page), says nothing about whether the turn started.
+ */
+function refusedByApi(error: unknown): boolean {
+  return (
+    error instanceof ApiError && error.problem !== null && error.status >= 400 && error.status < 500
+  )
+}
+
 function problemText(error: ApiError): string {
   return error.problem?.detail || conversationCopy.sendFailed
 }
@@ -343,8 +356,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
   async send(question, deps, origin = 'composer', onAccepted, onIssued) {
     const trimmed = trimLikePython(question)
     if (trimmed === '') return NOT_SENT
-    const { status } = get()
-    if (status === 'sending' || status === 'streaming') {
+    if (isRunning(get())) {
       set({ sendError: deps.texts.stillAnswering })
       return NOT_SENT
     }
@@ -471,11 +483,10 @@ export const useChatStore = create<ChatState>((set, get) => ({
         return outcome()
       }
       failSend(error, deps)
-      // An error status the server returned means it did not take the question. A request that was
-      // issued and then failed with no response (a reset connection, offline) is unknown: it may
-      // have arrived, so it counts as sent. A failure before the request was issued is not sent.
-      if (error instanceof ApiError) return NOT_SENT
-      return requested ? { kind: 'failed-after-accept' } : NOT_SENT
+      // A failure before the request was issued is not sent, and so is a refusal the API itself
+      // gave (`refusedByApi`). Anything else after it was issued is unknown: it may have arrived.
+      if (requested && !refusedByApi(error)) return { kind: 'failed-after-accept' }
+      return NOT_SENT
     } finally {
       if (inFlight === controller) inFlight = null
     }
@@ -484,7 +495,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
   stop(deps) {
     const { status, turn } = get()
-    if (turn === null || (status !== 'sending' && status !== 'streaming')) return
+    if (turn === null || !isRunning({ status })) return
     if (turn.turnId === null && turn.accepted) {
       // The server has answered, so it has the turn and will save it stopped; only its id has not
       // been read yet. Nothing is shown or put back in the box until it is (`pendingStop`).
@@ -518,7 +529,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
     // Any turn that has finished (completed, stopped, errored, or ended by its escalation) goes
     // to the server's copy. One still coming does not.
     if (turn === null || turn.turnId !== turnId) return
-    if (status === 'sending' || status === 'streaming') return
+    if (isRunning({ status })) return
     set({ status: 'idle', turn: null })
   },
 
@@ -549,7 +560,7 @@ function endWithoutClosingEvent(
   origin: SendOrigin,
 ) {
   const { status, turn } = useChatStore.getState()
-  if (turn === null || (status !== 'sending' && status !== 'streaming')) return
+  if (turn === null || !isRunning({ status })) return
   if (turn.turnId === null) {
     // No event came, so there is no turn to show. If the server had answered (200) it holds the
     // question, and saves the turn stopped: the question is not an unsent draft any more (as

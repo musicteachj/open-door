@@ -160,6 +160,10 @@ version (`0.x.y` while the app is being built, `1.0.0` when it is complete).
 
 ### Changed
 
+- **ADR 0016 records why an unscreened turn keeps an ordinary console row** (Phase 7 review): a
+  turn stopped while the safety check ran, or whose check was down, shows its time, role,
+  location, and outcome, and no text. Nothing on it says the message was sensitive, and redacting
+  it would hide how often the safety check fails.
 - **The scripted model answers the tour's prompts** (Phase 7, Stage 6; development and browser
   tests only, never a recorded eval). "How many sick days do I get?" cites the asker's state
   sick-leave section when there is one (Priya gets California's 4.3, Mateo the company's 4.3);
@@ -237,6 +241,24 @@ version (`0.x.y` while the app is being built, `1.0.0` when it is complete).
 
 ### Fixed
 
+- **A tour chip is never asked twice after a proxy error** (Phase 7 review). When a proxy answered
+  502 or 504 (or a page that isn't the API's) after the question reached the API, the chat
+  reported it as not sent, so the tour freed the chip and the visitor could ask again, starting a
+  second turn. Now only a refusal the API itself gives (a 4xx with its problem document) counts as
+  not sent; anything else after the request went out counts as "may have arrived".
+- **The scoreboard never rounds up to 100% or down to 0%** (Phase 7 review). A rate of 99.5% or
+  more read "100%" with failures in it (one miss in 618 answers); it now reads "99%", and a rate
+  just above zero reads "1%".
+- **The tour still sends a chip after one failed background refresh** (Phase 7 review). A failed
+  refresh of the conversation or the assistant's texts, with the cached copy still on screen,
+  made the tour ignore chip presses until a later refresh worked.
+- **The console keeps its "Show more turns" pages when the window regains focus** (Phase 7
+  review). Refocusing after a new turn read the first page again, which drops the held pages and
+  closed a trace open on them. The list and the tiles no longer refresh on focus or on a
+  reconnect.
+- **An older eval board with missing facts no longer blanks the scoreboard** (Phase 7 review).
+  The board writer gives `null` for a fact an older run file lacks, which the app's check
+  rejected, hiding the whole scoreboard; it now accepts them.
 - **The persona menu no longer reopens after a switch** (Phase 7, Stage 6). A re-render between a
   pick and the menu's own close could leave it open, so it came back when the switch ended. It
   now closes itself when a switch or sign out starts.

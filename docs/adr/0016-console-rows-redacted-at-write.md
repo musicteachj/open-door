@@ -74,3 +74,23 @@ Stage 1's security review corrected two things, and the owner agreed to both.
 - **An abandoned turn's row says it was abandoned** (`abandoned`, always on a redacted row), so the
   escalation rate counts only turns the safety check flagged, and the page can word that row
   differently. It says only that a turn died.
+
+## Amendment (2026-11-05, the Phase 7 review)
+
+The phase review asked whether a turn the safety check never screened should be redacted too. It
+is not, and the owner agreed.
+
+- **A turn without a verdict gets an ordinary row.** That is a turn stopped while the check ran,
+  one whose check failed or was unavailable (the person saw the fixed "can't answer right now" text
+  with 911 and 988), or one a budget stopped first. Its row shows its time, role, location, and
+  outcome ("Stopped" or "Safety check unavailable"), like any other turn's, and no text.
+- **Why:** nothing on the row says the message was sensitive. Most stopped and unscreened turns
+  are ordinary, and the fixed text a failed check shows is the same for every message. Redacting
+  them would hide how often the safety check fails, which is one of the things the console is
+  for, and would count them as escalations.
+- **What is different from an abandoned turn:** an abandoned turn's process died, so the app
+  can't say how it ended; its row is redacted and marked `abandoned`. An unscreened turn ended in
+  a known way, which its row shows.
+- **Rejected:** redacting every turn with no verdict, with a new `unscreened` mark so the
+  escalation tile wouldn't count it. It needs a migration and loses the safety check's failure
+  rate for little gain in privacy.

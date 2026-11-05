@@ -254,8 +254,7 @@ From Phase 6 a person can send HR a confidential case from the panel or the My c
 
 From Phase 7, HR sees what the assistant did on each turn in its own sandbox: the safety check's
 category, the tools, the handbook sections, tokens, cost, and timing
-([ADR 0016](adr/0016-console-rows-redacted-at-write.md)). Its page arrives in Stage 6; its data,
-from Stage 1:
+([ADR 0016](adr/0016-console-rows-redacted-at-write.md)), on its page at `/console`:
 
 - **Each finished turn writes a console row,** a copy of its metadata taken when the turn ends.
   No row holds a person ID, a conversation ID, a name, or any text a person or the model wrote: the
@@ -263,8 +262,9 @@ from Stage 1:
 - **A flagged turn (sensitive or crisis) is a date-only row:** its date and its counts (tokens,
   cost, timings, model). The database refuses a flagged row that holds anything more, and a turn
   whose process died mid-turn (so no verdict was stored) gets the same row. A turn the safety
-  check never screened (it was down, or the spending cap stopped the turn first) is an ordinary
-  row with no verdict, tools, or sections, so a guard outage shows.
+  check never screened (it was down, the person stopped the turn while it ran, or the spending cap
+  stopped the turn first) is an ordinary row with no verdict, tools, or sections, so a guard
+  outage shows (ADR 0016's second amendment).
 - **Only HR reads the rows,** in its own sandbox, by a database rule; nobody can change or delete
   them, and they go with the sandbox.
 - **Its limits:** role and location are coarse, not anonymous. In a small team, or a four-persona

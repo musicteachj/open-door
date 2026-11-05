@@ -1150,6 +1150,43 @@ Recorded at each stage's close.
     step's chip; a refused send left the chip marked sent; a card from an earlier step counted as
     the result). All were fixed test first and mutation-proved.
 
+### The phase review (`fix/phase-7-review`, 2026-11-05)
+
+After Stage 6 merged (#101), the whole phase was reviewed against its base `098c0b8`: three
+`/code-review high` passes (the whole phase; the web app's tour, chat store, and shell; the API,
+config, and the seam from the board writer to the app's scoreboard). The scope was Phase 6's
+(application code, migrations, scripts, and config; no tests, generated files, docs, or gallery)
+plus, on the owner's call, the two eval files that feed the app: `evals/assistant/boards.py` and
+`evals/scoreboard_gen.py`. Phase 7 guards no invariant on its own, so there was no separate
+security reviewer. Nothing high was found.
+
+- **Fixed, test first and mutation-proved:** a proxy's 502 or 504 after the question reached the
+  API counted as "not sent", so a tour chip could ask twice (now only the API's own 4xx refusal
+  is "not sent"); the scoreboard's percentages rounded 99.5% and up to "100%" (now only an exact 1
+  is 100%, and only an exact 0 is 0%); a failed background refresh made the tour ignore chips; a
+  window refocus or a reconnect collapsed the console's held pages; the app's scoreboard check
+  rejected the `null` facts the board writer gives an older run. Two cleanups: a conditional in
+  the tour store that changed nothing, and the chat store's own running checks now use
+  `isRunning`.
+- **Tried and taken back:** a crisis-recall mean fallback on the escalation row (no run file has
+  that figure, so it could never apply) and a Makefile guard on `MODEL` with `SET=effort` (the
+  effort set's use of the other model's folder is deliberate in `run.py` and recorded since
+  Stage 2; a guard in the Makefile alone would be half a rule). The fix branch's
+  `/code-review medium` round 1 found both.
+- **Decided, not changed (the owner agreed):** a turn the safety check never screened (stopped
+  while it ran, or the check was down) keeps an ordinary console row. Nothing on it says the
+  message was sensitive, and redacting it would hide the safety check's failure rate. ADR 0016's
+  second amendment records it.
+- **The four model-visible backlog items were written, then taken back on the owner's call:**
+  the religious-observance and age lines in the prompt, HR's topic note ("when it shows"), and
+  `list_cases`'s "most recently changed". Their full run hit the session's two-hour limit for a
+  background command before it finished (about $1.55 spent, nothing recorded, since the runner
+  saves only at the end), and the owner chose to ship v0.7.0 on the full run of 2026-11-03
+  rather than pay for a second attempt. They wait in `docs/BACKLOG.md` for the next prompt
+  change. A full run must be started so that no time limit can stop it.
+- **Recorded, not fixed:** the review's other lows, all rare tour or console edge cases, are in
+  `docs/BACKLOG.md` under Phase 8.
+
 ## Backlog
 
 Recorded at each stage's close, then moved to `docs/BACKLOG.md`.

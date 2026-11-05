@@ -59,6 +59,14 @@ describe('isScoreboard', () => {
     expect(withFacts({ date: 20261019 })).toBe(false)
   })
 
+  it('accepts the nulls the board writer gives an older run that lacks a fact', () => {
+    const [first, ...rest] = generated.sets
+    const withFacts = (facts: unknown) =>
+      isScoreboard({ ...generated, sets: [{ ...first, facts }, ...rest] })
+    expect(withFacts({ itemsPerTrial: null, trials: null, date: null, model: null })).toBe(true)
+    expect(withFacts({ models: { assistant: 'a', guard: null, judge: null } })).toBe(true)
+  })
+
   it('accepts a set that was not run and a history with no rows', () => {
     const notRun = {
       key: 'x',

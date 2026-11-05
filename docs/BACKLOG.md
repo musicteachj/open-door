@@ -5,6 +5,16 @@ should pick it up. When one is done, delete it here and record it in the changel
 
 ## Any phase
 
+- **"Send this question to HR."** The console counts the questions the handbook couldn't answer
+  (counts only: the question is the person's text). A button on a "couldn't find it" answer would
+  let the person send the question to HR themselves, so HR can see what to write next. (Phase 7
+  planning, decision 4.)
+- **Sonnet 5.5 writes tool calls as answer text.** In the model comparison of 2026-11-03 it did so
+  on a workplace-safety report (two of three trials) and a lunch-break question (all three), and
+  again on the turn's one re-issue, so the person got an error. It is why Opus 5.5 stays
+  ([ADR 0018](adr/0018-default-model.md)). Measure a newer Sonnet, or a turn that recovers from it
+  another way (a second re-issue, or a request that disallows text before the tool call), before
+  comparing again. (Phase 7, Stage 4.)
 - **A "still answering" conflict on Confirm gives no feedback.** `use-proposal-actions.ts` treats
   every 409 as "the card changed; the next read shows it". A 409 `turn-running` leaves the card
   pending, so if the page's view of the turn and the server's briefly differ, Confirm does nothing
@@ -206,22 +216,8 @@ conversation-page glitches are fixed with browser tests (stage 6).
 
 ## Phase 7: AI Ops console, reviewer experience, model decision
 
-- **The audit log stores `None` as the JSON value `null`.** `AuditEvent.before` and `after` are
-  nullable `jsonb` columns without `none_as_null=True`, so an event with no before or after state
-  holds JSON `null`, not SQL `NULL`, and an `IS NULL` query misses it. The assistant tables were
-  fixed in stage 1; the audit columns need the same type change and a data fix for existing rows.
-  Phase 7's console is the first to query them. (Phase 4 stage 1 review.) Moved from Phase 4 at its close: the console is the first to query these columns.
-
-- **Store why a turn was refused.** The Anthropic transport builds `Finished.stop_details` (the
-  refusal's category and explanation) and documents it as information for the audit trail, but
-  nothing stores it: a refused turn records only that it was refused. The console is the first to
-  need the reason; store it on the turn (and in the data inventory) or drop the field. (v0.4.0
-  release review.)
-
-- **Report the questions the handbook couldn't answer.** The console lists them, so HR can see
-  what to write next. The question text is user-written, so it's untrusted data, and it's redacted
-  for guard-flagged turns. Fold the "design notes" idea into the tour
-  rather than adding another explainer ("How it's built" was dropped on 2026-10-31). (2026-10-06 design brainstorm.)
+Phase 7 is closed. These five wait for the next change to what the model reads, in whichever
+phase makes it, since its full run covers them all.
 
 - **Reach the judge's 85% bar.** Phase 7, Stage 3 made its one bounded attempt: a clearer citation
   rule for the judge (2026-11.3, agreement 91.2%), the trimmed references, the Colorado carryover
@@ -234,21 +230,15 @@ conversation-page glitches are fixed with browser tests (stage 6).
   question in all three trials (it cited only 4.2 and offered PTO), while Eid and Yom Kippur got the
   accommodation route of 5.3 in every trial and Diwali in two. One prompt line (a time-off request
   for any religious observance gets the accommodation route as well as PTO) would likely fix it;
-  it changes what the model reads, so it needs a full run. The owner chose to decide before the
-  release, with the model Stage 4 picks: Opus 5.5 stays ([ADR 0018](adr/0018-default-model.md)).
-  (Phase 7, Stage 3.)
-- **Sonnet 5.5 writes tool calls as answer text.** In the model comparison of 2026-11-03 it did so
-  on a workplace-safety report (two of three trials) and a lunch-break question (all three), and
-  again on the turn's one re-issue, so the person got an error. It is why Opus 5.5 stays
-  ([ADR 0018](adr/0018-default-model.md)). Measure a newer Sonnet, or a turn that recovers from it
-  another way (a second re-issue, or a request that disallows text before the tool call), before
-  comparing again. (Phase 7, Stage 4.)
+  it changes what the model reads, so it needs a full run. At the Phase 7 review (2026-11-05) the
+  owner chose to ship v0.7.0 without it and fold this line, the age line, HR's topic note, and
+  `list_cases`'s wording into the next prompt change, whose full run covers them all. (Phase 7,
+  Stage 3.)
 - **Fairness: an age cue draws an age remark.** The same run told the 61-year-old asking about PTO
   "if you think your age might affect your PTO, the HR team can answer that" (flagged as an
   identity assumption in one trial) and, in another trial, that nothing in the handbook changes
   PTO by age; the 24-year-old got neither. Fix with the Good Friday line: don't comment on the
   asker's age, origin, or background unless the question asks about it. (Phase 7, Stage 3.)
-
 - **HR's topic note names a form that may not show.** `TOPIC_NOTE_HR` says a case "is sent from
   the HR panel's form", but the note goes only on topic turns, where no panel follows (the prompt
   itself says "when it shows"). Add "when it shows" or say what HR can do instead. It changes what
@@ -261,6 +251,41 @@ conversation-page glitches are fixed with browser tests (stage 6).
 
 ## Phase 8: hardening and deploy-readiness
 
+- **The audit log stores `None` as the JSON value `null`.** `AuditEvent.before` and `after` are
+  nullable `jsonb` columns without `none_as_null=True`, so an event with no before or after state
+  holds JSON `null`, not SQL `NULL`, and an `IS NULL` query misses it. The assistant tables were
+  fixed in stage 1; the audit columns need the same type change and a data fix for existing rows.
+  (Phase 4 stage 1 review.) Moved from Phase 7 at its close: the console only counts audit events
+  by action and never queries these columns, so the fix goes with the hardening pass.
+- **Phase 7 review lows, recorded, not fixed** (2026-11-05). Each is a rare edge case in the
+  tour or the console:
+  - starting a new conversation while a tour chip's answer is still coming leaves the step with
+    only Skip, since the turn it waits for is no longer on the page;
+  - on a step that expects a card, Next shows as soon as the card does, before the answer
+    finishes, and pressing it then stops that turn (the persona switch ends the stream);
+  - leaving `/ask` while a card step's answer streams shows the "didn't come" line until the
+    visitor goes back, where the card makes it a result;
+  - signing in again after another tab changed the persona clears the query client, mutation
+    cache included, so the identity gate can open while a switch is still in flight;
+  - after a reload, a chip other than the step's last one that was marked sent before its request
+    went out stays Sent (only the last chip tracks whether its request was issued);
+  - the tour runner subscribes to the current conversation twice (its own read and
+    `useTurnFinished`'s);
+  - the console's day heading counts the rows loaded so far, and a day's redacted rows sort after
+    its timed ones, so on a day of more than 50 turns they appear only after "Show more turns";
+  - a console row's cost leaves out a reservation kept because its cost was unknown (a settle that
+    timed out), so the cost tile can read below the ledger's spend;
+  - the console row adds the safety check's tokens to the turn's field by field instead of with
+    `pricing.total_usage`;
+  - after a send whose outcome is unknown (a network failure, or a 5xx since the review), the
+    plain chat doesn't read the conversation again, so a turn the API did start shows only on the
+    next read; and a proxy's own 4xx page (nginx's 413) now counts as unknown too, so the tour
+    keeps that chip Sent though the request likely never reached the API, and so does the API's
+    own 500 from before the turn's row exists (the API's problem could say no turn started);
+  - the scoreboard's `pct` and `_count` each have their own float-noise tolerance, and the
+    escalation run's terminal report keeps its own `_pct`, which can still print "100.0%" for a
+    rate just under 1; a board holding NaN or Infinity (which `json` reads) isn't refused when
+    loaded.
 - **A case refusal that can't succeed still offers "Try again".** `use-open-case.ts` maps the
   waiting limit, a repeated submission, personal data, and empty words; any other refusal (a 404
   `case-turn-not-found`, a 422 `case-words-too-long` or `case-invalid`) shows "Your case wasn't
