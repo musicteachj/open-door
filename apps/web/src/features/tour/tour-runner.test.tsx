@@ -2,7 +2,11 @@ import { act, fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { http, HttpResponse } from 'msw'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { DAY_METRICS, DAY_TURNS } from '@/app/gallery/fixtures/console'
-import { getEndSessionMutationKey, getGetAssistantTextsQueryKey } from '@/api/generated'
+import {
+  getEndSessionMutationKey,
+  getGetAssistantTextsQueryKey,
+  getGetCurrentConversationQueryKey,
+} from '@/api/generated'
 import { useChatStore } from '@/features/chat/store'
 import { installFakeApi } from '@/test/fake-api'
 import {
@@ -792,6 +796,58 @@ describe('a chip that cannot be sent', () => {
       expect(within(card).queryByRole('button', { name: 'Next' })).not.toBeInTheDocument()
       await user.click(within(card).getByRole('button', { name: /^How many sick days/ }))
       await waitFor(() => expect(posted).toHaveLength(2))
+    },
+  )
+
+  it('keeps the chip Sent after a proxy 504, since the API may have started the turn', async () => {
+    const posted = onTurn(() => new HttpResponse('<html>Gateway timeout</html>', { status: 504 }))
+    const { user } = setup('priya', 0)
+    const card = await mark(/Ask a policy question/)
+    await screen.findByRole('textbox', { name: 'Ask Open Door' })
+    await user.click(within(card).getByRole('button', { name: /^How many sick days/ }))
+    await waitFor(() => expect(posted).toHaveLength(1))
+    await waitFor(() => expect(useChatStore.getState().sendError).not.toBeNull())
+    await new Promise((resolve) => setTimeout(resolve, 100))
+    expect(useTourStore.getState().sent).toEqual([0])
+    expect(within(card).getByRole('button', { name: /sent$/ })).toHaveAttribute(
+      'aria-disabled',
+      'true',
+    )
+  })
+
+  it.each([
+    ['the assistant texts', '/api/v1/assistant/texts', getGetAssistantTextsQueryKey()],
+    [
+      'the conversation',
+      '/api/v1/assistant/conversations/current',
+      getGetCurrentConversationQueryKey(),
+    ],
+  ])(
+    'still sends a chip when a background read of %s fails while the cached copy shows',
+    async (_name, path, queryKey) => {
+      const posted = onTurn((question) => eventStream(...completes(question)))
+      let failing = false
+      const { user, queryClient } = setup('priya', 0, {}, () =>
+        server.use(
+          // Returning nothing falls through to the fake's own handler.
+          http.get(`${window.location.origin}${path}`, () => {
+            if (!failing) return undefined
+            return HttpResponse.json(
+              { type: 'about:blank', title: 'Down', status: 500, instance: '/' },
+              { status: 500 },
+            )
+          }),
+        ),
+      )
+      const card = await mark(/Ask a policy question/)
+      await screen.findByRole('textbox', { name: 'Ask Open Door' })
+      await waitFor(() => expect(queryClient.getQueryState(queryKey)?.status).toBe('success'))
+      failing = true
+      await act(() => queryClient.refetchQueries({ queryKey }).catch(() => {}))
+      await waitFor(() => expect(queryClient.getQueryState(queryKey)?.status).toBe('error'))
+      expect(queryClient.getQueryData(queryKey)).toBeDefined()
+      await user.click(within(card).getByRole('button', { name: /^How many sick days/ }))
+      await waitFor(() => expect(posted).toHaveLength(1))
     },
   )
 

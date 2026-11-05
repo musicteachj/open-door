@@ -116,10 +116,22 @@ def _shown(board: Mapping[str, Any]) -> bool:
 # --- Formatting -------------------------------------------------------------------------------
 
 
+# How close to 0% or 100% a rate must be to count as exactly that: float noise, not a result.
+_EXACT = Decimal("1e-7")
+
+
 def pct(value: float, *, places: int = 0) -> str:
-    """A rate as a percentage, rounded half up."""
+    """A rate as a percentage, rounded half up. Only 1 reads "100%" and only 0 reads "0%": a rate
+    between them that would round to either end shows the nearest step inside it ("99%", or
+    "99.9%" with one place; "1%" at the low end), so one failed item never reads as a perfect
+    score and one success never reads as none. Within `_EXACT` of either end counts as that end,
+    and NaN is shown as it is, as before."""
+    step = Decimal(1).scaleb(-places)
     scaled = Decimal(str(value)) * 100
-    return f"{scaled.quantize(Decimal(1).scaleb(-places), rounding='ROUND_HALF_UP'):f}%"
+    shown = scaled.quantize(step, rounding="ROUND_HALF_UP")
+    if scaled.is_finite() and _EXACT < scaled < 100 - _EXACT:
+        shown = min(max(shown, step), Decimal(100) - step)
+    return f"{shown:f}%"
 
 
 def _stamp_date(stamp: str) -> str:

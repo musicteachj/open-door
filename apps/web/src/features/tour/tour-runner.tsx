@@ -138,9 +138,11 @@ function ActiveTour({ me, actions, onChoosePersona }: TourRunnerProps) {
 
   const saved = useGetCurrentConversation({ query: { enabled: shown && hasChips } })
   // The assistant's texts or the conversation could not be read: a chip would wait for ever. The
-  // page shows its own error for either, and a chip pressed now is not queued.
+  // page shows its own error for either, and a chip pressed now is not queued. A failed background
+  // read that still has its cached copy is not that.
   const texts = useAssistantTexts({ enabled: hasChips })
-  const unreadable = texts.isError || saved.isError
+  const unreadable =
+    (texts.isError && texts.data === undefined) || (saved.isError && saved.data === undefined)
   const onStepPage = onPath(pathname, def.path)
   // Chips pressed before the assistant’s texts load, or while the
   // last answer is still coming, wait for the conversation to be idle, in the order pressed, for
@@ -161,9 +163,9 @@ function ActiveTour({ me, actions, onChoosePersona }: TourRunnerProps) {
     const onIssued = isLast ? () => useTourStore.getState().markIssued(visit) : undefined
     void send(question, undefined, onAccepted, onIssued).then((outcome) => {
       if (outcome.kind === 'not-sent') {
-        // The server never took the question (still answering, a refusal, a failure with a
-        // response): the chip may be pressed again. "Never sent twice" holds because every other
-        // ending keeps the chip Sent.
+        // The question never reached the API, or the API itself refused it (still answering, a
+        // 4xx refusal): the chip may be pressed again. "Never sent twice" holds because every
+        // other ending keeps the chip Sent.
         useTourStore.getState().unmarkSent(visit, chip)
       } else if (isLast) {
         if (outcome.kind === 'failed-after-accept') useTourStore.getState().sendLost(visit)

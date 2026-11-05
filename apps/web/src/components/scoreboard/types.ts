@@ -20,14 +20,15 @@ export type ScoreboardSet = {
   lowest: { value: number | null; display: string } | null
   /** Other figures, one per line. */
   also: string[]
+  /** A fact an older run file lacks is null (evals/assistant/boards.py), never an error. */
   facts: {
     /** The model that served the set. */
     model?: string | null
     /** The assistant, safety check, and judge, on the Q&A set. */
-    models?: { assistant?: string; guard?: string; judge?: string } | null
-    itemsPerTrial?: number
-    trials?: number
-    date?: string
+    models?: { assistant?: string | null; guard?: string | null; judge?: string | null } | null
+    itemsPerTrial?: number | null
+    trials?: number | null
+    date?: string | null
   } | null
 }
 
@@ -73,19 +74,22 @@ function isLowest(value: unknown): boolean {
   )
 }
 
+const isNullableNumber = (value: unknown) => value === null || typeof value === 'number'
+
 /**
- * The facts a set carries: when present, `itemsPerTrial` and `trials` are numbers, `model` is a
- * string or null, `date` is a string, and `models` are strings.
+ * The facts a set carries: when present, `itemsPerTrial` and `trials` are numbers, `model` and
+ * `date` are strings, and `models` are strings. Each may be null: the board writer gives null for a
+ * fact an older run file lacks.
  */
 function isFacts(value: unknown): boolean {
   if (!isRecord(value)) return false
-  if (value.itemsPerTrial !== undefined && typeof value.itemsPerTrial !== 'number') return false
+  if (value.itemsPerTrial !== undefined && !isNullableNumber(value.itemsPerTrial)) return false
   if (value.model !== undefined && !isNullableString(value.model)) return false
-  if (value.trials !== undefined && typeof value.trials !== 'number') return false
-  if (value.date !== undefined && typeof value.date !== 'string') return false
+  if (value.trials !== undefined && !isNullableNumber(value.trials)) return false
+  if (value.date !== undefined && !isNullableString(value.date)) return false
   const models = value.models
   if (models === undefined || models === null) return true
-  return isRecord(models) && Object.values(models).every(isString)
+  return isRecord(models) && Object.values(models).every(isNullableString)
 }
 
 function isSet(value: unknown): value is ScoreboardSet {

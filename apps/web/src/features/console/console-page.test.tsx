@@ -1,5 +1,6 @@
 import { act, render, screen, waitFor, within } from '@testing-library/react'
 import { http, HttpResponse } from 'msw'
+import { onlineManager } from '@tanstack/react-query'
 import { describe, expect, it } from 'vitest'
 import {
   DAY_TURNS,
@@ -355,6 +356,38 @@ describe('a read again', () => {
     await waitFor(() => expect(queryClient.isFetching()).toBe(0))
     expect(await rowButtons()).toHaveLength(3)
     expect(screen.queryByRole('button', { name: 'Show more turns' })).not.toBeInTheDocument()
+  })
+
+  it('does not read again on a window refocus, so the held pages stay', async () => {
+    const { fake } = await withPageTwo()
+    const turnsBefore = fake.calls.turns.length
+    const metricsBefore = fake.calls.metrics
+    // A new turn since: a read now would change the first page and drop the held one.
+    fake.set({ pages: { ...TWO_PAGES, '': { items: [T_1038_INJECTION], nextCursor: 'page-2' } } })
+    act(() => {
+      window.dispatchEvent(new Event('visibilitychange'))
+    })
+    await new Promise((resolve) => setTimeout(resolve, 100))
+    expect(fake.calls.turns).toHaveLength(turnsBefore)
+    expect(fake.calls.metrics).toBe(metricsBefore)
+    expect(await rowButtons()).toHaveLength(3)
+  })
+
+  it('does not read again on a reconnect, so the held pages stay', async () => {
+    const { fake } = await withPageTwo()
+    const turnsBefore = fake.calls.turns.length
+    const metricsBefore = fake.calls.metrics
+    fake.set({ pages: { ...TWO_PAGES, '': { items: [T_1038_INJECTION], nextCursor: 'page-2' } } })
+    act(() => {
+      onlineManager.setOnline(false)
+    })
+    act(() => {
+      onlineManager.setOnline(true)
+    })
+    await new Promise((resolve) => setTimeout(resolve, 100))
+    expect(fake.calls.turns).toHaveLength(turnsBefore)
+    expect(fake.calls.metrics).toBe(metricsBefore)
+    expect(await rowButtons()).toHaveLength(3)
   })
 
   it('clears a failed-page message when the first page changed', async () => {

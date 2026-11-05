@@ -578,3 +578,40 @@ def test_uncited_claims_never_show_a_nonzero_mean_as_zero(mean: float, text: str
 def test_the_judge_target_lives_with_the_runs_other_bars() -> None:
     assert gen.run_boards.JUDGE_PASS_TARGET == 0.85
     assert not hasattr(gen, "JUDGE_TARGET")
+
+
+@pytest.mark.parametrize(
+    ("value", "places", "text"),
+    [
+        (1.0, 0, "100%"),
+        (0.0, 0, "0%"),
+        (0.5, 0, "50%"),
+        (0.835, 0, "84%"),
+        (617 / 618, 0, "99%"),
+        (0.995, 0, "99%"),
+        (0.9999, 1, "99.9%"),
+        (0.9994, 1, "99.9%"),
+        (0.004, 0, "1%"),
+        (0.0001, 1, "0.1%"),
+        (0.012, 1, "1.2%"),
+    ],
+)
+def test_a_rate_short_of_one_or_above_zero_never_reads_as_100_or_0(
+    value: float, places: int, text: str
+) -> None:
+    # One Q&A miss in 618 graded answers is not a perfect score, and one success is not none.
+    assert gen.pct(value, places=places) == text
+
+
+@pytest.mark.parametrize(
+    ("value", "text"),
+    [(1 - 1e-12, "100%"), (1e-12, "0%"), (sum([0.1] * 10), "100%")],
+)
+def test_float_noise_at_either_end_is_not_a_failure_or_a_success(value: float, text: str) -> None:
+    # A perfect mean built from float sums can land a hair under 1; that is not a missed item.
+    assert gen.pct(value) == text
+
+
+def test_a_rate_that_is_not_a_number_is_shown_as_it_is() -> None:
+    # json reads NaN; the generator must not crash on an older board that holds one.
+    assert gen.pct(float("nan")) == "NaN%"

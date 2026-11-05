@@ -132,8 +132,17 @@ export const useTourStore = create<TourState>()(
         }),
       markSent: (chip) =>
         set((s) => ({ sent: s.sent.includes(chip) ? s.sent : [...s.sent, chip] })),
+      // Giving the last chip back also forgets that its request went out, so a press again starts
+      // clean.
       unmarkSent: (visit, chip) =>
-        set((s) => (s.visit === visit ? { sent: s.sent.filter((c) => c !== chip) } : {})),
+        set((s) =>
+          s.visit === visit
+            ? {
+                sent: s.sent.filter((c) => c !== chip),
+                issued: chip === (TOUR[s.step]!.chips?.length ?? 0) - 1 ? false : s.issued,
+              }
+            : {},
+        ),
       setTurnId: (visit, turnId) => set((s) => (s.visit === visit ? { turnId } : {})),
       sendLost: (visit) =>
         set((s) => (s.visit === visit && s.turnId === null ? { lost: true } : {})),
@@ -216,7 +225,7 @@ function validStored(raw: unknown): Partial<TourState> | null {
     sent,
     turnId: r.turnId as string | null,
     lost: r.lost || inFlightLost,
-    issued: pending && !issued ? false : issued,
+    issued,
     outcome: r.outcome as Outcome | null,
     entering: r.entering,
   }
