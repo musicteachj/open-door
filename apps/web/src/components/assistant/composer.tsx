@@ -17,6 +17,7 @@ import { cn } from '@/lib/utils'
 import { APP_LINK } from './link-class'
 import { QUESTION_LIMIT_CHARACTERS, conversationCopy, lengthHint } from './labels'
 import { characterCount, trimLikePython } from './text-count'
+import { TOUR_TARGETS, tourTarget } from '@/lib/tour-targets'
 
 /** The length hint shows from this many characters (the trimmed text, in code points). */
 const LENGTH_HINT_FROM_CHARACTERS = 1800
@@ -332,6 +333,7 @@ function Composer({
   return (
     <form
       data-slot="composer"
+      {...tourTarget(TOUR_TARGETS.composer)}
       onSubmit={handleSubmit}
       ref={formRef}
       className={cn('m-0 flex w-full max-w-content flex-col gap-2.5', className)}

@@ -6,6 +6,7 @@ import { getSessionStatus } from '@/app/session-status'
 import { useChatStore } from '@/features/chat/store'
 import { accessibleNameOf } from '@/test/accessible-name'
 import { installFakeApi } from '@/test/fake-api'
+import { installAssistantApi } from '@/test/fake-assistant'
 import { installFakeHandbook } from '@/test/fake-handbook'
 import { installFakeTimeOff } from '@/test/fake-time-off'
 import { PRIYA_WAITING } from '@/app/gallery/fixtures/timeoff'
@@ -34,7 +35,7 @@ function gate() {
   return { promise, resolve }
 }
 
-function failOnce(url: string, method: 'put' | 'delete') {
+function failOnce(url: string, method: 'put' | 'delete' | 'post') {
   server.use(
     http[method](
       url,
@@ -85,6 +86,16 @@ describe('the shell: layout', () => {
         .getByText(/^Sandbox resets in/)
         .closest('header'),
     ).not.toBeNull()
+  })
+
+  it('asks for none of the assistant’s texts on a page that has no assistant, when no tour is on', async () => {
+    installFakeApi('priya')
+    installFakeDirectory('priya')
+    const api = installAssistantApi()
+    const { queryClient } = renderApp({ at: '/directory' })
+    await screen.findByRole('list', { name: 'People' })
+    await waitFor(() => expect(queryClient.isFetching()).toBe(0))
+    expect(api.requests.texts).toBe(0)
   })
 
   it('keeps exactly one main on the pages, the profile, and not found', async () => {
@@ -390,7 +401,6 @@ describe('the shell: switching', () => {
     const { user } = renderApp({ at: '/ask' })
     await screen.findByRole('complementary', { name: 'Sidebar' })
     await switchViaMenu(user, 'Marcus')
-
     const alert = await screen.findByRole('alert')
     expect(alert).toHaveTextContent("We couldn't switch to Marcus.")
     expect(toast()).toBeNull()
@@ -402,6 +412,80 @@ describe('the shell: switching', () => {
     await user.click(within(alert).getByRole('button', { name: 'Retry' }))
     await waitFor(() => expect(personaSwitcher()).toHaveAccessibleName(MARCUS))
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  })
+
+  it('forgets a failed tour start when the visitor switches, so one error shows at a time', async () => {
+    installFakeApi('priya')
+    failOnce(`${window.location.origin}/api/v1/sandboxes`, 'post')
+    failOnce(SWITCH(), 'put')
+    const { user } = renderApp({ at: '/ask' })
+    await screen.findByRole('complementary', { name: 'Sidebar' })
+    await user.click(screen.getByRole('button', { name: /Switch persona$/ }))
+    await user.click(await screen.findByRole('menuitem', { name: 'Take the tour' }))
+    await user.click(await screen.findByRole('button', { name: 'Start the tour' }))
+    expect(await screen.findByRole('alert')).toHaveTextContent("We couldn't start a sandbox.")
+
+    await switchViaMenu(user, 'Marcus')
+    await waitFor(() =>
+      expect(screen.getByRole('alert')).toHaveTextContent("We couldn't switch to Marcus."),
+    )
+    expect(screen.getAllByRole('alert')).toHaveLength(1)
+  })
+
+  it('keeps focus on "Start the tour" in the dialog while its own sandbox starts', async () => {
+    installFakeApi('priya')
+    let release = () => {}
+    const held = new Promise<void>((resolve) => (release = resolve))
+    server.use(
+      http.post(`${window.location.origin}/api/v1/sandboxes`, async () => {
+        await held
+        return HttpResponse.json({ title: 'x', status: 500 }, { status: 500 })
+      }),
+    )
+    const { user } = renderApp({ at: '/ask' })
+    await screen.findByRole('complementary', { name: 'Sidebar' })
+    await user.click(screen.getByRole('button', { name: /Switch persona$/ }))
+    await user.click(await screen.findByRole('menuitem', { name: 'Take the tour' }))
+    const start = await screen.findByRole('button', { name: 'Start the tour' })
+    start.focus()
+    await user.keyboard('{Enter}')
+    await waitFor(() => expect(start).toHaveAttribute('aria-busy', 'true'))
+    expect(start).not.toBeDisabled()
+    expect(start).toHaveFocus()
+    release()
+  })
+
+  it('retries a failed tour start from the shell, leaving one error at most', async () => {
+    installFakeApi('priya')
+    const sandboxes = `${window.location.origin}/api/v1/sandboxes`
+    failOnce(sandboxes, 'post')
+    const { user } = renderApp({ at: '/ask' })
+    await screen.findByRole('complementary', { name: 'Sidebar' })
+    await user.click(screen.getByRole('button', { name: /Switch persona$/ }))
+    await user.click(await screen.findByRole('menuitem', { name: 'Take the tour' }))
+    await user.click(await screen.findByRole('button', { name: 'Start the tour' }))
+    const alert = await screen.findByRole('alert')
+    expect(alert).toHaveTextContent("We couldn't start a sandbox.")
+    await user.click(within(alert).getByRole('button', { name: 'Retry' }))
+    await waitFor(() => expect(screen.queryByRole('alert')).not.toBeInTheDocument())
+  })
+
+  it('forgets a failed switch when the tour starts, so one error shows at a time', async () => {
+    installFakeApi('priya')
+    failOnce(SWITCH(), 'put')
+    failOnce(`${window.location.origin}/api/v1/sandboxes`, 'post')
+    const { user } = renderApp({ at: '/ask' })
+    await screen.findByRole('complementary', { name: 'Sidebar' })
+    await switchViaMenu(user, 'Marcus')
+    expect(await screen.findByRole('alert')).toHaveTextContent("We couldn't switch to Marcus.")
+
+    await user.click(screen.getByRole('button', { name: /Switch persona$/ }))
+    await user.click(await screen.findByRole('menuitem', { name: 'Take the tour' }))
+    await user.click(await screen.findByRole('button', { name: 'Start the tour' }))
+    await waitFor(() =>
+      expect(screen.getByRole('alert')).toHaveTextContent("We couldn't start a sandbox."),
+    )
+    expect(screen.getAllByRole('alert')).toHaveLength(1)
   })
 
   it('does nothing when the current person is chosen', async () => {
@@ -842,7 +926,14 @@ describe('the shell: time off, approvals, and the rail', () => {
       const cases = await within(nav).findByRole('link', { name: 'Cases, 3 new' })
       expect(cases).toHaveAttribute('href', '/cases')
       expect(cases.querySelector('[data-slot="nav-count"]')).toHaveTextContent('3 new')
-      expect(navLinks()).toEqual(['Ask', 'Time off', 'Directory', 'Handbook', 'Cases, 3 new'])
+      expect(navLinks()).toEqual([
+        'Ask',
+        'Time off',
+        'Directory',
+        'Handbook',
+        'Cases, 3 new',
+        'Console',
+      ])
     })
 
     it('shows plain "Cases" with no badge when nothing is new', async () => {

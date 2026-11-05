@@ -219,6 +219,20 @@ describe('CoachMarkHost', () => {
       expect(fallback).toHaveFocus()
     })
 
+    it('ignores a page region the app focused (tabindex -1) and uses fallbackFocus instead', async () => {
+      const region = document.createElement('main')
+      region.tabIndex = -1
+      const fallback = document.createElement('button')
+      document.body.append(region, fallback)
+      region.focus()
+      const user = userEvent.setup()
+      render(<Closing fallbackFocus={() => fallback} />)
+      await user.click(screen.getByRole('button', { name: 'Leave the tour' }))
+      expect(fallback).toHaveFocus()
+      region.remove()
+      fallback.remove()
+    })
+
     it('prefers what had focus before to fallbackFocus when it is still there', async () => {
       const user = userEvent.setup()
       const fallback = document.createElement('button')
@@ -273,6 +287,36 @@ describe('CoachMarkHost', () => {
         rerender(<CoachMarkHost target={target} avoid={[late]} {...base} />)
         expect(observed).toContain(late)
       })
+    })
+  })
+
+  describe('on a desktop, after the first measure needed no scroll', () => {
+    it('does not scroll when the visitor later scrolls the target out of view', () => {
+      const target = element({ x: 100, y: 100, width: 300, height: 40 })
+      renderHost(target)
+      expect(window.scrollBy).not.toHaveBeenCalled()
+      sized(target, { x: 100, y: 1200, width: 300, height: 40 })
+      act(() => {
+        document.dispatchEvent(new Event('scroll'))
+      })
+      expect(window.scrollBy).not.toHaveBeenCalled()
+    })
+  })
+
+  describe('with a sticky header over the page', () => {
+    it('scrolls a target hidden under the header it is given into view', () => {
+      const header = element({ x: 0, y: 0, width: 1440, height: 150 })
+      renderHost(element({ x: 100, y: 100, width: 300, height: 40 }), [], { header })
+      expect(window.scrollBy).toHaveBeenCalledTimes(1)
+    })
+
+    it('holds no knowledge of any page’s header: without one given, the same target is in view', () => {
+      const stray = document.createElement('div')
+      stray.dataset.slot = 'conversation-header'
+      document.body.append(stray, element({ x: 0, y: 0, width: 1440, height: 150 }))
+      renderHost(element({ x: 100, y: 100, width: 300, height: 40 }))
+      expect(window.scrollBy).not.toHaveBeenCalled()
+      stray.remove()
     })
   })
 

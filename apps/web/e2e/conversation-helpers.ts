@@ -7,8 +7,11 @@ import { focusedName } from './helpers'
 
 /** The words a scripted question carries to pick a scenario (app/ai/scripted_scenarios.json). */
 export const QUESTIONS = {
-  /** No trigger: the default searches and cites the first passage. */
-  cited: 'How many sick days do I get?',
+  /**
+   * No trigger: the default searches and cites the first passage. Not "How many sick days do I
+   * get?", which the tour's scenario answers with a state's addendum (CA-4.3 for Priya).
+   */
+  cited: 'Tell me about sick days',
   /** Cites §3.1 instead, so a second answer cites a different section. */
   otherSection: 'scripted working note',
   decline: "Leo's home address",

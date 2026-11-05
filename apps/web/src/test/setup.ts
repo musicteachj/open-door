@@ -1,6 +1,7 @@
 import '@testing-library/jest-dom/vitest'
 import { cleanup, configure } from '@testing-library/react'
 import { afterAll, afterEach, beforeAll } from 'vitest'
+import { useTourStore } from '@/features/tour/store'
 import { resetAnnouncer } from '@/lib/announce'
 import { server } from './msw'
 
@@ -37,6 +38,9 @@ afterEach(() => {
   cleanup()
   // The announcer's regions live on the body, outside what `cleanup` removes.
   resetAnnouncer()
+  // The guided tour's state lives in session storage, so a test's tour never reaches the next.
+  useTourStore.setState(useTourStore.getInitialState())
+  sessionStorage.clear()
   server.resetHandlers()
 })
 

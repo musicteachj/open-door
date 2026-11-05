@@ -3,6 +3,7 @@ import { http, HttpResponse } from 'msw'
 import { describe, expect, it } from 'vitest'
 import { getGetMeQueryKey } from '@/api/generated'
 import { PERSONAS } from '@/features/personas/personas'
+import { useTourStore } from '@/features/tour/store'
 import { AI_DISCLOSURE } from '@/lib/disclosure'
 import { installFakeApi } from '@/test/fake-api'
 import { meFor } from '@/test/fixtures'
@@ -81,12 +82,120 @@ describe('the landing page', () => {
     ).toBeInTheDocument()
   })
 
-  it('hides "How it\'s built" and the tour until Phase 7 builds them', async () => {
+  it('has no "How it\'s built" link, and offers the tour under the persona picker', async () => {
     installFakeApi()
     renderApp({ at: '/' })
     await screen.findByRole('heading', { level: 2, name: 'Choose who to be' })
     expect(screen.queryByText("How it's built")).not.toBeInTheDocument()
-    expect(screen.queryByText('Take the 2-minute tour')).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Take the 2-minute tour' })).toBeEnabled()
+  })
+
+  it('starts the tour as Priya: busy and announced, the four cards disabled, then step 1', async () => {
+    const api = installFakeApi()
+    const held = gate()
+    let posted: unknown = null
+    server.use(
+      http.post(SANDBOXES(), async ({ request }) => {
+        posted = await request.json()
+        await held.promise
+        api.signIn('priya')
+        return HttpResponse.json(
+          { tenant: { id: 't', expiresAt: '2026-10-06T12:00:00Z' }, me: meFor('priya') },
+          { status: 201 },
+        )
+      }),
+    )
+    const { user } = renderApp({ at: '/' })
+    await user.click(await screen.findByRole('button', { name: 'Take the 2-minute tour' }))
+
+    const button = await screen.findByRole('button', { name: 'Starting the tour…' })
+    expect(button).toHaveAttribute('aria-busy', 'true')
+    expect(screen.getAllByRole('status').map((s) => s.textContent)).toContain(
+      'Starting the tour as Priya Raman.',
+    )
+    for (const persona of cards()) expect(persona).toBeDisabled()
+    expect(posted).toEqual({ persona: 'priya' })
+    held.resolve()
+    const mark = await screen.findByRole('dialog', { name: /Ask a policy question/ })
+    expect(within(mark).getByText('Step 1 of 10')).toBeInTheDocument()
+    expect(useTourStore.getState()).toMatchObject({ started: true, active: true, step: 0 })
+  })
+
+  it('keeps keyboard focus on the tour button while its own sandbox starts', async () => {
+    installFakeApi()
+    const held = gate()
+    server.use(
+      http.post(SANDBOXES(), async () => {
+        await held.promise
+        return HttpResponse.json({ title: 'x', status: 500 }, { status: 500 })
+      }),
+    )
+    const { user } = renderApp({ at: '/' })
+    const button = await screen.findByRole('button', { name: 'Take the 2-minute tour' })
+    button.focus()
+    await user.keyboard('{Enter}')
+    const loading = await screen.findByRole('button', { name: 'Starting the tour…' })
+    expect(loading).not.toBeDisabled()
+    expect(loading).toHaveFocus()
+    held.resolve()
+  })
+
+  it("says so, with Retry, when the tour's sandbox cannot start", async () => {
+    installFakeApi()
+    failStarts()
+    const { user } = renderApp({ at: '/' })
+    await user.click(await screen.findByRole('button', { name: 'Take the 2-minute tour' }))
+    expect(await screen.findByRole('alert')).toHaveTextContent("We couldn't start a sandbox.")
+    expect(screen.getByRole('button', { name: 'Take the 2-minute tour' })).toBeEnabled()
+    expect(useTourStore.getState().started).toBe(false)
+  })
+
+  it('disables the tour button while a persona card’s sandbox starts', async () => {
+    const api = installFakeApi()
+    const held = gate()
+    server.use(
+      http.post(SANDBOXES(), async () => {
+        await held.promise
+        api.signIn('mateo')
+        return HttpResponse.json(
+          { tenant: { id: 't', expiresAt: '2026-10-06T12:00:00Z' }, me: meFor('mateo') },
+          { status: 201 },
+        )
+      }),
+    )
+    const { user } = renderApp({ at: '/' })
+    await user.click(await card('Mateo'))
+    expect(await screen.findByRole('button', { name: 'Take the 2-minute tour' })).toBeDisabled()
+    held.resolve()
+    await screen.findByRole('heading', { level: 1, name: /Mateo/ })
+  })
+
+  it('shows one start error, not two, when a card and then the tour both fail', async () => {
+    installFakeApi()
+    server.use(
+      http.post(SANDBOXES(), () =>
+        HttpResponse.json(
+          { type: 'about:blank', title: 'Boom', status: 500, instance: '/x' },
+          { status: 500 },
+        ),
+      ),
+    )
+    const { user } = renderApp({ at: '/' })
+    await user.click(await card('Mateo'))
+    await screen.findByRole('alert')
+    await user.click(screen.getByRole('button', { name: 'Take the 2-minute tour' }))
+    await waitFor(() => expect(screen.getAllByRole('alert')).toHaveLength(1))
+    await new Promise((resolve) => setTimeout(resolve, 100))
+    expect(screen.getAllByRole('alert')).toHaveLength(1)
+  })
+
+  it('does not start the tour from a persona card', async () => {
+    installFakeApi()
+    const { user } = renderApp({ at: '/' })
+    await user.click(await card('Mateo'))
+    await screen.findByRole('heading', { level: 1, name: /Mateo/ })
+    expect(useTourStore.getState().started).toBe(false)
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
   })
 
   it('lists one card per persona, in order, as list items', async () => {

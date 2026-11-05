@@ -2,6 +2,7 @@ import { useCallback, useEffect, useId, useMemo, useRef, useState, type ReactNod
 import type { ConsoleTurnOut } from '@/api/generated'
 import { BottomSheet, SheetTitle } from '@/components/ui/bottom-sheet'
 import { useMediaQuery } from '@/hooks/use-media-query'
+import { cn } from '@/lib/utils'
 import { isTimed } from './labels'
 import { TracePanel } from './trace-panel'
 import { TurnTable } from './turn-table'
@@ -16,10 +17,18 @@ type ConsoleTraceHostProps = {
   loading?: boolean
   onAskQuestion?: () => void
   onTakeTour?: () => void
+  tourDisabled?: boolean
   /** Shown above the table in the same column, so the tiles reflow beside a docked trace. */
   before?: ReactNode
   /** Shown below the table in the same column, such as the scoreboard. */
   after?: ReactNode
+  /**
+   * The page's own layout: `header` sits above everything in the content column (`columnClassName`
+   * pads it), and the docked trace is flush against the sheet's right edge, as tall as the window,
+   * outside that padding. Without `header` the host lays itself out for a gallery frame.
+   */
+  header?: ReactNode
+  columnClassName?: string
 }
 
 /**
@@ -35,8 +44,11 @@ function ConsoleTraceHost({
   loading,
   onAskQuestion,
   onTakeTour,
+  tourDisabled,
   before,
   after,
+  header,
+  columnClassName,
 }: ConsoleTraceHostProps) {
   const [openId, setOpenId] = useState<string | null>(null)
   const traceId = useId()
@@ -121,25 +133,51 @@ function ConsoleTraceHost({
       />
     )
 
+  const page = header !== undefined
+  const content = (
+    <div className="flex min-w-0 flex-1 flex-col gap-10">
+      {before}
+      <TurnTable
+        turns={turns}
+        timeZone={timeZone}
+        selectedId={selectedId}
+        onOpen={open}
+        traceId={traceId}
+        panelOpen={docked}
+        loading={loading}
+        onAskQuestion={onAskQuestion}
+        onTakeTour={onTakeTour}
+        tourDisabled={tourDisabled}
+      />
+      {after}
+    </div>
+  )
+
   return (
-    <div ref={rootRef} data-slot="console-trace-host" className="flex items-start gap-6">
-      <div className="flex min-w-0 flex-1 flex-col gap-10">
-        {before}
-        <TurnTable
-          turns={turns}
-          timeZone={timeZone}
-          selectedId={selectedId}
-          onOpen={open}
-          traceId={traceId}
-          panelOpen={docked}
-          loading={loading}
-          onAskQuestion={onAskQuestion}
-          onTakeTour={onTakeTour}
-        />
-        {after}
-      </div>
+    <div
+      ref={rootRef}
+      data-slot="console-trace-host"
+      className={cn('flex items-start', !page && 'gap-6')}
+    >
+      {page ? (
+        <div className={cn('min-w-0 flex-1', columnClassName)}>
+          <div className="w-full max-w-270">
+            {header}
+            <div className="mt-10">{content}</div>
+          </div>
+        </div>
+      ) : (
+        content
+      )}
       {docked && (
-        <div className="sticky top-3 h-[calc(100dvh-24px)] flex-none self-start">
+        <div
+          data-slot="trace-dock"
+          className={cn(
+            'sticky top-3 h-[calc(100dvh-24px)] flex-none self-start',
+            // Beside the sheet's content, not inside it: the panel's own border-l is the edge.
+            page && 'w-panel',
+          )}
+        >
           {panel(false)}
         </div>
       )}

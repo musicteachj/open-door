@@ -1,5 +1,5 @@
 import { LogOut } from 'lucide-react'
-import { useId, useRef, useState, type ReactNode } from 'react'
+import { useEffect, useId, useRef, useState, type ReactNode } from 'react'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import {
   DropdownMenu,
@@ -34,6 +34,9 @@ type PersonaMenuProps = {
    * separator of their own above them; Sign out stays last.
    */
   extra?: ReactNode
+  /** Controls whether the menu is open, for a caller that opens it itself (the tour's end card). */
+  open?: boolean
+  onOpenChange?: (open: boolean) => void
 }
 
 /**
@@ -49,14 +52,29 @@ function PersonaMenu({
   onSignOut,
   busyLabel,
   extra,
+  open: openProp,
+  onOpenChange,
 }: PersonaMenuProps) {
-  const [open, setOpen] = useState(false)
+  const [openState, setOpenState] = useState(false)
+  const open = openProp ?? openState
+  const setOpen = (next: boolean) => {
+    setOpenState(next)
+    onOpenChange?.(next)
+  }
   const checkedRef = useRef<HTMLDivElement>(null)
   // No match means no one is current: the switcher says so, and no row is checked.
   const current = personas.find((p) => p.key === currentKey)
   const labelId = useId()
   const noteId = useId()
   const busy = busyLabel !== undefined
+  // While busy the menu is held closed (`open && !busy`), so Radix sees no change when it closes
+  // itself after a pick, and `open` would stay true: the menu would come back when the work ends.
+  // Closing it here, when the work begins, is what keeps it shut.
+  useEffect(() => {
+    if (busy && open) setOpen(false)
+    // `setOpen` is recreated every render and only calls the props and the state setter.
+    // oxlint-disable-next-line react-hooks/exhaustive-deps
+  }, [busy, open])
 
   // Radix's content types leave out onOpenAutoFocus, though it honors it. A spread object gets it
   // past the type. Without it, focus would land on the menu's first row, not the checked one.

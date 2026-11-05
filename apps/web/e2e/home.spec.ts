@@ -107,7 +107,7 @@ test('every interactive element is reachable by keyboard in the order above and 
   page,
 }) => {
   // The notes list the logo first, but the logo is not a control in the kit (the plan's Task 36
-  // note), so the first stop is the navigation. "How it's built" is hidden until Phase 7. The rail
+  // note), so the first stop is the navigation. The sidebar has no "How it's built" link. The rail
   // follows the page: PTO available, requests pending, then "Handbook updated" as the last stop.
   await page.reload()
   await expect(greetingHeading(page, 'Priya')).toBeVisible()

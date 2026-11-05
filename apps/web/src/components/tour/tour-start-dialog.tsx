@@ -15,6 +15,8 @@ type TourStartDialogProps = {
   onStart: () => void
   /** The new sandbox is starting: the button shows it is busy and ignores presses. */
   starting?: boolean
+  /** Something else is changing who the visitor is (a persona switch): "Start the tour" waits. */
+  blocked?: boolean
 }
 
 /**
@@ -23,7 +25,13 @@ type TourStartDialogProps = {
  * dialog keeps the overlay's 16 px margins and the buttons stack at full width, the primary on top
  * with Cancel still first in the tab order (all `AlertDialog`'s own behavior).
  */
-function TourStartDialog({ open, onOpenChange, onStart, starting = false }: TourStartDialogProps) {
+function TourStartDialog({
+  open,
+  onOpenChange,
+  onStart,
+  starting = false,
+  blocked = false,
+}: TourStartDialogProps) {
   return (
     <AlertDialog open={open} onOpenChange={onOpenChange}>
       <AlertDialogContent busy={starting}>
@@ -33,7 +41,7 @@ function TourStartDialog({ open, onOpenChange, onStart, starting = false }: Tour
         </AlertDialogDescription>
         <AlertDialogActions>
           <AlertDialogCancel>Cancel</AlertDialogCancel>
-          <AlertDialogConfirm loading={starting} onClick={onStart}>
+          <AlertDialogConfirm loading={starting} disabled={blocked} onClick={onStart}>
             Start the tour
           </AlertDialogConfirm>
         </AlertDialogActions>

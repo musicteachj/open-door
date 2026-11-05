@@ -194,7 +194,9 @@ export const StoredTurn = memo(function StoredTurn({
   ) : undefined
   // The confirm cards the turn made, under its message. A card whose turn did not finish is
   // already canceled in the saved copy, and shows that.
-  const cards = <ProposalCards proposals={turn.proposals} question={turn.question} />
+  const cards = (
+    <ProposalCards proposals={turn.proposals} question={turn.question} turnId={turn.id} />
+  )
   // Under a budget stop the server refuses every question, so there is nothing to ask again.
   const again = context.budgetStop ? undefined : () => context.onAskAgain(turn.question)
   // A sensitive turn shows its HR panel whatever became of the answer (it can fail, or be cut
@@ -215,7 +217,7 @@ export const StoredTurn = memo(function StoredTurn({
   if (escalation?.kind === 'crisis' || escalation?.kind === 'unavailable') {
     return (
       <>
-        <UserMessage text={turn.question} />
+        <UserMessage text={turn.question} turnId={turn.id} />
         {panel}
       </>
     )
@@ -224,7 +226,7 @@ export const StoredTurn = memo(function StoredTurn({
   if (turn.status === 'stopped') {
     return (
       <>
-        <UserMessage text={turn.question} />
+        <UserMessage text={turn.question} turnId={turn.id} />
         <Message
           contacts={notFoundContacts}
           status="stopped"
@@ -241,7 +243,7 @@ export const StoredTurn = memo(function StoredTurn({
   if (turn.status === 'failed') {
     return (
       <>
-        <UserMessage text={turn.question} />
+        <UserMessage text={turn.question} turnId={turn.id} />
         <Message
           contacts={notFoundContacts}
           status="error"
@@ -261,7 +263,7 @@ export const StoredTurn = memo(function StoredTurn({
     // the answer has been saved. Sending another question gets the API's "still answering".
     return (
       <>
-        <UserMessage text={turn.question} />
+        <UserMessage text={turn.question} turnId={turn.id} />
         <Message
           contacts={notFoundContacts}
           status="streaming"
@@ -282,7 +284,7 @@ export const StoredTurn = memo(function StoredTurn({
     // (the Build decisions in notes.md).
     return (
       <>
-        <UserMessage text={turn.question} />
+        <UserMessage text={turn.question} turnId={turn.id} />
         <Message
           contacts={notFoundContacts}
           status={status}
@@ -304,7 +306,7 @@ export const StoredTurn = memo(function StoredTurn({
     // "Show your work" on the right) goes under the card, as screen 10 draws it.
     return (
       <>
-        <UserMessage text={turn.question} />
+        <UserMessage text={turn.question} turnId={turn.id} />
         <Message
           status={status}
           text={turn.answerText}
@@ -321,7 +323,7 @@ export const StoredTurn = memo(function StoredTurn({
   }
   return (
     <>
-      <UserMessage text={turn.question} />
+      <UserMessage text={turn.question} turnId={turn.id} />
       <Message
         status={status}
         text={turn.answerText}
@@ -361,7 +363,12 @@ export function LiveTurnView({
   const answering =
     phase !== 'error' && phase !== 'stopped' && !(phase === 'idle' && live.completed)
   const cards = (
-    <ProposalCards proposals={live.proposals} question={live.question} turnRunning={answering} />
+    <ProposalCards
+      proposals={live.proposals}
+      question={live.question}
+      turnRunning={answering}
+      turnId={live.turnId}
+    />
   )
   // Under a budget stop the server refuses every question, so there is nothing to ask again.
   const again = context.budgetStop ? undefined : () => context.onAskAgain(live.question)
@@ -390,7 +397,7 @@ export function LiveTurnView({
   if (escalation?.kind === 'crisis' || escalation?.kind === 'unavailable') {
     return (
       <>
-        <UserMessage text={live.question} />
+        <UserMessage text={live.question} turnId={live.turnId} />
         {panel}
       </>
     )
@@ -408,7 +415,7 @@ export function LiveTurnView({
           : 'streaming'
   return (
     <>
-      <UserMessage text={live.question} />
+      <UserMessage text={live.question} turnId={live.turnId} />
       <Message
         status={status}
         errorMessage={live.error?.message}

@@ -28,6 +28,13 @@ describe('RedactedRow', () => {
     expect(screen.getByText('Oct 26 · 5,200 input tokens · 0 output · $0.004')).toBeInTheDocument()
   })
 
+  it('is the tour’s target only when the turn was flagged, never when it was abandoned', () => {
+    const flagged = render(<RedactedRow turn={T_FLAGGED} />)
+    expect(flagged.container.querySelector('[data-tour="flagged-row"]')).not.toBeNull()
+    const abandoned = render(<RedactedRow turn={T_ABANDONED} />)
+    expect(abandoned.container.querySelector('[data-tour]')).toBeNull()
+  })
+
   it('is one plain cell: no button, nothing focusable', () => {
     const { container } = render(<RedactedRow turn={T_FLAGGED} />)
     expect(screen.getAllByRole('cell')).toHaveLength(1)

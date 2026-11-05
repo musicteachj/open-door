@@ -4,6 +4,7 @@
 import { Lock } from 'lucide-react'
 import type { ConsoleTurnOut } from '@/api/generated'
 import { redactedFacts } from './labels'
+import { TOUR_TARGETS, tourTarget } from '@/lib/tour-targets'
 
 const FLAGGED = 'Flagged by the safety check. Details are hidden to protect the person.'
 // An abandoned turn was never judged, so it must not read as flagged.
@@ -17,7 +18,13 @@ const ABANDONED =
  */
 function RedactedRow({ turn }: { turn: ConsoleTurnOut }) {
   return (
-    <div role="row" data-slot="redacted-row" data-abandoned={turn.abandoned || undefined}>
+    <div
+      role="row"
+      data-slot="redacted-row"
+      data-abandoned={turn.abandoned || undefined}
+      // The tour points at a flagged turn; an abandoned one was never flagged.
+      {...(turn.abandoned ? {} : tourTarget(TOUR_TARGETS.flaggedRow))}
+    >
       <div
         role="cell"
         className="flex flex-col gap-1 border-b border-border-subtle bg-confidential-tint px-3 py-4"

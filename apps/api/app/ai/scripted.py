@@ -69,11 +69,15 @@ TIME_OFF_BEHAVIORS: Final = (
     "approve_it",
     "deny_it",
     "cancel_mine",
+    "approve_named",
+    "absence_of",
 )
 # The behaviors that call the case tools (the real tools run; the words quote their labels).
 CASE_BEHAVIORS: Final = ("my_cases", "open_cases", "cases_due")
 MODEL_BEHAVIORS: Final = (
     "decline",
+    "decline_scope",
+    "sick_days",
     "safety_refusal",
     "not_found",
     "long_answer",
@@ -101,6 +105,13 @@ DECLINE_TEXT: Final = (
     "I can't share another employee's private details, like a home address. If you need to reach"
     " someone for work, the people directory lists their work contact details."
 )
+DECLINE_SCOPE_TEXT: Final = (
+    "I can only share what you're allowed to see, and that doesn't include other people's private"
+    " details. I can help with your own time off, your balance, or a question about the handbook."
+)
+# The search a sick-days question runs: a state's sick-leave addendum is cited before the company
+# section when the person's state has one.
+SICK_DAYS_QUERY: Final = "How much sick leave do I get?"
 # Written before the search by the working-note scenario. The turn takes it back and shows it as a
 # status line, so the browser tests and Stage 6 can see a retraction.
 WORKING_NOTE_TEXT: Final = "Let me look that up in the handbook first."
@@ -239,8 +250,12 @@ def _is_addendum(result: dict[str, Any]) -> bool:
     return _ADDENDUM_SOURCE.match(str(result.get("source", ""))) is not None
 
 
+def _about_sick_leave(result: dict[str, Any]) -> bool:
+    return "sick" in str(result.get("title") or "").lower()
+
+
 def _chosen_search_result(
-    messages: Sequence[dict[str, Any]],
+    messages: Sequence[dict[str, Any]], *, prefer_sick_leave: bool = False
 ) -> tuple[dict[str, Any], int] | None:
     """The result the scripted model cites, and its place among all the request's results.
 
@@ -248,12 +263,23 @@ def _chosen_search_result(
     addendum: then the first addendum, so a person is cited their own state's rule. The API counts
     every `search_result` block in the request, in order, across messages and inside tool results,
     so the index is the count of everything before the last message plus the place in it.
+
+    With `prefer_sick_leave` (the sick-days scenario), only results whose title is about sick leave
+    are considered first, so the rank of other sections can't change what is cited. If none is, the
+    rule above applies to all of the results.
     """
     results = list(iter_search_results(messages[-1].get("content", [])))
     if not results:
         return None
     before = sum(count_search_results(message.get("content", [])) for message in messages[:-1])
-    position = next((i for i, result in enumerate(results) if _is_addendum(result)), 0)
+    pool = (
+        [i for i, result in enumerate(results) if _about_sick_leave(result)]
+        if prefer_sick_leave
+        else []
+    )
+    if not pool:
+        pool = list(range(len(results)))
+    position = next((i for i in pool if _is_addendum(results[i])), pool[0])
     return results[position], before + position
 
 
@@ -491,20 +517,62 @@ _TIME_OFF_LISTS = {
     "approve_it": "waiting_for_me",
     "deny_it": "waiting_for_me",
     "cancel_mine": "mine",
+    "approve_named": "waiting_for_me",
 }
-_DECISIONS = {"approve_it": "approve", "deny_it": "deny"}
+_DECISIONS = {"approve_it": "approve", "deny_it": "deny", "approve_named": "approve"}
+# The last "approve" in the question, and the name up to a possessive ("Priya's") or "request".
+_APPROVE_NAMED = re.compile(
+    r".*\bapprove\s+(.+?)(?:['’]s\b|\s+request)",  # noqa: RUF001
+    flags=re.IGNORECASE,
+)
+_OUT_NAMED = re.compile(r"why\s+was\s+(.+?)\s+out\b", flags=re.IGNORECASE)
+
+
+def _named_in(pattern: re.Pattern[str], question: str) -> str | None:
+    """The person's name the question gives (for "Approve Priya's request", "Priya"), or None."""
+    match = pattern.search(question)
+    if not match:
+        return None
+    # As typed: `.title()` would turn "McKenzie" into "Mckenzie" and "DeShawn" into "Deshawn". Only
+    # a name typed all in capitals ("PRIYA") is brought down to "Priya".
+    name = " ".join(match.group(1).split())
+    if name.isupper():
+        name = name.title()
+    return name[:1].upper() + name[1:]
 
 
 def _time_off_first_call(
     behavior: str, question: str, messages: Sequence[dict[str, Any]], today: date | None
-) -> ToolCall | None:
-    """The first tool call of a time-off scenario, or None when it needs today's date and the
-    context has none."""
+) -> ToolCall | str | None:
+    """The first tool call of a time-off scenario, the words to say instead when the question
+    leaves out what the call needs, or None when it needs today's date and the context has none."""
     if behavior == "show_balance":
         return _tool_call("get_time_off_balance", {}, question, messages)
+    if behavior == "absence_of":
+        name = _named_in(_OUT_NAMED, question)
+        if name is None:
+            return "I need a name to look up: who do you mean?"
+        if today is None:
+            return None
+        arguments: dict[str, Any] = {"scope": "team", "person_name": name}
+        # "Last week" runs Monday to Sunday, as `next_friday` counts weeks. Without it every
+        # approved request would be reported as last week's.
+        last_monday = today - timedelta(days=today.weekday() + 7)
+        arguments["from"] = last_monday.isoformat()
+        arguments["to"] = (last_monday + timedelta(days=6)).isoformat()
+        return _tool_call("list_time_off_requests", arguments, question, messages)
     if behavior in _TIME_OFF_LISTS:
         # The optional properties are left out: a strict tool can't get a null for them.
         arguments = {"scope": _TIME_OFF_LISTS[behavior]}
+        # The tool narrows the list to the person asked about: a request of someone else's is
+        # never the one approved. With no name parsed there is no one to approve for: say so, and
+        # make no call (an empty name fails the tool's validator, and the whole list would offer
+        # someone else's request).
+        if behavior == "approve_named":
+            name = _named_in(_APPROVE_NAMED, question)
+            if name is None:
+                return "I need a name to approve for: whose request do you mean?"
+            arguments["person_name"] = name
         return _tool_call("list_time_off_requests", arguments, question, messages)
     if today is None:
         return None
@@ -530,10 +598,15 @@ def _time_off_next(
         return _balance_words(data)
     if behavior == "waiting_on_me":
         return _waiting_words(data)
+    if behavior == "absence_of":
+        return _absence_words(question, data, today)
     if behavior in _DECISIONS:
         verb = _DECISIONS[behavior]
         if rounds == 1:
             waiting = _listed(data)
+            if not waiting and behavior == "approve_named":
+                name = _named_in(_APPROVE_NAMED, question) or "that person"
+                return f"Nothing from {name} is waiting for your decision, so there is no card."
             if not waiting:
                 return f"Nothing is waiting for your decision, so there is nothing to {verb}."
             arguments = {"request_id": str(waiting[0].get("id")), "decision": verb}
@@ -644,12 +717,49 @@ def _waiting_words(data: Any) -> str:
     waiting = _listed(data)
     if not waiting:
         return "Nothing is waiting for your decision right now."
-    first = waiting[0]
-    amount = first.get("amountLabel")
-    figure = f" ({amount})" if isinstance(amount, str) else ""
+    parts = []
+    for item in waiting:
+        amount = item.get("amountLabel")
+        figure = f" ({amount})" if isinstance(amount, str) else ""
+        # A row with no readable dates is still waiting: it is listed, in plain words.
+        days = _listed_days(item)
+        when = f"for {days}" if days else "dates not shown"
+        person = item.get("person") or "Someone"
+        parts.append(f"{person}, {when}{figure}")
+    count = f"{len(waiting)} requests are" if len(waiting) > 1 else "1 request is"
+    return f"{count} waiting for you: " + "; ".join(parts) + "."
+
+
+def _days_within_last_week(item: dict[str, Any], today: date | None) -> str:
+    """A row's days, cut to last week (Monday to Sunday, as the call asked for), so a request that
+    runs on past it names no day outside the week that was asked about."""
+    if today is None:
+        return _listed_days(item)
+    first, last = _iso(item.get("startDate")), _iso(item.get("endDate"))
+    if first is None or last is None:
+        return ""
+    last_monday = today - timedelta(days=today.weekday() + 7)
+    first, last = max(first, last_monday), min(last, last_monday + timedelta(days=6))
+    return _days_name(first, last) if first <= last else ""
+
+
+def _absence_words(question: str, data: Any, today: date | None) -> str:
+    """Only the tool's dates and status: it carries no reason, so none is given."""
+    name = _named_in(_OUT_NAMED, question) or "that person"
+    # (person, days) per approved row, with each row's days worked out once. A row with no person
+    # is still time off, so it is said in plain words, as the waiting list does.
+    approved = [
+        (item.get("person") or "Someone", days)
+        for item in _listed(data)
+        if item.get("status") == "approved" and (days := _days_within_last_week(item, today))
+    ]
+    if not approved:
+        return f"I didn't find any approved time off for {name} in that period."
+    person = approved[0][0]
+    days = "; ".join(when for who, when in approved if who == person)
     return (
-        f"The first request waiting for you is from {first.get('person')}, "
-        f"for {_listed_days(first)}{figure}."
+        f"{person} had approved time off: {days}. "
+        "The request doesn't record a reason, so I can't say why."
     )
 
 
@@ -711,6 +821,10 @@ class ScriptedTransport:
             async for event in self._say([(DECLINE_TEXT, None)]):
                 yield event
             return
+        if behavior == "decline_scope":
+            async for event in self._say([(DECLINE_SCOPE_TEXT, None)]):
+                yield event
+            return
         if behavior == "safety_refusal":
             yield _finished(
                 [],
@@ -732,7 +846,9 @@ class ScriptedTransport:
         # The default, not_found, long_answer, silence, and working_note all begin by searching.
         digest = hashlib.sha256(f"{question}|{_tool_calls_so_far(messages)}".encode()).hexdigest()
         call = ToolCall(
-            f"toolu_scripted_{digest[:12]}", "search_handbook", {"query": _query_of(question)}
+            f"toolu_scripted_{digest[:12]}",
+            "search_handbook",
+            {"query": SICK_DAYS_QUERY if behavior == "sick_days" else _query_of(question)},
         )
         content: list[dict[str, Any]] = []
         if behavior == "working_note":
@@ -759,6 +875,10 @@ class ScriptedTransport:
         today = today_from_context(messages)
         if rounds == 0:
             call = _time_off_first_call(behavior, question, messages, today)
+            if isinstance(call, str):
+                async for event in self._say([(call, None)]):
+                    yield event
+                return
         else:
             result = _last_tool_result(messages)
             if result.is_error:
@@ -808,7 +928,7 @@ class ScriptedTransport:
     async def _second_call(
         self, messages: Sequence[dict[str, Any]], behavior: str
     ) -> AsyncIterator[ModelEvent]:
-        chosen = _chosen_search_result(messages)
+        chosen = _chosen_search_result(messages, prefer_sick_leave=behavior == "sick_days")
         if chosen is None or behavior == "not_found":
             async for event in self._say([(NOT_FOUND_TEXT, None)]):
                 yield event

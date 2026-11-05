@@ -36,6 +36,23 @@ describe('ConsoleTraceHost', () => {
     expect(container.querySelector('[data-slot="turn-table"]')).toHaveAttribute('data-panel')
   })
 
+  it('as a page, docks the trace outside the padded column, at the panel width', async () => {
+    const { container } = render(
+      <ConsoleTraceHost
+        turns={DAY_TURNS}
+        timeZone="America/Denver"
+        sectionTitle={sectionTitle}
+        header={<h1>Console</h1>}
+        columnClassName="px-12"
+      />,
+    )
+    await userEvent.click(rowButton('10:33 AM'))
+    const dock = container.querySelector('[data-slot="trace-dock"]')!
+    expect(dock).toHaveClass('w-panel', 'sticky')
+    expect(dock.parentElement).toBe(container.querySelector('[data-slot="console-trace-host"]'))
+    expect(container.querySelector('.px-12')).not.toContainElement(dock as HTMLElement)
+  })
+
   it('opens from the keyboard with Enter', async () => {
     render(host())
     rowButton('10:31 AM').focus()

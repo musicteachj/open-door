@@ -4,10 +4,10 @@
 import { useId, useMemo, useState, type ReactNode } from 'react'
 import type { ConsoleTurnOut } from '@/api/generated'
 import { EmptyCell } from '@/components/core/empty-cell'
-import { EmptyState } from '@/components/core/empty-state'
 import { LoadingStatus } from '@/components/feedback/loading-status'
 import { outcomeBadgeFor } from '@/components/status/outcome-badges'
 import { StatusBadge } from '@/components/timeoff/status-badge'
+import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { cn } from '@/lib/utils'
 import {
@@ -37,6 +37,10 @@ type TurnTableProps = {
   /** The empty state's two ways forward. */
   onAskQuestion?: () => void
   onTakeTour?: () => void
+  /**
+   * The tour cannot start right now (a persona switch is in flight): "Take the tour" is disabled.
+   */
+  tourDisabled?: boolean
 }
 
 // The design's columns (console.css, --od-turn-cols), plain and with a docked panel.
@@ -245,6 +249,7 @@ function TurnTable({
   loading = false,
   onAskQuestion,
   onTakeTour,
+  tourDisabled = false,
 }: TurnTableProps) {
   const uid = useId()
   const days = useMemo(() => byDay(turns), [turns])
@@ -255,16 +260,24 @@ function TurnTable({
     zoneAbbreviation(timeZone, rows.find((t) => t.occurredAt !== null)?.occurredAt ?? now)
 
   if (!loading && turns.length === 0) {
+    // Left-aligned under a subtle rule, as the design shows it (not the centered EmptyState).
     return (
-      <EmptyState
-        message="No questions yet in this sandbox. Ask something, or take the tour."
-        action={{ label: 'Ask a question', onAction: () => onAskQuestion?.(), variant: 'primary' }}
-        secondaryAction={{
-          label: 'Take the tour',
-          onAction: () => onTakeTour?.(),
-          variant: 'secondary',
-        }}
-      />
+      <div
+        data-slot="turn-empty"
+        className="flex flex-col items-start gap-4 border-t border-border-subtle pt-8"
+      >
+        <p className="m-0 text-body text-ink">
+          No questions yet in this sandbox. Ask something, or take the tour.
+        </p>
+        <div className="flex flex-wrap gap-3">
+          <Button variant="primary" onClick={() => onAskQuestion?.()}>
+            Ask a question
+          </Button>
+          <Button variant="secondary" disabled={tourDisabled} onClick={() => onTakeTour?.()}>
+            Take the tour
+          </Button>
+        </div>
+      </div>
     )
   }
 

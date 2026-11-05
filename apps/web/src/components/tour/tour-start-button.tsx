@@ -4,6 +4,8 @@ import { Button } from '@/components/ui/button'
 type TourStartButtonProps = {
   /** A new sandbox is starting: busy, a spinner, and a polite status line. */
   starting?: boolean
+  /** Unavailable (really disabled, as the persona cards are): another sandbox is starting. */
+  disabled?: boolean
   /** Who the tour starts as, for the status line. */
   persona?: string
   onStart: () => void
@@ -18,12 +20,13 @@ type TourStartButtonProps = {
  */
 function TourStartButton({
   starting = false,
+  disabled = false,
   persona = 'Priya Raman',
   onStart,
 }: TourStartButtonProps) {
   return (
     <>
-      <Button variant="secondary" loading={starting} onClick={onStart}>
+      <Button variant="secondary" loading={starting} disabled={disabled} onClick={onStart}>
         {!starting && <CirclePlay aria-hidden="true" className="size-4 text-ink-muted" />}
         {starting ? 'Starting the tour…' : 'Take the 2-minute tour'}
       </Button>

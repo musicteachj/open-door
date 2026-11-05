@@ -60,8 +60,8 @@ test('usable at 390 px: the cards stack, and nothing overflows', async ({ page }
 test('each persona card is a single button with the accessible name above, reachable by keyboard and showing the focus ring', async ({
   page,
 }) => {
-  // Four buttons and nothing else to tab to (the tour and "How it's built" are hidden until Phase 7).
-  await expect(page.getByRole('button')).toHaveCount(4)
+  // The four cards and the tour button, and nothing else to tab to.
+  await expect(page.getByRole('button')).toHaveCount(5)
   await expect(page.getByRole('link')).toHaveCount(0)
   for (const name of FIRST_NAMES) {
     await page.keyboard.press('Tab')
@@ -79,6 +79,9 @@ test('each persona card is a single button with the accessible name above, reach
     await expect(card(page, name).locator('a, button, input')).toHaveCount(0)
     await expect(card(page, name)).toContainText(`Start as ${name}`)
   }
+  // The tour button comes after the cards.
+  await page.keyboard.press('Tab')
+  await expect(page.getByRole('button', { name: 'Take the 2-minute tour' })).toBeFocused()
 })
 
 for (const persona of PERSONAS) {

@@ -3,10 +3,10 @@ import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 import { TourStartDialog } from './tour-start-dialog'
 
-function setup() {
+function setup(blocked = false) {
   const onOpenChange = vi.fn<() => void>()
   const onStart = vi.fn<() => void>()
-  render(<TourStartDialog open onOpenChange={onOpenChange} onStart={onStart} />)
+  render(<TourStartDialog open onOpenChange={onOpenChange} onStart={onStart} blocked={blocked} />)
   return { onOpenChange, onStart, user: userEvent.setup() }
 }
 
@@ -31,6 +31,14 @@ describe('TourStartDialog', () => {
     const cancel = screen.getByRole('button', { name: 'Cancel' })
     const start = screen.getByRole('button', { name: 'Start the tour' })
     expect(cancel.compareDocumentPosition(start) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  })
+
+  it('disables "Start the tour" while something else is changing who the visitor is', async () => {
+    const { user, onStart } = setup(true)
+    const start = screen.getByRole('button', { name: 'Start the tour' })
+    expect(start).toBeDisabled()
+    await user.click(start)
+    expect(onStart).not.toHaveBeenCalled()
   })
 
   it('cancels from the button and from Escape', async () => {

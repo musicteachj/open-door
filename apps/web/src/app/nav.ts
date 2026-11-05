@@ -2,7 +2,6 @@ import {
   BookOpen,
   Calendar,
   ClipboardCheck,
-  Code,
   FolderLock,
   LayoutDashboard,
   MessageCircle,
@@ -40,15 +39,7 @@ export const NAV_ITEMS: readonly NavItemConfig[] = [
     available: true,
   },
   { label: 'Cases', to: '/cases', icon: FolderLock, roles: 'hr', available: true },
-  { label: 'Console', to: '/console', icon: LayoutDashboard, roles: 'hr', available: false },
-  // Sits at the bottom of the sidebar. Hidden until Phase 7 builds its page.
-  {
-    label: "How it's built",
-    to: '/how-its-built',
-    icon: Code,
-    roles: 'everyone',
-    available: false,
-  },
+  { label: 'Console', to: '/console', icon: LayoutDashboard, roles: 'hr', available: true },
 ]
 
 const SEES: Record<NavRole, (me: { isManager: boolean; isHrAdmin: boolean }) => boolean> = {

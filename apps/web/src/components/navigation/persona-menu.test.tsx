@@ -293,4 +293,57 @@ describe('PersonaMenu', () => {
       expect(screen.queryByRole('menu')).not.toBeInTheDocument()
     })
   })
+
+  it('closes when Sign out starts the work, and stays closed if it fails and the work ends', async () => {
+    const user = userEvent.setup({ pointerEventsCheck: 0 })
+    const props = {
+      personas: PERSONAS,
+      currentKey: 'priya',
+      onSwitch: vi.fn<(key: string) => void>(),
+    }
+    const view = render(<PersonaMenu {...props} onSignOut={vi.fn<() => void>()} />)
+    await user.click(screen.getByRole('button'))
+    await screen.findByRole('menu')
+    view.rerender(
+      <PersonaMenu {...props} onSignOut={vi.fn<() => void>()} busyLabel="Signing out…" />,
+    )
+    expect(screen.queryByRole('menu')).not.toBeInTheDocument()
+    view.rerender(<PersonaMenu {...props} onSignOut={vi.fn<() => void>()} />)
+    expect(screen.queryByRole('menu')).not.toBeInTheDocument()
+  })
+
+  it('stays closed when the work it started ends, even if the pick and the busy state rendered before it closed', async () => {
+    const user = userEvent.setup({ pointerEventsCheck: 0 })
+    // The caller re-renders busy at once, as it does when a pick starts a switch.
+    const onSwitch = vi.fn<(key: string) => void>()
+    const view = render(
+      <PersonaMenu
+        personas={PERSONAS}
+        currentKey="priya"
+        onSwitch={onSwitch}
+        onSignOut={vi.fn<() => void>()}
+      />,
+    )
+    await user.click(screen.getByRole('button'))
+    await screen.findByRole('menu')
+    view.rerender(
+      <PersonaMenu
+        personas={PERSONAS}
+        currentKey="priya"
+        onSwitch={onSwitch}
+        onSignOut={vi.fn<() => void>()}
+        busyLabel="Switching to Marcus…"
+      />,
+    )
+    expect(screen.queryByRole('menu')).not.toBeInTheDocument()
+    view.rerender(
+      <PersonaMenu
+        personas={PERSONAS}
+        currentKey="priya"
+        onSwitch={onSwitch}
+        onSignOut={vi.fn<() => void>()}
+      />,
+    )
+    expect(screen.queryByRole('menu')).not.toBeInTheDocument()
+  })
 })
