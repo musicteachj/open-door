@@ -13,9 +13,12 @@ import pytest
 from app.ai.pricing import SCRIPTED_MODEL, Usage, turn_call_cost
 from app.ai.scripted import (
     BEHAVIORS,
+    DECLINE_SCOPE_TEXT,
     SCENARIOS_PATH,
+    SICK_DAYS_QUERY,
     WORKING_NOTE_TEXT,
     ScriptedTransport,
+    _time_off_first_call,
     load_scenarios,
     next_friday,
     today_from_context,
@@ -245,6 +248,30 @@ async def test_a_state_addendum_is_cited_in_place_of_the_first_result() -> None:
     assert {c.cited_text for c in citations} == {PASSAGE_ONE}
     text = "".join(event.text for event in second if isinstance(event, TextDelta))
     assert text.startswith("According to CA-4.3 Sick leave")
+
+
+async def test_the_sick_days_scenario_cites_the_sick_leave_addendum_whatever_the_rank() -> None:
+    # As the browser saw it: the family leave addendum ranks first, then sick leave's.
+    results = (
+        search_result("/handbook/CA-5.1?passage=p1", "CA-5.1 Family and medical leave", "F."),
+        search_result(ADDENDUM_SOURCE, ADDENDUM_TITLE, PASSAGE_ONE),
+        search_result("/handbook/4.3?passage=p2", "4.3 Sick leave · Time off", PASSAGE_TWO),
+    )
+    _, second = await first_then_second(
+        ScriptedTransport(), "How many sick days do I get?", *results
+    )
+    assert {c.source for c in cited_of(second)} == {ADDENDUM_SOURCE}
+    assert {c.search_result_index for c in cited_of(second)} == {1}
+
+    # Without a state addendum about sick leave, the company section, not family leave's addendum.
+    _, second = await first_then_second(
+        ScriptedTransport(), "How many sick days do I get?", results[0], results[2]
+    )
+    assert {c.source for c in cited_of(second)} == {"/handbook/4.3?passage=p2"}
+
+    # Any other question keeps the old rule: the first addendum, whatever it is about.
+    _, second = await first_then_second(ScriptedTransport(), QUESTION, *results)
+    assert {c.source for c in cited_of(second)} == {"/handbook/CA-5.1?passage=p1"}
 
 
 async def test_the_addendum_is_found_after_earlier_results_in_the_conversation() -> None:
@@ -675,7 +702,42 @@ async def check_cases_due(transport: ScriptedTransport, question: str) -> None:
     assert (the_call(first).name, the_call(first).input) == ("list_cases", {"status": "new"})
 
 
+async def check_approve_named(transport: ScriptedTransport, question: str) -> None:
+    first = await collect(transport, a_request(*with_context(question)))
+    assert (the_call(first).name, the_call(first).input) == (
+        "list_time_off_requests",
+        {"scope": "waiting_for_me", "person_name": "Priya"},
+    )
+
+
+async def check_absence_of(transport: ScriptedTransport, question: str) -> None:
+    first = await collect(transport, a_request(*with_context(question)))
+    assert (the_call(first).name, the_call(first).input) == (
+        "list_time_off_requests",
+        {"scope": "team", "person_name": "Leo", "from": "2026-10-05", "to": "2026-10-11"},
+    )
+
+
+async def check_decline_scope(transport: ScriptedTransport, question: str) -> None:
+    events = await collect(transport, a_request(user(question)))
+    assert not any(isinstance(event, ToolCall) for event in events)
+    assert text_of(events) == DECLINE_SCOPE_TEXT
+    assert not any(isinstance(event, TextBlockEnd) and event.citations for event in events)
+
+
+async def check_sick_days(transport: ScriptedTransport, question: str) -> None:
+    first = await collect(transport, a_request(*with_context(question)))
+    assert (the_call(first).name, the_call(first).input) == (
+        "search_handbook",
+        {"query": SICK_DAYS_QUERY},
+    )
+
+
 CHECKS: dict[str, Check] = {
+    "approve_named": check_approve_named,
+    "absence_of": check_absence_of,
+    "decline_scope": check_decline_scope,
+    "sick_days": check_sick_days,
     "my_cases": check_my_cases,
     "open_cases": check_open_cases,
     "cases_due": check_cases_due,
@@ -1053,7 +1115,7 @@ async def test_whats_my_balance_quotes_the_tools_labels() -> None:
     )
 
 
-async def test_anything_waiting_on_me_names_the_first_request_from_the_list() -> None:
+async def test_anything_waiting_on_me_names_every_request_from_the_list() -> None:
     transport = ScriptedTransport()
     messages = with_context("Anything waiting on me?")
     first = await collect(transport, a_request(*messages))
@@ -1061,9 +1123,283 @@ async def test_anything_waiting_on_me_names_the_first_request_from_the_list() ->
 
     assert not any(isinstance(event, ToolCall) for event in second)
     assert text_of(second) == (
-        "The first request waiting for you is from Zara Bautista, for Tuesday, October 27 to"
+        "2 requests are waiting for you: Zara Bautista, for Tuesday, October 27 to"
+        " Wednesday, October 28 (16 hours (2 days)); Leo Nakamura, for Monday, November 2"
+        " (8 hours (1 day))."
+    )
+
+
+async def test_one_waiting_request_is_named() -> None:
+    transport = ScriptedTransport()
+    messages = with_context("Anything waiting on me?")
+    first = await collect(transport, a_request(*messages))
+    one = {**WAITING, "requests": WAITING["requests"][:1]}
+    second = await collect(transport, a_request(*messages, *tool_round(first, result=one)))
+
+    assert text_of(second) == (
+        "1 request is waiting for you: Zara Bautista, for Tuesday, October 27 to"
         " Wednesday, October 28 (16 hours (2 days))."
     )
+
+
+async def test_a_waiting_request_with_no_dates_is_listed_without_them() -> None:
+    transport = ScriptedTransport()
+    messages = with_context("Anything waiting on me?")
+    first = await collect(transport, a_request(*messages))
+    undated = {
+        **WAITING,
+        "requests": [
+            {**WAITING["requests"][0], "startDate": None, "endDate": None},
+            {**WAITING["requests"][1], "startDate": None, "endDate": None},
+        ],
+    }
+    second = await collect(transport, a_request(*messages, *tool_round(first, result=undated)))
+
+    assert text_of(second) == (
+        "2 requests are waiting for you: Zara Bautista, dates not shown (16 hours (2 days));"
+        " Leo Nakamura, dates not shown (8 hours (1 day))."
+    )
+
+
+async def test_a_waiting_request_with_no_person_names_someone_not_none() -> None:
+    transport = ScriptedTransport()
+    messages = with_context("Anything waiting on me?")
+    first = await collect(transport, a_request(*messages))
+    nameless = {**WAITING, "requests": [{**WAITING["requests"][0], "person": None}]}
+    second = await collect(transport, a_request(*messages, *tool_round(first, result=nameless)))
+
+    text = text_of(second)
+    assert text.startswith("1 request is waiting for you: Someone, ")
+    assert "None" not in text
+
+
+async def test_approve_priyas_request_proposes_on_the_request_the_list_returned() -> None:
+    transport = ScriptedTransport()
+    for question in ("Approve Priya's request.", "Approve Priya\u2019s request."):
+        messages = with_context(question)
+        first = await collect(transport, a_request(*messages))
+        assert the_call(first).input == {"scope": "waiting_for_me", "person_name": "Priya"}
+        priya = {**WAITING["requests"][0], "id": "88888888-8888-4888-8888-888888888888"}
+        listed = {**WAITING, "requests": [priya]}
+        second = await collect(transport, a_request(*messages, *tool_round(first, result=listed)))
+        assert the_call(second).input == {"request_id": priya["id"], "decision": "approve"}
+
+
+def test_approve_named_without_a_parsed_name_asks_whom_and_makes_no_call() -> None:
+    # Listing everyone's waiting requests would offer a card for someone else's.
+    call = _time_off_first_call("approve_named", "approve what is waiting", [], None)
+    assert isinstance(call, str)
+    assert "name" in call
+
+
+@pytest.mark.parametrize(
+    "question",
+    [
+        "Approve it, then approve Priya's request.",
+        "Approve Priya's time-off request.",
+        "approve Priya\u2019s pending request please",
+    ],
+)
+def test_approve_named_takes_only_the_name_before_the_possessive(question: str) -> None:
+    call = _time_off_first_call("approve_named", question, [], None)
+    assert isinstance(call, ToolCall)
+    assert call.input == {"scope": "waiting_for_me", "person_name": "Priya"}
+
+
+def test_absence_without_a_named_person_names_no_one() -> None:
+    call = _time_off_first_call("absence_of", "Why was somebody off?", [], None)
+    assert isinstance(call, str)
+    assert "name" in call
+
+
+def test_absence_without_a_date_in_the_context_makes_no_call() -> None:
+    assert _time_off_first_call("absence_of", "Why was Leo out last week?", [], None) is None
+
+
+@pytest.mark.parametrize(
+    ("question", "expected"),
+    [
+        ("Approve McKenzie's request.", "McKenzie"),
+        ("Approve DeShawn's request.", "DeShawn"),
+        ("approve priya's request", "Priya"),
+        ("Approve  mary   ann's request", "Mary ann"),
+    ],
+)
+def test_a_name_is_kept_as_typed_with_only_its_first_letter_raised(
+    question: str, expected: str
+) -> None:
+    call = _time_off_first_call("approve_named", question, [], None)
+    assert isinstance(call, ToolCall)
+    assert call.input["person_name"] == expected
+
+
+async def test_waiting_rows_without_dates_are_listed_beside_dated_ones() -> None:
+    transport = ScriptedTransport()
+    messages = with_context("Is there anything waiting on me?")
+    first = await collect(transport, a_request(*messages))
+    blank = {**WAITING["requests"][0], "startDate": None, "endDate": None}
+    dated = {**blank, "person": "Leo Nakamura", "startDate": "2026-10-07", "endDate": "2026-10-09"}
+    second = await collect(
+        transport, a_request(*messages, *tool_round(first, result={"requests": [blank, dated]}))
+    )
+    text = text_of(second)
+    assert text.startswith("2 requests are waiting for you: Zara Bautista, dates not shown (")
+    assert "; Leo Nakamura, for Wednesday, October 7 to Friday, October 9" in text
+    assert "for  (" not in text
+
+
+async def test_absence_rows_without_dates_are_left_out_of_the_words() -> None:
+    transport = ScriptedTransport()
+    messages = with_context("Why was Leo out last week?")
+    first = await collect(transport, a_request(*messages))
+    blank = {**WAITING["requests"][0], "status": "approved", "startDate": None, "endDate": None}
+    listed = {"requests": [blank]}
+    second = await collect(transport, a_request(*messages, *tool_round(first, result=listed)))
+    assert text_of(second) == "I didn't find any approved time off for Leo in that period."
+    dated = {**blank, "person": "Leo Nakamura", "startDate": "2026-10-07", "endDate": "2026-10-09"}
+    listed = {"requests": [blank, dated]}
+    second = await collect(transport, a_request(*messages, *tool_round(first, result=listed)))
+    assert "time off: Wednesday, October 7 to Friday, October 9. " in text_of(second)
+
+
+async def test_absence_words_keep_only_the_named_persons_days() -> None:
+    transport = ScriptedTransport()
+    messages = with_context("Why was Leo out last week?")
+    first = await collect(transport, a_request(*messages))
+    leo = {
+        **WAITING["requests"][0],
+        "person": "Leo Nakamura",
+        "status": "approved",
+        "startDate": "2026-10-07",
+        "endDate": "2026-10-09",
+    }
+    other = {**leo, "person": "Zara Bautista", "startDate": "2026-10-12", "endDate": "2026-10-13"}
+    listed = {"requests": [leo, other]}
+    second = await collect(transport, a_request(*messages, *tool_round(first, result=listed)))
+    text = text_of(second)
+    assert "Leo Nakamura had approved time off: Wednesday, October 7 to Friday, October 9. " in text
+    assert "October 12" not in text
+
+
+async def test_absence_words_name_only_days_inside_last_week() -> None:
+    # THURSDAY is 2026-10-15, so last week is Monday October 5 to Sunday October 11.
+    transport = ScriptedTransport()
+    messages = with_context("Why was Leo out last week?")
+    first = await collect(transport, a_request(*messages))
+    spans = {
+        **WAITING["requests"][0],
+        "person": "Leo Nakamura",
+        "status": "approved",
+        "startDate": "2026-10-01",
+        "endDate": "2026-10-14",
+    }
+    second = await collect(
+        transport, a_request(*messages, *tool_round(first, result={"requests": [spans]}))
+    )
+    text = text_of(second)
+    assert "time off: Monday, October 5 to Sunday, October 11. " in text
+    assert "October 1" not in text.replace("October 11", "")
+    assert "October 14" not in text
+    outside = {**spans, "startDate": "2026-10-12", "endDate": "2026-10-14"}
+    second = await collect(
+        transport, a_request(*messages, *tool_round(first, result={"requests": [outside]}))
+    )
+    assert text_of(second) == "I didn't find any approved time off for Leo in that period."
+
+
+async def test_absence_words_say_someone_for_a_row_with_no_person() -> None:
+    transport = ScriptedTransport()
+    messages = with_context("Why was Leo out last week?")
+    first = await collect(transport, a_request(*messages))
+    nameless = {
+        **WAITING["requests"][0],
+        "person": None,
+        "status": "approved",
+        "startDate": "2026-10-07",
+        "endDate": "2026-10-09",
+    }
+    second = await collect(
+        transport, a_request(*messages, *tool_round(first, result={"requests": [nameless]}))
+    )
+    text = text_of(second)
+    assert text.startswith("Someone had approved time off: Wednesday, October 7 to Friday, ")
+    assert "None" not in text
+
+
+async def test_approve_priyas_request_with_nothing_from_her_makes_no_card() -> None:
+    transport = ScriptedTransport()
+    messages = with_context("Approve Priya's request.")
+    first = await collect(transport, a_request(*messages))
+    empty: dict[str, Any] = {"window": None, "requests": [], "truncated": False}
+    second = await collect(transport, a_request(*messages, *tool_round(first, result=empty)))
+
+    assert not any(isinstance(event, ToolCall) for event in second)
+    assert text_of(second) == (
+        "Nothing from Priya is waiting for your decision, so there is no card."
+    )
+
+
+async def test_why_was_leo_out_gives_the_dates_and_no_reason() -> None:
+    transport = ScriptedTransport()
+    messages = with_context("Why was Leo out last week?")
+    first = await collect(transport, a_request(*messages))
+    leo = {
+        **WAITING["requests"][0],
+        "person": "Leo Nakamura",
+        "status": "approved",
+        "startDate": "2026-10-07",
+        "endDate": "2026-10-09",
+    }
+    second = await collect(
+        transport, a_request(*messages, *tool_round(first, result={"requests": [leo]}))
+    )
+
+    assert text_of(second) == (
+        "Leo Nakamura had approved time off: Wednesday, October 7 to Friday, October 9. "
+        "The request doesn't record a reason, so I can't say why."
+    )
+
+
+@pytest.mark.parametrize(
+    ("today", "first", "last"),
+    [
+        (date(2026, 10, 12), "2026-10-05", "2026-10-11"),  # Monday: last week just ended
+        (date(2026, 10, 15), "2026-10-05", "2026-10-11"),  # Thursday
+        (date(2026, 10, 18), "2026-10-05", "2026-10-11"),  # Sunday: still this week
+        (date(2026, 10, 19), "2026-10-12", "2026-10-18"),  # the next Monday moves a week on
+    ],
+)
+async def test_why_was_leo_out_asks_for_last_weeks_monday_to_sunday(
+    today: date, first: str, last: str
+) -> None:
+    events = await collect(
+        ScriptedTransport(), a_request(*with_context("Why was Leo out last week?", today))
+    )
+
+    assert the_call(events).input == {
+        "scope": "team",
+        "person_name": "Leo",
+        "from": first,
+        "to": last,
+    }
+
+
+async def test_why_was_leo_out_without_todays_date_is_said_plainly() -> None:
+    events = await collect(ScriptedTransport(), a_request(user("Why was Leo out last week?")))
+
+    assert not any(isinstance(event, ToolCall) for event in events)
+    assert text_of(events) == "I can't tell today's date, so I can't work out which day you mean."
+
+
+async def test_why_was_leo_out_with_nothing_found_says_so() -> None:
+    transport = ScriptedTransport()
+    messages = with_context("Why was Leo out last week?")
+    first = await collect(transport, a_request(*messages))
+    second = await collect(
+        transport, a_request(*messages, *tool_round(first, result={"requests": []}))
+    )
+
+    assert text_of(second) == "I didn't find any approved time off for Leo in that period."
 
 
 async def test_nothing_waiting_is_said_plainly() -> None:
@@ -1252,6 +1588,8 @@ def test_the_time_off_triggers_do_not_catch_the_default_question() -> None:
 
 
 CHECKS_TIME_OFF = {
+    "approve_named",
+    "absence_of",
     "book_friday",
     "sick_tomorrow",
     "show_balance",

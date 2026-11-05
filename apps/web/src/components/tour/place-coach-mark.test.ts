@@ -240,6 +240,134 @@ describe('placeCoachMark', () => {
   })
 })
 
+describe('placeCoachMark with a composer it must never cover', () => {
+  const composer = rect(232, 800, 976, 84)
+  const area = rect(232, 60, 976, 740)
+  const run = (target: Rect, over: { avoid?: Rect[]; scrollArea?: Rect | null } = {}) =>
+    placeCoachMark({
+      target,
+      card: CARD,
+      viewport: VIEWPORT,
+      avoid: over.avoid ?? [],
+      blocked: [composer],
+      scrollArea: over.scrollArea ?? null,
+      phone: false,
+    })
+
+  it('does not take a side that overlaps the composer by a few pixels', () => {
+    // Below the target the card would end at 806; above is clear.
+    const target = rect(300, 520, 700, 30)
+    const p = anchored(run(target))
+    expect(p.side).toBe('top')
+    expect(overlaps(rect(p.x, p.y, CARD.width, CARD.height), composer)).toBe(false)
+  })
+
+  it('as a last resort lifts the card clear of the composer, even over other content', () => {
+    // Every side runs into the composer: the target itself is out of the visible area.
+    const target = rect(300, 820, 700, 30)
+    const p = anchored(run(target))
+    expect(overlaps(rect(p.x, p.y, CARD.width, CARD.height), composer)).toBe(false)
+  })
+
+  it('still keeps the result strongly avoided while keeping the composer clear', () => {
+    const result = rect(232, 300, 976, 440)
+    const target = rect(248, 650, 84, 40)
+    const p = anchored(run(target, { avoid: [result] }))
+    const box = rect(p.x, p.y, CARD.width, CARD.height)
+    expect(overlaps(box, composer)).toBe(false)
+    expect(overlaps(box, result)).toBe(false)
+  })
+
+  it('never scrolls or shifts a target that is the composer itself', () => {
+    const p = anchored(run(composer, { scrollArea: area }))
+    expect(p.scrollBy).toBeUndefined()
+    expect(overlaps(rect(p.x, p.y, CARD.width, CARD.height), composer)).toBe(false)
+  })
+
+  it('scrolls a target that sits below the visible area so the card fits beneath it', () => {
+    const target = rect(300, 850, 120, 36)
+    const p = anchored(run(target, { scrollArea: area }))
+    expect(p.scrollBy).toBeGreaterThan(0)
+    const box = rect(p.x, p.y, CARD.width, CARD.height)
+    expect(overlaps(box, composer)).toBe(false)
+    // After the scroll the target is inside the visible area.
+    expect(target.y - p.scrollBy!).toBeGreaterThanOrEqual(area.y)
+    expect(target.y + target.height - p.scrollBy!).toBeLessThanOrEqual(composer.y)
+  })
+
+  it('scrolls so the card fits beneath a target that is in view but leaves no clear side', () => {
+    const target = rect(300, 560, 700, 56)
+    // Above is taken by something to avoid, and below would run into the composer.
+    const p = anchored(run(target, { scrollArea: area, avoid: [rect(0, 100, 1440, 440)] }))
+    expect(p.scrollBy).toBeGreaterThan(0)
+    expect(p.side).toBe('bottom')
+    expect(overlaps(rect(p.x, p.y, CARD.width, CARD.height), composer)).toBe(false)
+  })
+
+  it('does not scroll a target that is in view with a clear side', () => {
+    const p = anchored(run(rect(300, 300, 700, 56), { scrollArea: area }))
+    expect(p.scrollBy).toBeUndefined()
+  })
+
+  it('never scrolls up for a target that is in view when no side is clear and nothing is gained', () => {
+    // Near the top of the area: nothing above has room, and something to avoid sits just below.
+    const target = rect(300, 70, 700, 30)
+    const p = anchored(run(target, { scrollArea: area, avoid: [rect(300, 110, 700, 60)] }))
+    expect(p.scrollBy).toBeUndefined()
+  })
+
+  it('does not scroll when the tour may not (scrollArea is null)', () => {
+    expect(anchored(run(rect(300, 850, 120, 36))).scrollBy).toBeUndefined()
+  })
+
+  it('never scrolls the target out of the top of the area to make the card fit', () => {
+    const target = rect(300, 100, 700, 600)
+    const p = anchored(run(target, { scrollArea: area }))
+    expect(target.y - (p.scrollBy ?? 0)).toBeGreaterThanOrEqual(area.y)
+  })
+
+  it('scrolls back a target above the visible area just enough to show it', () => {
+    // Its top lands a margin inside the area, no further: more would only push it down.
+    const p = anchored(run(rect(300, -400, 120, 36), { scrollArea: area }))
+    expect(p.scrollBy).toBe(-400 - area.y - MARGIN)
+  })
+
+  it('scrolls back a target above the visible area', () => {
+    const p = anchored(run(rect(300, -100, 120, 36), { scrollArea: area }))
+    expect(p.scrollBy).toBeLessThan(0)
+  })
+})
+
+describe('placeCoachMark when the target is the composer itself', () => {
+  const window_ = rect(0, 0, 1440, 900)
+  const run = (composer: Rect) =>
+    placeCoachMark({
+      target: composer,
+      card: CARD,
+      viewport: VIEWPORT,
+      avoid: [],
+      blocked: [composer],
+      scrollArea: window_,
+      phone: false,
+    })
+
+  it('does not scroll, and sits below, a composer in the middle of the home page', () => {
+    const composer = rect(232, 300, 976, 84)
+    const p = anchored(run(composer))
+    expect(p.scrollBy).toBeUndefined()
+    expect(p.side).toBe('bottom')
+    expect(overlaps(rect(p.x, p.y, CARD.width, CARD.height), composer)).toBe(false)
+  })
+
+  it('does not scroll, and sits above, a composer stuck to the bottom of a conversation', () => {
+    const composer = rect(232, 800, 976, 84)
+    const p = anchored(run(composer))
+    expect(p.scrollBy).toBeUndefined()
+    expect(p.side).toBe('top')
+    expect(overlaps(rect(p.x, p.y, CARD.width, CARD.height), composer)).toBe(false)
+  })
+})
+
 describe('placeCoachMark on a phone', () => {
   const phone = { width: 390, height: 844 }
   const sheet = { width: 390, height: 260 }

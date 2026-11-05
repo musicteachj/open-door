@@ -23,7 +23,7 @@ import {
 } from '@/test/fake-assistant'
 import { meFor } from '@/test/fixtures'
 import { server } from '@/test/msw'
-import { useChatStore } from './store'
+import { useChatStore, type SendOutcome } from './store'
 import {
   useAssistantTexts,
   useBudgetBeforeConversation,
@@ -876,8 +876,8 @@ describe('starting a new conversation while one is being created', () => {
     await waitFor(() => expect(result.current.ready).toBe(true))
     useChatStore.setState({ draft: 'Sick days?' })
     let starting!: Promise<void>
-    let first!: Promise<void>
-    let second!: Promise<void>
+    let first!: Promise<SendOutcome>
+    let second!: Promise<SendOutcome>
     act(() => {
       starting = result.current.startNewConversation()
       first = result.current.send('Sick days?')
@@ -924,7 +924,7 @@ describe('starting a new conversation while one is being created', () => {
     await waitFor(() => expect(result.current.ready).toBe(true))
     useChatStore.setState({ draft: 'Sick days?' })
     let starting!: Promise<void>
-    let sending!: Promise<void>
+    let sending!: Promise<SendOutcome>
     act(() => {
       starting = result.current.startNewConversation()
       sending = result.current.send('Sick days?')
@@ -956,7 +956,7 @@ describe('a send that is waiting when the person changes', () => {
     const { result } = renderHook(() => useConversationActions(), { wrapper })
     await waitFor(() => expect(result.current.ready).toBe(true))
     let starting!: Promise<void>
-    let sending!: Promise<void>
+    let sending!: Promise<SendOutcome>
     act(() => {
       starting = result.current.startNewConversation()
       sending = result.current.send('Old person question')
@@ -991,7 +991,7 @@ describe('a send that races "Start a new conversation"', () => {
     const { wrapper } = setup()
     const { result } = renderHook(() => useConversationActions(), { wrapper })
     await waitFor(() => expect(result.current.ready).toBe(true))
-    let sending!: Promise<void>
+    let sending!: Promise<SendOutcome>
     act(() => {
       sending = result.current.send('Sick days?')
     })
@@ -1016,8 +1016,8 @@ describe('a send that races "Start a new conversation"', () => {
     const { wrapper } = setup()
     const { result } = renderHook(() => useConversationActions(), { wrapper })
     await waitFor(() => expect(result.current.ready).toBe(true))
-    let first!: Promise<void>
-    let second!: Promise<void>
+    let first!: Promise<SendOutcome>
+    let second!: Promise<SendOutcome>
     act(() => {
       first = result.current.send('First question')
     })
@@ -1065,7 +1065,7 @@ describe('a second send while one waits for the new conversation', () => {
     await waitFor(() => expect(result.current.ready).toBe(true))
     expect(useChatStore.getState().waitingToSend).toBe(false)
     let starting!: Promise<void>
-    let sending!: Promise<void>
+    let sending!: Promise<SendOutcome>
     act(() => {
       starting = result.current.startNewConversation()
       sending = result.current.send('Sick days?')

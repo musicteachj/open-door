@@ -35,7 +35,7 @@ test.describe('each persona sees exactly the nav items above, and an item appear
         name === 'Marcus'
           ? [...person, 'Approvals, 1 waiting1']
           : name === 'Dana'
-            ? ['Ask', 'Time off', 'Directory', 'Handbook', /^Cases/]
+            ? ['Ask', 'Time off', 'Directory', 'Handbook', /^Cases/, 'Console']
             : person,
       )
       await expect(page.getByRole('link', { name: "How it's built" })).toHaveCount(0)
@@ -43,12 +43,14 @@ test.describe('each persona sees exactly the nav items above, and an item appear
       if (name === 'Marcus')
         await expect(approvals).toHaveAccessibleName(nameLike('Approvals, 1 waiting'))
       else await expect(approvals).toHaveCount(0)
-      // HR has no My cases, and nobody else has Cases. Console is not built yet.
+      // HR has no My cases, and nobody else has Cases or Console.
       await expect(page.getByRole('link', { name: /^My cases/ })).toHaveCount(
         name === 'Dana' ? 0 : 1,
       )
       await expect(page.getByRole('link', { name: /^Cases/ })).toHaveCount(name === 'Dana' ? 1 : 0)
-      await expect(page.getByRole('link', { name: /^Console/ })).toHaveCount(0)
+      await expect(page.getByRole('link', { name: /^Console/ })).toHaveCount(
+        name === 'Dana' ? 1 : 0,
+      )
       expect((await scan(page)).violations).toEqual([])
     })
   }

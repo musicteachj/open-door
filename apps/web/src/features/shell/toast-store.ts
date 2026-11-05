@@ -5,9 +5,11 @@ type ShellToastState = {
   message: string | null
   /** Who the message is about. The shell shows it only to that person. */
   personId: string | null
+  /** The icon and color: a confirmation (the default) or a plain notice. */
+  tone: 'success' | 'info'
   /** Changes with each message, so a second toast replaces the first rather than reusing it. */
   id: number
-  show: (message: string, personId: string) => void
+  show: (message: string, personId: string, tone?: 'success' | 'info') => void
   clear: () => void
 }
 
@@ -21,8 +23,10 @@ type ShellToastState = {
 export const useShellToast = create<ShellToastState>((set) => ({
   message: null,
   personId: null,
+  tone: 'success',
   id: 0,
-  show: (message, personId) => set((state) => ({ message, personId, id: state.id + 1 })),
+  show: (message, personId, tone = 'success') =>
+    set((state) => ({ message, personId, tone, id: state.id + 1 })),
   clear: () => set({ message: null, personId: null }),
 }))
 

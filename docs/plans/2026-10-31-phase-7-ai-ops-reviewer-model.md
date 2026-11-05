@@ -734,7 +734,7 @@ notice), tests.
       500 ms, which a loaded runner can pass while the queue reloads the new filter. Raise the
       limit (about 2 seconds; a key that moves nothing still returns), keep the comment's reasoning,
       and prove it by slowing the queue's fake response in a test
-- [ ] `CHANGELOG.md`, the roadmap, `make check`, `/code-review medium` loop; propose the commit and
+- [x] `CHANGELOG.md`, the roadmap, `make check`, `/code-review medium` loop; propose the commit and
       PR
 
 ---
@@ -748,9 +748,9 @@ Batches: **A** Tasks 32–33, **B** Tasks 34–35, **C** Task 36.
 **Files:** `features/console/`, `app/nav.ts` (`Console` available), `router.tsx`, tests,
 `e2e/console.spec.ts`.
 
-- [ ] Dana's nav shows Console; nobody else's does, and `/console` for them is the not-found page
-- [ ] the page reads the two routes through TanStack Query, pages the list, and opens the trace
-- [ ] in the browser: Priya asks an ordinary and a sensitive question; Dana's console shows an
+- [x] Dana's nav shows Console; nobody else's does, and `/console` for them is the not-found page
+- [x] the page reads the two routes through TanStack Query, pages the list, and opens the trace
+- [x] in the browser: Priya asks an ordinary and a sensitive question; Dana's console shows an
       "Employee · Oakland, CA" row and a date-only redacted row, and nothing on the page holds
       "Priya" or her words
 
@@ -758,7 +758,7 @@ Batches: **A** Tasks 32–33, **B** Tasks 34–35, **C** Task 36.
 
 The "How it's built" page was dropped on 2026-10-31. What remains:
 
-- [ ] remove the hidden "How it's built" item from `app/nav.ts` and the hidden header link from
+- [x] remove the hidden "How it's built" item from `app/nav.ts` and the hidden header link from
       `features/landing/landing-page.tsx`, with the tests that assert them hidden
 
 ### Task 34: The tour
@@ -778,11 +778,11 @@ export type TourStep = {
 export const TOUR: readonly TourStep[];
 ```
 
-- [ ] "Take the 2-minute tour" and the persona menu's "Take the tour" start a new sandbox as Priya
+- [x] "Take the 2-minute tour" and the persona menu's "Take the tour" start a new sandbox as Priya
       and open step 1; the menu's item first says the current sandbox stays until it expires
-- [ ] a step that needs another persona switches to it; each chip sends its prompt; Back, Next, Skip,
+- [x] a step that needs another persona switches to it; each chip sends its prompt; Back, Next, Skip,
       and Leave work; a reload resumes the step from session storage
-- [ ] a step whose `expect` doesn't appear shows its `missing` line and still offers Next
+- [x] a step whose `expect` doesn't appear shows its `missing` line and still offers Next
 
 Known: the landing's comment (`landing-page.tsx` lines 13–14) marks where the tour button and
 "How it's built" link were hidden; the design's notes for screen 01 have the button's placement.
@@ -794,9 +794,9 @@ The link is removed (Task 33).
 `e2e/captures/manifest.ts`, and the tests that assert Console is hidden (`nav.test.ts`,
 `e2e/shell.spec.ts`, `e2e/home.spec.ts`).
 
-- [ ] the scripted model answers every tour prompt as the step expects
-- [ ] `e2e/tour.spec.ts` imports `TOUR` and walks every step from the landing to the end card
-- [ ] capture rows for screens 13 and 15; the capture report for the owner
+- [x] the scripted model answers every tour prompt as the step expects
+- [x] `e2e/tour.spec.ts` imports `TOUR` and walks every step from the landing to the end card
+- [x] capture rows for screens 13 and 15; the capture report for the owner
 
 Known: clear the AI ledger rows a local `CI=1` Playwright run leaves before `make check`, or later
 checks see a spent sandbox.
@@ -1098,6 +1098,58 @@ Recorded at each stage's close.
     leaves the list, one tool-icon map with icons for the case tools, `aria-controls` only while
     open, one `variant` prop on the empty state's actions, the scoreboard's shape check).
 
+- **Stage 6 (2026-11-04), what the code and the design forced:**
+  - **The owner approved the copy of tour steps 4, 5, and 8** as drafted: "Now you’re Marcus Bell,
+    the Store Manager at the Oakland store and Priya’s manager. Her request is waiting beside one
+    from Zara Bautista. Approve Priya’s on its card; nothing changes until you confirm." / "A
+    manager sees when someone on the team was out, never why. Ask about Leo’s absence last week,
+    and the answer says only that it was approved time off." / "Now you’re Dana Whitfield, the HR
+    Business Partner at Denver HQ. Priya’s case is new in the queue. Open it: the AI wrote a
+    neutral summary, and her own words stay hidden until you choose to read them."
+  - **A step has an ordered list of targets** (`targets`, `data-tour` values from one map in
+    `lib/tour-targets.ts`), not one: the coach mark points at the last one on the page (the
+    composer, then the answer's source chip; Confirm; "Open a confidential case", then Send; the
+    queue row, then the summary). `expect` is `card` or `panel` only, on steps 3, 4, and 7, the
+    steps with a missing line. The chat store's `send` reports what became of the question (not
+    sent, accepted with its turn ID, or lost after it went out), and the tour keeps the last
+    chip's own turn ID: a step's result is that turn finishing, and for steps 3, 4, and 7 the card
+    or panel inside that turn or a later one (marked `data-turn-key`, a per-tab key from `lib/turn-key.ts`,
+    since no server ID may appear in the page), so a card from an earlier turn never counts.
+    A question the server never took gives its chip back; one it took is never sent again.
+  - **Priya's row in Dana's queue** is the newest case by `sentAt` (the first in the queue's
+    order on a tie), so the script names no one.
+  - **The tour's place** is a Zustand store in session storage (`od.tour`, in
+    `DATA-INVENTORY.md`), cleared by sign out or a new sandbox from a persona card, but not by
+    the tour's own persona switches (a flag the switch sets and takes back if it fails). A
+    visitor's own switch from the menu leaves the tour, keeping the step for Resume. A failed
+    tour switch leaves the tour too, with the shell's own retry, rather than trying again.
+  - **The scripted model** gained the tour's answers (the sick-days query with a preference for
+    a sick-leave section, `approve_named`, `absence_of`, `decline_scope`, and every waiting
+    request named). Full-text search (what the browser tests use) never matched California's
+    sick-leave section with "paid" in the query, so the query is "How much sick leave do I get?"
+    and its integration tests run without an embedder. The conversation test's cited question
+    moved to "Tell me about sick days", and its injection test no longer checks the answer's
+    words (the guard notes, the model declines).
+  - **The console page** docks the trace flush with the sheet's right edge at full height, as
+    the frames show (the host gained a page mode; the gallery keeps its layout), with 48 px
+    page padding as the notes give. The empty state is left-aligned under a rule, and the error
+    box is 400 px tall, from the self-review against the frames. The heading has no icon.
+  - **The coach mark** treats the composer as a wall (`blocked`) and scrolls its target into
+    view once per target (`scrollArea`), so step 7's Send is in view and nothing covers the
+    question box. On the conversation page the window scrolls, not a container.
+  - **The persona menu** closes itself when a switch or sign out starts: a store update between
+    a pick and the menu's own close left it open (the root cause of an early workaround).
+  - **The captures:** each 13 and 15 row is its design frame's size; the console rows use the
+    tour's injection chip; `CAPTURE_ONLY` photographs only matching rows. The Approvals and HR
+    cases rows' failures were stale name patterns (Chromium's space before hidden text, since
+    #93), not this stage.
+  - **The batch reviews:** batch A found two mediums (a failed background refresh replaced the
+    list with the error; the reset of held pages was untested), batch B two (a failed switch left
+    the keep flag set, so the next sign out could carry the tour into a new sandbox; a failed tour
+    switch was retried forever) and lows (a chip held before the texts loaded could send the next
+    step's chip; a refused send left the chip marked sent; a card from an earlier step counted as
+    the result). All were fixed test first and mutation-proved.
+
 ## Backlog
 
 Recorded at each stage's close, then moved to `docs/BACKLOG.md`.
@@ -1253,3 +1305,63 @@ Recorded at each stage's close, then moved to `docs/BACKLOG.md`.
   only HR person in the demo. A sent chip's and the resume item's accessible names have a space
   before their hidden part in Chromium ("Book next Friday off. , sent"), as other names built
   this way already do.
+- **Stage 6, recorded, not fixed:** the scripted "approve" trigger is the literal "approve
+  priya's request", so another name doesn't match it (kept narrow so "Deny Leo's request" can't
+  approve by mistake); steps 4 and 8 say Priya's request is waiting and her case is new, which
+  holds only if the visitor confirmed in step 3 and sent in step 7 (otherwise step 4 shows its
+  missing line, and step 8 points at the newest seeded case); the scripted waiting list reads
+  "16 hours (2 days)" inside parentheses; the sick-days query isn't checked against real
+  embeddings, which the scripted transport never uses; the "At a glance" rail is blank in
+  captures of a scrolled conversation, as it was before this stage.
+- **Stage 6, `/code-review medium` (2026-11-04).** Round 1 found two ways the tour broke its
+  own promises (a finished turn from before a chip's press counted as its result; a chip was
+  re-enabled after a send the server had accepted, so it could be asked twice) and six smaller
+  ones (step 9 could ring an abandoned turn's row; a reload lost the result baseline; a session
+  expiry during a switch kept a stale tour; the landing's tour button swallowed a click while a
+  card started; the shell re-rendered on every tour change and loaded the assistant's texts on
+  every page; the coach mark's host knew the conversation page's header). Round 2: a step
+  pointing at the question box always scrolled the page; a switch landing on the wrong persona
+  looped; a late switch could wipe a new tour; a chip pressed while an answer streamed was
+  dropped; a malformed scoreboard file would break every page; the console fetched the
+  handbook a third time; the tour's observer watched the whole page. Round 3 found that
+  round 2's late-switch guard left the browser's session on the old sandbox while the screen
+  showed the new one (reverted: a sandbox can't start while a switch is pending, and a switch
+  can't start while a sandbox starts), and that a chip pressed before the persona's
+  conversation loaded took an empty baseline. Round 4: the data inventory's `od.tour` row left
+  out the baseline's turn IDs (fixed), and lows. All fixed test first and mutation-proved.
+- **Stage 6, review lows recorded, not fixed:** after the tour's own switch to a step's
+  persona, a later persona mismatch on the same step leaves the tour without a toast (only
+  Resume clears it); the desktop scroll isn't limited by how far the area can move, so at the
+  very end of a conversation the card can be drawn one frame early before the next measure;
+  the scroll-then-place step assumes the blocked question box is fixed or sticky, which it is.
+- **Stage 6, `/code-review medium` rounds 5 to 9.** The tour's state handling took most of the
+  rounds: one gate now keeps a persona switch, a sign out, and a sandbox start from overlapping
+  (round 5, after sign out was found ungated); a chip pressed off its page goes back to it first,
+  a failed load drops queued chips, a failed or turned-away send frees or finishes its step, and
+  the tour's switch guard reads the same gate (rounds 6 to 9); the desktop scroll happens at most
+  once per target (round 7); the tour's own buttons stay focusable while they start it (round
+  8); a stored tour state from another build loads as idle instead of crashing (round 9).
+- **Stage 6, review lows recorded, not fixed (rounds 5 to 9):** a reload while the tour's own
+  persona switch is in flight can reset the tour; the coach mark's scroll area is cached per
+  target, so crossing the 640 or 760 px breakpoint with the same target mounted keeps the old
+  container until the target changes; the scripted absence answer always reads last week (its
+  trigger is the tour's question); the identity gate reads the last render's pending flags, so
+  two presses in one frame can both pass (TanStack mutation scopes would close that); if Dana
+  changes the queue filter during step 8, the ring can mark another case; a "Show more turns"
+  load that lands after the first page refetched is dropped quietly (pressing again works).
+- **Stage 6, `/code-review medium` rounds 10 to 14, and the end of the loop.** Rounds 10 to 13
+  kept finding edge cases in the tour's chip tracking, so it was redesigned twice: the chat
+  store's `send` reports one outcome (not sent, accepted with its turn ID, or unknown after the
+  request went out), the tour follows the chip's own turn and counts a card or panel in that turn
+  or a later one (a per-tab `data-turn-key`, never the server's ID), and a step's outcome is latched once seen, so leaving the page
+  or starting a new conversation never changes it. The identity gate checks at call time, not
+  the last render. Round 14 still found nine items (a Stop or a dropped connection after a
+  chip's question went out could free the chip; a reload before the request went out lost the
+  chip; Retry after a failed tour switch went to the tour's page; Resume showed while the tour
+  ran; and smaller ones), all fixed, with one rule for a send's outcome: "never sent twice" wins
+  over "always retryable". **On the owner's call (2026-11-04), the loop ended there** rather than
+  run until a clean round; the phase review after the merge reads the whole phase again.
+- **Stage 6, recorded at the loop's end:** after a visitor's Stop before any response, the chat
+  puts the question back in the draft while the tour keeps the chip Sent (the server may already
+  hold a stopped turn), so the step shows Next; the shell's `fresh()` guard against dismissing the
+  tour-start error on a refused action is tested only through the boolean it reads.

@@ -52,6 +52,32 @@ describe('CaseQueueTable', () => {
     expect(link).toHaveAttribute('href', '/cases/c-priya')
   })
 
+  it('marks only the case sent most recently as the guided tour’s row', () => {
+    setup({
+      rows: [
+        row({ id: 'c-old', givenName: 'Keisha', sentAt: '2026-10-20T16:00:00Z' }),
+        row({ id: 'c-new' }),
+        row({ id: 'c-mid', givenName: 'Chloe', sentAt: '2026-10-24T16:00:00Z' }),
+      ],
+    })
+    const marked = document.querySelectorAll('[data-tour="case-row"]')
+    expect(marked).toHaveLength(1)
+    expect(marked[0]).toHaveAttribute('href', '/cases/c-new')
+  })
+
+  it('marks the first of the cases sent at the same moment, in the queue’s order', () => {
+    const sentAt = '2026-10-26T16:41:00Z'
+    setup({ rows: [row({ id: 'c-a', sentAt }), row({ id: 'c-b', sentAt })] })
+    const marked = document.querySelectorAll('[data-tour="case-row"]')
+    expect(marked).toHaveLength(1)
+    expect(marked[0]).toHaveAttribute('href', '/cases/c-a')
+  })
+
+  it('marks no row when the queue is empty', () => {
+    setup({ rows: [] })
+    expect(document.querySelector('[data-tour="case-row"]')).toBeNull()
+  })
+
   it('has a list named Cases and the column labels, hidden from assistive technology', () => {
     setup()
     expect(screen.getByRole('list', { name: 'Cases' })).toBeInTheDocument()

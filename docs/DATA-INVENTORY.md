@@ -498,13 +498,14 @@ CSRF one.
 
 ### Browser storage
 
-The web app uses no `localStorage`. It keeps three keys in `sessionStorage`:
+The web app uses no `localStorage`. It keeps four keys in `sessionStorage`:
 
 | Key | Holds | Why |
 |---|---|---|
 | `od.expiryBannerDismissed.<tenantExpiresAt>` | `1`, once the visitor has closed the "This sandbox resets in …" banner. The key ends with the sandbox's expiry time, which is not secret. | So the banner stays closed across a reload. A new sandbox has a new expiry, so it gets a new key and shows the banner again. |
 | `od.scrollPositions` | How far each page in the tab's history was scrolled, as a list of `[history entry key, pixels]` pairs, newest last, capped at the last 50. The keys are random router-generated strings, not addresses. | So Back or a reload returns to where the visitor was in a long list. |
 | `od.staleSourceEntries` | The history entry keys of source panels closed by "Start a new conversation", newest last, capped at the last 50. The keys are random router-generated strings, not addresses. | So Forward onto one of those entries, or a reload of it, shows the panel closed instead of reopening a passage from the old conversation. |
+| `od.tour` | The guided tour's place: whether a tour was started and is still on, the step number, which of the step's prompt chips were sent (by position), whether the tour is switching persona or page to enter the step, and, for the step's last chip, whether its request has gone out, the ID of the turn the server made for it once known, and whether that send ended with no turn to follow (so only the chip's own answer counts as this step's result, never an earlier one), and the step's latched outcome (`result`, `missing`, or none), so leaving the page or starting a new conversation never changes it. No question or answer text; the chips' words live in the app. Cleared when the visitor signs out or starts a new sandbox from a persona card. | So a reload resumes the tour at its step, and the persona menu can offer "Resume the tour". Nothing about the tour is stored on the server (Phase 7). |
 
 Only the person at that browser tab can see it. It is gone when the tab closes, and the API never
 receives it.

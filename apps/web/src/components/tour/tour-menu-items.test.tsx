@@ -57,6 +57,13 @@ describe('TourMenuItems', () => {
       )
     })
 
+    it('offers only Start over while the tour is showing, since there is nothing to resume', async () => {
+      await setup({ step: 5, active: true })
+      const items = screen.getAllByRole('menuitem')
+      expect(items).toHaveLength(1)
+      expect(items[0]).toHaveTextContent('Start the tour over')
+    })
+
     it('uses the total it is given', async () => {
       await setup({ step: 2, total: 8 })
       expect(screen.getAllByRole('menuitem')[0]).toHaveTextContent('Step 2 of 8')

@@ -4,6 +4,7 @@ import type { ProposalOut } from '@/api/generated'
 import { ConfirmCard } from '@/components/assistant/confirm-card'
 import { trimLikePython } from '@/components/assistant/text-count'
 import { FormMessage } from '@/components/timeoff/form-message'
+import { turnKey } from '@/lib/turn-key'
 import { useChatStore } from './store'
 import { focusComposer } from './use-assistant-composer'
 import { invalidateConversation } from './use-conversation'
@@ -104,14 +105,21 @@ export function ProposalCards({
   proposals,
   question,
   turnRunning,
+  turnId,
 }: {
   proposals: readonly ProposalOut[]
   question: string
   turnRunning?: boolean
+  /** The turn the cards belong to, carried on the element so a caller can tell whose they are. */
+  turnId?: string | null
 }) {
   if (proposals.length === 0) return null
   return (
-    <div data-slot="proposal-cards" className="-mt-3 flex w-full max-w-[680px] flex-col gap-3">
+    <div
+      data-slot="proposal-cards"
+      data-turn-key={turnId ? turnKey(turnId) : undefined}
+      className="-mt-3 flex w-full max-w-[680px] flex-col gap-3"
+    >
       {proposals.map((proposal) => (
         <ProposalCard
           key={proposal.id}

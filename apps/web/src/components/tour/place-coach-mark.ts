@@ -25,7 +25,18 @@ const SMALL_TARGET_MAX_WIDTH = 200
 type Side = 'bottom' | 'top' | 'right'
 
 type Placement =
-  | { mode: 'anchored'; side: Side; x: number; y: number; pointerOffset: number }
+  | {
+      mode: 'anchored'
+      side: Side
+      x: number
+      y: number
+      pointerOffset: number
+      /**
+       * Scroll the target's own scroll area by this much (instantly) first; the position assumes
+       * it.
+       */
+      scrollBy?: number
+    }
   | { mode: 'centered'; x: number; y: number }
   | { mode: 'sheet'; scrollBy: number }
 
@@ -39,7 +50,18 @@ type PlaceInput = {
   avoid: readonly Rect[]
   /** The viewport is 640 px wide or less: dock as a bottom sheet. */
   phone: boolean
+  /** Rectangles the card must never cover, whatever else it costs: the composer. */
+  blocked?: readonly Rect[]
+  /**
+   * The visible box of the scroll area the target sits in, when the tour may still scroll it. With
+   * it, a target out of view, or one the card cannot sit clear of the blocked rectangles beside,
+   * is scrolled so the card fits beneath it.
+   */
+  scrollArea?: Rect | null
 }
+
+/** The space kept between a card and a blocked rectangle. */
+const BLOCKED_GAP = 8
 
 /** Keeps `value` in [low, high]; if the range is empty (a card bigger than the room), low wins. */
 const keep = (value: number, low: number, high: number) => Math.max(low, Math.min(value, high))
@@ -99,7 +121,8 @@ function candidate(side: Side, target: Rect, anchor: Rect, card: Size, viewport:
  * On a phone the card is a bottom sheet instead, and the answer is how far to scroll the page so
  * the target, its ring, and the gap sit fully above the sheet (negative if it is above the top).
  */
-function placeCoachMark({ target, card, viewport, avoid, phone }: PlaceInput): Placement {
+function placeCoachMark(input: PlaceInput): Placement {
+  const { target, card, viewport, avoid, phone, blocked = [], scrollArea = null } = input
   if (phone) {
     if (target === null) return { mode: 'sheet', scrollBy: 0 }
     const sheetTop = viewport.height - card.height
@@ -124,17 +147,72 @@ function placeCoachMark({ target, card, viewport, avoid, phone }: PlaceInput): P
   // the whole result, never inside it.
   const result = avoid.find((r) => contains(r, target)) ?? null
   const anchor = result ?? target
-  const candidates = sides.map((side) => candidate(side, target, anchor, card, viewport))
-  const covered = (c: Candidate) => {
-    const box = { x: c.x, y: c.y, width: card.width, height: card.height }
-    return [...avoid, target].reduce(
-      (sum, rect) => sum + overlapArea(box, rect) * (rect === result ? RESULT_WEIGHT : 1),
+  const boxOf = (c: Candidate): Rect => ({ x: c.x, y: c.y, width: card.width, height: card.height })
+  const blockedBy = (box: Rect) => blocked.reduce((sum, rect) => sum + overlapArea(box, rect), 0)
+  const candidates = sides.flatMap((side) => {
+    const c = candidate(side, target, anchor, card, viewport)
+    if (blockedBy(boxOf(c)) === 0) return [c]
+    // Last resort: lift the card clear of what it must not cover, even if it then overlaps other
+    // content (the target and the result count against it below).
+    const lifted = blocked.reduce(
+      (y, rect) =>
+        overlapArea({ ...boxOf(c), y }, rect) > 0 ? rect.y - BLOCKED_GAP - card.height : y,
+      c.y,
+    )
+    // No room by definition: it is never preferred over a side that has room.
+    return [c, { ...c, y: Math.max(MARGIN, lifted), hasRoom: false }]
+  })
+  const covered = (c: Candidate) =>
+    [...avoid, target].reduce(
+      (sum, rect) => sum + overlapArea(boxOf(c), rect) * (rect === result ? RESULT_WEIGHT : 1),
       0,
     )
+  const clear = candidates.find((c) => c.hasRoom && covered(c) === 0 && blockedBy(boxOf(c)) === 0)
+
+  // Scrolling the target's own area, when it is out of view or nothing is clear: the card then
+  // goes beneath the target (or the result it belongs to), with its bottom above the blocked
+  // rectangles and the viewport's edge.
+  // A target that is, or sits inside, a blocked rectangle (the sticky composer) never moves with
+  // the scroll and is always in view: it is never scrolled, and never shifted.
+  const stuck = blocked.some((r) => contains(r, target))
+  if (scrollArea !== null && !stuck) {
+    const limit = Math.min(viewport.height - MARGIN, ...blocked.map((r) => r.y - BLOCKED_GAP))
+    const visibleBottom = Math.min(scrollArea.y + scrollArea.height, ...blocked.map((r) => r.y))
+    const inView = target.y >= scrollArea.y - 1 && target.y + target.height <= visibleBottom + 1
+    if (!inView || clear === undefined) {
+      const needed = anchor.y + anchor.height + GAP_FROM_TARGET + card.height - limit
+      // Never scroll the target's own top out of the area to make the card fit.
+      const keepVisible = target.y - scrollArea.y - MARGIN
+      // A target above the area scrolls back just far enough to show it (its top a margin inside);
+      // scrolling further up would only push it down for no gain, since the card goes beneath it.
+      const aboveArea = target.y < scrollArea.y
+      const scrollBy = Math.round(aboveArea ? keepVisible : Math.min(needed, keepVisible))
+      // A target in view only scrolls down to make room beneath it: never up for no gain.
+      if (scrollBy !== 0 && (!inView || scrollBy > 0)) {
+        // Only the target and the result move with the scroll. The blocked rectangles are taken
+        // to be fixed or sticky (the composer is), so they stay where they are. The host measures
+        // again on the scroll event it causes, so a blocked rectangle that did move is corrected
+        // on the next read.
+        const moved = (r: Rect): Rect => ({ ...r, y: r.y - scrollBy })
+        const after = placeCoachMark({
+          ...input,
+          target: moved(target),
+          avoid: avoid.map(moved),
+          scrollArea: null,
+        })
+        if (after.mode === 'anchored') return { ...after, scrollBy }
+      }
+    }
   }
-  const clear = candidates.find((c) => c.hasRoom && covered(c) === 0)
+
+  const rank = (c: Candidate) => [blockedBy(boxOf(c)), covered(c)] as const
+  const better = (a: Candidate, b: Candidate) => {
+    const [ah, as] = rank(a)
+    const [bh, bs] = rank(b)
+    return ah !== bh ? ah < bh : as < bs
+  }
   const chosen =
-    clear ?? candidates.reduce((best, c) => (covered(c) < covered(best) ? c : best), candidates[0]!)
+    clear ?? candidates.reduce((best, c) => (better(c, best) ? c : best), candidates[0]!)
   return {
     mode: 'anchored',
     side: chosen.side,

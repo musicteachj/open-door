@@ -412,6 +412,8 @@ export const SCREEN_FOLDERS = [
   '10-confirm-cards',
   '11-escalation-cases',
   '12-hr-cases',
+  '13-ai-ops-console',
+  '15-guided-tour',
 ] as const
 
 /** How to reach each state in the build. The capture spec holds the steps for each one; they use
@@ -455,6 +457,9 @@ export type ScreenSetup =
   | 'confirm-card'
   | 'cases'
   | 'hr-cases'
+  | 'console'
+  | 'tour'
+  | 'gallery-parts'
 
 /** The states of screen 08, by the design file's name (desktop-<state>.png). */
 export type TimeOffState =
@@ -519,6 +524,34 @@ export type ConfirmCardState =
   | 'sensitive-work'
 
 /** The states of screen 11, by the design file's name (desktop-<state>.png). */
+/** The states of screen 13, by the design file's name (desktop-<state>.png). */
+export type ConsoleState =
+  | 'default'
+  | 'empty'
+  | 'error'
+  | 'loading'
+  | 'scoreboard'
+  | 'trace-answered'
+  | 'trace-card'
+  | 'trace-injection'
+
+/** The states of screen 15, by the design file's name (desktop-<state>.png). */
+export type TourState =
+  | 'landing'
+  | 'starting'
+  | 'step-1'
+  | 'step-1-answer'
+  | 'switch'
+  | 'step-3-card'
+  | 'step-3-missing'
+  | 'step-7-case'
+  | 'step-9-console'
+  | 'end'
+  | 'menu'
+  | 'menu-confirm'
+  | 'left'
+  | 'resume'
+
 export type CasesState =
   | 'sensitive-offer'
   | 'form'
@@ -574,10 +607,23 @@ export type ScreenRow = {
   scenario?: ConversationFile
   /** For `time-off`, `approvals`, and `confirm-card`: the state of the real page to reach, named
    * by the design file (desktop-<state>.png). capture.spec.ts holds the steps for each. */
-  state?: TimeOffState | ApprovalsState | ConfirmCardState | CasesState | HrCasesState
+  state?:
+    | TimeOffState
+    | ApprovalsState
+    | ConfirmCardState
+    | CasesState
+    | HrCasesState
+    | ConsoleState
+    | TourState
+  /** For `gallery-parts`: the titles of the gallery's groups to photograph, top to bottom, as one
+   * picture (the design's component card shows the parts of the screen together). */
+  galleryGroups?: string[]
   target?: ScreenTarget
   /** Photographed at this size. 1440 by 900 when left out, the width the designs are drawn at. */
   viewport?: { width: number; height: number }
+  /** Set when the owner decided the build differs from the design's screenshot. The report prints
+   * "Differs by decision: " and this. */
+  differsByDecision?: string
   /** Set when the design shows something Phase 2 can't, with the phase that adds it. The report
    * prints "Differs by design until " and this. The build photograph is the closest real state. */
   differsUntil?: string
@@ -586,9 +632,11 @@ export type ScreenRow = {
 }
 
 const SCREENS = 'docs/design/screens'
-// Phases 3 and 5 built the Handbook, Time off, and Approvals items and the at-a-glance figures, so
-// what the sidebar still lacks is the one link Phase 7 adds.
-const HOW_ITS_BUILT = 'Phase 7: the "How it\'s built" link in the sidebar, which is hidden until then'
+// Phase 7 dropped "How it's built" (2026-10-31): the design's screenshots still draw the link at
+// the sidebar's foot, and the build leaves it out (the screen notes' build decision).
+const HOW_ITS_BUILT = 'the design\'s screenshot draws the "How it\'s built" link, which the build leaves out'
+// The landing screenshots predate the tour button, which screen 15 designed and Phase 7 ships.
+const TOUR_BUTTON = "the design's landing screenshot predates the tour button, which the build now shows (screen 15)"
 const DIRECTORY_NAV = HOW_ITS_BUILT
 const HANDBOOK_NAV = HOW_ITS_BUILT
 const HOME_NAV = HOW_ITS_BUILT
@@ -608,7 +656,7 @@ export type ConversationFile<Id extends string = GalleryStateId> =
 export const conversationRow = (
   file: ConversationFile,
   title: string,
-  extra: Pick<ScreenRow, 'note' | 'persona' | 'differsUntil'> = {},
+  extra: Pick<ScreenRow, 'note' | 'persona' | 'differsUntil' | 'differsByDecision'> = {},
 ): ScreenRow => ({
   title: `07 Conversation: ${title}`,
   designImage: `${SCREENS}/07-conversation/desktop-${file}.png`,
@@ -652,7 +700,7 @@ const pageRow = (
   folder: '08-time-off' | '09-approvals' | '10-confirm-cards',
   state: TimeOffState | ApprovalsState | ConfirmCardState,
   title: string,
-  extra: Pick<ScreenRow, 'note' | 'persona' | 'target' | 'differsUntil'> = {},
+  extra: Pick<ScreenRow, 'note' | 'persona' | 'target' | 'differsUntil' | 'differsByDecision'> = {},
 ): ScreenRow => {
   const screen = {
     '08-time-off': { label: '08 Time off', route: '/time-off', setup: 'time-off', who: 'Priya' },
@@ -716,13 +764,69 @@ const casesRow = (
 const SEED_DATES =
   'The seed has no request ahead for Priya, so the dates and figures differ from the frame'
 
+const BUILD_PLACEMENT =
+  "the coach mark never covers the composer or the result it points at, so it sits where the build's layout leaves room, not where the frame draws it"
+
+/**
+ * A row for screen 13: the real console as Dana, brought to the state by the steps in
+ * capture.spec.ts.
+ */
+const consoleRow = (
+  state: ConsoleState,
+  title: string,
+  extra: Pick<ScreenRow, 'note' | 'differsByDecision'> = {},
+): ScreenRow => ({
+  title: `13 AI Ops console: ${title}`,
+  designImage: `${SCREENS}/13-ai-ops-console/desktop-${state}.png`,
+  route: '/console',
+  persona: 'Dana',
+  setup: 'console',
+  state,
+  target: 'viewport',
+  // Every console frame is 1440 x 1420.
+  viewport: { width: 1440, height: 1420 },
+  // The design draws "How it's built" in the sidebar of every screen.
+  differsByDecision: HOW_ITS_BUILT,
+  ...extra,
+})
+
+/** A row for screen 15: the real tour, driven from the landing (or the menu) to the state. */
+/** The design frames' own heights for screen 15 (all 1440 wide); the rest are 900 tall. */
+const TOUR_HEIGHTS: Partial<Record<TourState, number>> = {
+  end: 1420,
+  landing: 1052,
+  starting: 1052,
+  'step-3-card': 1100,
+  'step-7-case': 1400,
+  'step-9-console': 1420,
+}
+
+const tourRow = (
+  state: TourState,
+  title: string,
+  extra: Pick<ScreenRow, 'note' | 'differsByDecision'> = {},
+): ScreenRow => {
+  const inApp = state === 'menu' || state === 'menu-confirm'
+  return {
+    title: `15 Guided tour: ${title}`,
+    designImage: `${SCREENS}/15-guided-tour/desktop-${state}.png`,
+    route: inApp ? '/ask' : '/',
+    ...(inApp ? { persona: 'Marcus' as const } : {}),
+    setup: 'tour',
+    state,
+    target: 'viewport',
+    viewport: { width: 1440, height: TOUR_HEIGHTS[state] ?? 900 },
+    ...extra,
+  }
+}
+
 export const SCREEN_ROWS: ScreenRow[] = [
   {
     title: '01 Landing: default',
     designImage: `${SCREENS}/01-landing/desktop-default.png`,
     route: '/',
     setup: 'landing',
-    differsUntil: 'Phase 7: "How it\'s built" and the tour button, which are hidden until then',
+    differsByDecision: `${HOW_ITS_BUILT}; ${TOUR_BUTTON}`,
   },
   {
     title: '01 Landing: hover and focus',
@@ -737,7 +841,7 @@ export const SCREEN_ROWS: ScreenRow[] = [
     route: '/',
     setup: 'landing-starting',
     note: 'The sandbox request is held, so the card stays in its starting state',
-    differsUntil: 'Phase 7: the tour button, which is hidden until then',
+    differsByDecision: TOUR_BUTTON,
   },
   {
     title: '01 Landing: error',
@@ -745,7 +849,7 @@ export const SCREEN_ROWS: ScreenRow[] = [
     route: '/',
     setup: 'landing-error',
     note: 'The sandbox request is answered with a 500',
-    differsUntil: 'Phase 7: the tour button, which is hidden until then',
+    differsByDecision: TOUR_BUTTON,
   },
 
   {
@@ -754,7 +858,7 @@ export const SCREEN_ROWS: ScreenRow[] = [
     route: '/ask',
     persona: 'Priya',
     setup: 'home',
-    differsUntil: HOME_NAV,
+    differsByDecision: HOME_NAV,
     note: 'The clock says 21 h 30 min are left, as the design does',
   },
   {
@@ -763,7 +867,7 @@ export const SCREEN_ROWS: ScreenRow[] = [
     route: '/ask',
     persona: 'Priya',
     setup: 'persona-menu',
-    differsUntil: HOME_NAV,
+    differsByDecision: HOME_NAV,
   },
   {
     title: '02 App shell: switching',
@@ -772,7 +876,7 @@ export const SCREEN_ROWS: ScreenRow[] = [
     persona: 'Priya',
     setup: 'switching',
     note: 'The switch request is held, so the switcher stays busy',
-    differsUntil: HOME_NAV,
+    differsByDecision: HOME_NAV,
   },
   {
     title: '02 App shell: switched, with the toast',
@@ -781,7 +885,7 @@ export const SCREEN_ROWS: ScreenRow[] = [
     persona: 'Priya',
     setup: 'switched',
     note: "Marcus's home. The pointer rests on the toast so it stays open. The seed has 1 approval waiting for Marcus (Zara's), not the frame's 2",
-    differsUntil: HOW_ITS_BUILT,
+    differsByDecision: HOW_ITS_BUILT,
   },
   {
     title: '02 App shell: expiry banner',
@@ -790,7 +894,7 @@ export const SCREEN_ROWS: ScreenRow[] = [
     persona: 'Priya',
     setup: 'expiry-banner',
     note: 'The clock says 2 h 50 min are left',
-    differsUntil: HOME_NAV,
+    differsByDecision: HOME_NAV,
   },
   {
     title: '02 App shell: employee navigation',
@@ -800,7 +904,7 @@ export const SCREEN_ROWS: ScreenRow[] = [
     setup: 'home',
     target: 'sidebar',
     note: "The sidebar, as Priya sees it (Mateo's is the same)",
-    differsUntil: HOW_ITS_BUILT,
+    differsByDecision: HOW_ITS_BUILT,
   },
   {
     title: '02 App shell: manager navigation',
@@ -809,7 +913,7 @@ export const SCREEN_ROWS: ScreenRow[] = [
     persona: 'Marcus',
     setup: 'home',
     target: 'sidebar',
-    differsUntil: HOW_ITS_BUILT,
+    differsByDecision: HOW_ITS_BUILT,
   },
   {
     title: '02 App shell: HR navigation',
@@ -818,7 +922,7 @@ export const SCREEN_ROWS: ScreenRow[] = [
     persona: 'Dana',
     setup: 'home',
     target: 'sidebar',
-    differsUntil: `Phase 6: the Cases and Console items. ${HOW_ITS_BUILT}`,
+    differsByDecision: HOW_ITS_BUILT,
   },
 
   {
@@ -827,7 +931,7 @@ export const SCREEN_ROWS: ScreenRow[] = [
     route: '/ask',
     persona: 'Priya',
     setup: 'home',
-    differsUntil: HOME_NAV,
+    differsByDecision: HOME_NAV,
   },
   {
     title: '03 Assistant home: composer and "Try asking" states',
@@ -867,7 +971,7 @@ export const SCREEN_ROWS: ScreenRow[] = [
     target: 'page',
     viewport: { width: 390, height: 844 },
     note: 'The design is a first pass. The build fixes its two problems: the sandbox indicator is in the top bar, and the navigation fades when it scrolls',
-    differsUntil: HOW_ITS_BUILT,
+    differsByDecision: HOW_ITS_BUILT,
   },
 
   {
@@ -876,7 +980,7 @@ export const SCREEN_ROWS: ScreenRow[] = [
     route: '/directory',
     persona: 'Priya',
     setup: 'directory',
-    differsUntil: DIRECTORY_NAV,
+    differsByDecision: DIRECTORY_NAV,
     note: 'Only the first eight people are the seed company in the design; the rest are illustrative',
   },
   {
@@ -886,7 +990,7 @@ export const SCREEN_ROWS: ScreenRow[] = [
     persona: 'Priya',
     setup: 'directory-loading',
     note: 'The list request is held, so the eight skeleton rows stay. The count already reads "145 people", because the counts load apart from the list; the design draws a bar there',
-    differsUntil: DIRECTORY_NAV,
+    differsByDecision: DIRECTORY_NAV,
   },
   {
     title: '04 Directory: My team',
@@ -894,7 +998,7 @@ export const SCREEN_ROWS: ScreenRow[] = [
     route: '/directory',
     persona: 'Marcus',
     setup: 'directory-my-team',
-    differsUntil: DIRECTORY_NAV,
+    differsByDecision: DIRECTORY_NAV,
   },
   {
     title: '04 Directory: no results',
@@ -903,7 +1007,7 @@ export const SCREEN_ROWS: ScreenRow[] = [
     persona: 'Priya',
     setup: 'directory-empty',
     note: 'Searched for "Jordn"',
-    differsUntil: DIRECTORY_NAV,
+    differsByDecision: DIRECTORY_NAV,
   },
   {
     title: '04 Directory: Show more',
@@ -912,7 +1016,7 @@ export const SCREEN_ROWS: ScreenRow[] = [
     persona: 'Priya',
     setup: 'directory-show-more',
     note: 'Scrolled to the end of the first 50. The design shows illustrative rows past the first eight',
-    differsUntil: DIRECTORY_NAV,
+    differsByDecision: DIRECTORY_NAV,
   },
   {
     title: "04 Directory: profile, locked (Priya on Leo's)",
@@ -920,7 +1024,7 @@ export const SCREEN_ROWS: ScreenRow[] = [
     route: '/directory',
     persona: 'Priya',
     setup: 'profile-locked',
-    differsUntil: DIRECTORY_NAV,
+    differsByDecision: DIRECTORY_NAV,
   },
   {
     title: "04 Directory: profile, HR view (Dana on Leo's)",
@@ -928,7 +1032,7 @@ export const SCREEN_ROWS: ScreenRow[] = [
     route: '/directory',
     persona: 'Dana',
     setup: 'profile-hr',
-    differsUntil: `Phase 6: the Cases and Console items. ${DIRECTORY_NAV}`,
+    differsByDecision: DIRECTORY_NAV,
   },
   {
     title: '04 Directory: profile, own (Priya)',
@@ -936,7 +1040,7 @@ export const SCREEN_ROWS: ScreenRow[] = [
     route: '/directory',
     persona: 'Priya',
     setup: 'profile-self',
-    differsUntil: DIRECTORY_NAV,
+    differsByDecision: DIRECTORY_NAV,
   },
 
   {
@@ -953,7 +1057,7 @@ export const SCREEN_ROWS: ScreenRow[] = [
     route: '/no/such/page',
     persona: 'Priya',
     setup: 'not-found',
-    differsUntil: HOW_ITS_BUILT,
+    differsByDecision: HOW_ITS_BUILT,
   },
   {
     title: '05 Global states: something went wrong',
@@ -961,9 +1065,8 @@ export const SCREEN_ROWS: ScreenRow[] = [
     route: '/directory',
     persona: 'Priya',
     setup: 'server-error',
-    note: "The directory's list request is answered with a 500 and a request ID, so the error shows inside the shell",
-    differsUntil:
-      `${HOW_ITS_BUILT}. The build's reference is the full 32 characters, where the design draws 8`,
+    note: "The directory's list request is answered with a 500 and a request ID, so the error shows inside the shell. The build's reference is the full 32 characters, where the design draws 8",
+    differsByDecision: HOW_ITS_BUILT,
   },
 
   {
@@ -972,7 +1075,7 @@ export const SCREEN_ROWS: ScreenRow[] = [
     route: '/handbook',
     persona: 'Priya',
     setup: 'handbook',
-    differsUntil: HANDBOOK_NAV,
+    differsByDecision: HANDBOOK_NAV,
     note: 'The real handbook, so the list is longer and the words differ from the design, whose section text is placeholder',
   },
   {
@@ -982,7 +1085,7 @@ export const SCREEN_ROWS: ScreenRow[] = [
     persona: 'Mateo',
     setup: 'handbook-search',
     note: 'Searched for "overtime"',
-    differsUntil: HANDBOOK_NAV,
+    differsByDecision: HANDBOOK_NAV,
   },
   {
     title: '06 Handbook: no results',
@@ -991,7 +1094,7 @@ export const SCREEN_ROWS: ScreenRow[] = [
     persona: 'Priya',
     setup: 'handbook-no-results',
     note: 'Searched for "dental plan"',
-    differsUntil: HANDBOOK_NAV,
+    differsByDecision: HANDBOOK_NAV,
   },
   {
     title: '06 Handbook: loading',
@@ -1000,7 +1103,7 @@ export const SCREEN_ROWS: ScreenRow[] = [
     persona: 'Priya',
     setup: 'handbook-loading',
     note: 'The handbook request is held, so the skeleton rows stay',
-    differsUntil: HANDBOOK_NAV,
+    differsByDecision: HANDBOOK_NAV,
   },
   {
     title: '06 Handbook: section (Priya on 4.3)',
@@ -1008,7 +1111,7 @@ export const SCREEN_ROWS: ScreenRow[] = [
     route: '/handbook/4.3',
     persona: 'Priya',
     setup: 'section',
-    differsUntil: HANDBOOK_NAV,
+    differsByDecision: HANDBOOK_NAV,
   },
   {
     title: '06 Handbook: section loading',
@@ -1017,7 +1120,7 @@ export const SCREEN_ROWS: ScreenRow[] = [
     persona: 'Priya',
     setup: 'section-loading',
     note: 'The section request is held, so the skeleton stays',
-    differsUntil: HANDBOOK_NAV,
+    differsByDecision: HANDBOOK_NAV,
   },
   {
     title: '06 Handbook: cited passage',
@@ -1025,7 +1128,7 @@ export const SCREEN_ROWS: ScreenRow[] = [
     route: '/handbook/CA-4.3?passage=p2',
     persona: 'Priya',
     setup: 'cited-passage',
-    differsUntil: HANDBOOK_NAV,
+    differsByDecision: HANDBOOK_NAV,
   },
   {
     title: "06 Handbook: doesn't apply (Mateo on CA-4.3)",
@@ -1033,7 +1136,7 @@ export const SCREEN_ROWS: ScreenRow[] = [
     route: '/handbook/CA-4.3',
     persona: 'Mateo',
     setup: 'not-applicable',
-    differsUntil: HANDBOOK_NAV,
+    differsByDecision: HANDBOOK_NAV,
   },
   {
     title: '06 Handbook: missing section',
@@ -1041,7 +1144,7 @@ export const SCREEN_ROWS: ScreenRow[] = [
     route: '/handbook/8.2',
     persona: 'Priya',
     setup: 'missing-section',
-    differsUntil: HANDBOOK_NAV,
+    differsByDecision: HANDBOOK_NAV,
   },
   {
     title: '06 Handbook: passage panel states',
@@ -1396,6 +1499,119 @@ export const SCREEN_ROWS: ScreenRow[] = [
     target: 'sidebar',
     note: "The sidebar as Dana sees it on Cases, with 3 new after Priya's case is sent",
   }),
+
+  // Screen 13, the AI Ops console. Dana, after Priya has asked three questions in the sandbox (an
+  // answered one, a Book PTO card, and a prompt injection), where the frame shows nine turns. The
+  // figures, times, and sections are the real sandbox's, not the frame's sample day.
+  consoleRow('default', 'default', {
+    note: "Priya asks three questions first, so the console shows three timed rows, not the frame's nine. The tiles read those turns, and the date is today's",
+    differsByDecision:
+      "the design's screenshot draws the \"How it's built\" link, which the build leaves out, and its nine turns are sample data",
+  }),
+  consoleRow('empty', 'empty', {
+    note: 'A new sandbox with no turns. The frame says "Cases: 2 new", and the build counts the seed',
+  }),
+  consoleRow('error', 'error', {
+    note: 'Both console reads are answered with a 500. The reference is the response\'s own, not the frame\'s c41e8b07',
+  }),
+  consoleRow('loading', 'loading', {
+    note: 'Both console reads are held, so the skeletons stay',
+  }),
+  consoleRow('scoreboard', 'scoreboard', {
+    note: 'Scrolled to "Eval scoreboard". The rows and history are the committed boards, so the figures differ from the frame\'s sample',
+  }),
+  consoleRow('trace-answered', 'trace, answered', {
+    note: "Priya's answered sick-leave question, opened from its row. The sections are the scripted model's, so they differ from the frame's CA-4.3",
+  }),
+  consoleRow('trace-card', 'trace, card', {
+    note: 'The Book PTO turn. Date-dependent: on a day the scripted "next Friday" is a holiday the turn is a refusal with no card. The card is named by its action here, "Book PTO", where the frame says "Card offered"',
+    differsByDecision:
+      'the trace names the action of the card offered, not "Card offered"; sample data',
+  }),
+  consoleRow('trace-injection', 'trace, injection', {
+    note: 'The prompt-injection turn. The scripted model answers it with the guard\'s tag, as the frame does, but its tools and sections may differ',
+  }),
+
+  // Screen 15, the guided tour, driven through the real tour. The sample day is Monday, October 26,
+  // so the dates, the balance, and the card's expiry differ; the notes say where.
+  tourRow('landing', 'landing', {
+    note: 'The landing as it ships, with "Take the 2-minute tour" under the persona picker',
+  }),
+  tourRow('starting', 'starting', {
+    note: 'The sandbox request is held, so the button stays on "Starting the tour…"',
+  }),
+  tourRow('step-1', 'step 1', {
+    note: "The ring is on the composer. The frame's coach mark sits under it; the build places it clear of the composer and the result",
+    differsByDecision: BUILD_PLACEMENT,
+  }),
+  tourRow('step-1-answer', 'step 1, the answer', {
+    note: "The scripted model's cited answer, not the frame's sample. The ring is on the first source chip",
+    differsByDecision: BUILD_PLACEMENT,
+  }),
+  tourRow('switch', 'step 2, after the switch', {
+    note: 'Mateo, with the "Now viewing as Mateo Alvarez." toast. The balance is the seed\'s, not the frame\'s 48 hours',
+  }),
+  tourRow('step-3-card', 'step 3, the card', {
+    note: "Priya's Book PTO card for next Friday, ring on Confirm. The dates and the expiry follow today. Date-dependent: on a day the scripted \"next Friday\" is a holiday there is no card",
+    differsByDecision: BUILD_PLACEMENT,
+  }),
+  tourRow('step-3-missing', 'step 3, no card', {
+    note: "STUB: the turn's answer is the frame's clarifying question, since the scripted model always makes the card",
+    differsByDecision: BUILD_PLACEMENT,
+  }),
+  tourRow('step-7-case', 'step 7, the case form', {
+    note: 'The HR panel with the form open and "Harassment or discrimination" chosen. The ring is on "Send to HR"',
+    differsByDecision: BUILD_PLACEMENT,
+  }),
+  tourRow('step-9-console', 'step 9, the console', {
+    note: "Dana's console after the tour's questions, the ring on the flagged row. The figures are the sandbox's own",
+    differsByDecision: BUILD_PLACEMENT,
+  }),
+  tourRow('end', 'the end card', {
+    note: 'Over the console, as in the frame',
+  }),
+  tourRow('menu', 'the persona menu', {
+    note: 'Marcus, outside the tour, with "Take the tour" between the personas and Sign out',
+  }),
+  tourRow('menu-confirm', 'the start dialog', {
+    note: '"Start the tour?" with Cancel focused',
+  }),
+  tourRow('left', 'after leaving', {
+    note: 'Left at step 5 as Marcus, with the toast. Leaving keeps the visitor on the page they were on, which is the conversation',
+    differsByDecision: 'leaving keeps the visitor on their page, so the conversation shows, not the home',
+  }),
+  tourRow('resume', 'the menu, mid-tour', {
+    note: 'Marcus, left at step 5: "Resume the tour" with "Step 5 of 10", and "Start the tour over"',
+  }),
+
+  // The design's component cards, set beside the gallery's groups for the same parts.
+  {
+    title: '13 AI Ops console: component card',
+    designImage: `${SCREENS}/13-ai-ops-console/component-card.png`,
+    route: '/gallery',
+    setup: 'gallery-parts',
+    galleryGroups: [
+      'Console: outcomes and safety check',
+      'Console: tiles',
+      'Console: turn table',
+      'Console: turn trace',
+    ],
+    note: "The gallery's console groups, which hold every part and state the card shows",
+  },
+  {
+    title: '15 Guided tour: component card',
+    designImage: `${SCREENS}/15-guided-tour/component-card.png`,
+    route: '/gallery',
+    setup: 'gallery-parts',
+    galleryGroups: [
+      'Tour: coach mark',
+      'Tour: chip and ring',
+      'Tour: end card',
+      'Tour: persona menu, dialog, and toasts',
+      'Tour: landing button',
+    ],
+    note: "The gallery's tour groups, which hold every part and state the card shows",
+  },
 ]
 
 /** The slug that names a screen row's pictures: "01-landing-desktop-default". */
@@ -1409,4 +1625,4 @@ export const buildScreenFile = (row: Pick<ScreenRow, 'designImage'>) =>
 
 /** The group heading a screen row prints under, such as "screens: 01-landing". */
 export const screenGroup = (row: Pick<ScreenRow, 'designImage'>) =>
-  `screens: ${screenSlug(row).match(/^\d\d-[a-z-]+?(?=-(desktop|narrow))/)?.[0] ?? 'other'}`
+  `screens: ${screenSlug(row).match(/^\d\d-[a-z-]+?(?=-(desktop|narrow|component))/)?.[0] ?? 'other'}`

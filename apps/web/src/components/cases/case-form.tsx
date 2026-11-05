@@ -15,6 +15,7 @@ import { CATEGORY_OPTIONS, caseCopy, countLine } from './labels'
 import { CaseSurface } from './surface'
 import { trimLikePython } from '@/components/assistant/text-count'
 import { CASE_LIMIT_CHARACTERS, characterCountOf, validateCase, type CaseProblem } from './validate'
+import { TOUR_TARGETS, tourTarget } from '@/lib/tour-targets'
 
 /** A reply under this many characters that raised the panel gets the "Add what happened" hint. */
 const SHORT_REPLY_CHARACTERS = 40
@@ -260,6 +261,7 @@ function CaseForm({
             aria-disabled={sending || undefined}
             onClick={submit}
             data-case-send=""
+            {...tourTarget(TOUR_TARGETS.caseSend)}
           >
             {sending ? caseCopy.sending : sendFailed ? caseCopy.tryAgain : caseCopy.send}
           </Button>

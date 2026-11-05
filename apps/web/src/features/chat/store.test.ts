@@ -657,6 +657,68 @@ describe('a send that fails', () => {
     expect(state().turn).toBeNull()
   })
 
+  it('reports failed-after-accept when the request failed with no response (it may have arrived)', async () => {
+    onTurn(() => HttpResponse.error())
+    expect(await state().send('Hello', makeDeps())).toEqual({ kind: 'failed-after-accept' })
+  })
+
+  it('reports not-sent when creating the conversation failed with a network error', async () => {
+    const deps = makeDeps({
+      conversationId: null,
+      createConversation: () => Promise.reject(new TypeError('Failed to fetch')),
+    })
+    expect(await state().send('Hello', deps)).toEqual({ kind: 'not-sent' })
+  })
+
+  it('reports failed-after-accept when a stop aborts the request before any response', async () => {
+    let signal: AbortSignal | undefined
+    vi.spyOn(streamModule, 'streamTurn').mockImplementation(
+      (_id, _question, options) =>
+        new Promise<void>((_resolve, reject) => {
+          signal = options.signal
+          options.signal?.addEventListener('abort', () =>
+            reject(new DOMException('x', 'AbortError')),
+          )
+        }),
+    )
+    const deps = makeDeps()
+    const sending = state().send('Hello', deps)
+    await vi.waitFor(() => expect(signal).toBeDefined())
+    state().stop(deps)
+    expect(await sending).toEqual({ kind: 'failed-after-accept' })
+  })
+
+  it('calls onIssued once, right before the request goes out, and not when refused earlier', async () => {
+    const onIssued = vi.fn<() => void>()
+    onTurn(() => HttpResponse.error())
+    await state().send('Hello', makeDeps(), 'composer', undefined, onIssued)
+    expect(onIssued).toHaveBeenCalledTimes(1)
+    const refused = vi.fn<() => void>()
+    await state().send('123-45-6789', makeDeps(), 'composer', undefined, refused)
+    expect(refused).not.toHaveBeenCalled()
+  })
+
+  it('reports not-sent when a stop comes before the request was issued', async () => {
+    let create!: (id: string) => void
+    const deps = makeDeps({
+      conversationId: null,
+      createConversation: () => new Promise<string>((r) => (create = r)),
+    })
+    const sending = state().send('Hello', deps)
+    await vi.waitFor(() => expect(state().status).toBe('sending'))
+    state().stop(deps)
+    create('c-new')
+    expect(await sending).toEqual({ kind: 'not-sent' })
+  })
+
+  it('reports failed-after-accept once the stream had begun but never named its turn', async () => {
+    const stream = openStream()
+    onTurn(() => stream.response())
+    const sent = state().send('Hello', makeDeps())
+    stream.close()
+    expect(await sent).toEqual({ kind: 'failed-after-accept' })
+  })
+
   it('asks the session guard to check who is signed in after a 401', async () => {
     onTurn(() => problemResponse(401, 'about:blank', 'Not signed in'))
     const deps = makeDeps()

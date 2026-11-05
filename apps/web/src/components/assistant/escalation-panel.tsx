@@ -7,12 +7,14 @@ import { Button } from '@/components/ui/button'
 import type { PageLink } from '@/lib/page-link'
 import { OpenCaseButton } from '@/components/cases/open-case-button'
 import { announce } from '@/lib/announce'
+import { turnKey } from '@/lib/turn-key'
 import { cn } from '@/lib/utils'
 import { linkifyEmergency, parseCrisisText } from './crisis-text'
 import { Segments } from './crisis-segments'
 import { APP_LINK } from './link-class'
 import { HrContacts } from './hr-contacts'
 import { conversationCopy } from './labels'
+import { TOUR_TARGETS, tourTarget } from '@/lib/tour-targets'
 
 type EscalationKind = 'crisis' | 'sensitive' | 'unavailable'
 
@@ -48,6 +50,8 @@ type EscalationPanelProps = {
   caseArea?: ReactNode
   /** Adds "Write to HR" after the contacts of the unavailable panel. */
   writeToHr?: PageLink | null
+  /** The turn this panel answers, carried on the element so a caller can tell whose it is. */
+  turnId?: string | null
   className?: string
 }
 
@@ -119,6 +123,7 @@ function EscalationPanel({
   openCaseRef,
   caseArea,
   writeToHr = null,
+  turnId,
   className,
 }: EscalationPanelProps) {
   const headerId = useId()
@@ -135,6 +140,7 @@ function EscalationPanel({
   return (
     <section
       data-slot="escalation-panel"
+      data-turn-key={turnId ? turnKey(turnId) : undefined}
       data-kind={kind}
       aria-labelledby={headerId}
       className={cn(
@@ -180,6 +186,7 @@ function EscalationPanel({
           <div>
             <OpenCaseButton
               ref={openCaseRef}
+              {...tourTarget(TOUR_TARGETS.openCase)}
               variant={kind === 'crisis' ? 'secondary' : 'primary'}
               onClick={onOpenCase}
             />

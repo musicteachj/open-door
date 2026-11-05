@@ -8,6 +8,7 @@ import { modelDisplayName } from '@/lib/models'
 import { dateTimeInZone } from './case-dates'
 import { detailCopy } from './labels'
 import type { SummaryState } from './summary-state'
+import { TOUR_TARGETS, tourTarget } from '@/lib/tour-targets'
 
 type CaseSummaryBlockProps = {
   state: SummaryState
@@ -49,6 +50,7 @@ function CaseSummaryBlock({
   return (
     <section
       data-slot="case-summary"
+      {...tourTarget(TOUR_TARGETS.caseSummary)}
       aria-labelledby={headingId}
       aria-busy={state === 'pending' || undefined}
       className={cn('overflow-hidden rounded-lg border border-border', className)}

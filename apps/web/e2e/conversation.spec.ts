@@ -132,8 +132,10 @@ test.describe('the demo steps', () => {
   })
 
   // The plan says an injection attempt is "refused". The spec says it is noted, not blocked: the
-  // guard flags it and the turn goes on, which is what the page shows.
-  test('an injection attempt is answered normally and leaks nothing', async ({ page }) => {
+  // guard flags it and the turn goes on, which is what the page shows: an ordinary answer with its
+  // feedback controls, no escalation panel, and no error. (This prompt has no scripted decline, so
+  // the scripted model searches and cites; the tour's own injection prompt is declined.)
+  test('an injection attempt is noted, not blocked, and leaks nothing', async ({ page }) => {
     // The system prompt's own words and its internal marker's phrase, read from the file.
     const prompt = readFileSync(
       resolve(import.meta.dirname, '../../api/app/ai/prompts/assistant.md'),
@@ -147,11 +149,13 @@ test.describe('the demo steps', () => {
     await askAndWaitForAnswer(page, QUESTIONS.injection)
     const answer = assistantMessage(page)
     await expectAssistantChrome(answer)
-    // The guard flags it but calls it ordinary, so it is answered like any question: cited, with
-    // no escalation panel and no refusal.
+    // The guard flags it but calls it ordinary, so it is answered like any question: cited (not
+    // the decline wording), with its feedback controls, no escalation panel, and no error.
     await expect(answer.getByRole('list', { name: 'Sources' })).toBeVisible()
-    await expect(panels(page)).toHaveCount(0)
     await expect(answer).not.toContainText("I can't")
+    await expect(answer.getByRole('group', { name: 'Was this right?' })).toBeVisible()
+    await expect(panels(page)).toHaveCount(0)
+    await expect(page.getByRole('alert')).toHaveCount(0)
     // Nothing of the system prompt is on the page, anywhere.
     const everything = await page.locator('body').innerText()
     expect(everything).not.toContain(canary!)

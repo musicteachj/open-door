@@ -15,7 +15,15 @@ import {
 import { registerReset } from '@/lib/identity'
 import { conversationCopy } from '@/components/assistant/labels'
 import { numberBySection } from '@/components/assistant/sources'
-import { useChatStore, type ChatState, type SendDeps, type SendOrigin } from './store'
+import {
+  NOT_SENT,
+  isRunning,
+  useChatStore,
+  type ChatState,
+  type SendDeps,
+  type SendOrigin,
+  type SendOutcome,
+} from './store'
 
 // The hooks the conversation page uses: the stored conversation (TanStack Query), the API's fixed
 // texts, and the actions that join the chat store to the server.
@@ -95,16 +103,14 @@ type SettleOptions = { runningPoll?: RunningPoll }
 /** The IDs of the finished live turns still waiting for their saved copy. */
 function waitingTurnIds(state: ChatState): string[] {
   const ids = state.settling.map((entry) => entry.turn.turnId)
-  const { turn, status } = state
-  if (turn !== null && status !== 'sending' && status !== 'streaming') ids.push(turn.turnId)
+  const { turn } = state
+  if (turn !== null && !isRunning(state)) ids.push(turn.turnId)
   return ids.filter((id): id is string => id !== null)
 }
 
 /** The turn the page is receiving now, if any. */
 function streamingTurnId(state: ChatState): string | null {
-  return state.turn !== null && (state.status === 'sending' || state.status === 'streaming')
-    ? state.turn.turnId
-    : null
+  return state.turn !== null && isRunning(state) ? state.turn.turnId : null
 }
 
 /**
@@ -152,8 +158,8 @@ export function useCurrentConversation({ runningPoll = RUNNING_POLL }: SettleOpt
  * The API's own words for what the browser refuses without a request. Fetched once (they are
  * fixed), so the page waits for them before the composer runs.
  */
-export function useAssistantTexts() {
-  return useGetAssistantTexts({ query: { staleTime: Infinity } })
+export function useAssistantTexts({ enabled = true }: { enabled?: boolean } = {}) {
+  return useGetAssistantTexts({ query: { staleTime: Infinity, enabled } })
 }
 
 /**
@@ -234,9 +240,9 @@ registerReset(() => {
  * Sending, stopping, and starting over. `send` does nothing until the API's texts have loaded (the
  * page waits for them, so this only guards a send that races the page).
  */
-export function useConversationActions() {
+export function useConversationActions({ enabled = true }: { enabled?: boolean } = {}) {
   const queryClient = useQueryClient()
-  const { data: texts } = useAssistantTexts()
+  const { data: texts } = useAssistantTexts({ enabled })
   const create = useCreateConversation()
   const { mutateAsync: createConversation } = create
 
@@ -309,10 +315,15 @@ export function useConversationActions() {
   }, [queryClient, texts, createConversation])
 
   const send = useCallback(
-    async (question: string, origin?: SendOrigin) => {
+    async (
+      question: string,
+      origin?: SendOrigin,
+      onAccepted?: (turnId: string) => void,
+      onIssued?: () => void,
+    ): Promise<SendOutcome> => {
       // The composer is busy (`waitingToSend`) from here until the question is handed to the
       // store, so a second Enter is ignored and cannot start a competing send.
-      if (useChatStore.getState().waitingToSend) return
+      if (useChatStore.getState().waitingToSend) return NOT_SENT
       useChatStore.setState({ waitingToSend: true })
       // A person change during any wait below ends this send without a word: the question was the
       // old person's, and `waitingToSend` now belongs to the new person's own send.
@@ -323,11 +334,11 @@ export function useConversationActions() {
           // A new conversation is being created: the question goes to it, once it exists.
           if (startingNew !== null) {
             const created = await startingNew
-            if (generation !== identityGeneration) return
+            if (generation !== identityGeneration) return NOT_SENT
             if (!created) {
               // The conversation could not be created: not to the old one. The draft stays.
               useChatStore.setState({ sendError: conversationCopy.sendFailed })
-              return
+              return NOT_SENT
             }
           }
           // A click can also come after this send began but before it knows where to go: then the
@@ -336,19 +347,20 @@ export function useConversationActions() {
           try {
             ready = await deps()
           } catch {
-            if (generation !== identityGeneration) return
+            if (generation !== identityGeneration) return NOT_SENT
             // The read that says whether there is a conversation failed. The composer calls `void
             // send(...)`, so nobody would catch it: say the send failed, and keep the draft.
             useChatStore.setState({ sendError: conversationCopy.sendFailed })
-            return
+            return NOT_SENT
           }
-          if (generation !== identityGeneration) return
+          if (generation !== identityGeneration) return NOT_SENT
           if (startsSeen === newConversations && startingNew === null) break
         }
       } finally {
         if (generation === identityGeneration) useChatStore.setState({ waitingToSend: false })
       }
-      if (ready !== null) await useChatStore.getState().send(question, ready, origin)
+      if (ready === null) return NOT_SENT
+      return useChatStore.getState().send(question, ready, origin, onAccepted, onIssued)
     },
     [deps],
   )

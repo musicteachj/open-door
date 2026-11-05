@@ -14,6 +14,7 @@ import { TimeOffPage } from '@/features/time-off/time-off-page'
 import { ApprovalsPage } from '@/features/approvals/approvals-page'
 import { CaseDetailPage } from '@/features/cases/case-detail-page'
 import { CasesPage } from '@/features/cases/cases-page'
+import { ConsolePage } from '@/features/console/console-page'
 import { MyCasesPage } from '@/features/cases/my-cases-page'
 
 // The component gallery is compiled in for development and for the e2e build, which sets
@@ -55,6 +56,7 @@ export const routes: RouteObject[] = [
                   { path: '/my-cases', element: <MyCasesPage /> },
                   { path: '/cases', element: <CasesPage /> },
                   { path: '/cases/:caseId', element: <CaseDetailPage /> },
+                  { path: '/console', element: <ConsolePage /> },
                   { path: '/directory', element: <DirectoryPage /> },
                   { path: '/directory/:personId', element: <ProfilePage /> },
                   { path: '/handbook', element: <HandbookPage /> },

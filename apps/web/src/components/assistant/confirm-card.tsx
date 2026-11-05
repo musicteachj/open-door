@@ -53,6 +53,7 @@ import {
   expiryLabel,
   failureVerb,
 } from './confirm-labels'
+import { TOUR_TARGETS, tourTarget } from '@/lib/tour-targets'
 
 type ConfirmCardProps = {
   /** The card the server built from the engine's figures. Every figure on it is an API label. */
@@ -365,6 +366,7 @@ function ConfirmCard({
             <Button
               loading={confirming}
               disabled={dismissing}
+              {...tourTarget(TOUR_TARGETS.confirm)}
               aria-label={confirming ? undefined : confirmName(card)}
               aria-disabled={turnRunning || undefined}
               aria-describedby={turnRunning ? waitId : undefined}

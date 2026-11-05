@@ -17,7 +17,7 @@ function ConsoleError({ reference, onRetry }: ConsoleErrorProps) {
     <div
       role="alert"
       data-slot="console-error"
-      className="flex flex-col items-center gap-3 py-12 text-center"
+      className="flex min-h-100 flex-col items-center justify-center gap-3 py-16 text-center"
     >
       <h3 className="m-0 text-h1 text-balance text-ink">Something went wrong on our side.</h3>
       <p className="m-0 max-w-110 text-body text-pretty text-ink-muted">

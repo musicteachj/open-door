@@ -3,6 +3,7 @@ import type { CitationOut } from '@/api/generated'
 import { cn } from '@/lib/utils'
 import { chipLabel, conversationCopy } from './labels'
 import { firstPerSection } from './sources'
+import { TOUR_TARGETS, tourTarget } from '@/lib/tour-targets'
 
 type SourceChipProps = {
   citation: CitationOut
@@ -21,6 +22,7 @@ function SourceChip({ citation, expanded, onOpen, className }: SourceChipProps) 
   return (
     <button
       data-slot="source-chip"
+      {...tourTarget(TOUR_TARGETS.sourceChip)}
       data-passage-id={citation.passageId}
       type="button"
       aria-expanded={expanded}

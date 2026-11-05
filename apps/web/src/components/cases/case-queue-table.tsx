@@ -5,6 +5,7 @@ import { SegmentedControl } from '@/components/timeoff/segmented-control'
 import { StatusBadge } from '@/components/timeoff/status-badge'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { initialsOf } from '@/lib/initials'
+import { TOUR_TARGETS, tourTarget } from '@/lib/tour-targets'
 import { cn } from '@/lib/utils'
 import { dayInZone } from './case-dates'
 import {
@@ -48,6 +49,14 @@ function CaseQueueTable({
   timeZone,
   className,
 }: CaseQueueTableProps) {
+  // The guided tour points at the case sent most recently: in a fresh sandbox that is the one the
+  // visitor just sent as Priya, with no name in the script. Cases sent at the same moment: the
+  // first in the queue's order wins (the comparison is strict). An empty queue marks nothing.
+  const newestId = rows.reduce<QueueItemOut | null>(
+    (newest, c) =>
+      newest === null || Date.parse(c.sentAt) > Date.parse(newest.sentAt) ? c : newest,
+    null,
+  )?.id
   return (
     <div data-slot="case-queue-table" className={className}>
       <SegmentedControl
@@ -86,6 +95,7 @@ function CaseQueueTable({
                   to={`/cases/${c.id}`}
                   data-slot="case-queue-row"
                   data-own={c.isOwn || undefined}
+                  {...(c.id === newestId ? tourTarget(TOUR_TARGETS.caseRow) : {})}
                   className={cn(
                     COLUMNS,
                     'relative min-h-16 border-b border-border-subtle py-2.5 text-ink no-underline transition-colors hover:bg-primary-tint hover:text-ink',

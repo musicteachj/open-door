@@ -224,4 +224,20 @@ describe('TurnTable', () => {
     expect(onTour).toHaveBeenCalledOnce()
     expect(screen.queryByRole('table')).toBeNull()
   })
+
+  it('does not wrap the empty state’s buttons in a status region', () => {
+    const { container } = render(<TurnTable turns={[]} {...props} />)
+    const empty = container.querySelector('[data-slot="turn-empty"]')!
+    expect(empty.tagName).not.toBe('OUTPUT')
+    expect(empty.closest('[role="status"], output')).toBeNull()
+  })
+
+  it('disables "Take the tour" when the tour cannot start', async () => {
+    const onTour = vi.fn<() => void>()
+    render(<TurnTable turns={[]} onTakeTour={onTour} tourDisabled {...props} />)
+    const button = screen.getByRole('button', { name: 'Take the tour' })
+    expect(button).toBeDisabled()
+    await userEvent.click(button)
+    expect(onTour).not.toHaveBeenCalled()
+  })
 })
