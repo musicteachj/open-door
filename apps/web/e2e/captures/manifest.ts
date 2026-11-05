@@ -1521,16 +1521,32 @@ export const SCREEN_ROWS: ScreenRow[] = [
     note: 'Scrolled to "Eval scoreboard". The rows and history are the committed boards, so the figures differ from the frame\'s sample',
   }),
   consoleRow('trace-answered', 'trace, answered', {
-    note: "Priya's answered sick-leave question, opened from its row. The sections are the scripted model's, so they differ from the frame's CA-4.3",
+    note: "Priya's sick-leave question, opened from its row. It cites CA-4.3, as the frame does; the other sections retrieved are the scripted search's",
   }),
   consoleRow('trace-card', 'trace, card', {
-    note: 'The Book PTO turn. Date-dependent: on a day the scripted "next Friday" is a holiday the turn is a refusal with no card. The card is named by its action here, "Book PTO", where the frame says "Card offered"',
+    note: 'The Book PTO turn. Date-dependent: on a day the scripted "next Friday" is a holiday the turn is a refusal with no card',
     differsByDecision:
-      'the trace names the action of the card offered, not "Card offered"; sample data',
+      'the trace names the card by the action the row stores, "Time-off request", where the frame says "Book PTO"; sample data',
   }),
   consoleRow('trace-injection', 'trace, injection', {
-    note: 'The prompt-injection turn. The scripted model answers it with the guard\'s tag, as the frame does, but its tools and sections may differ',
+    note: 'The tour\'s injection prompt, which the scripted model declines with no tools or sections, as the frame shows. The guard\'s "Possible prompt injection" tag is on the row and in the trace',
   }),
+
+  // The design's component card for screen 13, beside the gallery's console groups.
+  {
+    title: '13 AI Ops console: component card',
+    viewport: { width: 1600, height: 1000 },
+    designImage: `${SCREENS}/13-ai-ops-console/component-card.png`,
+    route: '/gallery',
+    setup: 'gallery-parts',
+    galleryGroups: [
+      'Console: outcomes and safety check',
+      'Console: tiles',
+      'Console: turn table',
+      'Console: turn trace',
+    ],
+    note: "The gallery's console groups, which hold every part and state the card shows",
+  },
 
   // Screen 15, the guided tour, driven through the real tour. The sample day is Monday, October 26,
   // so the dates, the balance, and the card's expiry differ; the notes say where.
@@ -1584,22 +1600,10 @@ export const SCREEN_ROWS: ScreenRow[] = [
     note: 'Marcus, left at step 5: "Resume the tour" with "Step 5 of 10", and "Start the tour over"',
   }),
 
-  // The design's component cards, set beside the gallery's groups for the same parts.
-  {
-    title: '13 AI Ops console: component card',
-    designImage: `${SCREENS}/13-ai-ops-console/component-card.png`,
-    route: '/gallery',
-    setup: 'gallery-parts',
-    galleryGroups: [
-      'Console: outcomes and safety check',
-      'Console: tiles',
-      'Console: turn table',
-      'Console: turn trace',
-    ],
-    note: "The gallery's console groups, which hold every part and state the card shows",
-  },
+  // The design's component card for screen 15, beside the gallery's tour groups.
   {
     title: '15 Guided tour: component card',
+    viewport: { width: 1600, height: 1000 },
     designImage: `${SCREENS}/15-guided-tour/component-card.png`,
     route: '/gallery',
     setup: 'gallery-parts',
@@ -1610,7 +1614,7 @@ export const SCREEN_ROWS: ScreenRow[] = [
       'Tour: persona menu, dialog, and toasts',
       'Tour: landing button',
     ],
-    note: "The gallery's tour groups, which hold every part and state the card shows",
+    note: "The gallery's tour groups, which hold every part and state the card shows. The persona menus, the start dialog, and the toasts open from buttons in the gallery, so they show closed here; the menu, dialog, and toast frames above show them open",
   },
 ]
 

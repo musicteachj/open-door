@@ -1505,10 +1505,16 @@ async function photographScreen(browser: Browser, row: ScreenRow): Promise<strin
             has: page.locator(':scope > h2', { hasText: new RegExp(`^${title}$`) }),
           })
           await group.first().scrollIntoViewIfNeeded()
-          return (await group.first().evaluate((el) => {
+          return group.first().evaluate((el) => {
+            // Wide parts (the console's 1080 px tiles and table) overflow their section, so the
+            // picture spans the widest thing inside it, not the section's own box.
             const { x, y, width, height } = el.getBoundingClientRect()
-            return { x: x + scrollX, y: y + scrollY, width, height }
-          }))
+            const right = Math.max(
+              x + width,
+              ...[...el.querySelectorAll('*')].map((child) => child.getBoundingClientRect().right),
+            )
+            return { x: x + scrollX, y: y + scrollY, width: right - x, height }
+          })
         }),
       )
       const left = Math.min(...boxes.map((b) => b.x))
@@ -1593,7 +1599,8 @@ test('captures the build and the design specimens, then writes the report', asyn
         group: screenGroup(row),
         title: row.title,
         note: [
-          row.note,
+          // A note runs into the lines after it, so it ends with a period when it lacks one.
+          row.note && (/[.!?]["”)]?$/.test(row.note) ? row.note : `${row.note}.`),
           row.differsByDecision && `Differs by decision: ${row.differsByDecision}.`,
           row.differsUntil && `Differs by design until ${row.differsUntil}.`,
         ]
