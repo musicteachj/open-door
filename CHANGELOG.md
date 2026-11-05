@@ -10,6 +10,25 @@ version (`0.x.y` while the app is being built, `1.0.0` when it is complete).
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-11-05
+
+Phase 7: the AI Ops console, the reviewer experience, and the model decision. HR now has a
+console at `/console` that shows what the assistant did on each turn in the sandbox (the safety
+check's verdict, the tools, the handbook sections, tokens, cost, and timing), with tiles for
+first-word time, the safety check's time, cost per answered question, escalations, refusals,
+"couldn't find it" answers, confirmed cards, and possible prompt injections. Its rows are written
+when a turn ends, name the asker only by role and location, and are redacted to a date and counts
+for a sensitive or crisis turn, which the database enforces (ADR 0016). Every live eval run now
+writes a committed board, and the README and the console show a scoreboard generated from them
+(ADR 0017). A guided tour walks a visitor through the four personas in ten steps. A new fairness
+set asks the same questions as different people and found two gaps, recorded for the next prompt
+change: Good Friday gets only PTO while other faiths' observances also get the accommodation
+route, and a stated age once drew an age remark. A comparison with Sonnet 5.5 kept Claude Opus
+5.5 as the default (ADR 0018). The full live run of 2026-11-03 ($15.20) scored the red team and
+actions at 100%, program-graded Q&A at 99%, the judge at 73% (its 85% bar stays open), and
+fairness at 11 of 12 groups consistent. The phase closed with a whole-phase review (three
+`/code-review high` passes) and a release review, and their fixes.
+
 ### Added
 
 - **The AI Ops console page and the guided tour** (Phase 7, Stage 6), built on Stage 5's parts.
