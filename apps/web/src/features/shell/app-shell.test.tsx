@@ -4,11 +4,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { getGetMeQueryKey } from '@/api/generated'
 import { getSessionStatus } from '@/app/session-status'
 import { useChatStore } from '@/features/chat/store'
+import { accessibleNameOf } from '@/test/accessible-name'
 import { installFakeApi } from '@/test/fake-api'
+import { installAssistantApi } from '@/test/fake-assistant'
 import { installFakeHandbook } from '@/test/fake-handbook'
 import { installFakeTimeOff } from '@/test/fake-time-off'
 import { PRIYA_WAITING } from '@/app/gallery/fixtures/timeoff'
-import { DIRECTORY_PEOPLE, installFakeDirectory } from '@/test/fake-directory'
+import { DIRECTORY_PEOPLE, fullNameOf, installFakeDirectory } from '@/test/fake-directory'
 import { meFor } from '@/test/fixtures'
 import { useShellLayout } from './shell-layout-store'
 import { useShellToast } from './toast-store'
@@ -19,8 +21,8 @@ import { renderApp } from '@/test/render-app'
 const SWITCH = () => `${window.location.origin}/api/v1/session/persona`
 const END = () => `${window.location.origin}/api/v1/session`
 const LANDING = 'Your open-door policy, now always open.'
-const PRIYA = 'Switch persona. Current: Priya Raman, Visual Merchandiser'
-const MARCUS = 'Switch persona. Current: Marcus Bell, Store Manager'
+const PRIYA = 'Priya Raman, Visual Merchandiser. Current persona. Switch persona'
+const MARCUS = 'Marcus Bell, Store Manager. Current persona. Switch persona'
 
 const toast = () => document.querySelector<HTMLElement>('[data-slot="toast"]')
 const hoursFromNow = (hours: number) => new Date(Date.now() + hours * 3_600_000).toISOString()
@@ -33,7 +35,7 @@ function gate() {
   return { promise, resolve }
 }
 
-function failOnce(url: string, method: 'put' | 'delete') {
+function failOnce(url: string, method: 'put' | 'delete' | 'post') {
   server.use(
     http[method](
       url,
@@ -65,9 +67,10 @@ describe('the shell: layout', () => {
   it('has no rail on the directory or a profile, and shows the indicator in the page header', async () => {
     installFakeApi('priya')
     installFakeDirectory('priya')
-    const { router } = renderApp({ at: '/directory' })
+    const { router, queryClient } = renderApp({ at: '/directory' })
     const main = await screen.findByRole('main')
     await screen.findByRole('list', { name: 'People' })
+    await waitFor(() => expect(queryClient.isFetching()).toBe(0))
     expect(screen.queryByRole('complementary', { name: 'Sandbox status' })).not.toBeInTheDocument()
     const inList = within(main).getByText(/^Sandbox resets in/)
     expect(inList.closest('header')).not.toBeNull()
@@ -76,6 +79,7 @@ describe('the shell: layout', () => {
 
     await act(() => router.navigate(`/directory/${DIRECTORY_PEOPLE[0]!.id}`))
     await screen.findByRole('heading', { level: 1, name: /\w/ })
+    await waitFor(() => expect(queryClient.isFetching()).toBe(0))
     expect(screen.queryByRole('complementary', { name: 'Sandbox status' })).not.toBeInTheDocument()
     expect(
       within(screen.getByRole('main'))
@@ -84,18 +88,39 @@ describe('the shell: layout', () => {
     ).not.toBeNull()
   })
 
+  it('asks for none of the assistant’s texts on a page that has no assistant, when no tour is on', async () => {
+    installFakeApi('priya')
+    installFakeDirectory('priya')
+    const api = installAssistantApi()
+    const { queryClient } = renderApp({ at: '/directory' })
+    await screen.findByRole('list', { name: 'People' })
+    await waitFor(() => expect(queryClient.isFetching()).toBe(0))
+    expect(api.requests.texts).toBe(0)
+  })
+
   it('keeps exactly one main on the pages, the profile, and not found', async () => {
     installFakeApi('priya')
-    const { router } = renderApp({ at: '/ask' })
+    // It visits the directory and a profile, whose requests need answers too.
+    installFakeDirectory('priya')
+    const { router, queryClient } = renderApp({ at: '/ask' })
     await screen.findByRole('complementary', { name: 'Sidebar' })
-    for (const path of [
-      '/directory',
-      '/directory/0f8fad5b-d9cb-469f-a165-70867728950e',
-      '/nowhere',
-    ]) {
-      await act(() => router.navigate(path))
-      expect(screen.getAllByRole('main')).toHaveLength(1)
-    }
+    const someone = DIRECTORY_PEOPLE[0]!
+    await act(() => router.navigate('/directory'))
+    await screen.findByRole('list', { name: 'People' })
+    await waitFor(() => expect(queryClient.isFetching()).toBe(0))
+    expect(screen.getAllByRole('main')).toHaveLength(1)
+    await act(() => router.navigate(`/directory/${someone.id}`))
+    await screen.findByRole('heading', { level: 1, name: fullNameOf(someone) })
+    await waitFor(() => expect(queryClient.isFetching()).toBe(0))
+    expect(screen.getAllByRole('main')).toHaveLength(1)
+    // A profile the directory doesn't have shows its own not-found state, still in one main.
+    await act(() => router.navigate('/directory/0f8fad5b-d9cb-469f-a165-70867728950e'))
+    await screen.findByRole('heading', { level: 1, name: "We couldn't find that page." })
+    await waitFor(() => expect(queryClient.isFetching()).toBe(0))
+    expect(screen.getAllByRole('main')).toHaveLength(1)
+    await act(() => router.navigate('/nowhere'))
+    expect(router.state.location.pathname).toBe('/nowhere')
+    expect(screen.getAllByRole('main')).toHaveLength(1)
   })
 
   it('lists the navigation for this person, in the main navigation', async () => {
@@ -111,10 +136,16 @@ describe('the shell: layout', () => {
 
   it('marks the page you are on, and Directory for a profile below it', async () => {
     installFakeApi('priya')
-    const { router } = renderApp({ at: '/ask' })
+    // It visits a profile, whose request needs an answer too.
+    installFakeDirectory('priya')
+    const { router, queryClient } = renderApp({ at: '/ask' })
     const nav = await screen.findByRole('navigation', { name: 'Main' })
     expect(within(nav).getByRole('link', { name: 'Ask' })).toHaveAttribute('aria-current', 'page')
-    await act(() => router.navigate('/directory/0f8fad5b-d9cb-469f-a165-70867728950e'))
+    const someone = DIRECTORY_PEOPLE[0]!
+    await act(() => router.navigate(`/directory/${someone.id}`))
+    // Wait for the profile itself, so no request of its own is still out when the test ends.
+    await screen.findByRole('heading', { level: 1, name: fullNameOf(someone) })
+    await waitFor(() => expect(queryClient.isFetching()).toBe(0))
     expect(within(nav).getByRole('link', { name: 'Directory' })).toHaveAttribute(
       'aria-current',
       'page',
@@ -214,7 +245,7 @@ describe('the shell: layout', () => {
     expect(
       within(glance)
         .getAllByRole('link')
-        .map((link) => link.getAttribute('aria-label')),
+        .map((link) => accessibleNameOf(link)),
     ).toEqual(['92 hours PTO available. Open Time off', '0 requests pending. Open Time off'])
   })
 
@@ -280,6 +311,8 @@ describe('the shell: the navigation scrolls on a narrow screen', () => {
 describe('the shell: switching', () => {
   it('shows "Switching to Marcus…", which the menu will not open on, then lands on /ask as Marcus with the toast', async () => {
     const api = installFakeApi('priya')
+    // The test starts on the directory, so its two requests need answers too.
+    installFakeDirectory('priya')
     const hold = gate()
     // Every /me after the first waits for this gate, so Marcus can only come from the switch's own
     // answer being stored, not from a refetch.
@@ -298,6 +331,10 @@ describe('the shell: switching', () => {
     )
     const { user, router, queryClient } = renderApp({ at: '/directory' })
     await screen.findByRole('complementary', { name: 'Sidebar' })
+    // The directory's own requests (the list and the facets) settle before the switch, so none
+    // is still out at the end.
+    await screen.findByRole('list', { name: 'People' })
+    await waitFor(() => expect(queryClient.isFetching()).toBe(0))
     holdingMe = true
     useChatStore.getState().setDraft('a half-typed question')
     const countBefore = getSessionStatus().resetCount
@@ -320,7 +357,9 @@ describe('the shell: switching', () => {
     // The conversation is empty.
     expect(useChatStore.getState().draft).toBe('')
     expect(useChatStore.getState().status).toBe('idle')
-    expect(toast()).toHaveTextContent('Now viewing as Marcus Bell.')
+    // The toast renders after the identity reset remounts the shell, so it can come a moment after
+    // the switcher's new name; the app doesn't promise the two appear together.
+    await waitFor(() => expect(toast()).toHaveTextContent('Now viewing as Marcus Bell.'))
     expect(within(toast()!).getByRole('button', { name: 'Dismiss' })).toBeInTheDocument()
     holdMe.resolve()
   })
@@ -362,7 +401,6 @@ describe('the shell: switching', () => {
     const { user } = renderApp({ at: '/ask' })
     await screen.findByRole('complementary', { name: 'Sidebar' })
     await switchViaMenu(user, 'Marcus')
-
     const alert = await screen.findByRole('alert')
     expect(alert).toHaveTextContent("We couldn't switch to Marcus.")
     expect(toast()).toBeNull()
@@ -374,6 +412,80 @@ describe('the shell: switching', () => {
     await user.click(within(alert).getByRole('button', { name: 'Retry' }))
     await waitFor(() => expect(personaSwitcher()).toHaveAccessibleName(MARCUS))
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  })
+
+  it('forgets a failed tour start when the visitor switches, so one error shows at a time', async () => {
+    installFakeApi('priya')
+    failOnce(`${window.location.origin}/api/v1/sandboxes`, 'post')
+    failOnce(SWITCH(), 'put')
+    const { user } = renderApp({ at: '/ask' })
+    await screen.findByRole('complementary', { name: 'Sidebar' })
+    await user.click(screen.getByRole('button', { name: /Switch persona$/ }))
+    await user.click(await screen.findByRole('menuitem', { name: 'Take the tour' }))
+    await user.click(await screen.findByRole('button', { name: 'Start the tour' }))
+    expect(await screen.findByRole('alert')).toHaveTextContent("We couldn't start a sandbox.")
+
+    await switchViaMenu(user, 'Marcus')
+    await waitFor(() =>
+      expect(screen.getByRole('alert')).toHaveTextContent("We couldn't switch to Marcus."),
+    )
+    expect(screen.getAllByRole('alert')).toHaveLength(1)
+  })
+
+  it('keeps focus on "Start the tour" in the dialog while its own sandbox starts', async () => {
+    installFakeApi('priya')
+    let release = () => {}
+    const held = new Promise<void>((resolve) => (release = resolve))
+    server.use(
+      http.post(`${window.location.origin}/api/v1/sandboxes`, async () => {
+        await held
+        return HttpResponse.json({ title: 'x', status: 500 }, { status: 500 })
+      }),
+    )
+    const { user } = renderApp({ at: '/ask' })
+    await screen.findByRole('complementary', { name: 'Sidebar' })
+    await user.click(screen.getByRole('button', { name: /Switch persona$/ }))
+    await user.click(await screen.findByRole('menuitem', { name: 'Take the tour' }))
+    const start = await screen.findByRole('button', { name: 'Start the tour' })
+    start.focus()
+    await user.keyboard('{Enter}')
+    await waitFor(() => expect(start).toHaveAttribute('aria-busy', 'true'))
+    expect(start).not.toBeDisabled()
+    expect(start).toHaveFocus()
+    release()
+  })
+
+  it('retries a failed tour start from the shell, leaving one error at most', async () => {
+    installFakeApi('priya')
+    const sandboxes = `${window.location.origin}/api/v1/sandboxes`
+    failOnce(sandboxes, 'post')
+    const { user } = renderApp({ at: '/ask' })
+    await screen.findByRole('complementary', { name: 'Sidebar' })
+    await user.click(screen.getByRole('button', { name: /Switch persona$/ }))
+    await user.click(await screen.findByRole('menuitem', { name: 'Take the tour' }))
+    await user.click(await screen.findByRole('button', { name: 'Start the tour' }))
+    const alert = await screen.findByRole('alert')
+    expect(alert).toHaveTextContent("We couldn't start a sandbox.")
+    await user.click(within(alert).getByRole('button', { name: 'Retry' }))
+    await waitFor(() => expect(screen.queryByRole('alert')).not.toBeInTheDocument())
+  })
+
+  it('forgets a failed switch when the tour starts, so one error shows at a time', async () => {
+    installFakeApi('priya')
+    failOnce(SWITCH(), 'put')
+    failOnce(`${window.location.origin}/api/v1/sandboxes`, 'post')
+    const { user } = renderApp({ at: '/ask' })
+    await screen.findByRole('complementary', { name: 'Sidebar' })
+    await switchViaMenu(user, 'Marcus')
+    expect(await screen.findByRole('alert')).toHaveTextContent("We couldn't switch to Marcus.")
+
+    await user.click(screen.getByRole('button', { name: /Switch persona$/ }))
+    await user.click(await screen.findByRole('menuitem', { name: 'Take the tour' }))
+    await user.click(await screen.findByRole('button', { name: 'Start the tour' }))
+    await waitFor(() =>
+      expect(screen.getByRole('alert')).toHaveTextContent("We couldn't start a sandbox."),
+    )
+    expect(screen.getAllByRole('alert')).toHaveLength(1)
   })
 
   it('does nothing when the current person is chosen', async () => {
@@ -499,9 +611,11 @@ describe('the shell: the countdown and the banner', () => {
 
   it('remembers a dismissal for the session, under a key that holds the expiry', async () => {
     const api = installFakeApi('priya')
+    // It moves around to the directory, whose requests need answers too.
+    installFakeDirectory('priya')
     const expiry = hoursFromNow(2.5)
     api.setExpiry(expiry)
-    const { user, router } = renderApp({ at: '/ask' })
+    const { user, router, queryClient } = renderApp({ at: '/ask' })
     await screen.findByRole('complementary', { name: 'Sidebar' })
     await user.click(screen.getByRole('button', { name: 'Dismiss for this session' }))
     expect(banner()).toBeNull()
@@ -511,6 +625,8 @@ describe('the shell: the countdown and the banner', () => {
     expect(localStorage.length).toBe(0)
     // Still dismissed after moving around.
     await act(() => router.navigate('/directory'))
+    await screen.findByRole('list', { name: 'People' })
+    await waitFor(() => expect(queryClient.isFetching()).toBe(0))
     expect(banner()).toBeNull()
   })
 
@@ -525,7 +641,7 @@ describe('the shell: the countdown and the banner', () => {
     await signOutViaMenu(user)
     await screen.findByRole('heading', { level: 1, name: LANDING })
     api.setExpiry(hoursFromNow(2.9))
-    await user.click(await screen.findByRole('button', { name: /^Start a sandbox as Priya / }))
+    await user.click(await screen.findByRole('button', { name: /^Priya / }))
     await screen.findByRole('complementary', { name: 'Sidebar' })
     expect(banner()).not.toBeNull()
   })
@@ -551,7 +667,7 @@ describe('the shell: review fixes', () => {
     renderApp({ at: '/ask' })
     const sidebar = await sidebarReady()
     expect(within(sidebar).getByRole('navigation', { name: 'Main' })).toBeInTheDocument()
-    expect(within(sidebar).getByRole('button', { name: /^Switch persona/ })).toBeInTheDocument()
+    expect(within(sidebar).getByRole('button', { name: /Switch persona$/ })).toBeInTheDocument()
     expect(screen.queryByRole('banner')).not.toBeInTheDocument()
   })
 
@@ -566,7 +682,7 @@ describe('the shell: review fixes', () => {
     await act(() => queryClient.invalidateQueries({ queryKey: getGetMeQueryKey() }))
     await waitFor(() =>
       expect(personaSwitcher()).toHaveAccessibleName(
-        'Switch persona. Current: Dana Whitfield, HR Business Partner',
+        'Dana Whitfield, HR Business Partner. Current persona. Switch persona',
       ),
     )
     expect(toast()).toBeNull()
@@ -584,7 +700,7 @@ describe('the shell: review fixes', () => {
     api.expire()
     await act(() => queryClient.invalidateQueries())
     await user.click(await screen.findByRole('button', { name: 'Choose who to be' }))
-    await user.click(await screen.findByRole('button', { name: /^Start a sandbox as Priya / }))
+    await user.click(await screen.findByRole('button', { name: /^Priya / }))
     await sidebarReady()
     expect(personaSwitcher()).toHaveAccessibleName(PRIYA)
     expect(toast()).toBeNull()
@@ -720,7 +836,7 @@ describe('the shell: time off, approvals, and the rail', () => {
   const navLinks = () =>
     within(screen.getByRole('navigation', { name: 'Main' }))
       .getAllByRole('link')
-      .map((link) => link.getAttribute('aria-label') ?? link.textContent)
+      .map((link) => accessibleNameOf(link))
 
   it('shows Marcus the Approvals item with the count in its name, and Priya none', async () => {
     installFakeApi('marcus')
@@ -773,10 +889,10 @@ describe('the shell: time off, approvals, and the rail', () => {
     const seen: { who: string; approvals: boolean }[] = []
     const observer = new MutationObserver(() => {
       const main = document.querySelector('nav[aria-label="Main"]')
-      const switcher = document.querySelector('[aria-label^="Switch persona"]')
+      const switcher = document.querySelector('[data-slot="persona-switcher"]')
       if (!main || !switcher) return
       seen.push({
-        who: switcher.getAttribute('aria-label') ?? '',
+        who: accessibleNameOf(switcher),
         approvals: main.textContent?.includes('Approvals') ?? false,
       })
     })
@@ -810,7 +926,14 @@ describe('the shell: time off, approvals, and the rail', () => {
       const cases = await within(nav).findByRole('link', { name: 'Cases, 3 new' })
       expect(cases).toHaveAttribute('href', '/cases')
       expect(cases.querySelector('[data-slot="nav-count"]')).toHaveTextContent('3 new')
-      expect(navLinks()).toEqual(['Ask', 'Time off', 'Directory', 'Handbook', 'Cases, 3 new'])
+      expect(navLinks()).toEqual([
+        'Ask',
+        'Time off',
+        'Directory',
+        'Handbook',
+        'Cases, 3 new',
+        'Console',
+      ])
     })
 
     it('shows plain "Cases" with no badge when nothing is new', async () => {
@@ -852,7 +975,7 @@ describe('the shell: time off, approvals, and the rail', () => {
       const glance = await screen.findByRole('region', { name: 'At a glance' })
       await within(glance).findByRole('link', { name: '3 new cases. Open Cases' })
       const links = within(glance).getAllByRole('link')
-      expect(links.map((link) => link.getAttribute('aria-label'))).toEqual([
+      expect(links.map((link) => accessibleNameOf(link))).toEqual([
         '92 hours PTO available. Open Time off',
         '0 requests pending. Open Time off',
         '3 new cases. Open Cases',
@@ -883,7 +1006,7 @@ describe('the shell: time off, approvals, and the rail', () => {
       expect(
         within(glance)
           .getAllByRole('link')
-          .map((link) => link.getAttribute('aria-label')),
+          .map((link) => accessibleNameOf(link)),
       ).toEqual([
         '92 hours PTO available. Open Time off',
         '0 requests pending. Open Time off',
@@ -900,7 +1023,7 @@ describe('the shell: time off, approvals, and the rail', () => {
     const glance = await within(rail).findByRole('region', { name: 'At a glance' })
     await within(glance).findByRole('link', { name: 'Sep 12 Handbook updated. Open Handbook' })
     const links = within(glance).getAllByRole('link')
-    expect(links.map((link) => link.getAttribute('aria-label'))).toEqual([
+    expect(links.map((link) => accessibleNameOf(link))).toEqual([
       '92 hours PTO available. Open Time off',
       '1 request pending. Open Time off',
       'Sep 12 Handbook updated. Open Handbook',
@@ -960,7 +1083,7 @@ describe('the shell: time off, approvals, and the rail', () => {
     expect(
       within(glance)
         .getAllByRole('link')
-        .map((link) => link.getAttribute('aria-label')),
+        .map((link) => accessibleNameOf(link)),
     ).toEqual(['Sep 12 Handbook updated. Open Handbook'])
   })
 })

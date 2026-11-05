@@ -6,7 +6,7 @@ import { cn } from '@/lib/utils'
 import { ApplicabilityBadge } from './applicability-badge'
 import { AppliesMarker } from './applies-marker'
 import { LastUpdated } from './last-updated'
-import { handbookPath, markerShownInList, sectionRowLabel } from './labels'
+import { handbookPath, markerShownInList } from './labels'
 
 /** The list's columns (.od-sec-cols): number, title, audience, marker, date, chevron. */
 export const sectionColumns =
@@ -21,9 +21,9 @@ type SectionRowProps = {
 
 /**
  * One handbook section in the table of contents, from SectionRow.jsx: a single link named by
- * `sectionRowLabel`. The marker shows only when the section covers the person and its audience is
- * restricted (`markerShownInList`). It renders the `li`, so it belongs inside a `SectionGroup`'s
- * list. The sketch's `onOpen` and `href` become a router `Link`. No arrow-key handling: rows are
+ * what it shows (WCAG 2.5.3). The marker shows only when the section covers the person and its
+ * audience is restricted (`markerShownInList`). It renders the `li`, so it belongs inside a
+ * `SectionGroup`'s list. The sketch's `onOpen` and `href` become a router `Link`. No arrow-key handling: rows are
  * plain links in the Tab order.
  */
 function SectionRow({ section, current = false, className }: SectionRowProps) {
@@ -34,9 +34,9 @@ function SectionRow({ section, current = false, className }: SectionRowProps) {
         to={handbookPath(section.id)}
         data-slot="section-row"
         aria-current={current ? 'page' : undefined}
-        aria-label={sectionRowLabel(section, markerShown)}
         className={cn(
           sectionColumns,
+          'relative',
           'min-h-12 border-b border-border-subtle text-ink no-underline transition-colors hover:bg-primary-tint hover:text-ink',
           rowFocusRing,
           current && 'bg-primary-tint',
@@ -45,7 +45,7 @@ function SectionRow({ section, current = false, className }: SectionRowProps) {
       >
         <span className="text-ui font-regular text-ink-muted tabular-nums @max-[56rem]:col-start-1">
           {section.id}
-        </span>
+        </span>{' '}
         <span
           className={cn(
             'py-3 text-body font-regular @max-[56rem]:col-start-2 @max-[56rem]:row-start-1 @max-[56rem]:py-0',
@@ -54,12 +54,21 @@ function SectionRow({ section, current = false, className }: SectionRowProps) {
         >
           {section.title}
         </span>
+        {/* Hidden words put back what the name used to say: "4.3 Sick leave. Applies to Everyone. Last updated Sep 12, 2026". */}
+        <span className="sr-only">. Applies to</span>{' '}
         <ApplicabilityBadge
           label={section.audienceLabel}
           variant="text"
           className="@max-[56rem]:col-start-2"
         />
+        <span className="sr-only">.</span>{' '}
         <span className="@max-[56rem]:col-start-2">{markerShown && <AppliesMarker applies />}</span>
+        {markerShown && (
+          <>
+            <span className="sr-only">.</span>{' '}
+          </>
+        )}
+        <span className="sr-only">Last updated</span>{' '}
         <LastUpdated date={section.lastUpdated} bare className="text-ui @max-[56rem]:col-start-2" />
         <ChevronRight
           aria-hidden="true"

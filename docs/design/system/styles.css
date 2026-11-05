@@ -21,3 +21,5 @@
 @import "./components/approvals/approvals.css";
 @import "./components/cases/cases.css";
 @import "./components/cases/hrcases.css";
+@import "./components/console/console.css";
+@import "./components/tour/tour.css";

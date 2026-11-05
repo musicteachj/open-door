@@ -15,7 +15,6 @@ import {
   panelEyebrow,
   searchResultSource,
   sectionEyebrow,
-  sectionRowLabel,
 } from './labels'
 
 describe('handbookCopy', () => {
@@ -115,20 +114,6 @@ describe('markerShownInList', () => {
     })
     expect(markerShownInList(hourly)).toBe(true)
     expect(markerShownInList(denver)).toBe(true)
-  })
-})
-
-describe('sectionRowLabel', () => {
-  it('is the number, title, audience, and date', () => {
-    expect(sectionRowLabel(sectionSummary(), false)).toBe(
-      '4.3 Sick leave. Applies to Everyone. Last updated Sep 12, 2026',
-    )
-  })
-
-  it('adds the marker when it is shown', () => {
-    expect(sectionRowLabel(californiaSickLeave(), true)).toBe(
-      'CA-4.3 Sick leave. Applies to California employees. Applies to you. Last updated Sep 12, 2026',
-    )
   })
 })
 

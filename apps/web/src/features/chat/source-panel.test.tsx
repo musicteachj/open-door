@@ -3,6 +3,7 @@ import { http, HttpResponse } from 'msw'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { citation, toolCall } from '@/test/assistant-fixtures'
 import { installFakeApi } from '@/test/fake-api'
+import { installFakeDirectory } from '@/test/fake-directory'
 import {
   conversationOut,
   installAssistantApi,
@@ -301,7 +302,7 @@ describe('the docked panel (a wide window)', () => {
   it('opens from a source chip with the first passage cited from its section, and focus returns to the chip', async () => {
     const { user, router } = signedIn()
     const chip = (await screen.findByRole('list', { name: 'Sources' })).querySelector(
-      `button[aria-label="${CO_MARKER}"]`,
+      '[data-slot="source-chip"][data-passage-id="4.3~p1"]',
     ) as HTMLElement
     await user.click(chip)
     await panel()
@@ -437,8 +438,12 @@ describe('the docked panel (a wide window)', () => {
     installFakeApi('priya')
     installAssistantApi()
     installPassages()
-    renderApp({ at: '/directory?source=CA-4.3~p2' })
+    // It opens the directory, whose requests need answers too.
+    installFakeDirectory('priya')
+    const { queryClient } = renderApp({ at: '/directory?source=CA-4.3~p2' })
     await screen.findByRole('heading', { name: 'Directory' })
+    await screen.findByRole('list', { name: 'People' })
+    await waitFor(() => expect(queryClient.isFetching()).toBe(0))
     expect(
       screen.queryByRole('complementary', { name: 'Handbook passage' }),
     ).not.toBeInTheDocument()

@@ -5,9 +5,14 @@ import { cn } from '@/lib/utils'
 type EmptyStateProps = {
   message: string
   /** The one thing to do about it, such as "Clear filters". */
-  action?: { label: string; onAction: () => void }
+  action?: { label: string; onAction: () => void; variant?: 'primary' | 'secondary' }
   /** A quieter second choice beside it, such as "Ask the assistant →". The icon follows the label. */
-  secondaryAction?: { label: string; onAction: () => void; icon?: ReactNode }
+  secondaryAction?: {
+    label: string
+    onAction: () => void
+    icon?: ReactNode
+    variant?: 'secondary' | 'ghost'
+  }
   className?: string
 }
 
@@ -26,12 +31,16 @@ function EmptyState({ message, action, secondaryAction, className }: EmptyStateP
       {(action || secondaryAction) && (
         <div className="flex flex-wrap justify-center gap-3">
           {action && (
-            <Button variant="secondary" onClick={action.onAction}>
+            <Button variant={action.variant ?? 'secondary'} onClick={action.onAction}>
               {action.label}
             </Button>
           )}
           {secondaryAction && (
-            <Button variant="ghost" className="pr-3.5 pl-4" onClick={secondaryAction.onAction}>
+            <Button
+              variant={secondaryAction.variant ?? 'ghost'}
+              className="pr-3.5 pl-4"
+              onClick={secondaryAction.onAction}
+            >
               {secondaryAction.label}
               {secondaryAction.icon}
             </Button>

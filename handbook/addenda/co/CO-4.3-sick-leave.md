@@ -18,7 +18,7 @@ This addendum applies to employees working in Colorado, including everyone at De
 
 Colorado's Healthy Families and Workplaces Act requires 1 hour of paid sick leave for every 30 hours worked, up to 48 hours a year, from your first day of work. Juniper Row simplifies this: in Colorado you have **48 hours** available on January 1. A new hire has 48 hours on their first day and can use it right away.
 
-## Carryover
+## Carryover of unused sick hours
 
 Unused hours carry over. On January 1, your balance is raised back to 48 hours rather than reset, so you never start a year with less than 48. You can use up to 48 hours a year.
 

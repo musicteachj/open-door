@@ -16,6 +16,7 @@ from app.ai.pricing import (
     dearer_model,
     estimate_input_tokens,
     estimate_request_tokens,
+    price_of,
     reservation_usd,
     total_usage,
     turn_call_cost,
@@ -27,6 +28,8 @@ HAIKU = "claude-haiku-5-5"
 # The models a declined Opus 5.5 request falls back to.
 OPUS_5 = "claude-opus-5"
 OPUS_4_8 = "claude-opus-4-8"
+# The model a declined Sonnet 5.5 request falls back to.
+SONNET_5 = "claude-sonnet-5"
 
 
 def test_the_hand_worked_example_is_exact() -> None:
@@ -204,6 +207,27 @@ def test_an_opus_fallback_attempt_is_priced_at_the_fallback_rates(fallback_model
     # Opus 5.5: $0.40 + $0.50 + $0.02 + $0.20. The fallback: $0.50 + $0.625 + $0.05 + $0.25.
     assert cost_usd(fallback_model, usage) == Decimal("1.425")
     assert cost == Decimal("1.12") + Decimal("1.425")
+
+
+def test_a_sonnet_fallback_attempt_is_priced_by_the_model_that_served_it() -> None:
+    usage = Usage(
+        input_tokens=100_000,
+        output_tokens=10_000,
+        cache_read_tokens=100_000,
+        cache_write_tokens=100_000,
+    )
+
+    cost = turn_call_cost([IterationUsage(SONNET, usage), IterationUsage(SONNET_5, usage)])
+
+    # Sonnet 5.5: $0.20 + $0.25 + $0.01 + $0.10. Sonnet 5: $0.20 + $0.25 + $0.02 + $0.10.
+    assert cost_usd(SONNET, usage) == Decimal("0.56")
+    assert cost_usd(SONNET_5, usage) == Decimal("0.57")
+    assert cost == Decimal("1.13")
+
+
+def test_price_of_still_raises_for_a_served_model_with_no_pinned_price() -> None:
+    with pytest.raises(ValueError, match="claude-sonnet-9-9"):
+        price_of("claude-sonnet-9-9")
 
 
 def test_an_unknown_served_model_is_priced_at_the_dearest_row_and_logged(

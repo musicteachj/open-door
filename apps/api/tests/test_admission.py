@@ -32,6 +32,7 @@ VIEW = ActorView(
     given_name="Priya",
     role="employee",
     location_name="Denver HQ",
+    city="Denver",
     state="CO",
     location_code="DEN",
     timezone="America/Denver",

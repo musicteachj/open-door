@@ -4,7 +4,8 @@ Prices are per million tokens and pinned here, per model, because the budget cap
 and the models' prices differ by twentyfold (ADR 0011). Money is `Decimal`, never `float`.
 
 Source: Anthropic, "Pricing", platform.claude.com/docs/en/about-claude/pricing, read on 2026-10-14.
-The Opus 5.5, Sonnet 5.5, and Haiku 5.5 rows were read again that day and match.
+The Opus 5.5, Sonnet 5.5, and Haiku 5.5 rows were read again that day and match. The Claude
+Sonnet 5 row was read from the same page on 2026-11-01.
 
 This module defines its own small usage types and imports no SDK. The transport
 (app/ai/transport.py) converts the SDK's usage into these.
@@ -16,6 +17,7 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from decimal import ROUND_CEILING, ROUND_HALF_EVEN, Decimal
 from types import MappingProxyType
+from typing import Final
 
 logger = logging.getLogger(__name__)
 
@@ -33,6 +35,7 @@ HAIKU = "claude-haiku-5-5"
 SCRIPTED_MODEL = "scripted"
 OPUS_5 = "claude-opus-5"
 OPUS_4_8 = "claude-opus-4-8"
+SONNET_5 = "claude-sonnet-5"
 
 
 @dataclass(frozen=True)
@@ -59,6 +62,15 @@ _OPUS_5_PRICE = Price(
     cache_write_5m_usd_per_mtok=Decimal("6.25"),
     cache_read_usd_per_mtok=Decimal("0.50"),
     output_usd_per_mtok=Decimal("25.00"),
+)
+
+# Claude Sonnet 5: $2 input, $2.50 5-minute cache write, $0.20 cache read, $10 output per million
+# tokens. Source: the pricing page named above, read on 2026-11-01.
+_SONNET_5_PRICE = Price(
+    input_usd_per_mtok=Decimal("2.00"),
+    cache_write_5m_usd_per_mtok=Decimal("2.50"),
+    cache_read_usd_per_mtok=Decimal("0.20"),
+    output_usd_per_mtok=Decimal("10.00"),
 )
 
 PRICES: Mapping[str, Price] = MappingProxyType(
@@ -88,6 +100,13 @@ PRICES: Mapping[str, Price] = MappingProxyType(
         # priced alike, and a declined attempt is billed, so settle must know the price.
         OPUS_5: _OPUS_5_PRICE,
         OPUS_4_8: _OPUS_5_PRICE,
+        # The fallback target when Sonnet 5.5 declines a request (`fallbacks: "default"`). Source:
+        # Anthropic's refusals page (platform.claude.com/docs/en/build-with-claude/
+        # refusals-and-fallback, read 2026-11-01) says the default routing "is applied server-side
+        # and is not published for each model". Anthropic's API guide says Sonnet 5.5's default
+        # fallback retries `cyber` and `frontier_llm` declines on Claude Sonnet 5, and doesn't
+        # retry `bio`, `reasoning_extraction`, or `general_harms`.
+        SONNET_5: _SONNET_5_PRICE,
         # The spec prices the scripted model at $0, so the budget is tested with configured caps.
         # A reservation still uses the request's real model, so it reserves real money and settles
         # back to nothing.
@@ -99,6 +118,11 @@ PRICES: Mapping[str, Price] = MappingProxyType(
         ),
     }
 )
+
+
+# The stream's budget error codes: the sandbox's cap, the day's cap, and the API's own spend limit.
+# One list for the turn (which sets them and shows their texts) and the console (which labels them).
+BUDGET_ERROR_CODES: Final = ("budget-sandbox", "budget-daily", "spend-limit")
 
 
 @dataclass(frozen=True)

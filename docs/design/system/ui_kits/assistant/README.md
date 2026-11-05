@@ -2,7 +2,7 @@
 
 The Open Door app shell and assistant home for Priya Raman (Visual Merchandiser, Oakland store), built from the components in /components.
 
-- AppShell.jsx: sidebar (Logo, NavItem list, How it's built, PersonaSwitcher) and main area.
+- AppShell.jsx: sidebar (Logo, NavItem list, PersonaSwitcher) and main area.
 - AssistantHome.jsx: greeting, Composer, TryAskingList, and the right rail (SandboxIndicator, GlanceList).
 - kit.css: shell layout only. Under 1100 px the rail moves below the content; under 760 px the sidebar becomes a top bar with horizontal nav.
 

@@ -65,6 +65,7 @@ class Action(StrEnum):
     CASE_READ_SUMMARY = "case.read_summary"
     CASE_READ_TEXT = "case.read_text"
     CASE_UPDATE_STATUS = "case.update_status"
+    CONSOLE_READ = "console.read"
 
 
 @dataclass(frozen=True, slots=True)
@@ -184,8 +185,10 @@ def _case_read_status(actor: Actor, target: Resource, today: date | None) -> boo
     )
 
 
-def _case_list(actor: Actor, target: Resource, today: date | None) -> bool:
-    # The queue is HR's. It has no case of its own to name, so it takes the actor as a person.
+def _hr_only(actor: Actor, target: Resource, today: date | None) -> bool:
+    # HR's, for their own: the case queue and the AI Ops console have no resource of their own to
+    # name, so they take the actor as a person. The route passes the HR person's own
+    # PersonResource, so there is no "not their own" test here (unlike the case reads).
     return isinstance(target, PersonResource) and actor.is_hr_admin
 
 
@@ -217,10 +220,11 @@ RULES: Mapping[Action, Rule] = MappingProxyType(
         Action.TIMEOFF_CANCEL: _timeoff_cancel,
         Action.CASE_OPEN: _case_open,
         Action.CASE_READ_STATUS: _case_read_status,
-        Action.CASE_LIST: _case_list,
+        Action.CASE_LIST: _hr_only,
         Action.CASE_READ_SUMMARY: _case_hr_not_own,
         Action.CASE_READ_TEXT: _case_hr_not_own,
         Action.CASE_UPDATE_STATUS: _case_update_status,
+        Action.CONSOLE_READ: _hr_only,
     }
 )
 

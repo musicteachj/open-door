@@ -4,7 +4,7 @@ import asyncio
 import json
 from collections.abc import AsyncIterator
 from decimal import Decimal
-from typing import Any
+from typing import Any, get_args
 
 import httpx2
 import pytest
@@ -13,13 +13,16 @@ from anthropic import AsyncAnthropic
 from app.ai import guard as guard_module
 from app.ai.anthropic_transport import AnthropicTransport
 from app.ai.guard import (
+    CRISIS_KINDS,
     INJECTION_NOTE,
     PREVIOUS_ANSWER_MAX_CHARACTERS,
     SENSITIVE_NOTE,
     TOPIC_NOTE,
+    TOPIC_NOTE_HR,
     build_guard_request,
     escalation_for_verdict,
     guard_reservation_usd,
+    notes_for_role,
     offers_case,
     screen,
     verdict_is_flagged,
@@ -473,3 +476,38 @@ def test_the_topic_note_is_for_a_message_with_no_panel() -> None:
     assert chr(0x2014) not in note
     # The admission reservation is sized with the sensitive note, so it must be the longer one.
     assert len(TOPIC_NOTE) <= len(SENSITIVE_NOTE)
+
+
+def test_the_hr_topic_note_names_the_panel_form_not_my_cases() -> None:
+    note = TOPIC_NOTE_HR
+    assert "My cases" not in note
+    assert "HR panel's form" in note
+    assert "read-only in the queue" in note
+    assert "Never say you opened a case or that a message to you reaches HR" in note
+    assert chr(0x2014) not in note
+    # The admission reservation is sized with the sensitive note, so it must stay the longer one.
+    assert len(TOPIC_NOTE_HR) <= len(SENSITIVE_NOTE)
+
+
+def test_only_hr_reads_the_hr_topic_note() -> None:
+    notes = (TOPIC_NOTE, INJECTION_NOTE)
+    assert notes_for_role(notes, "hr") == (TOPIC_NOTE_HR, INJECTION_NOTE)
+    assert notes_for_role(notes, "employee") == notes
+    assert notes_for_role(notes, "manager") == notes
+    assert notes_for_role((SENSITIVE_NOTE,), "hr") == (SENSITIVE_NOTE,)
+
+
+@pytest.mark.parametrize("injection", [False, True])
+async def test_every_topic_note_the_guard_can_give_is_swapped_for_hr(injection: bool) -> None:
+    """If the topic note changes in one place but not in the swap, HR would read "My cases"."""
+    topic_kinds = [k for k in get_args(GuardKind) if k not in CRISIS_KINDS]
+    assert len(topic_kinds) >= 5
+    for kind in topic_kinds:
+        outcome = await screen(
+            FakeTransport(verdict("ordinary", kind, injection)), build_guard_request("hello", None)
+        )
+        assert outcome.operator_notes, kind
+        for_hr = notes_for_role(outcome.operator_notes, "hr")
+        assert for_hr[0] == TOPIC_NOTE_HR, kind
+        assert TOPIC_NOTE not in for_hr, kind
+        assert notes_for_role(outcome.operator_notes, "employee") == outcome.operator_notes

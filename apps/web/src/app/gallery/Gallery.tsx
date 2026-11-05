@@ -36,8 +36,10 @@ import { NavigationSections } from './sections/navigation-sections'
 import { ApprovalsSections } from './sections/approvals-sections'
 import { CasesSections } from './sections/cases-sections'
 import { CasesHrSections } from './sections/cases-hr-sections'
+import { ConsoleSections } from './sections/console-sections'
 import { ConfirmCardSections } from './sections/confirm-card-sections'
 import { TimeOffSections } from './sections/timeoff-sections'
+import { TourSections } from './sections/tour-sections'
 
 // Every primitive in every state it has, for the browser tests and for looking at. The route is
 // compiled in only for development and the e2e build (router.tsx), and the build check
@@ -285,6 +287,8 @@ export function Gallery() {
         <ConfirmCardSections />
         <CasesSections />
         <CasesHrSections />
+        <ConsoleSections />
+        <TourSections />
       </main>
       <ToastViewport />
     </ToastProvider>

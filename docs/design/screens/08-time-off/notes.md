@@ -55,7 +55,7 @@ The page uses the full sheet. Three reasons:
 - Schedule line on the left, "Request time off" on the right, on one row.
 - My requests: "Upcoming" (soonest first), then "Past" (newest first). Row: dates over "type · amount", the status badge with who decided under it, and Cancel where allowed. A manager's note on a denial sits under the row. Rows tint on hover and while anything inside has focus.
 - Request form: a side panel `var(--panel-width)` (420 px) wide, the token the passage panel now uses too. It's docked at the right of the sheet, isn't modal, and the page reflows beside it. Fixed header (title, close) and footer (note, buttons); the body scrolls.
-- Dates field: short form so a range fits on one line ("Wed, Nov 25 to Fri, Nov 27"). Its accessible name is the full form. "What this uses" keeps full weekday and month names.
+- Dates field: short form so a range fits on one line ("Wed, Nov 25 to Fri, Nov 27"). Its accessible name is the short form it shows, and the full form is its accessible description (WCAG 2.5.3, Label in Name; changed 2026-11-01). "What this uses" keeps full weekday and month names.
 - Date picker: opens inline under the Dates field and pushes the rest of the form down, so it never covers the preview.
 - "What this uses": counted days (check), skipped days (calendar-minus icon), days already booked (error icon, "Already booked"), the total and what's left, then "Sources" with chips for the rules used: §4.1 for PTO, plus §4.2 when a holiday is skipped; CA-4.3 for Priya's sick time.
 - Cancel confirm: a centered alert dialog. The scrim covers the whole window, sidebar included.

@@ -160,11 +160,15 @@ the owner's explicit agreement first.
 ## AI development rules
 
 - **A change to a prompt, a tool description or schema, the guard, or the retrieval needs a full
-  run before its PR** (`make eval-live SET=full FRESH=1 PRUNE=1 YES=1`, estimated at $14, cap $16;
-  with Phase 6's 166 items, the run of 2026-10-29 cost $10.93). CI replays the full set offline,
-  and a smoke run re-records only its own items, so CI stays red until the full run is committed.
-  Use smoke runs (`make eval-live YES=1`, about $0.95, cap $2) to try wording before that. Put the
-  scoreboard change in the PR description.
+  run before its PR** (`make eval-live SET=full FRESH=1 PRUNE=1 YES=1`, estimated at $15.50 with
+  the fairness set, cap $18; with Phase 6's 166 items, the run of 2026-10-29 cost $10.93). CI
+  replays the full set offline, and a smoke run re-records only its own items, so CI stays red until
+  the full run is committed. Use smoke runs (`make eval-live YES=1`, about $1.00, cap $2) to try
+  wording before that. Put the scoreboard change in the PR description.
+  - **A run whose recordings are committed commits its board in the same change,** then
+    `make scoreboard` regenerates the README's scoreboard and the app's copy (CI fails if they're
+    stale). Every live run except smoke writes a board to `evals/scoreboards/`; a run into a
+    scratch folder (`FIXTURES_DIR`) writes none.
   - **A change to the guard's prompt (`guard.md`) also re-records the escalation set**
     (`make eval-live SET=escalation FRESH=1 YES=1`, about $0.05, cap $0.50). Tune on the tuning
     half into a scratch folder (`HALF=tuning`, with `--fixtures-dir`), never on the held-out half.
@@ -173,10 +177,10 @@ the owner's explicit agreement first.
     seeded summaries are copied from that run (`scripts/apply_seeded_summaries.py`).
   **A release gets the full run too**, unless the last one already covers everything it ships.
 - **Model IDs are pinned.** A new model is adopted only after an eval comparison.
-- **No paid AI calls on push or PR.** CI replays recorded fixtures. Live evals are a manual
-  workflow with a budget cap.
-- **The development AI budget is $25/month**, across Anthropic and Voyage. Use the fake transport
-  for UI and most development work. Size live eval runs to fit.
+- **No paid AI calls on push or PR.** CI replays recorded fixtures. A live eval is a local
+  `make eval-live` run with a cap.
+- **Every paid run needs the owner's OK,** with its estimate and its cap. Use the fake transport
+  for UI and most development work.
 - **Tool results that contain user-written text are untrusted data.** Turns that process them get no
   proposal tools.
 
@@ -201,8 +205,9 @@ The handbook is fictional company policy and is labeled as demo content, not leg
 - **`docs/design/` is the visual source of truth.** The owner designs in Claude Design and hands off
   screenshots plus `notes.md` guidelines. Where they disagree with any palette in the plan, the
   design wins.
-- **A phase's UI stage does not start until its screens are in `docs/design/`.** Backend stages do
-  not wait.
+- **A phase with new screens is designed right after its planning.** The planning writes the
+  Claude Design prompts, the owner designs and approves the screens, and they are synced into
+  `docs/design/`. No build stage starts until then, backend stages included.
 - **Use theme tokens, never raw hex, in components.**
 
 ---
@@ -248,6 +253,7 @@ make embed      fetch missing embeddings from Voyage (needs VOYAGE_API_KEY); com
 make eval-retrieval  score handbook search against the labeled questions (needs `make db`; no network)
 make eval-offline  replay the recorded assistant evals (needs `make db`; no network)
 make eval-live  paid; smoke by default, `SET=full` or `SET=effort`, and `YES=1` to run
+make scoreboard  rebuild the README's scoreboard and apps/web/src/generated/scoreboard.json from the boards
 make dev        Postgres, migrations, API (:8000) and web app (:5173) together
 make check      everything CI runs; needs `make db` first
 make e2e        the browser tests (Playwright, Chromium) against the real API on :8100

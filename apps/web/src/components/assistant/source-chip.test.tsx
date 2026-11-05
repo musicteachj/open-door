@@ -2,6 +2,7 @@ import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 import type { CitationOut } from '@/api/generated'
+import { accessibleNameOf } from '@/test/accessible-name'
 import { apiCitations, citation } from '@/test/assistant-fixtures'
 import { SourceChip, SourceChips } from './source-chip'
 import * as sources from './sources'
@@ -21,7 +22,7 @@ describe('SourceChip', () => {
   it('shows the number and the label, and is named by the full source', () => {
     render(<SourceChip citation={ca1} expanded={false} onOpen={() => {}} />)
     const chip = screen.getByRole('button', {
-      name: 'Source 1: Handbook CA-4.3, California addendum',
+      name: 'Handbook CA-4.3 · California addendum, source 1',
     })
     expect(chip).toHaveTextContent('1')
     expect(chip).toHaveTextContent('Handbook CA-4.3 · California addendum')
@@ -68,9 +69,9 @@ describe('SourceChips: citations as the API sends them', () => {
     const onOpen = vi.fn<(citation: CitationOut) => void>()
     render(<SourceChips citations={numberBySection(apiCitations())} onOpen={onOpen} />)
     const chips = within(screen.getByRole('list', { name: 'Sources' })).getAllByRole('button')
-    expect(chips.map((chip) => chip.getAttribute('aria-label'))).toEqual([
-      'Source 1: Handbook CA-4.3, California addendum',
-      'Source 2: Handbook §4.3, Company handbook',
+    expect(chips.map((chip) => accessibleNameOf(chip))).toEqual([
+      'Handbook CA-4.3 · California addendum, source 1',
+      'Handbook §4.3 · Company handbook, source 2',
     ])
     await userEvent.click(chips[0]!)
     expect(onOpen).toHaveBeenCalledExactlyOnceWith(
@@ -86,11 +87,11 @@ describe('SourceChips: citations as the API sends them', () => {
         onOpen={() => {}}
       />,
     )
-    expect(screen.getByRole('button', { name: /^Source 1/ })).toHaveAttribute(
+    expect(screen.getByRole('button', { name: /, source 1$/ })).toHaveAttribute(
       'aria-expanded',
       'true',
     )
-    expect(screen.getByRole('button', { name: /^Source 2/ })).toHaveAttribute(
+    expect(screen.getByRole('button', { name: /, source 2$/ })).toHaveAttribute(
       'aria-expanded',
       'false',
     )
@@ -105,7 +106,7 @@ describe('SourceChips: citations as the API sends them', () => {
         onOpen={onOpen}
       />,
     )
-    await userEvent.click(screen.getByRole('button', { name: /^Source 1/ }))
+    await userEvent.click(screen.getByRole('button', { name: /, source 1$/ }))
     expect(onOpen).toHaveBeenCalledExactlyOnceWith(
       expect.objectContaining({ passageId: 'CA-4.3~p2', marker: 1 }),
     )
@@ -120,7 +121,7 @@ describe('SourceChips: citations as the API sends them', () => {
         onOpen={onOpen}
       />,
     )
-    await userEvent.click(screen.getByRole('button', { name: /^Source 2/ }))
+    await userEvent.click(screen.getByRole('button', { name: /, source 2$/ }))
     expect(onOpen).toHaveBeenCalledExactlyOnceWith(
       expect.objectContaining({ passageId: '4.3~p3', marker: 2 }),
     )
@@ -134,7 +135,7 @@ describe('SourceChips: citations as the API sends them', () => {
         onOpen={() => {}}
       />,
     )
-    expect(screen.getByRole('button', { name: /^Source 2/ })).toHaveAttribute(
+    expect(screen.getByRole('button', { name: /, source 2$/ })).toHaveAttribute(
       'aria-expanded',
       'true',
     )
@@ -154,17 +155,17 @@ describe('SourceChips', () => {
   it('opens the first passage cited from the section', async () => {
     const onOpen = vi.fn<(citation: CitationOut) => void>()
     render(<SourceChips citations={[ca1, ca2, co]} onOpen={onOpen} />)
-    await userEvent.click(screen.getByRole('button', { name: /^Source 1/ }))
+    await userEvent.click(screen.getByRole('button', { name: /, source 1$/ }))
     expect(onOpen).toHaveBeenCalledExactlyOnceWith(ca1)
   })
 
   it('marks the chip whose passage is open as expanded', () => {
     render(<SourceChips citations={[ca1, co]} openPassageId="4.3~p3" onOpen={() => {}} />)
-    expect(screen.getByRole('button', { name: /^Source 1/ })).toHaveAttribute(
+    expect(screen.getByRole('button', { name: /, source 1$/ })).toHaveAttribute(
       'aria-expanded',
       'false',
     )
-    expect(screen.getByRole('button', { name: /^Source 2/ })).toHaveAttribute(
+    expect(screen.getByRole('button', { name: /, source 2$/ })).toHaveAttribute(
       'aria-expanded',
       'true',
     )

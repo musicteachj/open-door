@@ -35,7 +35,7 @@ describe('PersonaSwitcher', () => {
   it('is named for the person and the full title', () => {
     render(<PersonaSwitcher name="Priya Raman" title={TITLE} />)
     expect(screen.getByRole('button')).toHaveAccessibleName(
-      'Switch persona. Current: Priya Raman, Department Lead, Apparel',
+      'Priya Raman, Department Lead, Apparel. Current persona. Switch persona',
     )
   })
 
@@ -43,7 +43,7 @@ describe('PersonaSwitcher', () => {
     widths.scrollWidth = 300
     render(<PersonaSwitcher name="Priya Raman" title={TITLE} />)
     expect(screen.getByRole('button')).toHaveAccessibleName(
-      'Switch persona. Current: Priya Raman, Department Lead, Apparel',
+      'Priya Raman, Department Lead, Apparel. Current persona. Switch persona',
     )
   })
 

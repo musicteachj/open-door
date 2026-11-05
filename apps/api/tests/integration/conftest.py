@@ -55,6 +55,7 @@ from app.core.encryption import (
 )
 from app.db.engine import create_engine
 from app.db.models import (
+    AiConsoleTurn,
     AiConversation,
     AiFeedback,
     AiMessage,
@@ -356,6 +357,31 @@ async def write_case_rows(
     return case_id
 
 
+async def write_console_row(
+    session: AsyncSession, tenant_id: UUID, assistant: AssistantRows
+) -> None:
+    """Write the console row for the person's turn, as the turn's own finish does: a Core insert
+    with no RETURNING, since only HR can read the row back."""
+    await session.execute(
+        insert(AiConsoleTurn).values(
+            id=uuid4(),
+            tenant_id=tenant_id,
+            turn_id=assistant.turn_id,
+            occurred_on=date(2026, 10, 30),
+            occurred_at=datetime(2026, 10, 30, 17, 0, tzinfo=UTC),
+            flagged=False,
+            asker_role="employee",
+            asker_location="Denver, CO",
+            outcome="answered",
+            injection_suspected=False,
+            tools=[],
+            sections_retrieved=[],
+            sections_cited=[],
+            fallback=False,
+        )
+    )
+
+
 @dataclass(frozen=True)
 class TimeOffRows:
     """The IDs of the time-off rows `write_time_off_rows` wrote for one person."""
@@ -612,6 +638,7 @@ def make_tenant(app_engine: AsyncEngine, created_tenant_ids: list[UUID]) -> Make
             assistant = await write_assistant_rows(session, tenant_id, employee.id)
             await write_time_off_rows(session, tenant_id, employee.id, assistant)
             case_id = await write_case_rows(session, tenant_id, employee.id, assistant)
+            await write_console_row(session, tenant_id, assistant)
         return SampleTenant(tenant_id, employee.id, colleague.id, hr.id, case_id)
 
     return make

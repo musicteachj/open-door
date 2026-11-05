@@ -89,7 +89,8 @@ function FilterSelect({
 }
 
 // The option's name is the name, a comma, and the count ("Denver HQ, 40"), from a hidden label,
-// because Radix names an item from its text alone and the count sits outside that text.
+// because Radix names an item from its text alone and the count sits outside that text. The shown
+// text, "Denver HQ 40", is inside that name once punctuation is set aside (WCAG 2.5.3).
 function FilterOptionItem({ option }: { option: FilterOption }) {
   const nameId = useId()
   return (
@@ -98,6 +99,7 @@ function FilterOptionItem({ option }: { option: FilterOption }) {
       aria-labelledby={nameId}
       trailing={
         <>
+          {/* A space between the name and the count, so the shown text ("Denver HQ 40") is in the name. */}{' '}
           <span aria-hidden="true" className="ml-auto text-ink-muted tabular-nums">
             {option.count}
           </span>

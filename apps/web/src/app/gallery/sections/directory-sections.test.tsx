@@ -21,7 +21,7 @@ describe('DirectorySections', () => {
 
   it('tags one row in the table as yours, and locks every private row without a value', () => {
     const { container } = renderWithRouter(<DirectorySections />)
-    expect(screen.getAllByRole('link', { name: /\(you\)$/ })).toHaveLength(2)
+    expect(screen.getAllByRole('link', { name: /, You, / })).toHaveLength(2)
     const locked = container.querySelector('section[aria-labelledby]:has(svg.lucide-lock)')
     expect(locked).not.toBeNull()
     expect(screen.getAllByText('Visible to Leo and HR')).toHaveLength(4)

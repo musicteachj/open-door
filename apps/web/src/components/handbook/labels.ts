@@ -145,15 +145,6 @@ export function markerShownInList(
   return section.appliesToMe && restricted
 }
 
-/** A section row, which is one link: number, title, audience, the marker if shown, the date. */
-export function sectionRowLabel(
-  section: Pick<SectionSummary, 'id' | 'title' | 'audienceLabel' | 'lastUpdated'>,
-  markerShown: boolean,
-): string {
-  const marker = markerShown ? `. ${handbookCopy.marker.yes}` : ''
-  return `${section.id} ${section.title}. Applies to ${section.audienceLabel}${marker}. ${lastUpdatedText(section.lastUpdated)}`
-}
-
 /** "California and Colorado add to this section.", from the addenda's state codes. */
 export function stateRulesNote(stateCodes: string[]): string {
   const names = stateCodes.map(stateName)

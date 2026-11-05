@@ -1,4 +1,4 @@
-import { act, screen, within } from '@testing-library/react'
+import { act, screen, waitFor, within } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import {
   AALIYAH_ROW,
@@ -128,13 +128,16 @@ describe('the queue filter', () => {
     await queue()
     const open1 = screen.getByRole('radio', { name: 'Open' })
     open1.focus()
+    // The filter lives in the URL, and the router applies a navigation in a transition, so the
+    // checked state can trail the focus on a busy machine: wait for it rather than assert at once.
     await arrow(user, 'ArrowRight')
     const next = screen.getByRole('radio', { name: 'New' })
-    expect(next).toBeChecked()
     expect(next).toHaveFocus()
+    await waitFor(() => expect(next).toBeChecked())
     await arrow(user, 'ArrowRight')
-    expect(screen.getByRole('radio', { name: 'In review' })).toBeChecked()
-    expect(screen.getByRole('radio', { name: 'In review' })).toHaveFocus()
+    const inReview = screen.getByRole('radio', { name: 'In review' })
+    expect(inReview).toHaveFocus()
+    await waitFor(() => expect(inReview).toBeChecked())
   })
 })
 

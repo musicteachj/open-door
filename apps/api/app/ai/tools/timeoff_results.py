@@ -60,7 +60,7 @@ def balance_result(name: str, balances: Balances) -> dict[str, Any]:
             "ceiling": label(pto.ceiling_minutes),
             "nextEarning": {
                 "date": None if pto.next_earning is None else pto.next_earning.isoformat(),
-                "amount": label(pto.next_earning_minutes),
+                "amountLabel": label(pto.next_earning_minutes),
             },
         },
         "sick": [
@@ -85,7 +85,7 @@ def request_row(row: RequestRow) -> dict[str, Any]:
         "type": row.type,
         "startDate": row.start_date.isoformat(),
         "endDate": row.end_date.isoformat(),
-        "amount": label(row.amount_minutes),
+        "amountLabel": label(row.amount_minutes),
         "status": row.status,
         "decidedBy": row.decided_by_name,
     }
@@ -94,7 +94,7 @@ def request_row(row: RequestRow) -> dict[str, Any]:
 def _draw(draw: DrawOut) -> dict[str, Any]:
     return {
         "year": draw.year,
-        "amount": draw.amount_label,
+        "amountLabel": draw.amount_label,
         "availableBefore": draw.available_before_label,
         "availableAfter": draw.available_after_label,
     }
@@ -131,7 +131,7 @@ def check_result(preview: Preview) -> dict[str, Any]:
             [SkippedDay(day=item.day, reason=item.reason) for item in evaluation.skipped]
         ),
         "overlappingDays": [day.isoformat() for day in preview.overlapping],
-        "amount": None if amount is None else label(amount),
+        "amountLabel": None if amount is None else label(amount),
         "draws": [_draw(DrawOut.of(draw)) for draw in evaluation.draws],
         "rules": rules_out(preview.rules),
     }
@@ -146,7 +146,7 @@ def request_card_result(card: RequestCard) -> dict[str, Any]:
         "countedDays": [day.isoformat() for day in card.counted_days],
         "skippedDays": _skipped(card.skipped_days),
         "overlappingDays": [],
-        "amount": card.amount_label,
+        "amountLabel": card.amount_label,
         "draws": [_draw(draw) for draw in card.draws],
         "rules": rules_out(card.rules),
         "note": CONFIRM_REQUEST,
@@ -163,7 +163,7 @@ def decide_card_result(request_id: str, card: DecideCard) -> dict[str, Any]:
         "type": card.type,
         "startDate": card.start_date.isoformat(),
         "endDate": card.end_date.isoformat(),
-        "amount": card.amount_label,
+        "amountLabel": card.amount_label,
         "decision": card.decision,
         "rules": rules_out(card.rules),
         "note": CONFIRM_DECISION,
@@ -177,7 +177,7 @@ def cancel_card_result(request_id: str, card: CancelCard) -> dict[str, Any]:
         "startDate": card.start_date.isoformat(),
         "endDate": card.end_date.isoformat(),
         "status": card.status,
-        "amount": card.amount_label,
+        "amountLabel": card.amount_label,
         "returns": card.returns_label,
         "availableAfter": card.available_after_label,
         "rules": rules_out(card.rules),

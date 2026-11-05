@@ -77,11 +77,15 @@ LIST_DEFINITION: dict[str, Any] = {
         "List confidential cases for the HR team only. 'status' is 'open' (new and in review), "
         "'new', 'in_review', or 'closed'. Returns up to "
         f"{MAX_CASES} cases in the queue's order (new cases first, by the date HR replies by, "
-        "then the rest, oldest first): the case ID, the kind of case, the person's name, title, "
-        "and location, the date it was sent, the date HR replies by, the status, and whether a "
-        "reply is due. List them in the order given. Leaves out any case you opened yourself; you "
-        "see those with get_my_cases. It never returns what the person wrote or any summary of "
-        "it, and you can't read those. Anyone who is not on the HR team gets an error."
+        "then the rest, oldest first). When there are more than that, 'truncated' is true: a cut "
+        f"'new' or 'open' list holds the first {MAX_CASES} in the queue's order, and a cut "
+        f"'in_review' or 'closed' list holds the newest {MAX_CASES}, in the queue's order. "
+        "Each has the case ID, the kind of case, the person's name, title, and location, the date "
+        "it was sent, the date HR replies by, the status, and whether a reply is due. List them in "
+        "the order given. "
+        "Leaves out any case you opened yourself; you see those with get_my_cases. It never "
+        "returns what the person wrote or any summary of it, and you can't read "
+        "those. Anyone who is not on the HR team gets an error."
     ),
     "input_schema": {
         "type": "object",
@@ -194,10 +198,9 @@ async def run_list(raw_input: dict[str, Any], ctx: ToolContext) -> ToolOutcome:
         async with tenant_session(ctx.engine, ctx.tenant_ctx) as db:
             # A tool's session starts with the HR flag off. It is set from the server's actor.
             await set_is_hr(db, actor.is_hr_admin)
-            page = await service.queue(db, actor, parsed.status, None)
-            # HR's own case is left out, as the counts leave it out: they can't act on it.
-            items = [item for item in page.items if not item.is_own]
-            shown = items[:MAX_CASES]
+            shown, truncated = await service.cases_for_assistant(
+                db, actor, parsed.status, limit=MAX_CASES
+            )
             await record_event(
                 db,
                 tenant_id=actor.tenant_id,
@@ -212,7 +215,6 @@ async def run_list(raw_input: dict[str, Any], ctx: ToolContext) -> ToolOutcome:
         logger.warning("list_cases failed: %s", error_name(error))
         return failure("The cases couldn't be listed. Try again.", parsed.summary)
     today_iso = ctx.now.astimezone(ZoneInfo(HQ_TIMEZONE)).date().isoformat()
-    truncated = page.next_cursor is not None or len(items) > len(shown)
     data = {"cases": [_listed_case(item, today_iso) for item in shown], "truncated": truncated}
     return ToolOutcome([json_block(data)], summary=parsed.summary)
 

@@ -81,7 +81,7 @@ Each was offered as options, with a recommendation. The owner took the recommend
    - **Q&A, about 60 questions:** deterministic citation checks first, then a `claude-sonnet-5-5`
      rubric judge, accepted only if it agrees with about 30 hand grades at least 90% of the
      time.
-10. **Live evals within the $25 a month.**
+10. **Live evals, each with an estimate, a cap, and the owner's OK.**
     - A smoke run (about $1.20) before each pull request that changes a prompt, a tool, or the
       guard.
     - A full run (about $14) before the release.
@@ -114,7 +114,7 @@ Each was offered as options, with a recommendation. The owner took the recommend
 | The `citation` event carries `sectionPath` (product design) | It carries the section ID, the passage ID, the deep link, and where the marker goes | The passage panel needs the passage, and IDs like `CA-4.3` replaced paths in Phase 3 |
 | Run the production Docker image behind a local proxy (initial plan) | Run the API behind a strict nginx; Phase 8 repeats the check on the production image | The production Dockerfile is Phase 8 work, and the proxy's behavior is what's being tested |
 | `live-evals.yml`, a manual workflow, in Phase 4 (initial plan) | `make eval-live`, local only; the workflow moves to Phase 7 | It would put the API keys in GitHub's secrets, and the fixtures it records would still have to be downloaded and committed |
-| A live eval run before every PR that changes a prompt, a tool, or the guard (`CLAUDE.md`) | A smoke run for those PRs, and a full run before a release | A full run costs about $14; three in a month exceed the $25 budget. `CLAUDE.md` is reworded to match |
+| A live eval run before every PR that changes a prompt, a tool, or the guard (`CLAUDE.md`) | A smoke run for those PRs, and a full run before a release | A full run costs about $14, so it runs where it matters most, before a release. `CLAUDE.md` is reworded to match |
 | `docs/AI-GOVERNANCE.md` is written in Phase 8 | It's started in Phase 4 | The assistant ships now, and with it the EU AI Act notes in the backlog |
 
 ---
@@ -593,8 +593,7 @@ An item passes only if every line is yes. The uncited-claim count is reported on
 | One full run | about $14 |
 | A few dollars of hands-on testing | a few dollars |
 
-That's $22–24, inside $25, if the full run is the month's last big item. Voyage costs a fraction
-of a cent.
+Each run needs the owner's OK, with its estimate and cap. Voyage costs a fraction of a cent.
 
 ---
 
@@ -905,7 +904,7 @@ security reviewers are briefed on these seams:
 
 **Owner prerequisites,** before Stage 3's first smoke run:
 1. An Anthropic API key in `apps/api/.env` as `ANTHROPIC_API_KEY`.
-2. A monthly spend limit of $25 in the Claude Console (Settings, Billing, "Spend limits"). Unlike
+2. A spend limit in the Claude Console (Settings, Billing, "Spend limits"). Unlike
    Voyage's alert, it's a hard stop: at the limit, requests fail.
 
 > Source: Anthropic, "Rate limits", platform.claude.com/docs/en/api/rate-limits, "Setting your

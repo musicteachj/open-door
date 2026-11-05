@@ -204,7 +204,7 @@ test.describe('My cases, the queue, and the detail', () => {
   test('a queue row is named by its facts, in order', async ({ page }) => {
     await expect(
       state(page, 'case-queue-open').getByRole('link', {
-        name: 'Priya Raman, Visual Merchandiser, Oakland store. Harassment or discrimination. Sent Mon, Oct 26. Reply due Wed, Oct 28. New.',
+        name: /^Priya Raman\s?, Visual Merchandiser · Oakland store\s?\. Harassment or discrimination\s?\. Sent Mon, Oct 26\s?\. Reply due Wed, Oct 28\s?\. New$/,
       }),
     ).toHaveAttribute('href', '/cases/case-priya')
   })
@@ -374,7 +374,8 @@ test.describe('My cases, the queue, and the detail', () => {
       const queue = state(page, 'case-queue-open')
       await expect(queue.getByText('Person', { exact: true })).toBeHidden()
       const link = queue.getByRole('link').first()
-      await expect(link.getByText('Thu, Oct 22')).toBeHidden()
+      // Not drawn, but still in the link's name: visually hidden, not removed.
+      expect((await link.getByText('Thu, Oct 22').boundingBox())!.width).toBeLessThanOrEqual(1)
       const reply = (await link.getByText('Reply due today').boundingBox())!
       const badge = (await link.getByText('New').boundingBox())!
       expect(Math.abs(reply.y - badge.y)).toBeLessThan(12)

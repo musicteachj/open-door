@@ -1,6 +1,6 @@
 import type { QueryClient } from '@tanstack/react-query'
 import { getGetMeQueryKey, useGetMe, type Me } from '@/api/generated'
-import { resetIdentity } from '@/lib/identity'
+import { resetIdentity, type ResetReason } from '@/lib/identity'
 import { rememberPerson } from './session-status'
 
 /** The signed-in person, once /me has answered. */
@@ -17,8 +17,8 @@ export function useMe() {
  * in RequireSession matters: with data already there, nothing shows a loading state, so only the
  * reset count's `key` stops a mounted component from still watching the old person's query.
  */
-export function signInAs(queryClient: QueryClient, me: Me) {
-  resetIdentity(queryClient)
+export function signInAs(queryClient: QueryClient, me: Me, reason?: ResetReason) {
+  resetIdentity(queryClient, reason)
   queryClient.setQueryData(getGetMeQueryKey(), me)
   rememberPerson(me.id)
 }

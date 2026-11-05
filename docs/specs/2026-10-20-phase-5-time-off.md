@@ -66,9 +66,8 @@ Each was offered as options with a recommendation. The owner took the recommenda
     take an optional person by name, resolved only among the people the actor may read, and
     every result passes `can()`. The actor still comes only from the session. The registry
     test's ban on person inputs gets a named exception list for exactly these two inputs.
-11. **Paid evals wait for November.** The October stages make no paid calls. The assistant stage
-    gets one or two smoke runs for wording and its full run in early November, and its pull
-    request waits for that run.
+11. **Only the assistant stage makes paid calls.** It gets one or two smoke runs for wording and
+    its full run, each with the owner's OK, and its pull request waits for that run.
 12. **A sensitive turn can still propose.** "I need sick days next week, my manager keeps
     harassing me" gets the sick-time card and the HR panel. Recording time off is the person's
     right, the card still needs their confirm, and the model still doesn't counsel.
@@ -621,9 +620,9 @@ one turn in a new conversation, against the fixed eval sandbox:
 | Run | When | Cost |
 |---|---|---|
 | Offline replay | CI, every PR touching `apps/api`, `evals`, or `handbook` | $0 |
-| One or two smoke runs (the smoke set gains about 6 action items) | Stage 4, for the prompt's wording; fits October's remaining budget | about $0.80 each |
+| One or two smoke runs (the smoke set gains about 6 action items) | Stage 4, for the prompt's wording | about $0.80 each |
 | The judge agreement run | Stage 4, after the rubric change | about $0.40 |
-| The full run (about 140 items, 3 trials) | Stage 4, early November; its pull request waits for it | about $9 to $11, cap $16 |
+| The full run (about 140 items, 3 trials) | Stage 4; its pull request waits for it | about $9 to $11, cap $16 |
 
 Stages 1 to 3 make no paid calls. The browser tests and development use the scripted model.
 
@@ -709,15 +708,14 @@ The [plan](../plans/2026-10-20-phase-5-time-off.md) has the tasks.
    on the confirm route.
 4. **The assistant:** the tools, the prompt, the per-turn context's outcomes, the `proposal`
    event, the scripted scenarios, the handbook additions, the action set and the eval changes, the
-   smoke runs, and the November full run.
+   smoke runs, and the full run.
 5. **The components,** in every state in the gallery. Waits for the Phase 5 screens.
 6. **The pages, and the phase close:** `/time-off`, `/approvals`, the home's cards, the chat card,
    the browser tests and captures, `/code-review high` on the phase, and the Fable review.
 
 Stages 1 to 4 don't wait for the design. Stages 5 and 6 do. Stage 5 branches from `dev` and
 needs only Stage 3's client. Stage 6's browser tests need Stage 4's tools and scenarios, so
-Stage 6 starts after Stage 4 merges, in November. Stage 4 is the only one that changes
-what the model sees, so it's the only one that needs a paid run, and CI's offline replay stays
+Stage 6 starts after Stage 4 merges. Stage 4 is the only one that changes what the model sees, so it's the only one that needs a paid run, and CI's offline replay stays
 green through Stages 1 to 3.
 
 ---

@@ -132,8 +132,10 @@ test.describe('the demo steps', () => {
   })
 
   // The plan says an injection attempt is "refused". The spec says it is noted, not blocked: the
-  // guard flags it and the turn goes on, which is what the page shows.
-  test('an injection attempt is answered normally and leaks nothing', async ({ page }) => {
+  // guard flags it and the turn goes on, which is what the page shows: an ordinary answer with its
+  // feedback controls, no escalation panel, and no error. (This prompt has no scripted decline, so
+  // the scripted model searches and cites; the tour's own injection prompt is declined.)
+  test('an injection attempt is noted, not blocked, and leaks nothing', async ({ page }) => {
     // The system prompt's own words and its internal marker's phrase, read from the file.
     const prompt = readFileSync(
       resolve(import.meta.dirname, '../../api/app/ai/prompts/assistant.md'),
@@ -147,11 +149,13 @@ test.describe('the demo steps', () => {
     await askAndWaitForAnswer(page, QUESTIONS.injection)
     const answer = assistantMessage(page)
     await expectAssistantChrome(answer)
-    // The guard flags it but calls it ordinary, so it is answered like any question: cited, with
-    // no escalation panel and no refusal.
+    // The guard flags it but calls it ordinary, so it is answered like any question: cited (not
+    // the decline wording), with its feedback controls, no escalation panel, and no error.
     await expect(answer.getByRole('list', { name: 'Sources' })).toBeVisible()
-    await expect(panels(page)).toHaveCount(0)
     await expect(answer).not.toContainText("I can't")
+    await expect(answer.getByRole('group', { name: 'Was this right?' })).toBeVisible()
+    await expect(panels(page)).toHaveCount(0)
+    await expect(page.getByRole('alert')).toHaveCount(0)
     // Nothing of the system prompt is on the page, anywhere.
     const everything = await page.locator('body').innerText()
     expect(everything).not.toContain(canary!)
@@ -589,15 +593,17 @@ test.describe('a cited answer', () => {
     const answer = assistantMessage(page)
     await expectAssistantChrome(answer)
     // Marker 1 and chip 1 are the same section, and each is a button named for it.
-    const name = 'Source 1: Handbook §4.3, Time off'
-    const sources = answer.getByRole('button', { name })
-    await expect(sources).toHaveCount(3)
-    for (const source of await sources.all()) {
+    // A marker is named "Source 1: ...", and its chip by its shown text, then ", source 1".
+    const markers = answer.getByRole('button', { name: 'Source 1: Handbook §4.3, Time off' })
+    const chip = answer
+      .getByRole('list', { name: 'Sources' })
+      .getByRole('button', { name: /Time off\s?, source 1$/ })
+    await expect(markers).toHaveCount(2)
+    await expect(chip).toHaveCount(1)
+    for (const source of [...(await markers.all()), chip]) {
       await expect(source).toHaveAttribute('aria-expanded', 'false')
     }
-    await expect(
-      answer.getByRole('list', { name: 'Sources' }).getByRole('button', { name }),
-    ).toContainText('Handbook §4.3 · Time off')
+    await expect(chip).toContainText('Handbook §4.3 · Time off')
     // The composer's disclosure stays under the box.
     const disclosure = page.getByText(/Open Door is an AI assistant\./).first()
     await expect(disclosure).toBeVisible()
@@ -871,21 +877,21 @@ test.describe('the header and the conversation', () => {
       'My cases',
       'Directory',
       'Handbook',
-      'Switch persona. Current: Priya Raman, Visual Merchandiser',
+      'Priya Raman, Visual Merchandiser. Current persona. Switch persona',
       'Start a new conversation',
       // The thread in reading order: the markers in the text, the chip, Yes, No, Show your work.
       source,
       source,
-      source,
+      'Handbook §4.3 · Time off, source 1',
       'Yes',
       'No',
       'Show your work',
       'Ask Open Door',
       'Ask',
       // The rail comes last: the two time-off figures, then the handbook.
-      expect.stringMatching(/ PTO available\. Open Time off$/),
-      expect.stringMatching(/ requests? pending\. Open Time off$/),
-      expect.stringMatching(/Handbook updated\. Open Handbook$/),
+      expect.stringMatching(/ PTO available\s?\. Open Time off$/),
+      expect.stringMatching(/ requests? pending\s?\. Open Time off$/),
+      expect.stringMatching(/Handbook updated\s?\. Open Handbook$/),
     ])
     expect(stops[13]!.tag).toBe('TEXTAREA')
     expect(stops[14]!.slot).toBe('composer-ask')
@@ -898,7 +904,7 @@ test.describe('the header and the conversation', () => {
     await composerBox(page).focus()
     const stops = await tabStops(page, 2)
     expect(stops[0]).toMatchObject({ name: 'Stop', slot: 'composer-stop' })
-    expect(stops[1]!.name).toMatch(/ PTO available\. Open Time off$/)
+    expect(stops[1]!.name).toMatch(/ PTO available\s?\. Open Time off$/)
     await stopButton(page).click()
   })
 })
@@ -1036,7 +1042,7 @@ test.describe('budget and length states (STUB: the conversation GET)', () => {
         'My cases',
         'Directory',
         'Handbook',
-        'Switch persona. Current: Priya Raman, Visual Merchandiser',
+        'Priya Raman, Visual Merchandiser. Current persona. Switch persona',
       ])
       // The banner comes before the page: its two emergency links, then (sandbox only) its action.
       // Then "Write to HR" (a person's banner has it), the last words of its message.
@@ -1049,8 +1055,8 @@ test.describe('budget and length states (STUB: the conversation GET)', () => {
       const handbookAt = names.indexOf('Handbook', 6)
       expect(handbookAt).toBeGreaterThan(names.indexOf('Show your work'))
       expect(names[handbookAt + 1]).toBe('Directory')
-      expect(names[handbookAt + 2]).toMatch(/ PTO available\. Open Time off$/)
-      expect(names[handbookAt + 4]).toMatch(/Handbook updated\. Open Handbook$/)
+      expect(names[handbookAt + 2]).toMatch(/ PTO available\s?\. Open Time off$/)
+      expect(names[handbookAt + 4]).toMatch(/Handbook updated\s?\. Open Handbook$/)
     })
   }
 

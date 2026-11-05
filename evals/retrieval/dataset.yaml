@@ -3,6 +3,9 @@
 # Each question has an id, an asker, the question as an employee would type it, and one of:
 #   expect:    section IDs that genuinely answer it for that asker. Any chunk of any of them in
 #              the top 5 is a hit.
+#   expect_heading: optional, with `expect` of exactly one section: the `##` heading of the chunk
+#              that must be in the top 5. A hit then needs a chunk of that section under that
+#              heading, so another chunk of the same section can't stand in for it.
 #   must_not:  section IDs that must not appear in the top 5 (a negative).
 # `asker` is a persona (priya, marcus, dana, mateo) or an explicit state, employment_type, and
 # location. `location_code` asks about another location's policy ("what does California say?").
@@ -32,6 +35,12 @@ questions:
     asker: dana
     question: do my sick days roll over to next year
     expect: [CO-4.3]
+  # From the backlog's measured miss: the carryover passage ranked 8th fused, below the top 5.
+  - id: sick-dana-2
+    asker: dana
+    question: Colorado sick leave carry over unused payout
+    expect: [CO-4.3]
+    expect_heading: Carryover of unused sick hours
   - id: sick-co-hourly-1
     asker: { state: CO, employment_type: hourly, location: den }
     question: school closed because of a flu outbreak and I have to stay with my daughter. can I use sick time

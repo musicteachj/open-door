@@ -161,4 +161,36 @@ describe('BottomSheet', () => {
     await user.keyboard('{Escape}')
     expect(onClose).toHaveBeenCalledOnce()
   })
+
+  describe('full', () => {
+    function setupFull(onClose = vi.fn<() => void>()) {
+      render(
+        <BottomSheet onClose={onClose} full>
+          <header>
+            <SheetTitle>Turn trace</SheetTitle>
+          </header>
+        </BottomSheet>,
+      )
+      return onClose
+    }
+
+    it('covers the whole window, with no rounded top and no handle', () => {
+      setupFull()
+      const dialog = screen.getByRole('dialog', { name: 'Turn trace' })
+      expect(dialog).toHaveClass('top-0', 'rounded-none')
+      expect(handle()).toBeNull()
+    })
+
+    it('does not close on a swipe down the header, and still closes on Escape', async () => {
+      const onClose = setupFull()
+      const header = screen.getByRole('banner', { hidden: true })
+      fireEvent.pointerDown(header, { clientY: 100, pointerId: 1, button: 0 })
+      fireEvent.pointerMove(header, { clientY: 300, pointerId: 1 })
+      fireEvent.pointerUp(header, { clientY: 300, pointerId: 1 })
+      expect(onClose).not.toHaveBeenCalled()
+      expect(screen.getByRole('dialog').style.transform).toBe('')
+      await userEvent.keyboard('{Escape}')
+      expect(onClose).toHaveBeenCalledOnce()
+    })
+  })
 })

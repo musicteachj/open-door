@@ -1,0 +1,378 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="design_doc_mode" content="canvas">
+<link rel="stylesheet" href="styles.css">
+<template id="__bundler_thumbnail"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><rect width="100" height="100" fill="#59256A"></rect><g fill="none" stroke="#F5F7F8" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"><rect x="22" y="22" width="24" height="30" rx="3"></rect><rect x="54" y="22" width="24" height="16" rx="3"></rect><rect x="54" y="46" width="24" height="32" rx="3"></rect><rect x="22" y="60" width="24" height="18" rx="3"></rect></g></svg></template>
+<style>body{margin:0;background:#ECEEEF;font-family:'Instrument Sans',system-ui,sans-serif;-webkit-font-smoothing:antialiased}a{color:#59256A}a:hover{color:#461B54}.dv-turn{padding:40px 44px 32px;border-bottom:1px solid rgba(0,0,0,.08);scroll-margin-top:16px}.dv-thd{display:flex;align-items:baseline;gap:10px;margin:0 0 8px}.dv-tid{font:600 10px ui-monospace,Menlo,monospace;padding:3px 7px;background:#1a1a1a;color:#fff;border-radius:4px;text-decoration:none}.dv-tname{font:600 13px/1.2 system-ui,sans-serif;color:#1a1a1a}.dv-note{font:12px/1.55 system-ui,sans-serif;color:rgba(0,0,0,.6);max-width:1100px;margin:0 0 24px}.dv-opts{display:flex;flex-wrap:wrap;gap:56px;align-items:flex-start;max-width:2936px}.dv-opt{flex:none;display:flex;flex-direction:column;gap:12px;scroll-margin-top:16px}.dv-oid{font:600 10.5px ui-monospace,Menlo,monospace;padding:3px 7px;background:rgba(0,0,0,.08);color:#1a1a1a;border-radius:5px;text-decoration:none}.dv-olabel{display:flex;align-items:baseline;gap:8px;font:400 12px/1.3 system-ui,sans-serif;color:rgba(0,0,0,.6);max-width:1440px}.dv-card{max-width:100%;background:#fff;border:1px solid rgba(0,0,0,.08);border-radius:8px;box-shadow:0 1px 3px rgba(0,0,0,.06);overflow:hidden}.dv-opt:target .dv-oid{background:#2a78d6;color:#fff}</style>
+</helmet>
+<section class="dv-turn" id="t1" data-screen-label="13 AI Ops console">
+<div class="dv-thd"><a class="dv-tid" href="#t1">1</a><span class="dv-tname">Screen 13: The AI Ops console (as Dana Whitfield)</span></div>
+<p class="dv-note">What the assistant did on each of the tour's nine turns: outcome, safety check, tools, cited sections, tokens, cost, and timings. Never who asked by name, and never what anyone wrote. The flagged turn sits after the timed rows with its details withheld. Every figure is a plain fact in neutral ink, including the one above its target. The eval scoreboard below is the Scoreboard component, made self-contained. Frames are live: open a row to dock its trace, Escape or X to close. Every time is Mountain time. Components are in <a class="dv-oid" href="#components">components</a>.</p>
+<div class="dv-opts">
+<sc-for list="{{ frames }}" as="f" hint-placeholder-count="2">
+<div class="dv-opt" id="{{ f.id }}">
+<div class="dv-olabel"><a class="dv-oid" href="{{ f.href }}">{{ f.id }}</a>{{ f.label }}</div>
+<div class="dv-card" style="width:1442px;max-width:none">
+<div data-shot="{{ f.id }}" ref="{{ f.rootRef }}" onKeyDown="{{ f.onKey }}" style="position:relative;display:flex;height:1420px;box-sizing:border-box;background:var(--surface);font-family:var(--font-sans);color:var(--ink)">
+  <aside style="width:248px;flex:none;display:flex;flex-direction:column;padding:28px 16px 20px 20px;box-sizing:border-box">
+    <div style="display:flex;align-items:center;gap:12px;padding:0 8px 32px"><img src="assets/logo-mark.svg" width="32" height="32" alt=""><div style="display:flex;flex-direction:column;gap:2px"><span style="font-size:16px;line-height:20px;font-weight:600;letter-spacing:-0.01em">Open Door</span><span style="font-size:12px;line-height:16px;color:var(--ink-muted)">Juniper Row</span></div></div>
+    <nav aria-label="Main" style="display:flex;flex-direction:column;gap:2px">
+      <sc-for list="{{ f.nav }}" as="n" hint-placeholder-count="6">
+        <a href="{{ n.href }}" aria-current="{{ n.ac }}" style="display:flex;align-items:center;gap:12px;height:40px;padding:0 12px;border-radius:var(--radius-md);background:{{ n.bg }};color:{{ n.fg }};font-size:14px;line-height:20px;font-weight:{{ n.w }};text-decoration:none" style-hover="background:var(--neutral-hover);color:var(--ink)" style-focus="outline:2px solid var(--focus-ring);outline-offset:2px">
+          <sc-if value="{{ n.icAsk }}" hint-placeholder-val="{{ false }}"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z"></path></svg></sc-if>
+          <sc-if value="{{ n.icTime }}" hint-placeholder-val="{{ false }}"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="4" rx="2"></rect><path d="M16 2v4M8 2v4M3 10h18"></path></svg></sc-if>
+          <sc-if value="{{ n.icDir }}" hint-placeholder-val="{{ false }}"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"></path></svg></sc-if>
+          <sc-if value="{{ n.icBook }}" hint-placeholder-val="{{ false }}"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"></path><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"></path></svg></sc-if>
+          <sc-if value="{{ n.icCases }}" hint-placeholder-val="{{ false }}"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect width="8" height="5" x="14" y="17" rx="1"></rect><path d="M10 20H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h3.9a2 2 0 0 1 1.69.9l.81 1.2a2 2 0 0 0 1.67.9H20a2 2 0 0 1 2 2v2.5"></path><path d="M20 17v-2a2 2 0 1 0-4 0v2"></path></svg></sc-if>
+          <sc-if value="{{ n.icCon }}" hint-placeholder-val="{{ false }}"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect width="7" height="9" x="3" y="3" rx="1"></rect><rect width="7" height="5" x="14" y="3" rx="1"></rect><rect width="7" height="9" x="14" y="12" rx="1"></rect><rect width="7" height="5" x="3" y="16" rx="1"></rect></svg></sc-if>
+          <span style="flex:1">{{ n.label }}</span>
+          <sc-if value="{{ n.hasCount }}" hint-placeholder-val="{{ false }}"><span style="height:20px;padding:0 8px;box-sizing:border-box;border-radius:9999px;background:var(--primary);color:var(--on-primary);display:inline-flex;align-items:center;font-size:12px;line-height:16px;font-weight:600;font-variant-numeric:tabular-nums;white-space:nowrap"><span aria-hidden="true">{{ n.count }}</span><span style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)">, {{ n.count }} cases</span></span></sc-if>
+        </a>
+      </sc-for>
+    </nav>
+    <div style="flex:1"></div>
+    <button type="button" aria-haspopup="menu" aria-expanded="false" style="display:flex;align-items:center;gap:12px;width:100%;min-height:61px;padding:12px 8px;border:0;border-top:1px solid var(--border);background:transparent;font-family:inherit;text-align:left;cursor:pointer;color:var(--ink)" style-hover="background:var(--neutral-hover)" style-focus="outline:2px solid var(--focus-ring);outline-offset:2px">
+      <span style="width:36px;height:36px;flex:none;border-radius:9999px;background:var(--primary-tint);display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:600">DW</span>
+      <span style="flex:1;min-width:0;display:flex;flex-direction:column;gap:2px"><span style="font-size:14px;line-height:18px;font-weight:600">Dana Whitfield</span><span style="font-size:12px;line-height:16px;color:var(--ink-muted)">HR Business Partner</span></span>
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="flex:none;color:var(--ink-muted)"><path d="m7 15 5 5 5-5M7 9l5-5 5 5"></path></svg>
+    </button>
+  </aside>
+
+  <main style="flex:1;min-width:0;display:flex;padding:12px 12px 12px 0;box-sizing:border-box">
+    <div style="flex:1;min-width:0;display:flex;background:var(--surface-raised);border:1px solid var(--border);border-radius:var(--radius-xl);overflow:hidden">
+      <div data-scroller="true" style="position:relative;flex:1;min-width:0;overflow-y:auto">
+        <div style="padding:40px 48px 72px">
+          <div style="max-width:1080px">
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:24px">
+              <h1 style="margin:0;font-size:var(--text-h1);line-height:var(--leading-h1);font-weight:600;letter-spacing:var(--tracking-h1)">AI Ops console</h1>
+              <span style="display:inline-flex;align-items:center;gap:8px;height:28px;padding:0 12px;border:1px solid var(--border);border-radius:9999px;font-size:12px;line-height:16px;color:var(--ink-muted);font-variant-numeric:tabular-nums;white-space:nowrap"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><path d="M12 6v6l4 2"></path></svg>{{ f.reset }}</span>
+            </div>
+            <p style="margin:8px 0 0;max-width:680px;font-size:16px;line-height:26px;color:var(--ink-muted);text-wrap:pretty">What the assistant did on every turn in this sandbox. It never shows who asked or what they wrote.</p>
+
+            <section aria-labelledby="{{ f.id }}-sbx" aria-busy="{{ f.busy }}" style="margin-top:40px">
+              <h2 id="{{ f.id }}-sbx" style="margin:0;font-size:var(--text-h2);line-height:var(--leading-h2);font-weight:600">This sandbox</h2>
+
+              <sc-if value="{{ f.isError }}" hint-placeholder-val="{{ false }}">
+                <div style="display:flex;justify-content:center;padding:96px 0 104px;margin-top:16px;border:1px solid var(--border);border-radius:var(--radius-lg)">
+                  <div style="max-width:480px;display:flex;flex-direction:column;align-items:center;gap:12px;text-align:center">
+                    <h3 style="margin:0;font-size:var(--text-h1);line-height:var(--leading-h1);font-weight:600;letter-spacing:var(--tracking-h1);text-wrap:balance">Something went wrong on our side.</h3>
+                    <p style="margin:0;font-size:var(--text-body);line-height:var(--leading-body);color:var(--ink-muted);text-wrap:pretty">The sandbox figures didn't load. Try again in a moment. If it keeps happening, this reference helps us find it:</p>
+                    <p style="margin:0;display:flex;align-items:center;gap:8px;font-size:var(--text-small);line-height:20px;color:var(--ink-muted)">Reference<code style="padding:2px 8px;border:1px solid var(--border);border-radius:var(--radius-xs);background:var(--surface-sunken);font-family:var(--font-mono);font-size:13px;line-height:20px;color:var(--ink);user-select:all">c41e8b07</code></p>
+                    <div style="display:flex;gap:12px;margin-top:12px"><button type="button" style="height:40px;padding:0 16px;border:0;border-radius:var(--radius-md);background:var(--primary);color:var(--on-primary);display:inline-flex;align-items:center;gap:8px;font-family:var(--font-sans);font-size:14px;font-weight:600;cursor:pointer" style-hover="background:var(--primary-hover)" style-focus="outline:2px solid var(--focus-ring);outline-offset:2px"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"></path><path d="M3 3v5h5"></path></svg>Retry</button></div>
+                  </div>
+                </div>
+              </sc-if>
+
+              <sc-if value="{{ f.notError }}" hint-placeholder-val="{{ true }}">
+                <sc-if value="{{ f.isLoading }}" hint-placeholder-val="{{ false }}"><p role="status" style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)">Loading the sandbox figures</p></sc-if>
+                <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:16px;margin-top:16px">
+                  <sc-for list="{{ f.tiles }}" as="t" hint-placeholder-count="8">
+                    <div role="group" aria-labelledby="{{ t.hid }}" style="display:flex;flex-direction:column;min-width:0;padding:18px 20px 16px;box-sizing:border-box;border:1px solid var(--border);border-radius:var(--radius-lg);background:var(--surface-raised)">
+                      <h3 id="{{ t.hid }}" style="margin:0;font-size:14px;line-height:20px;font-weight:600;text-wrap:pretty">{{ t.title }}</h3>
+                      <sc-if value="{{ t.sk }}" hint-placeholder-val="{{ false }}"><div aria-hidden="true" style="display:flex;flex-direction:column;gap:10px;margin-top:16px"><span style="height:28px;width:45%;border-radius:6px;background:var(--surface-hover)"></span><span style="height:12px;width:80%;border-radius:6px;background:var(--surface-hover)"></span><span style="height:12px;width:56%;border-radius:6px;background:var(--surface-hover)"></span></div></sc-if>
+                      <sc-if value="{{ t.none }}" hint-placeholder-val="{{ false }}"><p style="margin:12px 0 0;font-size:15px;line-height:24px;color:var(--ink-muted)">No turns yet</p></sc-if>
+                      <sc-if value="{{ t.hasFig }}" hint-placeholder-val="{{ true }}">
+                        <p style="display:flex;flex-direction:column;margin:10px 0 0">
+                          <sc-if value="{{ t.hasPre }}" hint-placeholder-val="{{ false }}"><span style="font-size:13px;line-height:20px;color:var(--ink-muted)">{{ t.pre }}</span></sc-if>
+                          <span style="font-size:32px;line-height:40px;font-weight:600;letter-spacing:-0.01em;font-variant-numeric:tabular-nums;white-space:nowrap">{{ t.fig }}</span>
+                        </p>
+                      </sc-if>
+                      <sc-for list="{{ t.lines }}" as="l" hint-placeholder-count="1"><p style="margin:0;font-size:14px;line-height:20px;font-variant-numeric:tabular-nums;text-wrap:pretty">{{ l }}</p></sc-for>
+                      <sc-if value="{{ t.hasRows }}" hint-placeholder-val="{{ false }}">
+                        <dl style="margin:10px 0 0;padding:0;display:flex;flex-direction:column">
+                          <sc-for list="{{ t.rows }}" as="r" hint-placeholder-count="3"><div style="display:flex;justify-content:space-between;gap:12px;padding:6px 0;border-top:1px solid var(--border-subtle);font-size:14px;line-height:20px"><dt>{{ r.k }}</dt><dd style="margin:0;font-weight:600;font-variant-numeric:tabular-nums">{{ r.v }}</dd></div></sc-for>
+                        </dl>
+                      </sc-if>
+                      <sc-if value="{{ t.hasClosest }}" hint-placeholder-val="{{ false }}">
+                        <div style="display:flex;flex-direction:column;margin-top:10px">
+                          <p style="margin:0;font-size:13px;line-height:20px;color:var(--ink-muted)">Search came closest with:</p>
+                          <sc-for list="{{ t.closest }}" as="c" hint-placeholder-count="1"><p style="margin:0;font-size:14px;line-height:20px;font-variant-numeric:tabular-nums">{{ c }}</p></sc-for>
+                        </div>
+                      </sc-if>
+                      <sc-if value="{{ t.hasSpend }}" hint-placeholder-val="{{ false }}"><p style="margin:10px 0 0;font-size:14px;line-height:20px;font-variant-numeric:tabular-nums">{{ t.spend }}</p></sc-if>
+                      <div style="flex:1;min-height:12px"></div>
+                      <sc-if value="{{ t.hasFoot }}" hint-placeholder-val="{{ true }}"><p style="margin:0;padding-top:10px;border-top:1px solid var(--border-subtle);font-size:13px;line-height:20px;color:var(--ink-muted);font-variant-numeric:tabular-nums">{{ t.foot }}</p></sc-if>
+                    </div>
+                  </sc-for>
+                </div>
+
+                <sc-if value="{{ f.isEmpty }}" hint-placeholder-val="{{ false }}">
+                  <div style="display:flex;flex-direction:column;align-items:flex-start;gap:16px;margin-top:40px;padding:32px 0 8px;border-top:1px solid var(--border)">
+                    <p style="margin:0;font-size:var(--text-body);line-height:var(--leading-body);color:var(--ink);text-wrap:pretty">No questions yet in this sandbox. Ask something, or take the tour.</p>
+                    <div style="display:flex;flex-wrap:wrap;gap:12px">
+                      <a href="/ask" style="height:40px;padding:0 16px;box-sizing:border-box;border-radius:var(--radius-md);background:var(--primary);color:var(--on-primary);display:inline-flex;align-items:center;font-size:14px;line-height:20px;font-weight:600;white-space:nowrap;text-decoration:none" style-hover="background:var(--primary-hover);color:var(--on-primary)" style-focus="outline:2px solid var(--focus-ring);outline-offset:2px">Ask a question</a>
+                      <button type="button" style="height:40px;padding:0 16px;border:1px solid var(--border-strong);border-radius:var(--radius-md);background:var(--surface-raised);color:var(--ink);font-family:var(--font-sans);font-size:14px;line-height:20px;font-weight:600;white-space:nowrap;cursor:pointer" style-hover="background:var(--surface-hover);border-color:var(--border-strong-hover)" style-focus="outline:2px solid var(--focus-ring);outline-offset:2px">Take the tour</button>
+                    </div>
+                  </div>
+                </sc-if>
+
+                <sc-if value="{{ f.hasTable }}" hint-placeholder-val="{{ true }}">
+                  <div style="margin-top:40px">
+                    <sc-if value="{{ f.isData }}" hint-placeholder-val="{{ true }}"><h3 id="{{ f.id }}-day" data-turns="true" style="margin:0 0 12px;font-size:15px;line-height:22px;font-weight:600;font-variant-numeric:tabular-nums">Monday, October 26 · 9 turns</h3></sc-if>
+                    <div role="table" aria-labelledby="{{ f.id }}-day" aria-label="{{ f.tableLabel }}" style="font-size:14px;line-height:20px;font-variant-numeric:tabular-nums">
+                      <div role="rowgroup">
+                        <div role="row" style="display:grid;grid-template-columns:{{ f.cols }};column-gap:12px;align-items:end;padding:8px 12px;border-bottom:1px solid var(--border);font-size:13px;line-height:18px;color:var(--ink-muted)">
+                          <span role="columnheader">Time</span><span role="columnheader">Asked by</span><span role="columnheader">Outcome</span><span role="columnheader">Safety check</span><span role="columnheader" style="text-align:right">Tools</span><span role="columnheader">Cited</span><span role="columnheader" style="text-align:right">Cost</span><span role="columnheader" style="text-align:right">First token</span>
+                        </div>
+                      </div>
+                      <div role="rowgroup">
+                        <sc-if value="{{ f.isLoading }}" hint-placeholder-val="{{ false }}">
+                          <sc-for list="{{ f.skRows }}" as="s" hint-placeholder-count="6">
+                            <div role="row" aria-hidden="true" style="display:grid;grid-template-columns:{{ f.cols }};column-gap:12px;align-items:center;height:64px;padding:0 12px;box-sizing:border-box;border-bottom:1px solid var(--border-subtle)">
+                              <span style="height:12px;width:70%;border-radius:6px;background:var(--surface-hover)"></span><span style="height:12px;width:75%;border-radius:6px;background:var(--surface-hover)"></span><span style="height:12px;width:60%;border-radius:6px;background:var(--surface-hover)"></span><span style="height:12px;width:55%;border-radius:6px;background:var(--surface-hover)"></span><span style="justify-self:end;height:12px;width:16px;border-radius:6px;background:var(--surface-hover)"></span><span style="height:12px;width:40%;border-radius:6px;background:var(--surface-hover)"></span><span style="justify-self:end;height:12px;width:44px;border-radius:6px;background:var(--surface-hover)"></span><span style="justify-self:end;height:12px;width:32px;border-radius:6px;background:var(--surface-hover)"></span>
+                            </div>
+                          </sc-for>
+                        </sc-if>
+                        <sc-for list="{{ f.rows }}" as="r" hint-placeholder-count="8">
+                          <div role="row" onClick="{{ r.open }}" style="display:grid;grid-template-columns:{{ f.cols }};column-gap:12px;align-items:start;min-height:56px;padding:10px 12px;box-sizing:border-box;border-bottom:1px solid var(--border-subtle);background:{{ r.bg }};box-shadow:{{ r.bar }};outline:{{ r.ring }};outline-offset:-2px;cursor:pointer" style-hover="background:var(--primary-tint)">
+                            <span role="cell"><button type="button" data-turn="{{ r.id }}" aria-label="{{ r.aria }}" aria-expanded="{{ r.exp }}" aria-controls="{{ r.ctl }}" onFocus="{{ r.onFocus }}" onBlur="{{ r.onBlur }}" style="padding:0;border:0;background:transparent;font-family:var(--font-sans);font-size:14px;line-height:20px;font-weight:600;color:var(--ink);font-variant-numeric:tabular-nums;white-space:nowrap;cursor:pointer;outline:0">{{ r.time }}</button></span>
+                            <span role="cell" style="display:flex;flex-direction:column;min-width:0"><span>{{ r.who }}</span><span style="font-size:13px;line-height:18px;color:var(--ink-muted)">{{ r.loc }}</span></span>
+                            <span role="cell" style="display:flex;flex-direction:column;align-items:flex-start;gap:4px;min-width:0">
+                              <span style="display:inline-flex;align-items:center;gap:6px;height:24px;padding:0 8px;box-sizing:border-box;border:1px solid var(--border-strong);border-radius:var(--radius-xs);background:var(--surface-raised);font-size:13px;line-height:20px;font-weight:500;white-space:nowrap"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex:none;color:var(--ink-muted)"><path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z"></path></svg>{{ r.outcome }}</span>
+                              <sc-if value="{{ r.card }}" hint-placeholder-val="{{ false }}"><span style="font-size:13px;line-height:18px;color:var(--ink-muted)">Offered a card</span></sc-if>
+                            </span>
+                            <span role="cell" style="display:flex;flex-direction:column;align-items:flex-start;gap:4px;min-width:0">
+                              <span style="line-height:24px">Ordinary</span>
+                              <sc-if value="{{ r.inj }}" hint-placeholder-val="{{ false }}"><span style="display:inline-flex;flex-direction:{{ f.tagDir }};column-gap:4px;box-sizing:border-box;padding:1px 6px;border:1px solid var(--border-strong);border-radius:var(--radius-xs);background:var(--surface-sunken);font-size:12px;line-height:18px;color:var(--ink-muted);white-space:nowrap"><span>Possible prompt</span><span>injection</span></span></sc-if>
+                            </span>
+                            <span role="cell" style="text-align:right;line-height:24px">{{ r.tools }}</span>
+                            <span role="cell" style="line-height:24px"><sc-if value="{{ r.hasCited }}" hint-placeholder-val="{{ true }}">{{ r.cited }}</sc-if><sc-if value="{{ r.noCited }}" hint-placeholder-val="{{ false }}"><span aria-hidden="true" style="color:var(--ink-muted)">–</span><span style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)">None</span></sc-if></span>
+                            <span role="cell" style="text-align:right;line-height:24px">{{ r.cost }}</span>
+                            <span role="cell" style="text-align:right;line-height:24px;white-space:nowrap">{{ r.ft }}</span>
+                          </div>
+                        </sc-for>
+                        <sc-if value="{{ f.isData }}" hint-placeholder-val="{{ true }}">
+                          <div role="row" style="border-bottom:1px solid var(--border-subtle)">
+                            <div role="cell" style="display:flex;flex-direction:column;gap:4px;padding:16px 12px;background:var(--confidential-tint)">
+                              <p style="display:flex;align-items:center;gap:10px;margin:0;font-size:15px;line-height:22px;text-wrap:pretty"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex:none;color:var(--primary)"><rect width="18" height="11" x="3" y="11" rx="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>Flagged by the safety check. Details are hidden to protect the person.</p>
+                              <p style="margin:0 0 0 26px;font-size:13px;line-height:20px;color:var(--ink-muted);text-wrap:pretty">Oct 26 · 14,800 input tokens · 550 output · $0.024 · safety check 760 ms · first token 1.9 s · total 5.2 s</p>
+                            </div>
+                          </div>
+                        </sc-if>
+                      </div>
+                    </div>
+                  </div>
+                </sc-if>
+              </sc-if>
+            </section>
+
+            <section data-sb="true" style="margin-top:64px;padding-top:40px;border-top:1px solid var(--border-subtle)">
+              <dc-import name="Scoreboard" uid="{{ f.sbid }}" hint-size="100%,1040px"></dc-import>
+            </section>
+          </div>
+        </div>
+      </div>
+
+      <sc-if value="{{ f.panelOpen }}" hint-placeholder-val="{{ false }}">
+        <aside id="{{ f.id }}-trace" aria-labelledby="{{ f.id }}-th" style="width:var(--panel-width);flex:none;display:flex;flex-direction:column;min-height:0;border-left:1px solid var(--border);background:var(--surface-raised)">
+          <header style="flex:none;display:flex;flex-direction:column;gap:6px;padding:14px 14px 18px 24px;border-bottom:1px solid var(--border-subtle)">
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:12px">
+              <span style="display:inline-flex;align-items:center;gap:8px;font-size:13px;line-height:20px;color:var(--ink-muted)"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex:none"><rect width="7" height="9" x="3" y="3" rx="1"></rect><rect width="7" height="5" x="14" y="3" rx="1"></rect><rect width="7" height="9" x="14" y="12" rx="1"></rect><rect width="7" height="5" x="3" y="16" rx="1"></rect></svg>Turn trace</span>
+              <button type="button" aria-label="Close trace" onClick="{{ f.close }}" style="width:32px;height:32px;flex:none;border:0;border-radius:var(--radius-sm);background:transparent;color:var(--ink-muted);display:flex;align-items:center;justify-content:center;cursor:pointer" style-hover="background:var(--neutral-hover);color:var(--ink)" style-focus="outline:2px solid var(--focus-ring);outline-offset:2px"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"></path></svg></button>
+            </div>
+            <h2 id="{{ f.id }}-th" tabIndex="-1" data-trace-h="true" style="margin:0;padding-right:10px;font-size:var(--text-h2);line-height:var(--leading-h2);font-weight:600;font-variant-numeric:tabular-nums;outline:0;text-wrap:pretty">{{ f.p.title }}</h2>
+          </header>
+          <div style="flex:1;min-height:0;overflow-y:auto;padding:0 24px 32px">
+            <section style="padding:16px 0;border-bottom:1px solid var(--border-subtle)">
+              <h3 style="margin:0 0 8px;font-size:13px;line-height:20px;font-weight:600">Outcome</h3>
+              <span style="display:inline-flex;align-items:center;gap:6px;height:24px;padding:0 8px;box-sizing:border-box;border:1px solid var(--border-strong);border-radius:var(--radius-xs);background:var(--surface-raised);font-size:13px;line-height:20px;font-weight:500;white-space:nowrap"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex:none;color:var(--ink-muted)"><path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z"></path></svg>{{ f.p.outcome }}</span>
+            </section>
+            <section style="padding:16px 0;border-bottom:1px solid var(--border-subtle)">
+              <h3 style="margin:0 0 8px;font-size:13px;line-height:20px;font-weight:600">Safety check</h3>
+              <p style="display:flex;align-items:center;gap:8px;margin:0;font-size:14px;line-height:20px;font-variant-numeric:tabular-nums"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex:none;color:var(--ink-muted)"><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"></path><path d="m9 12 2 2 4-4"></path></svg>Ordinary<span style="color:var(--ink-muted)">· {{ f.p.sMs }}</span></p>
+              <sc-if value="{{ f.p.inj }}" hint-placeholder-val="{{ false }}"><span style="display:inline-flex;white-space:nowrap;margin:8px 0 0 24px;padding:1px 6px;border:1px solid var(--border-strong);border-radius:var(--radius-xs);background:var(--surface-sunken);font-size:12px;line-height:18px;color:var(--ink-muted)">Possible prompt injection</span></sc-if>
+            </section>
+            <section style="padding:16px 0 12px;border-bottom:1px solid var(--border-subtle)">
+              <h3 style="margin:0 0 4px;font-size:13px;line-height:20px;font-weight:600">Tools called</h3>
+              <sc-if value="{{ f.p.noTools }}" hint-placeholder-val="{{ false }}"><p style="margin:4px 0 4px;font-size:14px;line-height:20px;color:var(--ink-muted)">None</p></sc-if>
+              <ol style="margin:0;padding:0;list-style:none">
+                <sc-for list="{{ f.p.tools }}" as="t" hint-placeholder-count="1">
+                  <li style="display:grid;grid-template-columns:16px minmax(0,1fr) auto auto;column-gap:10px;align-items:start;padding:8px 0">
+                    <span aria-hidden="true" style="display:flex;padding-top:2px;color:var(--ink-muted)">
+                      <sc-if value="{{ t.isSearch }}" hint-placeholder-val="{{ true }}"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><path d="m21 21-4.3-4.3"></path></svg></sc-if>
+                      <sc-if value="{{ t.isCal }}" hint-placeholder-val="{{ false }}"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="4" rx="2"></rect><path d="M16 2v4M8 2v4M3 10h18"></path></svg></sc-if>
+                      <sc-if value="{{ t.isDir }}" hint-placeholder-val="{{ false }}"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"></path></svg></sc-if>
+                      <sc-if value="{{ t.isCard }}" hint-placeholder-val="{{ false }}"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect width="8" height="4" x="8" y="2" rx="1"></rect><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"></path><path d="m9 14 2 2 4-4"></path></svg></sc-if>
+                    </span>
+                    <span style="display:flex;flex-direction:column;min-width:0"><span style="font-size:14px;line-height:20px">{{ t.label }}</span><code style="font-family:var(--font-mono);font-size:12px;line-height:18px;color:var(--ink-muted);overflow-wrap:anywhere">{{ t.name }}</code></span>
+                    <span style="font-size:13px;line-height:20px;color:var(--ink-muted);font-variant-numeric:tabular-nums;white-space:nowrap">{{ t.ms }}</span>
+                    <span style="display:inline-flex;align-items:center;gap:4px;font-size:13px;line-height:20px;font-weight:600;white-space:nowrap"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:var(--ink-muted)"><path d="M20 6 9 17l-5-5"></path></svg>OK</span>
+                  </li>
+                </sc-for>
+              </ol>
+            </section>
+            <section style="padding:16px 0;border-bottom:1px solid var(--border-subtle)">
+              <h3 style="margin:0 0 6px;font-size:13px;line-height:20px;font-weight:600">Sections retrieved</h3>
+              <sc-if value="{{ f.p.noSec }}" hint-placeholder-val="{{ false }}"><p style="margin:0;font-size:14px;line-height:20px;color:var(--ink-muted)">None</p></sc-if>
+              <ul role="list" style="margin:0;padding:0;list-style:none">
+                <sc-for list="{{ f.p.sec }}" as="x" hint-placeholder-count="1">
+                  <li style="display:grid;grid-template-columns:56px minmax(0,1fr) auto;column-gap:12px;align-items:baseline;padding:6px 0;border-top:1px solid var(--border-subtle);font-size:14px;line-height:20px"><span style="color:var(--ink-muted);font-variant-numeric:tabular-nums">{{ x.num }}</span><span style="text-wrap:pretty">{{ x.title }}</span><span style="font-size:13px;color:{{ x.color }};font-weight:{{ x.weight }};white-space:nowrap">{{ x.status }}</span></li>
+                </sc-for>
+              </ul>
+            </section>
+            <section style="padding:16px 0;border-bottom:1px solid var(--border-subtle)">
+              <h3 style="margin:0 0 6px;font-size:13px;line-height:20px;font-weight:600">Card offered</h3>
+              <p style="margin:0;font-size:14px;line-height:20px">{{ f.p.card }}</p>
+            </section>
+            <sc-for list="{{ f.p.groups }}" as="g" hint-placeholder-count="4">
+              <section style="padding:16px 0;border-bottom:1px solid var(--border-subtle)">
+                <h3 style="margin:0 0 4px;font-size:13px;line-height:20px;font-weight:600">{{ g.h }}</h3>
+                <sc-if value="{{ g.hasBig }}" hint-placeholder-val="{{ false }}"><p style="margin:0;font-size:15px;line-height:22px;font-weight:600;font-variant-numeric:tabular-nums">{{ g.big }}</p></sc-if>
+                <dl style="margin:0;padding:0">
+                  <sc-for list="{{ g.rows }}" as="kv" hint-placeholder-count="3">
+                    <div style="display:grid;grid-template-columns:104px minmax(0,1fr);column-gap:12px;padding:3px 0;font-size:14px;line-height:20px"><dt style="color:var(--ink-muted)">{{ kv.k }}</dt><dd style="margin:0;font-variant-numeric:tabular-nums;overflow-wrap:anywhere"><sc-if value="{{ kv.mono }}" hint-placeholder-val="{{ false }}"><code style="font-family:var(--font-mono);font-size:13px">{{ kv.v }}</code></sc-if><sc-if value="{{ kv.plain }}" hint-placeholder-val="{{ true }}">{{ kv.v }}</sc-if></dd></div>
+                  </sc-for>
+                </dl>
+                <sc-if value="{{ g.hasNote }}" hint-placeholder-val="{{ false }}"><p style="margin:4px 0 0;font-size:13px;line-height:20px;color:var(--ink-muted)">{{ g.note }}</p></sc-if>
+              </section>
+            </sc-for>
+          </div>
+        </aside>
+      </sc-if>
+    </div>
+  </main>
+</div>
+</div>
+</div>
+</sc-for>
+</div>
+</section>
+<section class="dv-turn" id="components" data-screen-label="13 Console components">
+<div class="dv-thd"><a class="dv-tid" href="#components">C</a><span class="dv-tname">Console components</span></div>
+<p class="dv-note">The component card, rendered from components/console/ (ConsoleTile, TurnTable, TracePanel, Scoreboard). Every state shown is a real prop or data-state on the component.</p>
+<iframe src="components/console/console.card.html" title="Console components" ref="{{ cardRef }}" style="width:1180px;height:3200px;border:1px solid rgba(0,0,0,.08);border-radius:8px;background:#fff"></iframe>
+</section>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  state = { fs: {} };
+  roots = {};
+  componentWillUnmount() { clearInterval(this.fitTimer); }
+  cardRef = el => {
+    if (!el || el === this.cardEl) return;
+    this.cardEl = el;
+    const fit = () => { try { const doc = el.contentDocument; if (!doc || !doc.body) return; const h = doc.body.scrollHeight; if (h > 200 && Math.abs(el.offsetHeight - h - 24) > 4) el.style.height = (h + 24) + 'px'; } catch (err) {} };
+    el.addEventListener('load', fit);
+    let n = 0; clearInterval(this.fitTimer);
+    this.fitTimer = setInterval(() => { fit(); if (++n > 40) clearInterval(this.fitTimer); }, 250);
+  };
+  data() {
+    if (this._d) return this._d;
+    const M = [['Model', 'claude-opus-5-5', 1], ['Effort', 'low'], ['Prompt', '2026-11.2', 1], ['Tools', '2026-11.2', 1]];
+    const tool = (label, name, ms) => ({ label, name, ms });
+    const T = [
+      { id: 'i1038', time: '10:38 AM', who: 'Employee', loc: 'Oakland, CA', inj: true, cited: '', cost: '$0.011', ft: '1.1 s', sMs: '980 ms', tools: [], sec: [], card: 'None', tok: ['6,900 (5,120 from cache)', '120', '0'], tm: ['980 ms', '1.1 s', '2.0 s'] },
+      { id: 'b1038', time: '10:38 AM', who: 'Employee', loc: 'Oakland, CA', cited: '', cost: '$0.022', ft: '1.7 s', sMs: '690 ms', tools: [tool('Looked up the directory', 'find_people', '60 ms')], sec: [], card: 'None', tok: ['13,100 (10,900 from cache)', '520', '0'], tm: ['690 ms', '1.7 s', '4.4 s'] },
+      { id: 'm1036', time: '10:36 AM', who: 'Manager', loc: 'Oakland, CA', cited: '', cost: '$0.018', ft: '1.5 s', sMs: '650 ms', tools: [tool('Checked time off', 'list_time_off_requests', '95 ms')], sec: [], card: 'None', tok: ['11,200 (9,400 from cache)', '410', '0'], tm: ['650 ms', '1.5 s', '3.6 s'] },
+      { id: 'c1035', time: '10:35 AM', who: 'Manager', loc: 'Oakland, CA', cardRow: true, cited: '4.1', cost: '$0.026', ft: '2.0 s', sMs: '720 ms', tools: [tool('Checked time off', 'list_time_off_requests', '90 ms'), tool('Prepared a confirm card', 'propose_time_off_decision', '110 ms')], sec: [['4.1', 'Paid time off', 'Cited']], card: 'Approve a request', tok: ['14,900 (12,300 from cache)', '620', '0'], tm: ['720 ms', '2.0 s', '5.4 s'] },
+      { id: 'm1035', time: '10:35 AM', who: 'Manager', loc: 'Oakland, CA', cited: '', cost: '$0.019', ft: '1.6 s', sMs: '610 ms', tools: [tool('Checked time off', 'list_time_off_requests', '70 ms')], sec: [], card: 'None', tok: ['12,000 (10,100 from cache)', '440', '0'], tm: ['610 ms', '1.6 s', '3.9 s'] },
+      { id: 'c1033', time: '10:33 AM', who: 'Employee', loc: 'Oakland, CA', cardRow: true, cited: '4.1', cost: '$0.028', ft: '2.2 s', sMs: '700 ms', tools: [tool('Checked time off', 'check_time_off', '85 ms'), tool('Prepared a confirm card', 'propose_time_off_request', '120 ms')], sec: [['4.1', 'Paid time off', 'Cited']], card: 'Book PTO', tok: ['16,240 (13,100 from cache)', '640', '0'], tm: ['700 ms', '2.2 s', '5.8 s'] },
+      { id: 'a1032', time: '10:32 AM', who: 'Employee', loc: 'Austin, TX', cited: '4.3', cost: '$0.020', ft: '1.3 s', sMs: '630 ms', tools: [tool('Searched the handbook', 'search_handbook', '400 ms')], sec: [['4.3', 'Sick leave', 'Cited'], ['4.1', 'Paid time off', 'Not cited']], card: 'None', tok: ['12,100 (10,200 from cache)', '500', '0'], tm: ['630 ms', '1.3 s', '3.8 s'] },
+      { id: 'a1031', time: '10:31 AM', who: 'Employee', loc: 'Oakland, CA', cited: 'CA-4.3', cost: '$0.021', ft: '1.4 s', sMs: '640 ms', tools: [tool('Searched the handbook', 'search_handbook', '420 ms')], sec: [['CA-4.3', 'Sick leave (California)', 'Cited'], ['4.3', 'Sick leave', 'Not cited'], ['4.1', 'Paid time off', 'Not cited']], card: 'None', tok: ['12,400 (10,200 from cache)', '470', '0'], tm: ['640 ms', '1.4 s', '4.1 s'] }
+    ];
+    const TILES = [
+      { title: 'Time to first token', pre: 'Median', fig: '1.6 s', lines: ['95th percentile 2.2 s', 'Target 3 s'], foot: '9 turns · Small sample' },
+      { title: 'Safety check time', pre: '95th percentile', fig: '980 ms', lines: ['Target 800 ms'], foot: '9 turns · Small sample' },
+      { title: 'Cost per answered question', fig: '$0.021', lines: ['8 answered questions'], spend: 'Sandbox spend $0.21 of $1.00 cap', foot: 'Small sample', emptySpend: 'Sandbox spend $0.00 of $1.00 cap' },
+      { title: 'Escalation rate', fig: '11%', lines: ['1 of 9 turns flagged by the safety check'], foot: 'Small sample' },
+      { title: 'Refusals and fallbacks', fig: '0%', lines: ['0 of 9 turns'], foot: 'Small sample' },
+      { title: 'Said the handbook doesn’t cover it', fig: '0', lines: ['of 9 turns'], closest: ['None yet'], foot: 'Small sample' },
+      { title: 'Cards confirmed by a person', rows: [['Time-off requests', '1'], ['Decisions', '1'], ['Cancellations', '0']], foot: 'From the audit log' },
+      { title: 'Possible prompt injections', fig: '1', lines: ['of 9 turns'], foot: 'Small sample' }
+    ];
+    return this._d = { T, M, TILES };
+  }
+  nav(count) {
+    const items = [['ask', 'Ask', '/ask'], ['time', 'Time off', '/time-off'], ['dir', 'Directory', '/directory'], ['book', 'Handbook', '/handbook'], ['cases', 'Cases', '/cases'], ['con', 'Console', '/console']];
+    return items.map(([k, label, href]) => {
+      const on = k === 'con';
+      return { label, href, ac: on ? 'page' : 'false', bg: on ? 'var(--primary-tint)' : 'transparent', fg: on ? 'var(--ink)' : 'var(--ink-nav)', w: on ? 600 : 500,
+        icAsk: k === 'ask', icTime: k === 'time', icDir: k === 'dir', icBook: k === 'book', icCases: k === 'cases', icCon: k === 'con',
+        hasCount: k === 'cases' && count > 0, count: count + ' new' };
+    });
+  }
+  scrollFrame(k, target) {
+    const go = () => {
+      const r = this.roots[k]; if (!r) return;
+      const sc = r.querySelector('[data-scroller]'); const el = r.querySelector(target === 'sb' ? '[data-sb]' : '[data-turns]');
+      if (!sc || !el) return;
+      let top = 0, n = el; while (n && n !== sc) { top += n.offsetTop; n = n.offsetParent; }
+      sc.scrollTop = Math.max(0, top - (target === 'sb' ? 0 : 24));
+    };
+    [80, 400, 1200, 2500].forEach(ms => setTimeout(go, ms));
+  }
+  tile(t, i, mode, k) {
+    const base = { hid: k + '-tile' + i, title: t.title, sk: false, none: false, hasFig: false, hasPre: false, pre: '', fig: '', lines: [], hasRows: false, rows: [], hasClosest: false, closest: [], hasSpend: false, spend: '', hasFoot: false, foot: '' };
+    if (mode === 'loading') return { ...base, sk: true };
+    if (mode === 'empty') return { ...base, none: true, hasSpend: !!t.emptySpend, spend: t.emptySpend || '' };
+    return { ...base, hasFig: !!t.fig, hasPre: !!t.pre, pre: t.pre || '', fig: t.fig || '', lines: t.lines || [], hasRows: !!t.rows, rows: (t.rows || []).map(([kk, v]) => ({ k: kk, v })),
+      hasClosest: !!t.closest, closest: t.closest || [], hasSpend: !!t.spend, spend: t.spend || '', hasFoot: !!t.foot, foot: t.foot || '' };
+  }
+  frame(cfg) {
+    const D = this.data(), k = cfg.id, mode = cfg.mode || 'data';
+    const cur = s => Object.assign({ panel: cfg.panel || null, foc: null }, s.fs[k] || {});
+    const st = cur(this.state);
+    const upd = o => this.setState(s => ({ fs: { ...s.fs, [k]: { ...cur(s), ...o } } }));
+    const focusSel = sel => setTimeout(() => { const r = this.roots[k]; const el = r && r.querySelector(sel); if (el) el.focus(); }, 60);
+    const close = () => { const was = cur(this.state).panel; upd({ panel: null }); if (was) focusSel('[data-turn="' + was + '"]'); };
+    const open = id => () => { upd({ panel: id }); focusSel('[data-trace-h]'); };
+    const panelOpen = mode === 'data' && !!st.panel;
+    const cols = panelOpen ? '64px minmax(0,0.9fr) minmax(0,1.1fr) minmax(0,1.4fr) 40px 56px 52px 52px' : '96px minmax(0,1.3fr) minmax(0,1.4fr) minmax(0,1.6fr) 56px 80px 72px 88px';
+    const rows = mode === 'data' ? D.T.map(t => {
+      const sel = st.panel === t.id;
+      return { id: t.id, time: t.time, who: t.who, loc: t.loc, outcome: 'Answered', card: !!t.cardRow, inj: !!t.inj, tools: String(t.tools.length), hasCited: !!t.cited, noCited: !t.cited, cited: t.cited, cost: t.cost, ft: t.ft,
+        aria: t.time + ', ' + t.who + ', ' + t.loc + ', Answered', exp: sel ? 'true' : 'false', ctl: k + '-trace',
+        bg: sel ? 'var(--primary-tint)' : 'transparent', bar: sel ? 'inset 3px 0 0 var(--primary)' : 'none', ring: st.foc === t.id ? '2px solid var(--focus-ring)' : 'none',
+        open: open(t.id),
+        onFocus: e => { let fv = true; try { fv = e.target.matches(':focus-visible'); } catch (err) {} if (fv) upd({ foc: t.id }); },
+        onBlur: () => { if (cur(this.state).foc === t.id) upd({ foc: null }); } };
+    }) : [];
+    const t = panelOpen ? D.T.find(x => x.id === st.panel) : null;
+    const p = t ? {
+      title: t.time + ' · ' + t.who + ' · ' + t.loc, outcome: 'Answered', sMs: t.sMs, inj: !!t.inj,
+      noTools: !t.tools.length, tools: t.tools.map(x => ({ ...x, isSearch: x.name === 'search_handbook', isCal: /time_off/.test(x.name) && !/^propose/.test(x.name), isDir: x.name === 'find_people', isCard: /^propose/.test(x.name) })),
+      noSec: !t.sec.length, sec: t.sec.map(([num, title, status]) => ({ num, title, status, color: status === 'Cited' ? 'var(--ink)' : 'var(--ink-muted)', weight: status === 'Cited' ? 600 : 400 })),
+      card: t.card,
+      groups: [
+        { h: 'Model', rows: D.M.map(([kk, v, m]) => ({ k: kk, v, mono: !!m, plain: !m })) },
+        { h: 'Tokens', rows: [['Input', t.tok[0]], ['Output', t.tok[1]], ['Cache writes', t.tok[2]]].map(([kk, v]) => ({ k: kk, v, mono: false, plain: true })) },
+        { h: 'Cost', hasBig: true, big: t.cost, rows: [], hasNote: true, note: 'Includes the safety check' },
+        { h: 'Timings', rows: [['Safety check', t.tm[0]], ['First token', t.tm[1]], ['Total', t.tm[2]]].map(([kk, v]) => ({ k: kk, v, mono: false, plain: true })) }
+      ].map(g => ({ hasBig: false, big: '', hasNote: false, note: '', ...g }))
+    } : { tools: [], sec: [], groups: [] };
+    return {
+      id: k, href: '#' + k, label: cfg.label, sbid: k + '-sb',
+      rootRef: el => { if (el && this.roots[k] !== el) { this.roots[k] = el; if (cfg.scroll) this.scrollFrame(k, cfg.scroll); } },
+      onKey: e => { if (e.key === 'Escape' && cur(this.state).panel) { e.preventDefault(); close(); } },
+      nav: this.nav(mode === 'empty' ? 2 : 3), reset: mode === 'empty' ? 'Sandbox resets in 24 h' : 'Sandbox resets in 23 h',
+      busy: mode === 'loading' ? 'true' : 'false', isError: mode === 'error', notError: mode !== 'error', isLoading: mode === 'loading', isEmpty: mode === 'empty', isData: mode === 'data',
+      hasTable: mode === 'data' || mode === 'loading', tableLabel: mode === 'loading' ? 'Turns' : '',
+      tiles: D.TILES.map((x, i) => this.tile(x, i, mode, k)), cols, rows, skRows: [1, 2, 3, 4, 5, 6],
+      panelOpen, close, p, tagDir: panelOpen ? 'column' : 'row'
+    };
+  }
+  renderVals() {
+    const frames = [
+      { id: 'desktop-default', label: 'The console at the top: eight tiles, each with its sample size and "Small sample" in words, then the tour’s nine turns. The flagged turn sits after the timed rows, with no time, asker, or trace.' },
+      { id: 'desktop-trace-answered', panel: 'a1031', scroll: 'turns', label: 'Trace (a), 10:31 AM: one handbook search, three sections retrieved, one cited. The panel docks at 420 px; the tiles reflow to two columns.' },
+      { id: 'desktop-trace-card', panel: 'c1033', scroll: 'turns', label: 'Trace (b), 10:33 AM: two tools in order, and the card it offered, "Book PTO".' },
+      { id: 'desktop-trace-injection', panel: 'i1038', scroll: 'turns', label: 'Trace (c), 10:38 AM: Ordinary with the quiet "Possible prompt injection" tag, 980 ms, no tools, no sections.' },
+      { id: 'desktop-scoreboard', scroll: 'sb', label: 'Scrolled to the eval scoreboard: one row per set with its lowest trial, then the history of full runs as a table. Target 85% is a plain fact.' },
+      { id: 'desktop-empty', mode: 'empty', label: 'A new sandbox: every tile says "No turns yet", spend $0.00 of $1.00. The list offers "Ask a question" and "Take the tour". The scoreboard still shows. Cases "2 new".' },
+      { id: 'desktop-loading', mode: 'loading', label: 'Loading: tile titles with static skeletons, the table header with six skeleton rows. The scoreboard is bundled, so it shows at once.' },
+      { id: 'desktop-error', mode: 'error', label: 'The sandbox figures failed: Global States’ "Something went wrong" with the reference and Retry, in place of the tiles and list. The scoreboard still shows.' }
+    ];
+    return { frames: frames.map(f => this.frame(f)), cardRef: this.cardRef };
+  }
+}
+</script>
+</body>
+</html>

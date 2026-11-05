@@ -10,6 +10,9 @@ rendered from that file. The shell's regions (sidebar, content sheet, right rail
 [`../03-assistant-home/notes.md`](../03-assistant-home/notes.md). This screen adds the persona
 menu, switching, the navigation for each persona, and the expiry banner.
 
+**"How it's built" was dropped in Phase 7 (2026-10-31).** The screenshots below still show it;
+the build leaves it out.
+
 ## Purpose
 
 Let a visitor move around the app, see which persona they are exploring as, switch to another one,
@@ -49,7 +52,8 @@ everything on the assistant home.
 ## Interactions
 
 - **Persona switcher:** opens the menu. Its accessible name always includes the full title, even
-  when the visible title is truncated.
+  when the visible title is truncated, and starts with what it shows: "Marcus Bell, Store
+  Manager. Current persona. Switch persona" (WCAG 2.5.3, Label in Name; changed 2026-11-01).
 - **Persona menu:** focus starts on the current persona, and the arrow keys move between items.
   The build adds what the sketch doesn't have: Escape and a click outside close the menu and
   return focus to the switcher (shadcn's dropdown menu does both). The personas are

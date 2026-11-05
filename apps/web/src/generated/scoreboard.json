@@ -1,0 +1,467 @@
+{
+  "schema": 1,
+  "sets": [
+    {
+      "key": "retrieval",
+      "name": "Retrieval",
+      "detail": "Handbook 2026.11.3",
+      "notRun": false,
+      "headline": {
+        "label": "Hit rate at 5",
+        "value": 1.0,
+        "display": "100%"
+      },
+      "lowest": {
+        "value": null,
+        "display": "No trials: retrieval is exact."
+      },
+      "also": [
+        "Every negative passed."
+      ],
+      "facts": {
+        "model": "voyage-4",
+        "models": null,
+        "effort": null,
+        "promptVersion": null,
+        "toolsetVersion": null,
+        "guardPromptVersion": null,
+        "judgeVersion": null,
+        "datasetSha256": {
+          "dataset.yaml": "5f1bf69cf082b08ca846055c7e17370147e5a08e739e8cea2f83541796646a4d"
+        },
+        "commit": "5d3aaf6d7398ae8d83b3892df3afbaea94859931-dirty",
+        "trials": 1,
+        "date": "2026-11-02",
+        "live": true,
+        "partial": false,
+        "handbookVersion": "2026.11.3",
+        "stamp": "20261102T201348Z",
+        "set": "retrieval"
+      }
+    },
+    {
+      "key": "qa",
+      "name": "Policy Q&A",
+      "detail": "Full run, Nov 3, 2026",
+      "notRun": false,
+      "headline": {
+        "label": "Program checks",
+        "value": 0.9906103286384976,
+        "display": "99%"
+      },
+      "lowest": {
+        "value": 0.971830985915493,
+        "display": "97%"
+      },
+      "also": [
+        "Unanswerable 97%, lowest 90%"
+      ],
+      "facts": {
+        "model": "claude-opus-5-5",
+        "models": {
+          "assistant": "claude-opus-5-5",
+          "guard": "claude-haiku-5-5",
+          "judge": "claude-sonnet-5-5"
+        },
+        "effort": "low",
+        "promptVersion": "2026-11.3",
+        "toolsetVersion": "2026-11.3",
+        "guardPromptVersion": "2026-11.1",
+        "judgeVersion": "2026-11.3",
+        "datasetSha256": {
+          "redteam.yaml": "61d1d6b185634c82cfe8bba5d874912af2401b825278059198041cc9ff415ac5",
+          "qa.yaml": "da92f0fb278d0367d79512d9b3266d05206be6b0f9546916f140ae69788ec24f",
+          "actions.yaml": "dddb4feebf93ab374085bcf8b25c00fad25e8f7b1a75ac3ae8ad400f48d82a94",
+          "smoke.yaml": "aaa69eb6be411795e4bc6ff1ab056526ecac27ba4470aa8b6278a391917075ce",
+          "judge.md": "959f77f0d809e1a3ce73c4b2be5d4e9d0fa4273322807562a72c48c5bb997b2c",
+          "groups.yaml": "0019617d8bbb1dabf4a6e32365e8534170b52c4acab854951f0acb3961ec73bf",
+          "hand-grades.yaml": "bf42a68931c4a9e2891497fa2ff01b33e6d1f0d54b45fb589bb479a7e9d2ee16",
+          "fairness-judge.md": "eb800c570ff3f86263681ab2413485298c9a12710e78b4eb249be492e1ff9882"
+        },
+        "commit": "5d3aaf6d7398ae8d83b3892df3afbaea94859931-dirty",
+        "trials": 3,
+        "date": "2026-11-03",
+        "live": true,
+        "partial": false,
+        "itemsPerTrial": 206,
+        "fairnessRegraded": {
+          "date": "2026-11-03",
+          "sha256": {
+            "graders.py": "23340b2dfe0d47d3e847ea8f1b00be981ad415f3fb0245748f1ed0728e0aa31a",
+            "groups.yaml": "1ca42ff45880bd7a9af692e62afffdcb38ade8c689ce0b63efbd1a3ed605f76c"
+          }
+        },
+        "stamp": "20261103T140018Z",
+        "set": "full"
+      }
+    },
+    {
+      "key": "quality",
+      "name": "Answer quality",
+      "detail": "Nov 3, 2026",
+      "notRun": false,
+      "headline": {
+        "label": "Judge pass rate",
+        "value": 0.732394366197183,
+        "display": "73%"
+      },
+      "lowest": {
+        "value": 0.6901408450704225,
+        "display": "69%"
+      },
+      "also": [
+        "Target 85%",
+        "16.3 uncited claims",
+        "Judge agreement with the hand grades 91.2%"
+      ],
+      "facts": {
+        "model": "claude-opus-5-5",
+        "models": {
+          "assistant": "claude-opus-5-5",
+          "guard": "claude-haiku-5-5",
+          "judge": "claude-sonnet-5-5"
+        },
+        "effort": "low",
+        "promptVersion": "2026-11.3",
+        "toolsetVersion": "2026-11.3",
+        "guardPromptVersion": "2026-11.1",
+        "judgeVersion": "2026-11.3",
+        "datasetSha256": {
+          "redteam.yaml": "61d1d6b185634c82cfe8bba5d874912af2401b825278059198041cc9ff415ac5",
+          "qa.yaml": "da92f0fb278d0367d79512d9b3266d05206be6b0f9546916f140ae69788ec24f",
+          "actions.yaml": "dddb4feebf93ab374085bcf8b25c00fad25e8f7b1a75ac3ae8ad400f48d82a94",
+          "smoke.yaml": "aaa69eb6be411795e4bc6ff1ab056526ecac27ba4470aa8b6278a391917075ce",
+          "judge.md": "959f77f0d809e1a3ce73c4b2be5d4e9d0fa4273322807562a72c48c5bb997b2c",
+          "groups.yaml": "0019617d8bbb1dabf4a6e32365e8534170b52c4acab854951f0acb3961ec73bf",
+          "hand-grades.yaml": "bf42a68931c4a9e2891497fa2ff01b33e6d1f0d54b45fb589bb479a7e9d2ee16",
+          "fairness-judge.md": "eb800c570ff3f86263681ab2413485298c9a12710e78b4eb249be492e1ff9882"
+        },
+        "commit": "5d3aaf6d7398ae8d83b3892df3afbaea94859931-dirty",
+        "trials": 3,
+        "date": "2026-11-03",
+        "live": true,
+        "partial": false,
+        "itemsPerTrial": 206,
+        "fairnessRegraded": {
+          "date": "2026-11-03",
+          "sha256": {
+            "graders.py": "23340b2dfe0d47d3e847ea8f1b00be981ad415f3fb0245748f1ed0728e0aa31a",
+            "groups.yaml": "1ca42ff45880bd7a9af692e62afffdcb38ade8c689ce0b63efbd1a3ed605f76c"
+          }
+        },
+        "stamp": "20261103T140018Z",
+        "set": "full"
+      },
+      "agreementStatus": "accepted"
+    },
+    {
+      "key": "redteam",
+      "name": "Red team",
+      "detail": "Nov 3, 2026",
+      "notRun": false,
+      "headline": {
+        "label": "In every trial",
+        "value": 1.0,
+        "display": "100%"
+      },
+      "lowest": {
+        "value": 1.0,
+        "display": "100%"
+      },
+      "also": [
+        "All six groups at 100%: actions, cases, injection, private details, prompt extraction, routing."
+      ],
+      "facts": {
+        "model": "claude-opus-5-5",
+        "models": {
+          "assistant": "claude-opus-5-5",
+          "guard": "claude-haiku-5-5",
+          "judge": "claude-sonnet-5-5"
+        },
+        "effort": "low",
+        "promptVersion": "2026-11.3",
+        "toolsetVersion": "2026-11.3",
+        "guardPromptVersion": "2026-11.1",
+        "judgeVersion": "2026-11.3",
+        "datasetSha256": {
+          "redteam.yaml": "61d1d6b185634c82cfe8bba5d874912af2401b825278059198041cc9ff415ac5",
+          "qa.yaml": "da92f0fb278d0367d79512d9b3266d05206be6b0f9546916f140ae69788ec24f",
+          "actions.yaml": "dddb4feebf93ab374085bcf8b25c00fad25e8f7b1a75ac3ae8ad400f48d82a94",
+          "smoke.yaml": "aaa69eb6be411795e4bc6ff1ab056526ecac27ba4470aa8b6278a391917075ce",
+          "judge.md": "959f77f0d809e1a3ce73c4b2be5d4e9d0fa4273322807562a72c48c5bb997b2c",
+          "groups.yaml": "0019617d8bbb1dabf4a6e32365e8534170b52c4acab854951f0acb3961ec73bf",
+          "hand-grades.yaml": "bf42a68931c4a9e2891497fa2ff01b33e6d1f0d54b45fb589bb479a7e9d2ee16",
+          "fairness-judge.md": "eb800c570ff3f86263681ab2413485298c9a12710e78b4eb249be492e1ff9882"
+        },
+        "commit": "5d3aaf6d7398ae8d83b3892df3afbaea94859931-dirty",
+        "trials": 3,
+        "date": "2026-11-03",
+        "live": true,
+        "partial": false,
+        "itemsPerTrial": 206,
+        "fairnessRegraded": {
+          "date": "2026-11-03",
+          "sha256": {
+            "graders.py": "23340b2dfe0d47d3e847ea8f1b00be981ad415f3fb0245748f1ed0728e0aa31a",
+            "groups.yaml": "1ca42ff45880bd7a9af692e62afffdcb38ade8c689ce0b63efbd1a3ed605f76c"
+          }
+        },
+        "stamp": "20261103T140018Z",
+        "set": "full"
+      }
+    },
+    {
+      "key": "actions",
+      "name": "Actions",
+      "detail": "Nov 3, 2026",
+      "notRun": false,
+      "headline": {
+        "label": "Pass rate",
+        "value": 1.0,
+        "display": "100%"
+      },
+      "lowest": {
+        "value": 1.0,
+        "display": "100%"
+      },
+      "also": [
+        "Numbers match the engine 100%"
+      ],
+      "facts": {
+        "model": "claude-opus-5-5",
+        "models": {
+          "assistant": "claude-opus-5-5",
+          "guard": "claude-haiku-5-5",
+          "judge": "claude-sonnet-5-5"
+        },
+        "effort": "low",
+        "promptVersion": "2026-11.3",
+        "toolsetVersion": "2026-11.3",
+        "guardPromptVersion": "2026-11.1",
+        "judgeVersion": "2026-11.3",
+        "datasetSha256": {
+          "redteam.yaml": "61d1d6b185634c82cfe8bba5d874912af2401b825278059198041cc9ff415ac5",
+          "qa.yaml": "da92f0fb278d0367d79512d9b3266d05206be6b0f9546916f140ae69788ec24f",
+          "actions.yaml": "dddb4feebf93ab374085bcf8b25c00fad25e8f7b1a75ac3ae8ad400f48d82a94",
+          "smoke.yaml": "aaa69eb6be411795e4bc6ff1ab056526ecac27ba4470aa8b6278a391917075ce",
+          "judge.md": "959f77f0d809e1a3ce73c4b2be5d4e9d0fa4273322807562a72c48c5bb997b2c",
+          "groups.yaml": "0019617d8bbb1dabf4a6e32365e8534170b52c4acab854951f0acb3961ec73bf",
+          "hand-grades.yaml": "bf42a68931c4a9e2891497fa2ff01b33e6d1f0d54b45fb589bb479a7e9d2ee16",
+          "fairness-judge.md": "eb800c570ff3f86263681ab2413485298c9a12710e78b4eb249be492e1ff9882"
+        },
+        "commit": "5d3aaf6d7398ae8d83b3892df3afbaea94859931-dirty",
+        "trials": 3,
+        "date": "2026-11-03",
+        "live": true,
+        "partial": false,
+        "itemsPerTrial": 206,
+        "fairnessRegraded": {
+          "date": "2026-11-03",
+          "sha256": {
+            "graders.py": "23340b2dfe0d47d3e847ea8f1b00be981ad415f3fb0245748f1ed0728e0aa31a",
+            "groups.yaml": "1ca42ff45880bd7a9af692e62afffdcb38ade8c689ce0b63efbd1a3ed605f76c"
+          }
+        },
+        "stamp": "20261103T140018Z",
+        "set": "full"
+      }
+    },
+    {
+      "key": "fairness",
+      "name": "Fairness",
+      "detail": "Nov 3, 2026",
+      "notRun": false,
+      "headline": {
+        "label": "Groups consistent",
+        "value": 0.9166666666666666,
+        "display": "11 of 12"
+      },
+      "lowest": {
+        "value": null,
+        "display": "Groups are judged across all trials."
+      },
+      "also": [
+        "1 identity assumption in the worst trial",
+        "Judge equivalence 85% (lowest trial 82%)",
+        "Groups consistent by attribute: name 100%, parent 100%, religion 0%, age 100%, origin 100%, spouse 100%.",
+        "Graded again from the saved run on 2026-11-03; no new model calls"
+      ],
+      "facts": {
+        "model": "claude-opus-5-5",
+        "models": {
+          "assistant": "claude-opus-5-5",
+          "guard": "claude-haiku-5-5",
+          "judge": "claude-sonnet-5-5"
+        },
+        "effort": "low",
+        "promptVersion": "2026-11.3",
+        "toolsetVersion": "2026-11.3",
+        "guardPromptVersion": "2026-11.1",
+        "judgeVersion": "2026-11.3",
+        "datasetSha256": {
+          "redteam.yaml": "61d1d6b185634c82cfe8bba5d874912af2401b825278059198041cc9ff415ac5",
+          "qa.yaml": "da92f0fb278d0367d79512d9b3266d05206be6b0f9546916f140ae69788ec24f",
+          "actions.yaml": "dddb4feebf93ab374085bcf8b25c00fad25e8f7b1a75ac3ae8ad400f48d82a94",
+          "smoke.yaml": "aaa69eb6be411795e4bc6ff1ab056526ecac27ba4470aa8b6278a391917075ce",
+          "judge.md": "959f77f0d809e1a3ce73c4b2be5d4e9d0fa4273322807562a72c48c5bb997b2c",
+          "groups.yaml": "0019617d8bbb1dabf4a6e32365e8534170b52c4acab854951f0acb3961ec73bf",
+          "hand-grades.yaml": "bf42a68931c4a9e2891497fa2ff01b33e6d1f0d54b45fb589bb479a7e9d2ee16",
+          "fairness-judge.md": "eb800c570ff3f86263681ab2413485298c9a12710e78b4eb249be492e1ff9882"
+        },
+        "commit": "5d3aaf6d7398ae8d83b3892df3afbaea94859931-dirty",
+        "trials": 3,
+        "date": "2026-11-03",
+        "live": true,
+        "partial": false,
+        "itemsPerTrial": 206,
+        "fairnessRegraded": {
+          "date": "2026-11-03",
+          "sha256": {
+            "graders.py": "23340b2dfe0d47d3e847ea8f1b00be981ad415f3fb0245748f1ed0728e0aa31a",
+            "groups.yaml": "1ca42ff45880bd7a9af692e62afffdcb38ade8c689ce0b63efbd1a3ed605f76c"
+          }
+        },
+        "stamp": "20261103T140018Z",
+        "set": "full"
+      }
+    },
+    {
+      "key": "escalation",
+      "name": "Escalation",
+      "detail": "Oct 27, 2026",
+      "notRun": false,
+      "headline": {
+        "label": "Crisis recall",
+        "value": 1.0,
+        "display": "100%"
+      },
+      "lowest": {
+        "value": 1.0,
+        "display": "100%"
+      },
+      "also": [
+        "Sensitive recall 100%",
+        "Ordinary questions offered no case 100%"
+      ],
+      "facts": {
+        "model": "claude-haiku-5-5",
+        "models": {
+          "guard": "claude-haiku-5-5"
+        },
+        "effort": null,
+        "promptVersion": null,
+        "toolsetVersion": null,
+        "guardPromptVersion": "2026-11.1",
+        "judgeVersion": null,
+        "datasetSha256": {
+          "messages.yaml": "ecf9d6dc7073d162874f70b2a73faa9d4c9b1e8b6a62ccf6f58eef94b0f69008"
+        },
+        "commit": "1d18e453d3d9aa9722edba74b7ed429d255a5b2b-dirty",
+        "trials": 3,
+        "date": "2026-10-27",
+        "live": true,
+        "partial": false,
+        "scoredHalf": "held_out",
+        "stamp": "20261027T234352Z",
+        "set": "escalation"
+      }
+    },
+    {
+      "key": "case-summary",
+      "name": "Case summary",
+      "detail": "Oct 30, 2026",
+      "notRun": false,
+      "headline": {
+        "label": "Passed every check",
+        "value": 1.0,
+        "display": "22 of 22"
+      },
+      "lowest": {
+        "value": 1.0,
+        "display": "22 of 22"
+      },
+      "also": [
+        "By the judge: 22 of 22"
+      ],
+      "facts": {
+        "model": "claude-opus-5-5",
+        "models": {
+          "summary": "claude-opus-5-5",
+          "judge": "claude-sonnet-5-5"
+        },
+        "effort": null,
+        "promptVersion": "2026-11.2",
+        "toolsetVersion": null,
+        "guardPromptVersion": null,
+        "judgeVersion": "2026-11.1",
+        "datasetSha256": {
+          "narratives.yaml": "337d3ec791ad7ac94945753ae59df9e1408d48773311fa407767a06877851474"
+        },
+        "commit": "e33a2f7dcdc7918ce3ab49446aacd40843a84ead-dirty",
+        "trials": 3,
+        "date": "2026-10-30",
+        "live": true,
+        "partial": false,
+        "stamp": "20261030T213352Z",
+        "set": "case-summary"
+      }
+    }
+  ],
+  "history": [
+    {
+      "stamp": "20261019T152212Z",
+      "date": "Oct 19, 2026, 15:22 UTC",
+      "model": "claude-opus-5-5",
+      "qa": "100%",
+      "unanswerable": "100%",
+      "redteam": "100%",
+      "actions": null,
+      "judge": "74%",
+      "cost": "$8.02"
+    },
+    {
+      "stamp": "20261025T160449Z",
+      "date": "Oct 25, 2026, 16:04 UTC",
+      "model": "claude-opus-5-5",
+      "qa": "100%",
+      "unanswerable": "100%",
+      "redteam": "97%",
+      "actions": "96%",
+      "judge": "72%",
+      "cost": "$10.39"
+    },
+    {
+      "stamp": "20261029T142328Z",
+      "date": "Oct 29, 2026, 14:23 UTC",
+      "model": "claude-opus-5-5",
+      "qa": "97%",
+      "unanswerable": "93%",
+      "redteam": "100%",
+      "actions": "99%",
+      "judge": "68%",
+      "cost": "$10.93"
+    },
+    {
+      "stamp": "20261103T140018Z",
+      "date": "Nov 3, 2026, 14:00 UTC",
+      "model": "claude-opus-5-5",
+      "qa": "99%",
+      "unanswerable": "97%",
+      "redteam": "100%",
+      "actions": "100%",
+      "judge": "73%",
+      "cost": "$15.20"
+    },
+    {
+      "stamp": "20261103T184543Z",
+      "date": "Nov 3, 2026, 18:45 UTC",
+      "model": "claude-sonnet-5-5",
+      "qa": "98%",
+      "unanswerable": "100%",
+      "redteam": "99%",
+      "actions": "97%",
+      "judge": "83%",
+      "cost": "$9.44"
+    }
+  ]
+}

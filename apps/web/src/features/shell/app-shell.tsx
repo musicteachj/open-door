@@ -11,7 +11,7 @@ import { Toast, ToastProvider, ToastViewport } from '@/components/ui/toast'
 import { navFor } from '@/app/nav'
 import { useMe } from '@/app/useMe'
 import { useTimeOffSummary } from '@/features/time-off/use-time-off'
-import { getGetHandbookQueryKey, useGetCaseCounts, useGetHandbook } from '@/api/generated'
+import { useGetCaseCounts } from '@/api/generated'
 import {
   ConversationSourcePanel,
   NARROW_WINDOW_QUERY,
@@ -23,12 +23,20 @@ import { cn } from '@/lib/utils'
 import { formatMonthDay, formatTimeLeft, isExpiringSoon } from '@/lib/time'
 import { useExpiryBannerDismissal } from './expiry-banner-dismissal'
 import { casesGlance, timeOffGlance } from './glance'
+import { useHandbookGlance } from './use-handbook-glance'
 import { useIdentityActions } from './use-identity-actions'
 import { ShellBannerSlot } from './shell-slots'
 import { useShellLayout } from './shell-layout-store'
 import { useNow } from './use-now'
 import { useScrollsMore } from './use-scrolls-more'
 import { useShellToast } from './toast-store'
+import { TourMenuItems } from '@/components/tour/tour-menu-items'
+import { TourStartDialog } from '@/components/tour/tour-start-dialog'
+import { TourRunner } from '@/features/tour/tour-runner'
+import { useTourStore } from '@/features/tour/store'
+import { TOUR } from '@/features/tour/script'
+import { useStartTour } from '@/features/tour/use-start-tour'
+import { SANDBOX_START_FAILED } from '@/lib/sandbox-copy'
 
 // The signed-in frame, from docs/design/screens/02-app-shell and 03-assistant-home: a sidebar, a
 // white content sheet (the page's one <main>), and a right rail. Below 760 px the sidebar becomes
@@ -36,8 +44,6 @@ import { useShellToast } from './toast-store'
 // the content. It renders between RequireSession and the routes, so the reset key remounts it.
 
 const COMPANY = 'Juniper Row'
-// "How it's built" sits at the bottom of the sidebar, apart from the rest of the navigation.
-const BUILT_PATH = '/how-its-built'
 // The only page with the right rail (the sandbox status and the at-a-glance list).
 const RAIL_PATH = '/ask'
 const PERSONA_OPTIONS = PERSONAS.map(({ key, name, title }) => ({ key, name, title }))
@@ -51,6 +57,30 @@ export function AppShell() {
 function Frame({ me }: { me: NonNullable<ReturnType<typeof useMe>['data']> }) {
   const actions = useIdentityActions()
   const now = useNow()
+  // The persona menu is open when the visitor opens it, or when the tour's end card asks to.
+  const [menuOpen, setMenuOpen] = useState(false)
+  // Narrow reads, so a change to the tour (a chip sent, a step entered) does not render the frame.
+  const tourStep = useTourStore((s) => (s.started ? s.step + 1 : undefined))
+  const tourActive = useTourStore((s) => s.active)
+  const resumeTour = useTourStore((s) => s.resume)
+  const startDialogOpen = useTourStore((s) => s.startDialogOpen)
+  const setStartDialogOpen = useTourStore((s) => s.setStartDialogOpen)
+  const startTour = useStartTour()
+  const startFailed = startTour.failed
+  // One identity error at a time, as on the landing page: using the menu again forgets a failed
+  // tour start, and the menu's own failure (`actions.failure`) is replaced by its next action.
+  const { dismissError } = startTour
+  // Only an action that started forgets it: one refused (another identity change is in flight)
+  // returns false and leaves the error where it is.
+  const fresh = <Args extends unknown[]>(run: (...args: Args) => boolean | void) => {
+    return (...args: Args) => {
+      if (run(...args) !== false) dismissError()
+    }
+  }
+  // A failed start leaves the dialog and says so beside the menu, where Retry is.
+  useEffect(() => {
+    if (startFailed) setStartDialogOpen(false)
+  }, [startFailed, setStartDialogOpen])
   // The right rail belongs to the assistant home alone. Every other page takes the sheet's width.
   const { pathname } = useLocation()
   const showRail = pathname === RAIL_PATH
@@ -71,11 +101,7 @@ function Frame({ me }: { me: NonNullable<ReturnType<typeof useMe>['data']> }) {
   const items = navFor(me)
   // Only the rail shows the figure, so only the assistant home asks. A failure leaves it out:
   // the rail is a convenience, not the page.
-  // It has its own cache entry: the Handbook page's query throws to the error page, and a failure
-  // here must not be left in that entry for the page to find.
-  const handbook = useGetHandbook({
-    query: { queryKey: [...getGetHandbookQueryKey(), 'glance'], enabled: showRail },
-  })
+  const handbook = useHandbookGlance(showRail)
   // The time-off summary feeds the rail on the assistant home and a manager's Approvals badge on
   // every page. A failure leaves the figures and the badge out, as the handbook figure is.
   const summary = useTimeOffSummary({ enabled: showRail || me.isManager })
@@ -144,47 +170,55 @@ function Frame({ me }: { me: NonNullable<ReturnType<typeof useMe>['data']> }) {
           data-more={navScrolls}
           className="flex flex-col gap-0.5 max-[760px]:flex-row max-[760px]:overflow-x-auto max-[760px]:data-[more=true]:[mask-image:linear-gradient(to_right,var(--color-ink)_calc(100%-40px),transparent)]"
         >
-          {items
-            .filter((item) => item.to !== BUILT_PATH)
-            .map((item) => (
-              <NavItem
-                key={item.to}
-                icon={item.icon}
-                label={item.label}
-                to={item.to}
-                count={
-                  item.to === '/approvals'
-                    ? (summary.data?.waitingCount ?? undefined)
-                    : item.to === '/cases' && me.isHrAdmin
-                      ? caseCounts.data?.new
-                      : undefined
-                }
-                {...(item.to === '/cases' ? { countWord: 'new', wordInBadge: true } : {})}
-                className="max-[760px]:shrink-0"
-              />
-            ))}
-        </nav>
-
-        <div className="flex-1 max-[760px]:hidden" />
-        {items
-          .filter((item) => item.to === BUILT_PATH)
-          .map((item) => (
+          {items.map((item) => (
             <NavItem
               key={item.to}
               icon={item.icon}
               label={item.label}
               to={item.to}
-              className="mb-3 max-[760px]:hidden"
+              count={
+                item.to === '/approvals'
+                  ? (summary.data?.waitingCount ?? undefined)
+                  : item.to === '/cases' && me.isHrAdmin
+                    ? caseCounts.data?.new
+                    : undefined
+              }
+              {...(item.to === '/cases' ? { countWord: 'new', wordInBadge: true } : {})}
+              className="max-[760px]:shrink-0"
             />
           ))}
+        </nav>
+
+        <div className="flex-1 max-[760px]:hidden" />
 
         <PersonaMenu
           personas={PERSONA_OPTIONS}
           currentKey={me.personaKey}
-          onSwitch={actions.switchTo}
-          onSignOut={actions.signOut}
+          onSwitch={fresh(actions.switchTo)}
+          onSignOut={fresh(actions.signOut)}
           busyLabel={actions.busyLabel}
+          open={menuOpen}
+          onOpenChange={setMenuOpen}
+          extra={
+            <TourMenuItems
+              step={tourStep}
+              total={TOUR.length}
+              active={tourActive}
+              onTake={fresh(() => setStartDialogOpen(true))}
+              onResume={fresh(resumeTour)}
+              onRestart={fresh(() => setStartDialogOpen(true))}
+            />
+          }
         />
+        {startFailed && (
+          <InlineError
+            message={SANDBOX_START_FAILED}
+            onRetry={() => {
+              actions.clearFailure()
+              startTour.start()
+            }}
+          />
+        )}
         {actions.failure && (
           <InlineError message={actions.failure.message} onRetry={actions.failure.again} />
         )}
@@ -253,18 +287,30 @@ function Frame({ me }: { me: NonNullable<ReturnType<typeof useMe>['data']> }) {
           </div>
         </div>
       </ToastProvider>
+      <TourStartDialog
+        open={startDialogOpen}
+        onOpenChange={setStartDialogOpen}
+        starting={startTour.starting}
+        blocked={startTour.blocked}
+        onStart={() => {
+          actions.clearFailure()
+          startTour.start()
+        }}
+      />
+      <TourRunner me={me} actions={actions} onChoosePersona={() => setMenuOpen(true)} />
     </div>
   )
 }
 
 /** Shows the toast only to the person it is about, whatever else is in the store. */
 function ShellToast({ personId }: { personId: string }) {
-  const { message, personId: forPerson, id, clear } = useShellToast()
+  const { message, personId: forPerson, tone, id, clear } = useShellToast()
   return (
     <>
       {message && forPerson === personId && (
         <Toast
           key={id}
+          tone={tone}
           defaultOpen
           onOpenChange={(open) => {
             if (!open) clear()

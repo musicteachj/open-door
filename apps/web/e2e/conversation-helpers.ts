@@ -1,4 +1,5 @@
 import { expect, type Locator, type Page } from '@playwright/test'
+import { focusedName } from './helpers'
 
 // Shared by conversation.spec.ts and conversation-layout.spec.ts: the steps of asking a question
 // on /ask and reading the page back. Every question goes to the real API, which answers with the
@@ -6,8 +7,11 @@ import { expect, type Locator, type Page } from '@playwright/test'
 
 /** The words a scripted question carries to pick a scenario (app/ai/scripted_scenarios.json). */
 export const QUESTIONS = {
-  /** No trigger: the default searches and cites the first passage. */
-  cited: 'How many sick days do I get?',
+  /**
+   * No trigger: the default searches and cites the first passage. Not "How many sick days do I
+   * get?", which the tour's scenario answers with a state's addendum (CA-4.3 for Priya).
+   */
+  cited: 'Tell me about sick days',
   /** Cites §3.1 instead, so a second answer cites a different section. */
   otherSection: 'scripted working note',
   decline: "Leo's home address",
@@ -227,12 +231,13 @@ export async function tabStops(page: Page, count: number) {
       await page.evaluate(() => {
         const el = document.activeElement as HTMLElement
         return {
-          name: el.getAttribute('aria-label') ?? el.textContent?.trim().slice(0, 60) ?? '',
+          name: '',
           slot: el.getAttribute('data-slot'),
           tag: el.tagName,
         }
       }),
     )
+    stops.at(-1)!.name = await focusedName(page)
   }
   return stops
 }

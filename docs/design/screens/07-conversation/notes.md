@@ -58,7 +58,7 @@
 ## Keyboard and focus
 
 - Tab order, top to bottom: sidebar nav, persona switcher, banner action (if any), "Start a new conversation", then the thread in reading order. Within the thread: links and markers inside the text, then source chips, Yes, No, "Show your work", and the work details. After the thread comes the composer, then Ask or Stop. The rail or the open panel comes last.
-- Markers and chips are buttons with `aria-expanded`. The accessible name is "Source 1: Handbook CA-4.3, California addendum".
+- Markers and chips are buttons with `aria-expanded`. A marker's accessible name is "Source 1: Handbook CA-4.3, California addendum"; a chip's starts with what it shows: "Handbook CA-4.3 · California addendum, source 1" (WCAG 2.5.3, Label in Name; changed 2026-11-01).
 - Opening the panel moves focus to the panel title (h2, `tabindex="-1"`). The panel isn't modal on desktop. Tab continues from the title to Close, the passage text, and "Open in handbook".
 - Escape anywhere in the conversation view, or the close button, closes the panel. Focus returns to the marker or chip that opened it. Pressing the same marker again also closes the panel.
 - Opening a different marker while the panel is open replaces the passage and moves focus to the title again. Focus later returns to the newest opener.

@@ -20,7 +20,6 @@ describe('NAV_ITEMS', () => {
       ['Approvals', 'manager'],
       ['Cases', 'hr'],
       ['Console', 'hr'],
-      ["How it's built", 'everyone'],
     ])
   })
 
@@ -34,12 +33,11 @@ describe('NAV_ITEMS', () => {
       '/approvals',
       '/cases',
       '/console',
-      '/how-its-built',
     ])
     for (const item of NAV_ITEMS) expect(item.icon).toBeTruthy()
   })
 
-  it('has everything but Console and How it is built available in Phase 6', () => {
+  it('has every item available, and no How it is built (dropped in Phase 7)', () => {
     expect(NAV_ITEMS.filter((i) => i.available).map((i) => i.label)).toEqual([
       'Ask',
       'Time off',
@@ -48,30 +46,25 @@ describe('NAV_ITEMS', () => {
       'Handbook',
       'Approvals',
       'Cases',
+      'Console',
     ])
-  })
-
-  it("configures How it's built, hidden until Phase 7", () => {
-    const built = NAV_ITEMS.find((i) => i.label === "How it's built")
-    expect(built).toBeDefined()
-    expect(built?.available).toBe(false)
+    expect(NAV_ITEMS.map((i) => i.label)).not.toContain("How it's built")
   })
 })
 
 describe('navFor with every item available (the 02 notes)', () => {
-  const built = "How it's built"
   const person = ['Ask', 'Time off', 'My cases', 'Directory', 'Handbook']
   it.each([
-    ['Priya', priya, [...person, built]],
-    ['Mateo', mateo, [...person, built]],
-    ['Marcus', marcus, [...person, 'Approvals', built]],
-    ['Dana', dana, ['Ask', 'Time off', 'Directory', 'Handbook', 'Cases', 'Console', built]],
+    ['Priya', priya, [...person]],
+    ['Mateo', mateo, [...person]],
+    ['Marcus', marcus, [...person, 'Approvals']],
+    ['Dana', dana, ['Ask', 'Time off', 'Directory', 'Handbook', 'Cases', 'Console']],
   ])('%s', (_name, me, expected) => {
     expect(labels(navFor(me, allAvailable))).toEqual(expected)
   })
 })
 
-describe('navFor in Phase 6', () => {
+describe('navFor', () => {
   const person = ['Ask', 'Time off', 'My cases', 'Directory', 'Handbook']
 
   it.each([
@@ -85,8 +78,15 @@ describe('navFor in Phase 6', () => {
     expect(labels(navFor(marcus))).toEqual([...person, 'Approvals'])
   })
 
-  it('gives HR no My cases, and Cases after Handbook (Console is not built yet)', () => {
-    expect(labels(navFor(dana))).toEqual(['Ask', 'Time off', 'Directory', 'Handbook', 'Cases'])
+  it('gives HR no My cases, and Cases then Console after Handbook', () => {
+    expect(labels(navFor(dana))).toEqual([
+      'Ask',
+      'Time off',
+      'Directory',
+      'Handbook',
+      'Cases',
+      'Console',
+    ])
   })
 
   it('hides Approvals again for the employee a manager switches to', () => {
@@ -103,7 +103,6 @@ describe('navFor in Phase 6', () => {
       'Approvals',
       'Cases',
       'Console',
-      "How it's built",
     ])
   })
 })

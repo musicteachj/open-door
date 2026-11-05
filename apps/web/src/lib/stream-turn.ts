@@ -110,7 +110,8 @@ export async function streamTurn(
   }
   if (!response.ok) throw apiErrorFrom(response, await response.text())
   // A 2xx that is not a stream, such as an HTML page from a misconfigured proxy, is a failed send:
-  // the server did not take the question, so nothing is "accepted" and the draft stays.
+  // nothing is "accepted" and the draft stays. Whether the API started the turn is unknown, so the
+  // send's outcome is `failed-after-accept` (see `SendOutcome`).
   if (!(response.headers.get('Content-Type') ?? '').toLowerCase().includes('text/event-stream')) {
     // Let go of the body so the connection is not held open.
     void response.body?.cancel().catch(() => {})

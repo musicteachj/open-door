@@ -173,7 +173,8 @@ describe('RequestForm, the fields', () => {
 
   it('names the Dates field for the picked days', () => {
     setup({ start: '2026-10-30' })
-    expect(screen.getByRole('button', { name: /Dates Friday, October 30/ })).toBeInTheDocument()
+    const field = screen.getByRole('button', { name: /Dates Fri, Oct 30/ })
+    expect(field).toHaveAccessibleDescription('Friday, October 30')
   })
 
   it('opens the picker under the field, and Done closes it and returns focus to the field', async () => {

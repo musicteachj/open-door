@@ -38,7 +38,9 @@ import { nav, scrollsSideways, settledScan, switchPersona } from './time-off-hel
 const PANEL = ['[data-slot="escalation-panel"]']
 const dialog = (page: Page) => page.getByRole('alertdialog')
 const casesLink = (page: Page, news: number) =>
-  nav(page).getByRole('link', { name: news === 0 ? 'Cases' : `Cases, ${news} new`, exact: true })
+  nav(page).getByRole('link', {
+    name: news === 0 ? 'Cases' : new RegExp(`^Cases\\s?, ${news} new$`),
+  })
 const myCasesLink = (page: Page) => nav(page).getByRole('link', { name: 'My cases', exact: true })
 const notFound = (page: Page) => page.getByRole('heading', { name: "We couldn't find that page." })
 const showWords = (page: Page) => page.getByRole('button', { name: 'Show Priya’s words' })
@@ -442,6 +444,17 @@ test.describe('at 390 px', () => {
     await expect(formHeading(page)).toBeFocused()
     expect(await scrollsSideways(page)).toBe(false)
     expect.soft((await settledScan(page)).violations).toEqual([])
+  })
+
+  test('keeps "Sent <date>" in a queue row\'s name at 390 px, where the column is hidden', async ({
+    page,
+  }) => {
+    await startAs(page, 'Dana')
+    await page.goto('/cases')
+    await expect(queueRows(page)).toHaveCount(3)
+    await expect(queueRows(page).first()).toHaveAccessibleName(
+      /\. Sent [A-Z][a-z]{2}, [A-Z][a-z]{2} \d+/,
+    )
   })
 
   test('HR’s queue and a case detail fit and pass axe', async ({ page }) => {

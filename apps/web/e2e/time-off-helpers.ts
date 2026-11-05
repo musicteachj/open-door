@@ -17,7 +17,10 @@ export const nav = (page: Page) => page.getByRole('navigation', { name: 'Main' }
 /** A rail figure, such as "requests pending", by the words after its number. */
 export const railLink = (page: Page, words: RegExp | string) =>
   page.locator('[data-slot="glance-list"]').getByRole('link', {
-    name: typeof words === 'string' ? new RegExp(`${words}\\. Open`) : words,
+    name:
+      typeof words === 'string'
+        ? new RegExp(`${words}\\s?\\. Open (Time off|Cases|Approvals|Handbook)$`)
+        : words,
   })
 
 /** The id of the newest confirm card in the person's conversation, as the API reports it. */
@@ -213,8 +216,8 @@ export const longDay = (day: string) =>
 /** Switches persona and waits until the shell shows the new person, so the next step is theirs. */
 export async function switchPersona(page: Page, firstName: string) {
   await switchTo(page, firstName)
-  await expect(page.getByRole('button', { name: /^Switch persona/ })).toHaveAccessibleName(
-    new RegExp(`Current: ${firstName} `),
+  await expect(page.getByRole('button', { name: /Switch persona$/ })).toHaveAccessibleName(
+    new RegExp(`^${firstName} .* Current persona\\. Switch persona$`),
   )
 }
 

@@ -220,7 +220,7 @@ def test_the_directory_shows_only_the_cards_fields(browser: Browser) -> None:
         assert forbidden.isdisjoint(shown)
     assert set(me) == CARD_FIELDS | ME_ONLY_FIELDS
     assert set(card["department"]) == {"id", "name"}
-    assert set(card["location"]) == {"id", "code", "name", "state", "timezone"}
+    assert set(card["location"]) == {"id", "code", "name", "city", "state", "timezone"}
     assert set(card["manager"]) == {"id", "givenName", "familyName"}
 
 

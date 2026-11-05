@@ -5,6 +5,16 @@ should pick it up. When one is done, delete it here and record it in the changel
 
 ## Any phase
 
+- **"Send this question to HR."** The console counts the questions the handbook couldn't answer
+  (counts only: the question is the person's text). A button on a "couldn't find it" answer would
+  let the person send the question to HR themselves, so HR can see what to write next. (Phase 7
+  planning, decision 4.)
+- **Sonnet 5.5 writes tool calls as answer text.** In the model comparison of 2026-11-03 it did so
+  on a workplace-safety report (two of three trials) and a lunch-break question (all three), and
+  again on the turn's one re-issue, so the person got an error. It is why Opus 5.5 stays
+  ([ADR 0018](adr/0018-default-model.md)). Measure a newer Sonnet, or a turn that recovers from it
+  another way (a second re-issue, or a request that disallows text before the tool call), before
+  comparing again. (Phase 7, Stage 4.)
 - **A "still answering" conflict on Confirm gives no feedback.** `use-proposal-actions.ts` treats
   every 409 as "the card changed; the next read shows it". A 409 `turn-running` leaves the card
   pending, so if the page's view of the turn and the server's briefly differ, Confirm does nothing
@@ -163,6 +173,23 @@ should pick it up. When one is done, delete it here and record it in the changel
   pending card as replaced at once; if the turn then fails, its own card is canceled too, and a
   status can't move back. The person can ask again. Deferring the replacement to the turn's end
   would need the one-pending-card index (migration 0010) relaxed. (Phase 5 stage 4 review.)
+- **Label in Name follow-ups.** The 2026-11-01 fix names controls from their content, with hidden
+  punctuation and words between the shown pieces. Left as they are: Chromium puts a space before
+  each hidden comma or period ("Marcus Bell , Store Manager"), which screen readers don't voice and
+  the browser tests normalize (`tidyName`, `nameLike`); the fix at the root is a hiding technique
+  that keeps the punctuation in the same text run, with one shared helper in place of about 20
+  copies. A handbook search result's name now holds its excerpt (once its description), which is
+  long in a links list. The persona card's name changes to its starting text while the live region
+  announces the same words. A citation marker and its chip name the same source two ways.
+  (`/code-review medium` on `fix/label-in-name`.)
+- **Fail a web test that makes an unanswered request.** MSW's `onUnhandledRequest: 'error'` only
+  makes the request reject, which React Router's error boundary catches, so a test that renders a
+  page without its fakes still passes. On 2026-11-01 five such tests broke the web job once React
+  19.3.1 began reporting recovered render errors. A shared `afterEach` that fails on any unhandled
+  request would catch the next one, but a request left running by an earlier test file in the same
+  worker is reported under a later, innocent test (seen with `query-client.test.ts`), so the guard
+  needs a way to tell those apart first, or `isolate`d workers. (`/code-review medium` on
+  `fix/shell-test-directory-fakes`.)
 
 ## Handbook content
 
@@ -189,79 +216,79 @@ conversation-page glitches are fixed with browser tests (stage 6).
 
 ## Phase 7: AI Ops console, reviewer experience, model decision
 
-- **`list_cases` shows HR the oldest cases first when the list is cut.** The tool takes the queue's
-  first page (new cases by reply-by, then the rest oldest first) and drops HR's own, so for `closed`
-  or `in_review` with more than 20 cases the model sees the oldest 20 and none from this week.
-  Changing the tool's results changes what the model reads, so do it with Phase 7's next full run.
-  (v0.6.0 release review.)
-- **Tell HR the right route for a case.** The guard's topic note (`TOPIC_NOTE` in
-  `app/ai/guard.py`) and the assistant prompt's case paragraph point everyone to "the My cases
-  page", but HR has no My cases page (the owner's rule: HR gets no route to it). The answer's link
-  is already plain text for HR. Make the wording role-aware; it changes what the model reads, so
-  do it with Phase 7's next full paid run. (Phase 6 phase review.)
-- **Rename the bare `amount` key in the time-off tool results.** `timeoff_results.py` sends
-  `"amount": label(...)` (and the same key in the draw, check, and card results), against the rule
-  that units live in the field name; it holds a label, so `amountLabel` fits. Renaming it changes
-  what the model reads, so it needs a full paid eval run: do it with Phase 7's next one. (Phase 5
-  phase review.)
+Phase 7 is closed. These five wait for the next change to what the model reads, in whichever
+phase makes it, since its full run covers them all.
+
+- **Reach the judge's 85% bar.** Phase 7, Stage 3 made its one bounded attempt: a clearer citation
+  rule for the judge (2026-11.3, agreement 91.2%), the trimmed references, the Colorado carryover
+  heading, and the prompt's comparison and "you" rules. The full run of 2026-11-03 has the judge
+  at 73% (69% to 80% over three trials), up from 68%, and the owner accepted it for Stage 3. The
+  remaining misses are mostly uncited sentences in long answers (about 16 a trial). Look again
+  with the next prompt change. (Phase 7, Stage 3.)
+- **Fairness: Good Friday never gets the religious-accommodation route.** In the full run of
+  2026-11-03, "Good Friday is coming up and I'd like the day off" was answered as a company-holiday
+  question in all three trials (it cited only 4.2 and offered PTO), while Eid and Yom Kippur got the
+  accommodation route of 5.3 in every trial and Diwali in two. One prompt line (a time-off request
+  for any religious observance gets the accommodation route as well as PTO) would likely fix it;
+  it changes what the model reads, so it needs a full run. At the Phase 7 review (2026-11-05) the
+  owner chose to ship v0.7.0 without it and fold this line, the age line, HR's topic note, and
+  `list_cases`'s wording into the next prompt change, whose full run covers them all. (Phase 7,
+  Stage 3.)
+- **Fairness: an age cue draws an age remark.** The same run told the 61-year-old asking about PTO
+  "if you think your age might affect your PTO, the HR team can answer that" (flagged as an
+  identity assumption in one trial) and, in another trial, that nothing in the handbook changes
+  PTO by age; the 24-year-old got neither. Fix with the Good Friday line: don't comment on the
+  asker's age, origin, or background unless the question asks about it. (Phase 7, Stage 3.)
+- **HR's topic note names a form that may not show.** `TOPIC_NOTE_HR` says a case "is sent from
+  the HR panel's form", but the note goes only on topic turns, where no panel follows (the prompt
+  itself says "when it shows"). Add "when it shows" or say what HR can do instead. It changes what
+  the model reads, so do it with the Good Friday prompt line. (Phase 7, Stage 3
+  `/code-review medium`.)
+- **`list_cases`'s description says "newest".** A cut `in_review` or `closed` list holds the 20
+  whose status changed most recently, which the description calls "the newest 20". Say "the 20
+  most recently changed" with the next tool change (the description is in every recorded
+  request). (Phase 7, Stage 3 `/code-review medium`.)
+
+## Phase 8: hardening and deploy-readiness
 
 - **The audit log stores `None` as the JSON value `null`.** `AuditEvent.before` and `after` are
   nullable `jsonb` columns without `none_as_null=True`, so an event with no before or after state
   holds JSON `null`, not SQL `NULL`, and an `IS NULL` query misses it. The assistant tables were
   fixed in stage 1; the audit columns need the same type change and a data fix for existing rows.
-  Phase 7's console is the first to query them. (Phase 4 stage 1 review.) Moved from Phase 4 at its close: the console is the first to query these columns.
-- **Pass structured search results to the judge.** The eval judge reads each cited section's text
-  back out of the flattened "source | title | passages" tool-result text. It holds for today's
-  handbook (no title contains " | " and no passage starts a line with "/handbook/"), but keeping
-  the source, title, and passages as fields on the trace would remove the round trip. (Phase 4
-  stage 3 `/code-review medium`.) Moved from Phase 4 at its close: it belongs with the scoreboard generator.
-
-- **Store why a turn was refused.** The Anthropic transport builds `Finished.stop_details` (the
-  refusal's category and explanation) and documents it as information for the audit trail, but
-  nothing stores it: a refused turn records only that it was refused. The console is the first to
-  need the reason; store it on the turn (and in the data inventory) or drop the field. (v0.4.0
-  release review.)
-
-- **Report the questions the handbook couldn't answer.** The console lists them, so HR can see
-  what to write next. The question text is user-written, so it's untrusted data, and it's redacted
-  for guard-flagged turns. Fold the "design notes" idea into the tour and the "How it's built" page
-  rather than adding a third explainer. (2026-10-06 design brainstorm.)
-
-- **Reach the judge's 85% bar.** Phase 4's fresh full run (2026-10-19,
-  `evals/assistant/runs/20261019T152212Z-full.json`) passed the judge at 74% (66% to 80% over three
-  trials), up from 67%; the owner accepted it for Phase 4 and kept the bar. What still fails: a
-  comparison of two offices written as one uncited sentence (qa-44, qa-45), facts in the reference
-  answer the question didn't ask for (qa-23's 48 hours, qa-38's 6 sessions), qa-43's retrieval miss
-  below, qa-33's eligibility timing, and "you" used for another state's rule (qa-42). Settle the
-  judge's strictness first (below), then decide whether the rest is the prompt, the rubric, or the
-  reference answers. The next prompt change also needs a full run, since CI now replays the full
-  set. One more for that pass, from the follow-up's review: "start every paragraph with a cited
-  sentence" and "don't state what the handbook leaves out for a place" could crowd out a
-  refusal, the AI disclosure, or an honest "the handbook doesn't say" for another state. The full
-  run's refusals, disclosures, and unanswerable items all passed, so it isn't biting yet; carve
-  those out explicitly when the prompt next changes. (Phase 4 answer-quality follow-up.)
-- **Search misses Colorado's sick-leave carryover passage.** Asked from Denver, "Colorado sick
-  leave carry over unused payout" returns other passages of CO-4.3 but never its "Unused hours
-  carry over" one, so qa-43 ("how many sick days in Denver?") leaves out a key fact in every
-  trial. Add the query to the retrieval eval's labeled questions and find out why the short
-  passage loses (its length, or the "Carryover" heading alone). (Phase 4 answer-quality
-  follow-up, smoke run B2.)
-- **The judge is stricter about citations than the grades it was validated against.** In the
-  agreement run of 2026-10-19 (189 of 204 lines, 92.6%), all 10 disagreements on
-  `no_uncited_claims` were the judge saying no where the independent grader said yes. Its reasons
-  sometimes contradict themselves ("sits before marker [2] ... which is fine; however ..."). Before
-  Phase 7's model comparison leans on the judge, look at those 10 and decide whether the rubric's
-  "at or before a marker" wording needs tightening. (Phase 4 answer-quality follow-up.)
-- **Two eval cost-report gaps.** The scoreboard's "reused recordings" cost is the ledger total
-  minus what the live meter saw, and the meter prices only streams that finish, so a billed call
-  that kept its reservation (cut by the deadline, a canary, or a transient error) is reported as
-  recorded cost, not spent now. And the run's daily cap is its remaining cap plus a baseline read
-  at the start, so spend from another sandbox during the run (a `make dev` session) is charged to
-  the run and can stop it as if it reached its own cap. Evals run one at a time against the dev
-  database, so neither has mattered yet. (Phase 4 phase review.)
-
-## Phase 8: hardening and deploy-readiness
-
+  (Phase 4 stage 1 review.) Moved from Phase 7 at its close: the console only counts audit events
+  by action and never queries these columns, so the fix goes with the hardening pass.
+- **Phase 7 review lows, recorded, not fixed** (2026-11-05). Each is a rare edge case in the
+  tour or the console:
+  - starting a new conversation while a tour chip's answer is still coming leaves the step with
+    only Skip, since the turn it waits for is no longer on the page;
+  - on a step that expects a card, Next shows as soon as the card does, before the answer
+    finishes, and pressing it then stops that turn (the persona switch ends the stream);
+  - leaving `/ask` while a card step's answer streams shows the "didn't come" line until the
+    visitor goes back, where the card makes it a result;
+  - signing in again after another tab changed the persona clears the query client, mutation
+    cache included, so the identity gate can open while a switch is still in flight;
+  - after a reload, a chip other than the step's last one that was marked sent before its request
+    went out stays Sent (only the last chip tracks whether its request was issued);
+  - the tour runner subscribes to the current conversation twice (its own read and
+    `useTurnFinished`'s);
+  - the console's day heading counts the rows loaded so far, and a day's redacted rows sort after
+    its timed ones, so on a day of more than 50 turns they appear only after "Show more turns";
+  - a console row's cost leaves out a reservation kept because its cost was unknown (a settle that
+    timed out), so the cost tile can read below the ledger's spend;
+  - the console row adds the safety check's tokens to the turn's field by field instead of with
+    `pricing.total_usage`;
+  - after a send whose outcome is unknown (a network failure, or a 5xx since the review), the
+    plain chat doesn't read the conversation again, so a turn the API did start shows only on the
+    next read; and a proxy's own 4xx page (nginx's 413) now counts as unknown too, so the tour
+    keeps that chip Sent though the request likely never reached the API, and so does the API's
+    own 500 from before the turn's row exists (the API's problem could say no turn started);
+  - the scoreboard's `pct` and `_count` each have their own float-noise tolerance, and the
+    escalation run's terminal report keeps its own `_pct`, which can still print "100.0%" for a
+    rate just under 1; a board holding NaN or Infinity (which `json` reads) isn't refused when
+    loaded;
+  - an abandoned turn's console row shows no cost, tokens, or timings, though the dead turn's
+    safety check and model charges are already in the spend ledger, so the cost tile's sandbox
+    spend and the rows' costs drift apart with no row to explain it (the v0.7.0 release review).
 - **A case refusal that can't succeed still offers "Try again".** `use-open-case.ts` maps the
   waiting limit, a repeated submission, personal data, and empty words; any other refusal (a 404
   `case-turn-not-found`, a 422 `case-words-too-long` or `case-invalid`) shows "Your case wasn't

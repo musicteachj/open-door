@@ -1,5 +1,6 @@
 import { screen, waitFor, within } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
+import { accessibleNameOf } from '@/test/accessible-name'
 import { installFakeApi } from '@/test/fake-api'
 import {
   DEPARTMENT_OPTIONS,
@@ -21,7 +22,7 @@ async function openDirectory(persona: 'priya' | 'marcus' = 'priya') {
 }
 
 const rows = () => within(screen.getByRole('list', { name: 'People' })).getAllByRole('listitem')
-const rowNames = () => rows().map((li) => within(li).getByRole('link').getAttribute('aria-label')!)
+const rowNames = () => rows().map((li) => accessibleNameOf(within(li).getByRole('link')))
 const heading = () => screen.getByRole('heading', { level: 1, name: 'Directory' })
 const countText = () => heading().parentElement!.textContent
 const location = (r: { router: { state: { location: { search: string } } } }) =>
@@ -31,7 +32,7 @@ describe('the list', () => {
   it('shows the first 50 people sorted by last name, then "Showing 50 of 120" and Show more', async () => {
     await openDirectory()
     expect(rows()).toHaveLength(50)
-    const families = rowNames().map((label) => label.split(',')[0]!.split(' ').at(-1)!)
+    const families = rowNames().map((label) => label.split(' ')[1]!.replace(',', ''))
     const first50 = DIRECTORY_PEOPLE.slice(0, 50).map((p) => p.familyName)
     expect(families).toEqual(first50)
     expect(first50).toEqual([...first50].sort((a, b) => a.localeCompare(b)))
@@ -55,14 +56,14 @@ describe('the list', () => {
     expect(screen.queryByRole('button', { name: 'Show more' })).not.toBeInTheDocument()
   })
 
-  it('tags the signed-in person\'s own row "You", and names it "(you)"', async () => {
+  it('tags the signed-in person\'s own row "You", and names it with "You"', async () => {
     const { user } = await openDirectory()
     // Priya sits past the first page: press Show more until her row is there.
     while (!screen.queryByRole('link', { name: /^Priya Raman/ })) {
       await user.click(screen.getByRole('button', { name: 'Show more' }))
       await screen.findByText(/^Showing /)
     }
-    const own = screen.getByRole('link', { name: /^Priya Raman, .*\(you\)$/ })
+    const own = screen.getByRole('link', { name: /^Priya Raman, You, / })
     expect(within(own).getByText('You')).toBeInTheDocument()
     expect(screen.queryAllByText('You')).toHaveLength(1)
   })

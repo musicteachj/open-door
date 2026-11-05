@@ -60,7 +60,9 @@ describe('ConversationSections: what each state shows', () => {
     renderSections()
     const section = state('conversation-cited-answer')
     expect(within(section).getByText('AI')).toBeInTheDocument()
-    expect(within(section).getAllByRole('button', { name: /^Source 1: / })).toHaveLength(4)
+    expect(
+      within(section).getAllByRole('button', { name: /^Source 1: |, source 1$/ }),
+    ).toHaveLength(4)
     expect(within(section).getByText('Sources')).toBeInTheDocument()
     expect(within(section).getByText('Was this right?')).toBeInTheDocument()
     expect(within(section).getByRole('button', { name: 'Show your work' })).toHaveAttribute(
@@ -81,7 +83,7 @@ describe('ConversationSections: what each state shows', () => {
     renderSections()
     const section = state('conversation-source-panel')
     expect(within(section).queryByRole('complementary')).not.toBeInTheDocument()
-    const markers = within(section).getAllByRole('button', { name: /^Source 1: / })
+    const markers = within(section).getAllByRole('button', { name: /^Source 1: |, source 1$/ })
     await userEvent.click(markers[2]!)
     expect(within(section).getByRole('complementary', { name: 'Handbook passage' })).toBeVisible()
     // Only the marker for the passage that is open is active. The fourth button is the section's
@@ -97,7 +99,9 @@ describe('ConversationSections: what each state shows', () => {
   it('puts the open source panel in its own frame after the conversation frame, in one state', async () => {
     renderSections()
     const section = state('conversation-source-panel')
-    await userEvent.click(within(section).getAllByRole('button', { name: /^Source 1: / })[2]!)
+    await userEvent.click(
+      within(section).getAllByRole('button', { name: /^Source 1: |, source 1$/ })[2]!,
+    )
     const wrapper = section.querySelector('[data-slot="conversation-state"]')!
     const frame = wrapper.querySelector('[data-slot="conversation-frame"]')!
     const panelFrame = wrapper.querySelector('[data-slot="source-panel-frame"]')!
@@ -132,7 +136,9 @@ describe('ConversationSections: what each state shows', () => {
     renderSections()
     const section = state('conversation-streaming-text')
     expect(section.querySelector('[data-slot="answer-live"]')).toHaveAttribute('aria-busy', 'true')
-    expect(within(section).getAllByRole('button', { name: /^Source 1: / })).toHaveLength(1)
+    expect(
+      within(section).getAllByRole('button', { name: /^Source 1: |, source 1$/ }),
+    ).toHaveLength(1)
     expect(within(section).queryByText('Sources')).not.toBeInTheDocument()
   })
 
@@ -243,9 +249,9 @@ describe('ConversationSections: what each state shows', () => {
       'href',
       '/directory/',
     )
-    expect(within(section).getAllByRole('button', { name: /^Source 1: / }).length).toBeGreaterThan(
-      0,
-    )
+    expect(
+      within(section).getAllByRole('button', { name: /^Source 1: |, source 1$/ }).length,
+    ).toBeGreaterThan(0)
   })
 
   it('shows the sensitive answer first, then the panel, then feedback is not under the panel', () => {
@@ -363,7 +369,10 @@ describe('ConversationSections: what each state shows', () => {
 describe('ConversationSections: the chips name the chapter, as the API does', () => {
   const chips = (id: string) =>
     [...state(id).querySelectorAll('[data-slot="source-chip"]')].map((chip) =>
-      chip.textContent?.replace(/^\d/, '').trim(),
+      chip.textContent
+        ?.replace(/^\d/, '')
+        .replace(/, source \d+$/, '')
+        .trim(),
     )
 
   it('uses the chapter name for a company section and the addendum name for an addendum', () => {

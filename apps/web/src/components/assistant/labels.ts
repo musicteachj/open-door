@@ -118,7 +118,7 @@ export function chipLabel(citation: Pick<CitationOut, 'sectionId' | 'groupName'>
   return `Handbook ${sectionNumber(citation.sectionId)} · ${citation.groupName}`
 }
 
-/** A marker's or chip's accessible name: "Source 1: Handbook CA-4.3, California addendum". */
+/** A citation marker's accessible name: "Source 1: Handbook CA-4.3, California addendum". */
 export function sourceName(
   marker: number,
   citation: Pick<CitationOut, 'sectionId' | 'groupName'>,
@@ -126,7 +126,7 @@ export function sourceName(
   return `Source ${marker}: Handbook ${sectionNumber(citation.sectionId)}, ${citation.groupName}`
 }
 
-export type ToolIconKind = 'search' | 'profile' | 'people' | 'calendar' | 'card' | 'tool'
+export type ToolIconKind = 'search' | 'profile' | 'people' | 'calendar' | 'card' | 'cases' | 'tool'
 
 const TOOL_ICONS: Record<string, ToolIconKind> = {
   search_handbook: 'search',
@@ -138,6 +138,8 @@ const TOOL_ICONS: Record<string, ToolIconKind> = {
   propose_time_off_request: 'card',
   propose_time_off_decision: 'card',
   propose_cancel_time_off: 'card',
+  get_my_cases: 'cases',
+  list_cases: 'cases',
 }
 
 /** Which icon a tool gets in "Show your work". An unknown tool gets the generic one. */

@@ -1,7 +1,6 @@
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
-import { personaCardLabel } from '@/lib/labels'
 import { PersonaCard } from './persona-card'
 
 const priya = {
@@ -12,13 +11,14 @@ const priya = {
 }
 
 describe('PersonaCard', () => {
-  it('is one button, named by labels.ts', () => {
+  it('is one button, named by what it shows', () => {
     render(<PersonaCard {...priya} onSelect={() => {}} />)
     const buttons = screen.getAllByRole('button')
     expect(buttons).toHaveLength(1)
-    expect(buttons[0]).toHaveAccessibleName(personaCardLabel(priya))
+    // The name is what the card shows, in order (WCAG 2.5.3). jsdom doesn't lay out the card, so
+    // the pieces may run together here; a browser spaces them.
     expect(buttons[0]).toHaveAccessibleName(
-      'Start a sandbox as Priya Raman, Visual Merchandiser, Oakland store. Ask about California sick leave and book a day off.',
+      'Priya Raman, Visual Merchandiser, Oakland store. Ask about California sick leave and book a day off. Start as Priya',
     )
   })
 

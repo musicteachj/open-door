@@ -17,8 +17,8 @@ doesn't need it, and a running counter would need one.
   `ai_spend_daily` (every sandbox together, with no tenant column). It's inserted only after
   summing both under `pg_advisory_xact_lock`, and only if both stay under their caps.
 - After the call, a `settle` row of (actual − reserved) brings the total to the real cost.
-- The caps: $1.00 per sandbox and $3.00 a day, in settings. The Anthropic Console's monthly spend
-  limit is the hard backstop.
+- The caps: $1.00 per sandbox and $3.00 a day, in settings. A spend limit set in the Anthropic
+  Console is the hard backstop.
 
 ## Rejected alternatives
 

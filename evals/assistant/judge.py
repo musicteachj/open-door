@@ -48,6 +48,7 @@ from decimal import Decimal
 from functools import cache
 from pathlib import Path
 from typing import Any, NamedTuple
+from uuid import UUID
 
 from anthropic import (
     APIConnectionError,
@@ -70,7 +71,7 @@ from app.ai.replay import (
     encode_usage,
     fingerprint,
 )
-from app.modules.sandbox.seed import SeedCompany
+from app.modules.sandbox.seed import PersonRow, SeedCompany
 
 EVAL_DIR = Path(__file__).resolve().parent
 JUDGE_MD_PATH = EVAL_DIR / "judge.md"
@@ -316,13 +317,17 @@ def user_message(judge_input: JudgeInput) -> str:
     return "\n".join(parts)
 
 
-def judge_api_kwargs(judge_input: JudgeInput, *, system: str | None = None) -> dict[str, Any]:
+def judge_api_kwargs(
+    judge_input: JudgeInput, *, system: str | None = None, model: str = JUDGE_MODEL
+) -> dict[str, Any]:
     """The keyword arguments for the judge's `client.messages.create`, as plain JSON-able data.
 
     Pure. The live caller sends exactly this and the recorder fingerprints exactly this, so a
-    recorded call is the call that was sent."""
+    recorded call is the call that was sent. `model` is the judge's model: only the spot check of
+    another judge (`run.py --rejudge`) names one. It is part of the fingerprint, so that judge's
+    recordings never answer the default judge."""
     return {
-        "model": JUDGE_MODEL,
+        "model": model,
         "max_tokens": JUDGE_MAX_TOKENS,
         "output_config": {
             "effort": JUDGE_EFFORT,
@@ -335,7 +340,8 @@ def judge_api_kwargs(judge_input: JudgeInput, *, system: str | None = None) -> d
 
 def reservation_usd(kwargs: Mapping[str, Any]) -> Decimal:
     """The most a judge call could cost: its full output allowance (`max_tokens`) plus an estimate
-    of its input. The runner checks that this fits under the spend cap before each judge call."""
+    of its input, priced at the request's own model (`kwargs["model"]`). The runner checks that
+    this fits under the spend cap before each judge call."""
     characters = len(json.dumps(kwargs))
     estimate = Usage(
         input_tokens=-(-characters // CHARACTERS_PER_TOKEN),
@@ -343,7 +349,7 @@ def reservation_usd(kwargs: Mapping[str, Any]) -> Decimal:
         cache_read_tokens=0,
         cache_write_tokens=0,
     )
-    return cost_usd(JUDGE_MODEL, estimate)
+    return cost_usd(str(kwargs.get("model", JUDGE_MODEL)), estimate)
 
 
 def asker_line(company: SeedCompany, persona: str) -> str:
@@ -353,6 +359,15 @@ def asker_line(company: SeedCompany, persona: str) -> str:
     judge doesn't mistake an HR person's "since you're on the HR team" for a made-up claim. A
     manager is anyone who has a report other than themselves (as `load_actor` counts reports)."""
     person = next(p for p in company.people if p.persona_key == persona)
+    return _person_line(company, person)
+
+
+def person_line(company: SeedCompany, person_id: UUID) -> str:
+    """The same line for a person named by ID: a fairness clone, who has no persona key."""
+    return _person_line(company, next(p for p in company.people if p.id == person_id))
+
+
+def _person_line(company: SeedCompany, person: PersonRow) -> str:
     place = next(loc for loc in company.locations if loc.id == person.location_id)
     role = role_for(
         is_hr_admin=person.is_hr_admin,
@@ -375,24 +390,25 @@ def location_line(company: SeedCompany, code: str | None) -> str | None:
 
 # --- Building the input from a trace ----------------------------------------------------------
 
-_RESULT_START = re.compile(r"\n(?=/handbook/)")
-_RESULT = re.compile(r"/handbook/(?P<section>[^?\s|]+)\?passage=[^\s|]*\s\|\s(?P<rest>.*)", re.S)
+_SOURCE = re.compile(r"/handbook/(?P<section>[^?\s|]+)\?passage=")
 
 
 def section_texts(tool_results: Iterable[Any]) -> dict[str, str]:
     """The handbook's text for each section the tools returned, by section ID.
 
-    A search result is written into the tool result as `source | title | passages`, one result to a
-    block (see run.py `_result_text`). A section that came back twice (two searches) is kept once.
+    Read from each result's `search_results` fields (source, title, passages; see run.py
+    `_search_results_of`), never from the flattened text, so a "|" in a title or a passage that
+    starts with "/handbook/" can't be taken for a result. A section that came back twice (two
+    searches) is kept once.
     """
     found: dict[str, list[str]] = {}
     for result in tool_results:
-        for block in _RESULT_START.split("\n" + result.text)[1:]:
-            match = _RESULT.fullmatch(block.strip())
+        for hit in result.search_results:
+            match = _SOURCE.match(hit.source)
             if match is None:
                 continue
-            _title, _, passages = match.group("rest").partition(" | ")
             texts = found.setdefault(match.group("section"), [])
+            passages = " ".join(hit.passages)
             if passages not in texts:
                 texts.append(passages)
     return {section: " ".join(texts) for section, texts in found.items()}
@@ -421,13 +437,13 @@ def tool_facts_of(trace: Any) -> tuple[ToolFact, ...]:
     """The turn's tool results that are not handbook searches, in the order they were sent.
 
     A result belongs to the search tool by its call's name. A result with no call in the trace is a
-    search result when its text holds handbook passages (`/handbook/...` lines), and a fact
+    search result when it holds search results (its `search_results` fields), and a fact
     otherwise."""
     names = {use.id: use.name for use in trace.tool_uses}
     facts: list[ToolFact] = []
     for result in trace.tool_results:
         name = names.get(result.tool_use_id)
-        if name == SEARCH_TOOL or (name is None and "/handbook/" in result.text):
+        if name == SEARCH_TOOL or (name is None and bool(result.search_results)):
             continue
         facts.append(ToolFact(name or UNKNOWN_TOOL, result.text, bool(result.is_error)))
     return tuple(facts)
@@ -662,9 +678,12 @@ class JudgeOutcome:
         return {"unavailable": self.unavailable}
 
 
-def _outcome(item_id: str, key: str, response: JudgeResponse) -> JudgeOutcome:
-    model = response.served_by if is_priced(response.served_by) else JUDGE_MODEL
-    cost = cost_usd(model, response.usage)
+def _outcome(
+    item_id: str, key: str, response: JudgeResponse, model: str = JUDGE_MODEL
+) -> JudgeOutcome:
+    """`model` prices a response served by a model with no pinned price."""
+    priced = response.served_by if is_priced(response.served_by) else model
+    cost = cost_usd(priced, response.usage)
     try:
         return JudgeOutcome(item_id, key, parse_response(response), None, cost, response.usage)
     except JudgeUnavailable as error:
@@ -692,7 +711,9 @@ class Judge:
         caller: JudgeCaller | None,
         record: bool = True,
         system: str | None = None,
+        model: str = JUDGE_MODEL,
     ) -> None:
+        self.model = model
         self.store = store
         self.caller = caller
         self.record = record
@@ -701,7 +722,7 @@ class Judge:
     def prepare(self, judge_input: JudgeInput) -> Prepared:
         """The request for this input and its fingerprint. Built once, then handed to `recorded`,
         `judge`, and `reservation_usd`, which would each build it again."""
-        kwargs = judge_api_kwargs(judge_input, system=self.system)
+        kwargs = judge_api_kwargs(judge_input, system=self.system, model=self.model)
         return Prepared(kwargs, fingerprint("judge", kwargs))
 
     def _lookup(self, key: str) -> tuple[JudgeResponse | None, bool]:
@@ -722,7 +743,7 @@ class Judge:
         calls."""
         key = (prepared or self.prepare(judge_input)).key
         response, _ = self._lookup(key)
-        return None if response is None else _outcome("", key, response)
+        return None if response is None else _outcome("", key, response, self.model)
 
     async def judge(
         self, item_id: str, judge_input: JudgeInput, prepared: Prepared | None = None
@@ -731,7 +752,7 @@ class Judge:
         key = request.key
         response, damaged = self._lookup(key)
         if response is not None:
-            return replace(_outcome(item_id, key, response), called=False)
+            return replace(_outcome(item_id, key, response, self.model), called=False)
         if self.caller is None:
             what = "could not be read" if damaged else "is missing"
             raise ReplayMiss(
@@ -748,4 +769,4 @@ class Judge:
             self.store.put(
                 Record(key, "judge", item_id, 0, result=fresh.to_json()), replace=damaged
             )
-        return _outcome(item_id, key, fresh)
+        return _outcome(item_id, key, fresh, self.model)

@@ -59,7 +59,15 @@ window.OD_FILES = [
   'components/cases/CaseQueueTable.jsx',
   'components/cases/CaseSummaryBlock.jsx',
   'components/cases/CaseWordsReveal.jsx',
-  'components/cases/CaseTimeline.jsx'
+  'components/cases/CaseTimeline.jsx',
+  'components/console/ConsoleTile.jsx',
+  'components/console/TurnTable.jsx',
+  'components/console/TracePanel.jsx',
+  'components/console/Scoreboard.jsx',
+  'components/tour/TourChip.jsx',
+  'components/tour/CoachMark.jsx',
+  'components/tour/TourEndCard.jsx',
+  'components/tour/TourMenuItems.jsx'
 ];
 window.loadOpenDoor = async function (root, files) {
   var mods = {};

@@ -1,0 +1,674 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="design_doc_mode" content="canvas">
+<link rel="stylesheet" href="styles.css">
+<template id="__bundler_thumbnail"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><rect width="100" height="100" fill="#59256A"></rect><g fill="none" stroke="#F5F7F8" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"><rect x="22" y="38" width="56" height="36" rx="6"></rect><path d="M40 38l10-12 10 12"></path></g></svg></template>
+<style>body{margin:0;background:#ECEEEF;font-family:'Instrument Sans',system-ui,sans-serif;-webkit-font-smoothing:antialiased}a{color:#59256A}a:hover{color:#461B54}textarea::placeholder{color:#66737B}@keyframes od-spin{to{transform:rotate(360deg)}}@media (prefers-reduced-motion: reduce){[data-spin]{animation:none !important}}.dv-turn{padding:40px 44px 32px;border-bottom:1px solid rgba(0,0,0,.08);scroll-margin-top:16px}.dv-thd{display:flex;align-items:baseline;gap:10px;margin:0 0 8px}.dv-tid{font:600 10px ui-monospace,Menlo,monospace;padding:3px 7px;background:#1a1a1a;color:#fff;border-radius:4px;text-decoration:none}.dv-tname{font:600 13px/1.2 system-ui,sans-serif;color:#1a1a1a}.dv-note{font:12px/1.55 system-ui,sans-serif;color:rgba(0,0,0,.6);max-width:1100px;margin:0 0 24px}.dv-opts{display:flex;flex-wrap:wrap;gap:56px;align-items:flex-start;max-width:2936px}.dv-opt{flex:none;display:flex;flex-direction:column;gap:12px;scroll-margin-top:16px}.dv-oid{font:600 10.5px ui-monospace,Menlo,monospace;padding:3px 7px;background:rgba(0,0,0,.08);color:#1a1a1a;border-radius:5px;text-decoration:none}.dv-olabel{display:flex;align-items:baseline;gap:8px;font:400 12px/1.3 system-ui,sans-serif;color:rgba(0,0,0,.6);max-width:1440px}.dv-card{max-width:100%;background:#fff;border:1px solid rgba(0,0,0,.08);border-radius:8px;box-shadow:0 1px 3px rgba(0,0,0,.06);overflow:hidden}.dv-opt:target .dv-oid{background:#2a78d6;color:#fff}</style>
+</helmet>
+<section class="dv-turn" id="t1" data-screen-label="15 Guided tour">
+<div class="dv-thd"><a class="dv-tid" href="#t1">1</a><span class="dv-tname">Screen 15: The guided tour</span></div>
+<p class="dv-note">Ten steps, about two minutes, always in a new sandbox that starts as Priya Raman. Each step is a 360 px coach mark beside its target, which gets a 2 px primary ring. There's no overlay, so the page stays usable and the visitor can type their own question. Frames are live: send a chip and it shows "Sent", then "Next" takes the place of "Skip this step"; the X or Escape leaves the tour and shows the toast; "Take the tour" in the menu opens the confirm dialog. Every time is Mountain time. Components are in <a class="dv-oid" href="#components">components</a>.</p>
+<div class="dv-opts">
+<sc-for list="{{ frames }}" as="f" hint-placeholder-count="2">
+<div class="dv-opt" id="{{ f.id }}">
+<div class="dv-olabel"><a class="dv-oid" href="{{ f.href }}">{{ f.id }}</a>{{ f.label }}</div>
+<div class="dv-card" style="width:1442px;max-width:none">
+<div data-shot="{{ f.id }}" ref="{{ f.rootRef }}" onKeyDown="{{ f.onKey }}" style="position:relative;overflow:hidden;width:1440px;height:{{ f.h }};box-sizing:border-box;background:var(--surface);font-family:var(--font-sans);color:var(--ink)">
+
+<sc-if value="{{ f.isLanding }}" hint-placeholder-val="{{ false }}">
+<div style="padding:0 136px">
+  <header style="height:72px;display:flex;align-items:center;justify-content:space-between">
+    <div style="display:flex;align-items:center;gap:12px"><img src="assets/logo-mark.svg" width="32" height="32" alt=""><span style="font-size:16px;line-height:20px;font-weight:600;letter-spacing:-0.01em">Open Door</span></div>
+  </header>
+  <main>
+    <section style="padding-top:72px;max-width:760px;display:flex;flex-direction:column;gap:20px">
+      <h1 style="margin:0;font-size:var(--text-display);line-height:var(--leading-display);font-weight:600;letter-spacing:var(--tracking-display);text-wrap:balance">Your open-door policy, now always open.</h1>
+      <p style="margin:0;font-size:var(--text-body-lg);line-height:var(--leading-body-lg);color:var(--ink-muted);text-wrap:pretty">An AI help desk for HR questions. It answers with citations to the company handbook, proposes actions for a person to confirm, and sends sensitive topics like harassment or medical leave to a human HR partner.</p>
+    </section>
+    <section aria-labelledby="{{ f.id }}-pick" style="margin-top:72px">
+      <h2 id="{{ f.id }}-pick" style="margin:0 0 20px;font-size:var(--text-h2);line-height:var(--leading-h2);font-weight:600">Choose who to be</h2>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:16px">
+        <sc-for list="{{ f.cards }}" as="c" hint-placeholder-count="4">
+          <button type="button" disabled="{{ c.dis }}" aria-label="{{ c.aria }}" style="display:flex;flex-direction:column;align-items:stretch;text-align:left;padding:24px;background:var(--surface-raised);border:1px solid {{ c.border }};border-radius:var(--radius-lg);font-family:var(--font-sans);color:{{ c.fg }};cursor:{{ c.cursor }}" style-focus="outline:2px solid var(--focus-ring);outline-offset:2px">
+            <span style="width:40px;height:40px;border-radius:9999px;background:{{ c.avBg }};color:{{ c.fg }};display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600">{{ c.initials }}</span>
+            <span style="margin-top:16px;font-size:var(--text-body-lg);line-height:var(--leading-body-lg);font-weight:600">{{ c.name }}</span>
+            <span style="font-size:var(--text-ui);line-height:var(--leading-ui)">{{ c.role }}</span>
+            <span style="margin-top:4px;display:flex;align-items:center;gap:6px;font-size:var(--text-small);line-height:var(--leading-small);color:{{ c.muted }}"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="flex:none"><path d="M20 10c0 4.993-5.539 10.193-7.399 11.799a1 1 0 0 1-1.202 0C9.539 20.193 4 14.993 4 10a8 8 0 0 1 16 0"></path><circle cx="12" cy="10" r="3"></circle></svg>{{ c.location }}</span>
+            <span style="height:1px;background:var(--border-subtle);margin:20px 0"></span>
+            <span style="flex:1;font-size:var(--text-body);line-height:var(--leading-body)">{{ c.prompt }}</span>
+            <span style="margin-top:20px;min-height:20px;display:flex;align-items:center;gap:8px;font-size:var(--text-small);line-height:var(--leading-small);font-weight:600;color:{{ c.cta }}">{{ c.startLabel }}<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex:none"><path d="M5 12h14M12 5l7 7-7 7"></path></svg></span>
+          </button>
+        </sc-for>
+      </div>
+      <div aria-live="polite" style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap">{{ f.landStatus }}</div>
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:24px;flex-wrap:wrap;margin-top:24px">
+        <p style="margin:0;font-size:var(--text-small);line-height:var(--leading-small);color:var(--ink-muted);max-width:640px;text-wrap:pretty">Each visit gets its own private copy of Juniper Row, a fictional company. It resets after 24 hours.</p>
+        <sc-if value="{{ f.tourIdle }}" hint-placeholder-val="{{ true }}"><button type="button" onClick="{{ f.startTour }}" style="height:40px;padding:0 16px;border:1px solid var(--border-strong);border-radius:var(--radius-md);background:var(--surface-raised);color:var(--ink);display:inline-flex;align-items:center;gap:8px;font-family:var(--font-sans);font-size:var(--text-ui);font-weight:600;cursor:pointer;white-space:nowrap" style-hover="background:var(--surface-hover);border-color:var(--border-strong-hover)" style-focus="outline:2px solid var(--focus-ring);outline-offset:2px"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><path d="m10 8 6 4-6 4z"></path></svg>Take the 2-minute tour</button></sc-if>
+        <sc-if value="{{ f.tourBusy }}" hint-placeholder-val="{{ false }}"><button type="button" aria-disabled="true" aria-busy="true" style="height:40px;padding:0 16px;border:1px solid var(--border-strong);border-radius:var(--radius-md);background:var(--surface-raised);color:var(--ink);display:inline-flex;align-items:center;gap:8px;font-family:var(--font-sans);font-size:var(--text-ui);font-weight:600;cursor:progress;white-space:nowrap">{{ spinner }}Starting the tour…</button></sc-if>
+      </div>
+    </section>
+  </main>
+  <footer style="margin-top:88px;padding:24px 0 40px;border-top:1px solid var(--border);display:flex;flex-direction:column;gap:8px">
+    <p style="margin:0;display:flex;align-items:center;gap:8px;font-size:var(--text-small);line-height:var(--leading-small);color:var(--ink-muted)"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="flex:none"><circle cx="12" cy="12" r="10"></circle><path d="M12 16v-4M12 8h.01"></path></svg>Open Door is an AI assistant. It can make mistakes, and it always shows its sources.</p>
+    <p style="margin:0;padding-left:22px;font-size:var(--text-small);line-height:var(--leading-small);color:var(--ink-muted)">Juniper Row and everyone in it are fictional. This is a demo, not legal advice. Don't enter real personal information.</p>
+  </footer>
+</div>
+</sc-if>
+
+<sc-if value="{{ f.isApp }}" hint-placeholder-val="{{ true }}">
+<div style="display:flex;height:100%">
+  <aside style="width:248px;flex:none;display:flex;flex-direction:column;padding:28px 16px 20px 20px;box-sizing:border-box">
+    <div style="display:flex;align-items:center;gap:12px;padding:0 8px 32px"><img src="assets/logo-mark.svg" width="32" height="32" alt=""><div style="display:flex;flex-direction:column;gap:2px"><span style="font-size:16px;line-height:20px;font-weight:600;letter-spacing:-0.01em">Open Door</span><span style="font-size:12px;line-height:16px;color:var(--ink-muted)">Juniper Row</span></div></div>
+    <nav aria-label="Main" style="display:flex;flex-direction:column;gap:2px">
+      <sc-for list="{{ f.nav }}" as="n" hint-placeholder-count="5">
+        <a href="{{ n.href }}" aria-current="{{ n.ac }}" style="display:flex;align-items:center;gap:12px;height:40px;padding:0 12px;border-radius:var(--radius-md);background:{{ n.bg }};color:{{ n.fg }};font-size:14px;line-height:20px;font-weight:{{ n.w }};text-decoration:none" style-hover="background:var(--neutral-hover);color:var(--ink)" style-focus="outline:2px solid var(--focus-ring);outline-offset:2px">
+          <sc-if value="{{ n.icAsk }}" hint-placeholder-val="{{ false }}"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z"></path></svg></sc-if>
+          <sc-if value="{{ n.icTime }}" hint-placeholder-val="{{ false }}"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="4" rx="2"></rect><path d="M16 2v4M8 2v4M3 10h18"></path></svg></sc-if>
+          <sc-if value="{{ n.icLock }}" hint-placeholder-val="{{ false }}"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect width="8" height="5" x="14" y="17" rx="1"></rect><path d="M10 20H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h3.9a2 2 0 0 1 1.69.9l.81 1.2a2 2 0 0 0 1.67.9H20a2 2 0 0 1 2 2v2.5"></path><path d="M20 17v-2a2 2 0 1 0-4 0v2"></path></svg></sc-if>
+          <sc-if value="{{ n.icDir }}" hint-placeholder-val="{{ false }}"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"></path></svg></sc-if>
+          <sc-if value="{{ n.icBook }}" hint-placeholder-val="{{ false }}"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"></path><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"></path></svg></sc-if>
+          <sc-if value="{{ n.icAppr }}" hint-placeholder-val="{{ false }}"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect width="8" height="4" x="8" y="2" rx="1"></rect><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"></path><path d="m9 14 2 2 4-4"></path></svg></sc-if>
+          <sc-if value="{{ n.icCon }}" hint-placeholder-val="{{ false }}"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect width="7" height="9" x="3" y="3" rx="1"></rect><rect width="7" height="5" x="14" y="3" rx="1"></rect><rect width="7" height="9" x="14" y="12" rx="1"></rect><rect width="7" height="5" x="3" y="16" rx="1"></rect></svg></sc-if>
+          <span style="flex:1">{{ n.label }}</span>
+          <sc-if value="{{ n.hasCount }}" hint-placeholder-val="{{ false }}"><span style="height:20px;min-width:20px;padding:0 7px;box-sizing:border-box;border-radius:9999px;background:var(--primary);color:var(--on-primary);display:inline-flex;align-items:center;justify-content:center;font-size:12px;line-height:16px;font-weight:600;font-variant-numeric:tabular-nums;white-space:nowrap"><span aria-hidden="true">{{ n.count }}</span><span style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)">, {{ n.countSr }}</span></span></sc-if>
+        </a>
+      </sc-for>
+    </nav>
+    <div style="flex:1"></div>
+    <div style="position:relative">
+      <sc-if value="{{ f.menuOpen }}" hint-placeholder-val="{{ false }}">
+        <div role="menu" aria-label="View as" style="position:absolute;left:0;bottom:calc(100% + 6px);z-index:20;width:244px;padding:4px;box-sizing:border-box;background:var(--surface-raised);border:1px solid var(--border);border-radius:var(--radius-md);box-shadow:var(--shadow-md);display:flex;flex-direction:column;gap:2px">
+          <div style="padding:8px 10px 4px;font-size:12px;line-height:16px;color:var(--ink-muted)">View as</div>
+          <sc-for list="{{ f.personas }}" as="pp" hint-placeholder-count="4"><button type="button" role="menuitemradio" aria-checked="{{ pp.checked }}" style="display:flex;align-items:center;gap:10px;width:100%;padding:8px 10px 8px 8px;border:0;border-radius:var(--radius-xs);background:{{ pp.bg }};font-family:var(--font-sans);text-align:left;color:var(--ink);cursor:pointer" style-hover="background:var(--neutral-hover)" style-focus="outline:2px solid var(--focus-ring);outline-offset:-2px">
+            <span style="width:28px;height:28px;flex:none;border-radius:9999px;background:var(--primary-tint);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:600">{{ pp.initials }}</span>
+            <span style="flex:1;min-width:0;display:flex;flex-direction:column"><span style="font-size:14px;line-height:18px;font-weight:600">{{ pp.name }}</span><span style="font-size:12px;line-height:16px;color:var(--ink-muted)">{{ pp.title }}</span></span><sc-if value="{{ pp.isMe }}" hint-placeholder-val="{{ false }}"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" style="flex:none;color:var(--primary)"><path d="M20 6 9 17l-5-5"></path></svg></sc-if></button></sc-for>
+          <p style="margin:0;padding:6px 10px 8px;font-size:12px;line-height:16px;color:var(--ink-muted)">Switching starts a new conversation.</p>
+          <div role="separator" style="height:1px;background:var(--border-subtle);margin:0 -4px"></div>
+          <sc-if value="{{ f.menuTake }}" hint-placeholder-val="{{ false }}">
+            <button type="button" role="menuitem" data-tour-item="true" onClick="{{ f.openDlg }}" style="display:flex;align-items:center;gap:10px;width:100%;min-height:36px;padding:0 10px;margin-top:2px;border:0;border-radius:var(--radius-xs);background:transparent;font-family:var(--font-sans);font-size:14px;line-height:20px;font-weight:500;text-align:left;color:var(--ink);cursor:pointer" style-hover="background:var(--neutral-hover)" style-focus="outline:2px solid var(--focus-ring);outline-offset:-2px"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="flex:none;color:var(--ink-muted)"><circle cx="12" cy="12" r="10"></circle><path d="m10 8 6 4-6 4z"></path></svg>Take the tour</button>
+          </sc-if>
+          <sc-if value="{{ f.menuResume }}" hint-placeholder-val="{{ false }}">
+            <button type="button" role="menuitem" aria-label="Resume the tour, step 5 of 10" style="display:flex;align-items:center;gap:10px;width:100%;padding:8px 10px;margin-top:2px;border:0;border-radius:var(--radius-xs);background:transparent;font-family:var(--font-sans);text-align:left;color:var(--ink);cursor:pointer" style-hover="background:var(--neutral-hover)" style-focus="outline:2px solid var(--focus-ring);outline-offset:-2px"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="flex:none;color:var(--ink-muted)"><circle cx="12" cy="12" r="10"></circle><path d="m10 8 6 4-6 4z"></path></svg><span style="display:flex;flex-direction:column"><span style="font-size:14px;line-height:18px;font-weight:500">Resume the tour</span><span style="font-size:12px;line-height:16px;color:var(--ink-muted);font-variant-numeric:tabular-nums">Step 5 of 10</span></span></button>
+            <button type="button" role="menuitem" style="display:flex;align-items:center;gap:10px;width:100%;min-height:36px;padding:0 10px;border:0;border-radius:var(--radius-xs);background:transparent;font-family:var(--font-sans);font-size:14px;line-height:20px;font-weight:500;text-align:left;color:var(--ink);cursor:pointer" style-hover="background:var(--neutral-hover)" style-focus="outline:2px solid var(--focus-ring);outline-offset:-2px"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="flex:none;color:var(--ink-muted)"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"></path><path d="M3 3v5h5"></path></svg>Start the tour over</button>
+          </sc-if>
+          <div role="separator" style="height:1px;background:var(--border-subtle);margin:2px -4px 0"></div>
+          <a href="Landing.dc.html" role="menuitem" style="display:flex;align-items:center;gap:10px;height:36px;padding:0 10px;margin-top:2px;border-radius:var(--radius-xs);color:var(--ink);font-size:14px;font-weight:500;text-decoration:none" style-hover="background:var(--neutral-hover);color:var(--ink)" style-focus="outline:2px solid var(--focus-ring);outline-offset:-2px"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="color:var(--ink-muted)"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><path d="m16 17 5-5-5-5M21 12H9"></path></svg>Sign out</a>
+        </div>
+      </sc-if>
+      <button type="button" aria-haspopup="menu" aria-expanded="{{ f.menuExp }}" style="display:flex;align-items:center;gap:12px;width:100%;min-height:61px;padding:12px 8px;border:0;border-top:1px solid var(--border);background:{{ f.swBg }};font-family:inherit;text-align:left;cursor:pointer;color:var(--ink)" style-hover="background:var(--neutral-hover)" style-focus="outline:2px solid var(--focus-ring);outline-offset:2px">
+        <span style="width:36px;height:36px;flex:none;border-radius:9999px;background:var(--primary-tint);display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:600">{{ f.p.initials }}</span>
+        <span style="flex:1;min-width:0;display:flex;flex-direction:column;gap:2px"><span style="font-size:14px;line-height:18px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ f.p.name }}</span><span style="font-size:12px;line-height:16px;color:var(--ink-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ f.p.title }}</span></span>
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="flex:none;color:var(--ink-muted)"><path d="m7 15 5 5 5-5M7 9l5-5 5 5"></path></svg>
+      </button>
+    </div>
+  </aside>
+
+  <main style="flex:1;min-width:0;display:flex;padding:12px 12px 12px 0;box-sizing:border-box">
+    <div style="flex:1;min-width:0;display:flex;background:var(--surface-raised);border:1px solid var(--border);border-radius:var(--radius-xl);overflow:hidden">
+
+      <sc-if value="{{ f.isHome }}" hint-placeholder-val="{{ true }}">
+        <div style="flex:1;min-width:0;display:grid;grid-template-columns:minmax(0,1fr) 340px">
+          <section style="padding:120px 72px 48px 80px;display:flex;flex-direction:column;min-width:0">
+            <h1 style="margin:0 0 36px;font-size:48px;line-height:56px;font-weight:600;letter-spacing:-0.025em">Good morning, {{ f.p.first }}.</h1>
+            <div data-tt="composer" style="max-width:760px;border:1px solid var(--input-border);border-radius:var(--radius-lg);background:var(--surface-raised);box-shadow:0 1px 2px rgba(20,33,42,.04)" style-hover="border-color:var(--input-border-hover)">
+              <textarea aria-label="Ask Open Door" rows="3" data-composer="true" placeholder="Ask about time off, pay, benefits, or policy…" style="display:block;width:100%;box-sizing:border-box;border:0;outline:0;resize:none;font-family:var(--font-sans);font-size:18px;line-height:28px;color:var(--ink);background:transparent;padding:20px 24px 8px"></textarea>
+              <div style="display:flex;align-items:center;gap:16px;padding:12px 12px 12px 24px;border-top:1px solid var(--border-subtle)"><p style="flex:1;display:flex;align-items:center;gap:8px;margin:0;font-size:13px;line-height:20px;color:var(--ink-muted)"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="flex:none"><circle cx="12" cy="12" r="10"></circle><path d="M12 16v-4M12 8h.01"></path></svg>Open Door is an AI assistant. It can make mistakes, and it always shows its sources.</p><button type="button" style="flex:none;height:40px;padding:0 14px 0 16px;border:0;border-radius:var(--radius-md);background:var(--primary);color:var(--on-primary);display:flex;align-items:center;gap:8px;font-family:var(--font-sans);font-size:14px;font-weight:600;cursor:pointer" style-hover="background:var(--primary-hover)" style-focus="outline:2px solid var(--focus-ring);outline-offset:2px">Ask<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M12 5l7 7-7 7"></path></svg></button></div>
+            </div>
+            <div style="max-width:760px;margin-top:48px;display:flex;flex-direction:column;gap:8px">
+              <div style="font-size:13px;line-height:20px;color:var(--ink-muted)">Try asking</div>
+              <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));column-gap:32px">
+                <sc-for list="{{ f.p.qs }}" as="q" hint-placeholder-count="4">
+                  <button type="button" style="display:flex;align-items:center;justify-content:space-between;gap:12px;height:52px;padding:0 12px;border:0;border-bottom:1px solid var(--border-subtle);background:transparent;font-family:var(--font-sans);font-size:15px;color:var(--ink);text-align:left;cursor:pointer" style-hover="background:var(--primary-tint)" style-focus="outline:2px solid var(--focus-ring);outline-offset:2px;position:relative;z-index:1">{{ q }}<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="flex:none"><path d="M5 12h14M12 5l7 7-7 7"></path></svg></button>
+                </sc-for>
+              </div>
+            </div>
+          </section>
+          <aside aria-label="Your summary" style="border-left:1px solid var(--border-subtle);background:var(--surface-sunken);padding:28px 32px 32px;display:flex;flex-direction:column">
+            <div style="display:flex;justify-content:flex-end"><span style="display:inline-flex;align-items:center;gap:8px;height:28px;padding:0 12px;border:1px solid var(--border);border-radius:9999px;background:var(--surface-raised);font-size:12px;line-height:16px;color:var(--ink-muted);font-variant-numeric:tabular-nums;white-space:nowrap"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><path d="M12 6v6l4 2"></path></svg>{{ f.reset }}</span></div>
+            <div style="margin-top:64px;font-size:13px;line-height:20px;color:var(--ink-muted);padding-bottom:12px;border-bottom:1px solid var(--border)">At a glance</div>
+            <div style="display:flex;flex-direction:column">
+              <sc-for list="{{ f.p.glance }}" as="g" hint-placeholder-count="3">
+                <a href="{{ g.href }}" aria-label="{{ g.aria }}" style="display:flex;align-items:center;gap:12px;padding:20px 12px;margin:0 -12px;border-bottom:1px solid var(--border-subtle);border-radius:var(--radius-md);color:var(--ink);text-decoration:none" style-hover="background:var(--primary-tint);color:var(--ink)" style-focus="outline:2px solid var(--focus-ring);outline-offset:2px;position:relative;z-index:1">
+                  <span style="flex:1;min-width:0;display:flex;flex-direction:column;gap:2px"><span style="display:flex;align-items:center;gap:10px"><span style="font-size:32px;line-height:40px;font-weight:600;letter-spacing:-0.01em;font-variant-numeric:tabular-nums;white-space:nowrap">{{ g.v }}</span><sc-if value="{{ g.mk }}" hint-placeholder-val="{{ false }}"><span style="width:8px;height:8px;border-radius:50%;background:var(--marker)"></span></sc-if></span><span style="font-size:14px;line-height:20px;color:var(--ink-muted)">{{ g.cap }}</span></span>
+                  <span style="display:flex;align-items:center;gap:4px;font-size:13px;line-height:20px;font-weight:600;color:var(--primary)">{{ g.dest }}<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"></path></svg></span>
+                </a>
+              </sc-for>
+            </div>
+          </aside>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{ f.isConv }}" hint-placeholder-val="{{ false }}">
+        <section aria-label="Conversation" style="flex:1;min-width:0;display:flex;flex-direction:column">
+          <div style="flex:none;display:flex;align-items:center;gap:16px;padding:20px 40px 0">
+            <p style="flex:1;min-width:0;margin:0;font-size:13px;line-height:20px;color:var(--ink-muted);text-wrap:pretty">Conversations are deleted with your sandbox after 24 hours.</p>
+            <button type="button" style="flex:none;display:inline-flex;align-items:center;gap:8px;height:32px;padding:0 10px;border:0;border-radius:var(--radius-sm);background:transparent;color:var(--ink);font-family:var(--font-sans);font-size:13px;line-height:20px;font-weight:600;cursor:pointer" style-hover="background:var(--neutral-hover)" style-focus="outline:2px solid var(--focus-ring);outline-offset:2px"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.375 2.625a1 1 0 0 1 3 3l-9.013 9.014a2 2 0 0 1-.853.506l-2.873.84a.5.5 0 0 1-.62-.62l.84-2.873a2 2 0 0 1 .506-.852z"></path></svg>Start a new conversation</button>
+            <span style="flex:none;display:inline-flex;align-items:center;gap:8px;height:28px;padding:0 12px;border:1px solid var(--border);border-radius:9999px;font-size:12px;line-height:16px;color:var(--ink-muted);font-variant-numeric:tabular-nums;white-space:nowrap"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><path d="M12 6v6l4 2"></path></svg>{{ f.reset }}</span>
+          </div>
+          <div style="position:relative;flex:1;min-height:0;overflow:hidden;padding:24px 40px {{ f.padB }};display:flex;flex-direction:column;justify-content:{{ f.justify }}">
+            <div style="flex:none;display:flex;flex-direction:column;gap:32px;max-width:760px">
+              <sc-for list="{{ f.msgs }}" as="m" hint-placeholder-count="2">
+                <sc-if value="{{ m.isUser }}" hint-placeholder-val="{{ true }}"><div style="align-self:flex-end;max-width:520px;padding:10px 16px;background:var(--surface-hover);border-radius:var(--radius-lg);font-size:15px;line-height:24px;color:var(--ink);text-wrap:pretty"><span style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)">You asked: </span>{{ m.text }}</div></sc-if>
+                <sc-if value="{{ m.isAi }}" hint-placeholder-val="{{ false }}">
+                  <div style="display:flex;flex-direction:column;gap:14px;max-width:680px">
+                    <div style="display:flex;align-items:center;gap:8px"><span style="display:inline-flex;align-items:center;height:20px;padding:0 6px;box-sizing:border-box;border:1px solid var(--border-strong);border-radius:var(--radius-xs);font-size:11px;line-height:16px;font-weight:600;letter-spacing:.03em;color:var(--ink)">AI</span><span style="font-size:13px;line-height:20px;color:var(--ink-muted)">Open Door</span></div>
+                    <div style="display:flex;flex-direction:column;gap:12px">
+                      <sc-for list="{{ m.paras }}" as="pa" hint-placeholder-count="2">
+                        <p style="margin:0;font-size:15px;line-height:24px;color:var(--ink);text-wrap:pretty">{{ pa.text }}<sc-if value="{{ pa.mk }}" hint-placeholder-val="{{ false }}"><button type="button" aria-label="Source 1: Handbook CA-4.3, California addendum" style="display:inline-flex;align-items:center;justify-content:center;min-width:20px;height:20px;padding:0 5px;margin:0 1px 0 4px;vertical-align:1px;box-sizing:border-box;border:1px solid var(--border-strong);border-radius:var(--radius-xs);background:var(--surface-raised);font-family:var(--font-sans);font-size:12px;line-height:16px;font-weight:600;color:var(--ink);font-variant-numeric:tabular-nums;cursor:pointer" style-hover="border-color:var(--primary);background:var(--primary-tint)" style-focus="outline:2px solid var(--focus-ring);outline-offset:2px">1</button></sc-if></p>
+                      </sc-for>
+                    </div>
+                    <sc-if value="{{ m.hasChips }}" hint-placeholder-val="{{ false }}">
+                      <div style="display:flex;flex-direction:column;gap:8px;margin-top:2px">
+                        <p style="margin:0;font-size:13px;line-height:20px;color:var(--ink-muted)">Sources</p>
+                        <div style="display:flex;flex-wrap:wrap;gap:8px">
+                          <button type="button" data-tt="src" aria-label="Source 1: Handbook CA-4.3, California addendum" aria-expanded="false" style="display:inline-flex;align-items:center;gap:8px;height:32px;padding:0 12px 0 6px;border:1px solid var(--border-strong);border-radius:var(--radius-sm);background:var(--surface-raised);font-family:var(--font-sans);font-size:13px;line-height:20px;color:var(--ink);cursor:pointer;white-space:nowrap" style-hover="border-color:var(--primary);background:var(--primary-tint)" style-focus="outline:2px solid var(--focus-ring);outline-offset:2px"><span style="display:inline-flex;align-items:center;justify-content:center;min-width:20px;height:20px;padding:0 5px;box-sizing:border-box;border:1px solid var(--border-strong);border-radius:var(--radius-xs);background:var(--surface-raised);font-size:12px;line-height:16px;font-weight:600;font-variant-numeric:tabular-nums">1</span>Handbook CA-4.3 · California addendum</button>
+                        </div>
+                      </div>
+                    </sc-if>
+                    <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;min-height:32px">
+                      <div role="group" aria-label="Was this helpful?" style="display:flex;align-items:center;gap:10px"><span style="font-size:13px;line-height:20px;color:var(--ink-muted)">Was this helpful?</span><div style="display:flex;gap:6px"><button type="button" aria-pressed="false" style="height:32px;padding:0 12px;border:1px solid var(--border-strong);border-radius:var(--radius-sm);background:var(--surface-raised);color:var(--ink);font-family:var(--font-sans);font-size:13px;line-height:20px;font-weight:600;cursor:pointer" style-hover="background:var(--surface-hover);border-color:var(--border-strong-hover)" style-focus="outline:2px solid var(--focus-ring);outline-offset:2px">Yes</button><button type="button" aria-pressed="false" style="height:32px;padding:0 12px;border:1px solid var(--border-strong);border-radius:var(--radius-sm);background:var(--surface-raised);color:var(--ink);font-family:var(--font-sans);font-size:13px;line-height:20px;font-weight:600;cursor:pointer" style-hover="background:var(--surface-hover);border-color:var(--border-strong-hover)" style-focus="outline:2px solid var(--focus-ring);outline-offset:2px">No</button></div></div>
+                      <span style="flex:1"></span>
+                      <button type="button" aria-expanded="false" style="display:inline-flex;align-items:center;gap:6px;height:32px;padding:0 8px 0 10px;border:0;border-radius:var(--radius-sm);background:transparent;color:var(--ink);font-family:var(--font-sans);font-size:13px;line-height:20px;font-weight:600;cursor:pointer" style-hover="background:var(--neutral-hover)" style-focus="outline:2px solid var(--focus-ring);outline-offset:2px">Show your work<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="color:var(--ink-muted)"><path d="m6 9 6 6 6-6"></path></svg></button>
+                    </div>
+                  </div>
+                </sc-if>
+                <sc-if value="{{ m.isCard }}" hint-placeholder-val="{{ false }}">
+                  <div style="display:flex;flex-direction:column;gap:14px;max-width:680px">
+                    <div style="display:flex;align-items:center;gap:8px"><span style="display:inline-flex;align-items:center;height:20px;padding:0 6px;box-sizing:border-box;border:1px solid var(--border-strong);border-radius:var(--radius-xs);font-size:11px;line-height:16px;font-weight:600;letter-spacing:.03em;color:var(--ink)">AI</span><span style="font-size:13px;line-height:20px;color:var(--ink-muted)">Open Door</span></div>
+                    <p style="margin:0;font-size:15px;line-height:24px;color:var(--ink);text-wrap:pretty">Here’s the request. Confirm it and Marcus Bell will review it.</p>
+                    <section aria-labelledby="{{ f.id }}-cc" style="border:1px solid var(--border);border-radius:var(--radius-lg);background:var(--surface-raised);overflow:hidden">
+                      <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;padding:14px 20px;border-bottom:1px solid var(--border-subtle)">
+                        <div style="display:flex;align-items:center;gap:12px;min-width:0"><span aria-hidden="true" style="width:32px;height:32px;flex:none;border-radius:var(--radius-sm);background:var(--primary-tint);color:var(--primary);display:flex;align-items:center;justify-content:center"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="4" rx="2"></rect><path d="M16 2v4M8 2v4M3 10h18M12 14v4M10 16h4"></path></svg></span><h3 id="{{ f.id }}-cc" style="margin:0;font-size:15px;line-height:24px;font-weight:600">Book PTO</h3></div>
+                        <span style="display:inline-flex;align-items:center;gap:6px;font-size:13px;line-height:20px;color:var(--ink-muted);font-variant-numeric:tabular-nums;white-space:nowrap"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"></circle><path d="M12 6v6l4 2"></path></svg>Expires at 10:48 AM</span>
+                      </div>
+                      <div style="display:flex;flex-direction:column;gap:16px;padding:16px 20px 20px">
+                        <dl style="margin:0;display:grid;grid-template-columns:96px minmax(0,1fr);gap:8px 16px;align-items:center;font-size:14px;line-height:20px"><dt style="color:var(--ink-muted)">Type</dt><dd style="margin:0">PTO</dd><dt style="color:var(--ink-muted)">Dates</dt><dd style="margin:0;font-weight:600">Friday, October 30</dd></dl>
+                        <section aria-labelledby="{{ f.id }}-pv" style="border:1px solid var(--border);border-radius:var(--radius-lg);overflow:hidden">
+                          <h4 id="{{ f.id }}-pv" style="margin:0;padding:10px 16px;background:var(--surface-sunken);border-bottom:1px solid var(--border-subtle);font-size:13px;line-height:20px;font-weight:600">What this uses</h4>
+                          <div style="padding:6px 16px 12px">
+                            <ul role="list" style="margin:0;padding:0;list-style:none"><li style="display:grid;grid-template-columns:16px minmax(0,1fr) auto;gap:10px;align-items:start;padding:6px 0;font-size:14px;line-height:20px;font-variant-numeric:tabular-nums"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="margin-top:2px;color:var(--primary)"><path d="M20 6 9 17l-5-5"></path></svg><span><span style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)">Counted: </span>Friday, October 30</span><span>8 hours</span></li></ul>
+                            <p style="margin:6px 0 0;padding-top:12px;border-top:1px solid var(--border-subtle);font-size:15px;line-height:24px;font-variant-numeric:tabular-nums;text-wrap:pretty"><span style="font-weight:600">8 hours (1 day)</span><span style="color:var(--ink-muted)"> · 84 hours (10.5 days) left after this</span></p>
+                            <div style="display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-top:12px"><span style="font-size:12px;line-height:16px;color:var(--ink-muted)">Sources</span><a href="/handbook/4.1" aria-label="Source: Handbook §4.1, Paid time off" style="display:inline-flex;align-items:center;gap:6px;height:24px;padding:0 8px;border:1px solid var(--border-strong);border-radius:var(--radius-xs);background:var(--surface-raised);font-size:12px;line-height:16px;color:var(--ink);text-decoration:none;font-variant-numeric:tabular-nums;white-space:nowrap" style-hover="background:var(--surface-hover);border-color:var(--border-strong-hover);color:var(--ink)" style-focus="outline:2px solid var(--focus-ring);outline-offset:2px"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="color:var(--ink-muted)"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"></path><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"></path></svg>Handbook §4.1 · Paid time off</a></div>
+                          </div>
+                        </section>
+                        <p style="display:flex;align-items:flex-start;gap:8px;margin:0;font-size:14px;line-height:20px;color:var(--ink-muted);text-wrap:pretty"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex:none;margin-top:2px"><circle cx="12" cy="12" r="10"></circle><path d="M12 16v-4M12 8h.01"></path></svg>Marcus Bell, your manager, reviews PTO requests.</p>
+                      </div>
+                      <div style="display:flex;flex-direction:column;gap:12px;padding:14px 20px 16px;border-top:1px solid var(--border-subtle);background:var(--surface-sunken)">
+                        <p style="display:flex;align-items:center;gap:8px;margin:0;font-size:14px;line-height:20px;color:var(--ink)"><span aria-hidden="true" style="display:inline-flex;align-items:center;height:20px;padding:0 6px;box-sizing:border-box;border:1px solid var(--border-strong);border-radius:var(--radius-xs);background:var(--surface-raised);font-size:11px;line-height:16px;font-weight:600;letter-spacing:.03em">AI</span>Proposed by the AI. Nothing happens until you confirm.</p>
+                        <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+                          <button type="button" data-tt="confirm" aria-label="Confirm: book PTO on Friday, October 30" style="height:40px;padding:0 18px;border:0;border-radius:var(--radius-md);background:var(--primary);color:var(--on-primary);font-family:var(--font-sans);font-size:14px;line-height:20px;font-weight:600;cursor:pointer" style-hover="background:var(--primary-hover)" style-focus="outline:2px solid var(--focus-ring);outline-offset:2px">Confirm</button>
+                          <button type="button" aria-label="Dismiss, don’t book PTO on Friday, October 30" style="height:40px;padding:0 18px;border:1px solid var(--border-strong);border-radius:var(--radius-md);background:var(--surface-raised);color:var(--ink);font-family:var(--font-sans);font-size:14px;line-height:20px;font-weight:600;cursor:pointer" style-hover="background:var(--surface-hover);border-color:var(--border-strong-hover)" style-focus="outline:2px solid var(--focus-ring);outline-offset:2px">Dismiss</button>
+                        </div>
+                      </div>
+                    </section>
+                  </div>
+                </sc-if>
+                <sc-if value="{{ m.isSens }}" hint-placeholder-val="{{ false }}">
+                  <section aria-labelledby="{{ f.id }}-sh" style="max-width:680px;border:1px solid var(--border-strong);border-radius:var(--radius-xl);overflow:hidden;background:var(--surface-raised)">
+                    <div style="display:flex;align-items:center;gap:10px;padding:12px 24px;background:var(--surface-sunken);border-bottom:1px solid var(--border);color:var(--ink)"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="flex:none"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"></path></svg><h2 id="{{ f.id }}-sh" style="margin:0;font-size:15px;line-height:22px;font-weight:600">A person in HR handles this, not the AI</h2></div>
+                    <div style="display:flex;flex-direction:column;gap:16px;padding:18px 24px 12px">
+                      <p style="margin:0;font-size:16px;line-height:26px;text-wrap:pretty">This sounds like something a person on the HR team should help with. You can open a confidential case below. Only the HR team can open it in Open Door, never your manager, and it’s stored encrypted. HR replies within 2 business days. Their contact details are below.</p>
+                      <div style="display:flex;flex-direction:column;gap:2px">
+                        <h3 style="margin:0;font-size:13px;line-height:20px;font-weight:600">HR contacts</h3>
+                        <p style="margin:0 0 4px;font-size:13px;line-height:20px;color:var(--ink-muted)">A person on the HR team reads and answers these, not the AI.</p>
+                        <ul role="list" style="margin:0;padding:0;list-style:none">
+                          <sc-for list="{{ hr }}" as="h" hint-placeholder-count="2">
+                            <li style="display:flex;align-items:center;gap:12px;padding:12px 0;border-top:1px solid var(--border-subtle)">
+                              <span aria-hidden="true" style="width:36px;height:36px;flex:none;border-radius:9999px;background:var(--primary-tint);display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:600"><sc-if value="{{ h.isPerson }}" hint-placeholder-val="{{ true }}">{{ h.ini }}</sc-if><sc-if value="{{ h.isTeam }}" hint-placeholder-val="{{ false }}"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"></path></svg></sc-if></span>
+                              <span style="flex:1;min-width:0;display:flex;flex-direction:column"><span style="font-size:15px;line-height:22px;font-weight:600">{{ h.name }}</span><span style="font-size:13px;line-height:18px;color:var(--ink-muted)">{{ h.role }}</span></span>
+                              <a href="{{ h.mailto }}" style="font-size:14px;line-height:20px;font-weight:600;color:var(--primary);text-decoration:underline;text-decoration-thickness:1px;text-underline-offset:3px;border-radius:2px;white-space:nowrap" style-hover="color:var(--primary-hover)" style-focus="outline:2px solid var(--focus-ring);outline-offset:2px">{{ h.email }}</a>
+                            </li>
+                          </sc-for>
+                        </ul>
+                      </div>
+                      <a href="/handbook/7.2" style="align-self:flex-start;font-size:14px;line-height:20px;font-weight:600;color:var(--primary);text-decoration:underline;text-decoration-thickness:1px;text-underline-offset:3px;border-radius:2px" style-hover="color:var(--primary-hover)" style-focus="outline:2px solid var(--focus-ring);outline-offset:2px">How confidential HR cases work, §7.2</a>
+                    </div>
+                    <div style="padding:22px 24px 24px;border-top:1px solid var(--confidential-border);background:var(--confidential-tint)">
+                      <dc-import name="Case Form" c="{{ m.c }}" hint-size="100%,560px"></dc-import>
+                    </div>
+                  </section>
+                </sc-if>
+              </sc-for>
+            </div>
+          </div>
+          <div style="flex:none;display:flex;flex-direction:column;gap:10px;padding:12px 40px 24px">
+            <div style="max-width:760px">
+              <div data-tt="composer" style="border:1px solid var(--input-border);border-radius:var(--radius-lg);background:var(--surface-raised)" style-hover="border-color:var(--input-border-hover)">
+                <textarea aria-label="Ask Open Door" rows="2" data-composer="true" placeholder="Ask a follow-up…" style="display:block;width:100%;box-sizing:border-box;border:0;outline:0;resize:none;font-family:var(--font-sans);font-size:var(--text-body-lg);line-height:var(--leading-body-lg);color:var(--ink);background:transparent;padding:14px 20px 6px"></textarea>
+                <div style="display:flex;align-items:center;gap:16px;padding:10px 10px 10px 20px;border-top:1px solid var(--border-subtle)"><p style="flex:1;display:flex;align-items:center;gap:8px;margin:0;font-size:13px;line-height:20px;color:var(--ink-muted)"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="flex:none"><circle cx="12" cy="12" r="10"></circle><path d="M12 16v-4M12 8h.01"></path></svg>Open Door is an AI assistant. It can make mistakes, and it always shows its sources.</p><button type="button" style="flex:none;height:40px;padding:0 14px 0 16px;border:0;border-radius:var(--radius-md);background:var(--primary);color:var(--on-primary);display:flex;align-items:center;gap:8px;font-family:var(--font-sans);font-size:14px;font-weight:600;cursor:pointer" style-hover="background:var(--primary-hover)" style-focus="outline:2px solid var(--focus-ring);outline-offset:2px">Ask<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M12 5l7 7-7 7"></path></svg></button></div>
+              </div>
+            </div>
+          </div>
+        </section>
+        <aside aria-label="Your summary" style="width:340px;flex:none;box-sizing:border-box;padding:28px 32px 32px;border-left:1px solid var(--border-subtle);background:var(--surface-sunken)">
+          <div style="font-size:13px;line-height:20px;color:var(--ink-muted);padding-bottom:12px;border-bottom:1px solid var(--border)">At a glance</div>
+          <div style="display:flex;flex-direction:column">
+            <sc-for list="{{ f.p.glance }}" as="g" hint-placeholder-count="3">
+              <a href="{{ g.href }}" aria-label="{{ g.aria }}" style="display:flex;align-items:center;gap:12px;padding:20px 12px;margin:0 -12px;border-bottom:1px solid var(--border-subtle);border-radius:var(--radius-md);color:var(--ink);text-decoration:none" style-hover="background:var(--primary-tint);color:var(--ink)" style-focus="outline:2px solid var(--focus-ring);outline-offset:2px;position:relative;z-index:1">
+                <span style="flex:1;min-width:0;display:flex;flex-direction:column;gap:2px"><span style="display:flex;align-items:center;gap:10px"><span style="font-size:32px;line-height:40px;font-weight:600;letter-spacing:-0.01em;font-variant-numeric:tabular-nums;white-space:nowrap">{{ g.v }}</span><sc-if value="{{ g.mk }}" hint-placeholder-val="{{ false }}"><span style="width:8px;height:8px;border-radius:50%;background:var(--marker)"></span></sc-if></span><span style="font-size:14px;line-height:20px;color:var(--ink-muted)">{{ g.cap }}</span></span>
+                <span style="display:flex;align-items:center;gap:4px;font-size:13px;line-height:20px;font-weight:600;color:var(--primary)">{{ g.dest }}<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"></path></svg></span>
+              </a>
+            </sc-for>
+          </div>
+        </aside>
+      </sc-if>
+
+      <sc-if value="{{ f.isConsole }}" hint-placeholder-val="{{ false }}">
+        <div style="position:relative;flex:1;min-width:0;overflow:hidden">
+          <div style="padding:40px 48px 72px">
+<div style="max-width:1080px">
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:24px">
+              <h1 style="margin:0;font-size:var(--text-h1);line-height:var(--leading-h1);font-weight:600;letter-spacing:var(--tracking-h1)">AI Ops console</h1>
+              <span style="display:inline-flex;align-items:center;gap:8px;height:28px;padding:0 12px;border:1px solid var(--border);border-radius:9999px;font-size:12px;line-height:16px;color:var(--ink-muted);font-variant-numeric:tabular-nums;white-space:nowrap"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><path d="M12 6v6l4 2"></path></svg>{{ f.cv.reset }}</span>
+            </div>
+            <p style="margin:8px 0 0;max-width:680px;font-size:16px;line-height:26px;color:var(--ink-muted);text-wrap:pretty">What the assistant did on every turn in this sandbox. It never shows who asked or what they wrote.</p>
+
+            <section aria-labelledby="{{ f.id }}-sbx" aria-busy="{{ f.cv.busy }}" style="margin-top:40px">
+              <h2 id="{{ f.id }}-sbx" style="margin:0;font-size:var(--text-h2);line-height:var(--leading-h2);font-weight:600">This sandbox</h2>
+
+              <sc-if value="{{ f.cv.isError }}" hint-placeholder-val="{{ false }}">
+                <div style="display:flex;justify-content:center;padding:96px 0 104px;margin-top:16px;border:1px solid var(--border);border-radius:var(--radius-lg)">
+                  <div style="max-width:480px;display:flex;flex-direction:column;align-items:center;gap:12px;text-align:center">
+                    <h3 style="margin:0;font-size:var(--text-h1);line-height:var(--leading-h1);font-weight:600;letter-spacing:var(--tracking-h1);text-wrap:balance">Something went wrong on our side.</h3>
+                    <p style="margin:0;font-size:var(--text-body);line-height:var(--leading-body);color:var(--ink-muted);text-wrap:pretty">The sandbox figures didn't load. Try again in a moment. If it keeps happening, this reference helps us find it:</p>
+                    <p style="margin:0;display:flex;align-items:center;gap:8px;font-size:var(--text-small);line-height:20px;color:var(--ink-muted)">Reference<code style="padding:2px 8px;border:1px solid var(--border);border-radius:var(--radius-xs);background:var(--surface-sunken);font-family:var(--font-mono);font-size:13px;line-height:20px;color:var(--ink);user-select:all">c41e8b07</code></p>
+                    <div style="display:flex;gap:12px;margin-top:12px"><button type="button" style="height:40px;padding:0 16px;border:0;border-radius:var(--radius-md);background:var(--primary);color:var(--on-primary);display:inline-flex;align-items:center;gap:8px;font-family:var(--font-sans);font-size:14px;font-weight:600;cursor:pointer" style-hover="background:var(--primary-hover)" style-focus="outline:2px solid var(--focus-ring);outline-offset:2px"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"></path><path d="M3 3v5h5"></path></svg>Retry</button></div>
+                  </div>
+                </div>
+              </sc-if>
+
+              <sc-if value="{{ f.cv.notError }}" hint-placeholder-val="{{ true }}">
+                <sc-if value="{{ f.cv.isLoading }}" hint-placeholder-val="{{ false }}"><p role="status" style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)">Loading the sandbox figures</p></sc-if>
+                <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:16px;margin-top:16px">
+                  <sc-for list="{{ f.cv.tiles }}" as="t" hint-placeholder-count="8">
+                    <div role="group" aria-labelledby="{{ t.hid }}" style="display:flex;flex-direction:column;min-width:0;padding:18px 20px 16px;box-sizing:border-box;border:1px solid var(--border);border-radius:var(--radius-lg);background:var(--surface-raised)">
+                      <h3 id="{{ t.hid }}" style="margin:0;font-size:14px;line-height:20px;font-weight:600;text-wrap:pretty">{{ t.title }}</h3>
+                      <sc-if value="{{ t.sk }}" hint-placeholder-val="{{ false }}"><div aria-hidden="true" style="display:flex;flex-direction:column;gap:10px;margin-top:16px"><span style="height:28px;width:45%;border-radius:6px;background:var(--surface-hover)"></span><span style="height:12px;width:80%;border-radius:6px;background:var(--surface-hover)"></span><span style="height:12px;width:56%;border-radius:6px;background:var(--surface-hover)"></span></div></sc-if>
+                      <sc-if value="{{ t.none }}" hint-placeholder-val="{{ false }}"><p style="margin:12px 0 0;font-size:15px;line-height:24px;color:var(--ink-muted)">No turns yet</p></sc-if>
+                      <sc-if value="{{ t.hasFig }}" hint-placeholder-val="{{ true }}">
+                        <p style="display:flex;flex-direction:column;margin:10px 0 0">
+                          <sc-if value="{{ t.hasPre }}" hint-placeholder-val="{{ false }}"><span style="font-size:13px;line-height:20px;color:var(--ink-muted)">{{ t.pre }}</span></sc-if>
+                          <span style="font-size:32px;line-height:40px;font-weight:600;letter-spacing:-0.01em;font-variant-numeric:tabular-nums;white-space:nowrap">{{ t.fig }}</span>
+                        </p>
+                      </sc-if>
+                      <sc-for list="{{ t.lines }}" as="l" hint-placeholder-count="1"><p style="margin:0;font-size:14px;line-height:20px;font-variant-numeric:tabular-nums;text-wrap:pretty">{{ l }}</p></sc-for>
+                      <sc-if value="{{ t.hasRows }}" hint-placeholder-val="{{ false }}">
+                        <dl style="margin:10px 0 0;padding:0;display:flex;flex-direction:column">
+                          <sc-for list="{{ t.rows }}" as="r" hint-placeholder-count="3"><div style="display:flex;justify-content:space-between;gap:12px;padding:6px 0;border-top:1px solid var(--border-subtle);font-size:14px;line-height:20px"><dt>{{ r.k }}</dt><dd style="margin:0;font-weight:600;font-variant-numeric:tabular-nums">{{ r.v }}</dd></div></sc-for>
+                        </dl>
+                      </sc-if>
+                      <sc-if value="{{ t.hasClosest }}" hint-placeholder-val="{{ false }}">
+                        <div style="display:flex;flex-direction:column;margin-top:10px">
+                          <p style="margin:0;font-size:13px;line-height:20px;color:var(--ink-muted)">Search came closest with:</p>
+                          <sc-for list="{{ t.closest }}" as="c" hint-placeholder-count="1"><p style="margin:0;font-size:14px;line-height:20px;font-variant-numeric:tabular-nums">{{ c }}</p></sc-for>
+                        </div>
+                      </sc-if>
+                      <sc-if value="{{ t.hasSpend }}" hint-placeholder-val="{{ false }}"><p style="margin:10px 0 0;font-size:14px;line-height:20px;font-variant-numeric:tabular-nums">{{ t.spend }}</p></sc-if>
+                      <div style="flex:1;min-height:12px"></div>
+                      <sc-if value="{{ t.hasFoot }}" hint-placeholder-val="{{ true }}"><p style="margin:0;padding-top:10px;border-top:1px solid var(--border-subtle);font-size:13px;line-height:20px;color:var(--ink-muted);font-variant-numeric:tabular-nums">{{ t.foot }}</p></sc-if>
+                    </div>
+                  </sc-for>
+                </div>
+
+                <sc-if value="{{ f.cv.isEmpty }}" hint-placeholder-val="{{ false }}">
+                  <div style="display:flex;flex-direction:column;align-items:flex-start;gap:16px;margin-top:40px;padding:32px 0 8px;border-top:1px solid var(--border)">
+                    <p style="margin:0;font-size:var(--text-body);line-height:var(--leading-body);color:var(--ink);text-wrap:pretty">No questions yet in this sandbox. Ask something, or take the tour.</p>
+                    <div style="display:flex;flex-wrap:wrap;gap:12px">
+                      <a href="/ask" style="height:40px;padding:0 16px;box-sizing:border-box;border-radius:var(--radius-md);background:var(--primary);color:var(--on-primary);display:inline-flex;align-items:center;font-size:14px;line-height:20px;font-weight:600;white-space:nowrap;text-decoration:none" style-hover="background:var(--primary-hover);color:var(--on-primary)" style-focus="outline:2px solid var(--focus-ring);outline-offset:2px">Ask a question</a>
+                      <button type="button" style="height:40px;padding:0 16px;border:1px solid var(--border-strong);border-radius:var(--radius-md);background:var(--surface-raised);color:var(--ink);font-family:var(--font-sans);font-size:14px;line-height:20px;font-weight:600;white-space:nowrap;cursor:pointer" style-hover="background:var(--surface-hover);border-color:var(--border-strong-hover)" style-focus="outline:2px solid var(--focus-ring);outline-offset:2px">Take the tour</button>
+                    </div>
+                  </div>
+                </sc-if>
+
+                <sc-if value="{{ f.cv.hasTable }}" hint-placeholder-val="{{ true }}">
+                  <div style="margin-top:40px">
+                    <sc-if value="{{ f.cv.isData }}" hint-placeholder-val="{{ true }}"><h3 id="{{ f.id }}-day" data-turns="true" style="margin:0 0 12px;font-size:15px;line-height:22px;font-weight:600;font-variant-numeric:tabular-nums">Monday, October 26 · 9 turns</h3></sc-if>
+                    <div role="table" aria-labelledby="{{ f.id }}-day" aria-label="{{ f.cv.tableLabel }}" style="font-size:14px;line-height:20px;font-variant-numeric:tabular-nums">
+                      <div role="rowgroup">
+                        <div role="row" style="display:grid;grid-template-columns:{{ f.cv.cols }};column-gap:12px;align-items:end;padding:8px 12px;border-bottom:1px solid var(--border);font-size:13px;line-height:18px;color:var(--ink-muted)">
+                          <span role="columnheader">Time</span><span role="columnheader">Asked by</span><span role="columnheader">Outcome</span><span role="columnheader">Safety check</span><span role="columnheader" style="text-align:right">Tools</span><span role="columnheader">Cited</span><span role="columnheader" style="text-align:right">Cost</span><span role="columnheader" style="text-align:right">First token</span>
+                        </div>
+                      </div>
+                      <div role="rowgroup">
+                        <sc-if value="{{ f.cv.isLoading }}" hint-placeholder-val="{{ false }}">
+                          <sc-for list="{{ f.cv.skRows }}" as="s" hint-placeholder-count="6">
+                            <div role="row" aria-hidden="true" style="display:grid;grid-template-columns:{{ f.cv.cols }};column-gap:12px;align-items:center;height:64px;padding:0 12px;box-sizing:border-box;border-bottom:1px solid var(--border-subtle)">
+                              <span style="height:12px;width:70%;border-radius:6px;background:var(--surface-hover)"></span><span style="height:12px;width:75%;border-radius:6px;background:var(--surface-hover)"></span><span style="height:12px;width:60%;border-radius:6px;background:var(--surface-hover)"></span><span style="height:12px;width:55%;border-radius:6px;background:var(--surface-hover)"></span><span style="justify-self:end;height:12px;width:16px;border-radius:6px;background:var(--surface-hover)"></span><span style="height:12px;width:40%;border-radius:6px;background:var(--surface-hover)"></span><span style="justify-self:end;height:12px;width:44px;border-radius:6px;background:var(--surface-hover)"></span><span style="justify-self:end;height:12px;width:32px;border-radius:6px;background:var(--surface-hover)"></span>
+                            </div>
+                          </sc-for>
+                        </sc-if>
+                        <sc-for list="{{ f.cv.rows }}" as="r" hint-placeholder-count="8">
+                          <div role="row" onClick="{{ r.open }}" style="display:grid;grid-template-columns:{{ f.cv.cols }};column-gap:12px;align-items:start;min-height:56px;padding:10px 12px;box-sizing:border-box;border-bottom:1px solid var(--border-subtle);background:{{ r.bg }};box-shadow:{{ r.bar }};outline:{{ r.ring }};outline-offset:-2px;cursor:pointer" style-hover="background:var(--primary-tint)">
+                            <span role="cell"><button type="button" data-turn="{{ r.id }}" aria-label="{{ r.aria }}" aria-expanded="{{ r.exp }}" aria-controls="{{ r.ctl }}" onFocus="{{ r.onFocus }}" onBlur="{{ r.onBlur }}" style="padding:0;border:0;background:transparent;font-family:var(--font-sans);font-size:14px;line-height:20px;font-weight:600;color:var(--ink);font-variant-numeric:tabular-nums;white-space:nowrap;cursor:pointer;outline:0">{{ r.time }}</button></span>
+                            <span role="cell" style="display:flex;flex-direction:column;min-width:0"><span>{{ r.who }}</span><span style="font-size:13px;line-height:18px;color:var(--ink-muted)">{{ r.loc }}</span></span>
+                            <span role="cell" style="display:flex;flex-direction:column;align-items:flex-start;gap:4px;min-width:0">
+                              <span style="display:inline-flex;align-items:center;gap:6px;height:24px;padding:0 8px;box-sizing:border-box;border:1px solid var(--border-strong);border-radius:var(--radius-xs);background:var(--surface-raised);font-size:13px;line-height:20px;font-weight:500;white-space:nowrap"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex:none;color:var(--ink-muted)"><path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z"></path></svg>{{ r.outcome }}</span>
+                              <sc-if value="{{ r.card }}" hint-placeholder-val="{{ false }}"><span style="font-size:13px;line-height:18px;color:var(--ink-muted)">Offered a card</span></sc-if>
+                            </span>
+                            <span role="cell" style="display:flex;flex-direction:column;align-items:flex-start;gap:4px;min-width:0">
+                              <span style="line-height:24px">Ordinary</span>
+                              <sc-if value="{{ r.inj }}" hint-placeholder-val="{{ false }}"><span style="display:inline-flex;flex-direction:{{ f.cv.tagDir }};column-gap:4px;box-sizing:border-box;padding:1px 6px;border:1px solid var(--border-strong);border-radius:var(--radius-xs);background:var(--surface-sunken);font-size:12px;line-height:18px;color:var(--ink-muted);white-space:nowrap"><span>Possible prompt</span><span>injection</span></span></sc-if>
+                            </span>
+                            <span role="cell" style="text-align:right;line-height:24px">{{ r.tools }}</span>
+                            <span role="cell" style="line-height:24px"><sc-if value="{{ r.hasCited }}" hint-placeholder-val="{{ true }}">{{ r.cited }}</sc-if><sc-if value="{{ r.noCited }}" hint-placeholder-val="{{ false }}"><span aria-hidden="true" style="color:var(--ink-muted)">–</span><span style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)">None</span></sc-if></span>
+                            <span role="cell" style="text-align:right;line-height:24px">{{ r.cost }}</span>
+                            <span role="cell" style="text-align:right;line-height:24px;white-space:nowrap">{{ r.ft }}</span>
+                          </div>
+                        </sc-for>
+                        <sc-if value="{{ f.cv.isData }}" hint-placeholder-val="{{ true }}">
+                          <div role="row" style="border-bottom:1px solid var(--border-subtle)">
+                            <div role="cell" data-tt="flagged" style="display:flex;flex-direction:column;gap:4px;padding:16px 12px;background:var(--confidential-tint)">
+                              <p style="display:flex;align-items:center;gap:10px;margin:0;font-size:15px;line-height:22px;text-wrap:pretty"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex:none;color:var(--primary)"><rect width="18" height="11" x="3" y="11" rx="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>Flagged by the safety check. Details are hidden to protect the person.</p>
+                              <p style="margin:0 0 0 26px;font-size:13px;line-height:20px;color:var(--ink-muted);text-wrap:pretty">Oct 26 · 14,800 input tokens · 550 output · $0.024 · safety check 760 ms · first token 1.9 s · total 5.2 s</p>
+                            </div>
+                          </div>
+                        </sc-if>
+                      </div>
+                    </div>
+                  </div>
+                </sc-if>
+              </sc-if>
+            </section>
+
+            <section data-sb="true" style="margin-top:64px;padding-top:40px;border-top:1px solid var(--border-subtle)"><dc-import name="Scoreboard" uid="{{ f.id }}-sb" hint-size="100%,1040px"></dc-import></section>
+</div>
+          </div>
+        </div>
+      </sc-if>
+    </div>
+  </main>
+</div>
+</sc-if>
+
+<sc-if value="{{ f.hasCoach }}" hint-placeholder-val="{{ false }}">
+  <div aria-hidden="true" style="position:absolute;left:{{ f.pos.rx }}px;top:{{ f.pos.ry }}px;width:{{ f.pos.rw }}px;height:{{ f.pos.rh }}px;box-sizing:border-box;border-radius:{{ f.pos.rr }}px;outline:2px solid var(--primary);pointer-events:none;z-index:24;visibility:{{ f.pos.vis }}"></div>
+  <div role="dialog" aria-modal="false" aria-labelledby="{{ f.id }}-ct" data-coach="true" style="position:absolute;left:{{ f.pos.cx }}px;top:{{ f.pos.cy }}px;width:360px;box-sizing:border-box;z-index:25;visibility:{{ f.pos.vis }};background:var(--surface-raised);border:1px solid var(--border-strong);border-radius:var(--radius-lg);box-shadow:var(--shadow-md)">
+    <sc-if value="{{ f.pos.up }}" hint-placeholder-val="{{ false }}"><span aria-hidden="true" style="position:absolute;top:-7px;left:{{ f.pos.po }}px;width:12px;height:12px;background:var(--surface-raised);border-top:1px solid var(--border-strong);border-left:1px solid var(--border-strong);transform:rotate(45deg)"></span></sc-if>
+    <sc-if value="{{ f.pos.down }}" hint-placeholder-val="{{ false }}"><span aria-hidden="true" style="position:absolute;bottom:-7px;left:{{ f.pos.po }}px;width:12px;height:12px;background:var(--surface-raised);border-right:1px solid var(--border-strong);border-bottom:1px solid var(--border-strong);transform:rotate(45deg)"></span></sc-if>
+    <sc-if value="{{ f.pos.left }}" hint-placeholder-val="{{ false }}"><span aria-hidden="true" style="position:absolute;left:-7px;top:{{ f.pos.po }}px;width:12px;height:12px;background:var(--surface-raised);border-left:1px solid var(--border-strong);border-bottom:1px solid var(--border-strong);transform:rotate(45deg)"></span></sc-if>
+    <div style="position:relative;display:flex;flex-direction:column;gap:8px;padding:12px 12px 16px 20px">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:12px">
+        <span aria-hidden="true" style="font-size:12px;line-height:16px;color:var(--ink-muted);font-variant-numeric:tabular-nums">{{ f.cm.stepText }}</span>
+        <button type="button" aria-label="Leave the tour" onClick="{{ f.leave }}" style="width:32px;height:32px;flex:none;border:0;border-radius:var(--radius-sm);background:transparent;color:var(--ink-muted);display:flex;align-items:center;justify-content:center;cursor:pointer" style-hover="background:var(--neutral-hover);color:var(--ink)" style-focus="outline:2px solid var(--focus-ring);outline-offset:2px"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"></path></svg></button>
+      </div>
+      <h2 id="{{ f.id }}-ct" tabIndex="-1" data-coach-h="true" style="margin:-6px 8px 0 0;font-size:17px;line-height:24px;font-weight:600;outline:0;text-wrap:pretty"><span style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)">{{ f.cm.stepText }}: </span>{{ f.cm.title }}</h2>
+      <p style="margin:0 8px 0 0;font-size:14px;line-height:22px;text-wrap:pretty">{{ f.cm.body }}</p>
+      <sc-if value="{{ f.cm.missing }}" hint-placeholder-val="{{ false }}"><p role="status" style="margin:0 8px 0 0;font-size:13px;line-height:20px;color:var(--ink-muted);text-wrap:pretty">{{ f.cm.missingText }}</p></sc-if>
+      <sc-if value="{{ f.cm.hasChips }}" hint-placeholder-val="{{ false }}">
+        <div style="display:flex;flex-direction:column;margin:4px 8px 0 0;border-top:1px solid var(--border-subtle)">
+          <sc-for list="{{ f.cm.chips }}" as="c" hint-placeholder-count="1">
+            <button type="button" aria-disabled="{{ c.dis }}" aria-label="{{ c.aria }}" onClick="{{ c.send }}" style="display:flex;align-items:center;justify-content:space-between;gap:12px;width:100%;min-height:44px;padding:10px 10px;box-sizing:border-box;border:0;border-bottom:1px solid var(--border-subtle);background:transparent;font-family:var(--font-sans);font-size:14px;line-height:20px;color:{{ c.fg }};text-align:left;cursor:{{ c.cur }}" style-hover="background:{{ c.hov }}" style-focus="outline:2px solid var(--focus-ring);outline-offset:-2px">
+              <span style="text-wrap:pretty">{{ c.text }}</span>
+              <sc-if value="{{ c.ready }}" hint-placeholder-val="{{ true }}"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="flex:none;color:var(--ink)"><path d="M5 12h14M12 5l7 7-7 7"></path></svg></sc-if>
+              <sc-if value="{{ c.sent }}" hint-placeholder-val="{{ false }}"><span style="flex:none;display:inline-flex;align-items:center;gap:4px;font-size:13px;line-height:20px;font-weight:600;color:var(--ink-muted)"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"></path></svg>Sent</span></sc-if>
+            </button>
+          </sc-for>
+        </div>
+      </sc-if>
+      <div style="display:flex;align-items:center;gap:8px;margin:8px 8px 0 0">
+        <sc-if value="{{ f.cm.hasBack }}" hint-placeholder-val="{{ true }}"><button type="button" style="height:32px;padding:0 12px;border:1px solid var(--border-strong);border-radius:var(--radius-sm);background:var(--surface-raised);color:var(--ink);font-family:var(--font-sans);font-size:13px;line-height:20px;font-weight:600;cursor:pointer" style-hover="background:var(--surface-hover);border-color:var(--border-strong-hover)" style-focus="outline:2px solid var(--focus-ring);outline-offset:2px">Back</button></sc-if>
+        <span style="flex:1"></span>
+        <sc-if value="{{ f.cm.showSkip }}" hint-placeholder-val="{{ true }}"><button type="button" onClick="{{ f.skip }}" style="height:32px;padding:0 10px;border:0;border-radius:var(--radius-sm);background:transparent;color:var(--primary);font-family:var(--font-sans);font-size:13px;line-height:20px;font-weight:600;cursor:pointer" style-hover="background:var(--primary-tint);color:var(--primary-hover)" style-focus="outline:2px solid var(--focus-ring);outline-offset:2px">Skip this step</button></sc-if>
+        <sc-if value="{{ f.cm.showNext }}" hint-placeholder-val="{{ false }}"><button type="button" data-coach-next="true" style="height:32px;padding:0 14px;border:0;border-radius:var(--radius-sm);background:var(--primary);color:var(--on-primary);font-family:var(--font-sans);font-size:13px;line-height:20px;font-weight:600;cursor:pointer" style-hover="background:var(--primary-hover)" style-focus="outline:2px solid var(--focus-ring);outline-offset:2px">Next</button></sc-if>
+      </div>
+    </div>
+  </div>
+</sc-if>
+
+<sc-if value="{{ f.hasEnd }}" hint-placeholder-val="{{ false }}">
+  <div role="dialog" aria-modal="false" aria-labelledby="{{ f.id }}-et" data-end="true" style="position:absolute;left:838px;top:50%;transform:translate(-50%,-50%);width:520px;box-sizing:border-box;z-index:25;display:flex;flex-direction:column;gap:12px;padding:24px 28px 28px;background:var(--surface-raised);border:1px solid var(--border-strong);border-radius:var(--radius-xl);box-shadow:var(--shadow-md)">
+    <span aria-hidden="true" style="font-size:12px;line-height:16px;color:var(--ink-muted);font-variant-numeric:tabular-nums">Step 10 of 10</span>
+    <h2 id="{{ f.id }}-et" tabIndex="-1" style="margin:0;font-size:var(--text-h2);line-height:var(--leading-h2);font-weight:600;outline:0"><span style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)">Step 10 of 10: </span>That’s the tour</h2>
+    <p style="margin:0;font-size:15px;line-height:24px;text-wrap:pretty">You’ve seen answers that change by state and always cite the handbook, a day off requested and approved on cards a person confirmed, private details kept private, a sensitive concern sent to HR in the person’s own words, and a record of everything the AI did.</p>
+    <p style="margin:0;font-size:15px;line-height:24px;color:var(--ink-muted);text-wrap:pretty">This sandbox stays for 24 hours, so keep exploring.</p>
+    <div style="display:flex;flex-wrap:wrap;gap:12px;margin-top:8px">
+      <button type="button" onClick="{{ f.closeEnd }}" style="height:40px;padding:0 16px;border:0;border-radius:var(--radius-md);background:var(--primary);color:var(--on-primary);font-family:var(--font-sans);font-size:14px;line-height:20px;font-weight:600;white-space:nowrap;cursor:pointer" style-hover="background:var(--primary-hover)" style-focus="outline:2px solid var(--focus-ring);outline-offset:2px">Keep exploring as Dana</button>
+      <button type="button" style="height:40px;padding:0 16px;border:1px solid var(--border-strong);border-radius:var(--radius-md);background:var(--surface-raised);color:var(--ink);font-family:var(--font-sans);font-size:14px;line-height:20px;font-weight:600;white-space:nowrap;cursor:pointer" style-hover="background:var(--surface-hover);border-color:var(--border-strong-hover)" style-focus="outline:2px solid var(--focus-ring);outline-offset:2px">Choose who to be</button>
+    </div>
+  </div>
+</sc-if>
+
+<sc-if value="{{ f.hasToast }}" hint-placeholder-val="{{ false }}">
+  <div role="status" style="position:absolute;right:36px;bottom:36px;z-index:30;display:flex;align-items:center;gap:12px;min-width:320px;max-width:460px;padding:12px 8px 12px 16px;box-sizing:border-box;background:var(--surface-raised);border:1px solid var(--border);border-radius:var(--radius-md);box-shadow:var(--shadow-md)">
+    <sc-if value="{{ f.toastOk }}" hint-placeholder-val="{{ true }}"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="flex:none;color:var(--success)"><circle cx="12" cy="12" r="10"></circle><path d="m9 12 2 2 4-4"></path></svg></sc-if>
+    <sc-if value="{{ f.toastInfo }}" hint-placeholder-val="{{ false }}"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="flex:none;color:var(--ink-muted)"><circle cx="12" cy="12" r="10"></circle><path d="M12 16v-4M12 8h.01"></path></svg></sc-if>
+    <p style="flex:1;margin:0;font-size:14px;line-height:20px;color:var(--ink);text-wrap:pretty">{{ f.toast }}</p>
+    <button type="button" aria-label="Dismiss" onClick="{{ f.dismissToast }}" style="width:32px;height:32px;flex:none;border:0;border-radius:var(--radius-sm);background:transparent;color:var(--ink-muted);display:flex;align-items:center;justify-content:center;cursor:pointer" style-hover="background:var(--neutral-hover);color:var(--ink)" style-focus="outline:2px solid var(--focus-ring);outline-offset:2px"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"></path></svg></button>
+  </div>
+</sc-if>
+
+<sc-if value="{{ f.hasDlg }}" hint-placeholder-val="{{ false }}">
+  <div style="position:absolute;inset:0;z-index:40;display:flex;align-items:center;justify-content:center;padding:24px;background:var(--scrim)">
+    <div role="alertdialog" aria-modal="true" aria-labelledby="{{ f.id }}-dt" aria-describedby="{{ f.id }}-db" onKeyDown="{{ f.dlgKey }}" style="width:480px;max-width:100%;box-sizing:border-box;padding:24px;background:var(--surface-raised);border-radius:var(--radius-xl);box-shadow:var(--shadow-md);display:flex;flex-direction:column;gap:8px">
+      <h2 id="{{ f.id }}-dt" style="margin:0;font-size:var(--text-h2);line-height:var(--leading-h2);font-weight:600">Start the tour?</h2>
+      <p id="{{ f.id }}-db" style="margin:0;font-size:15px;line-height:24px;color:var(--ink-muted);text-wrap:pretty">The tour starts a new sandbox as Priya Raman. Your current sandbox stays until it expires.</p>
+      <div style="display:flex;justify-content:flex-end;flex-wrap:wrap;gap:12px;margin-top:16px">
+        <button type="button" data-dlg-cancel="true" onClick="{{ f.closeDlg }}" style="height:40px;padding:0 16px;border:1px solid var(--border-strong);border-radius:var(--radius-md);background:var(--surface-raised);color:var(--ink);outline:{{ f.dlgRing }};outline-offset:2px;font-family:var(--font-sans);font-size:14px;line-height:20px;font-weight:600;cursor:pointer" style-hover="background:var(--surface-hover);border-color:var(--border-strong-hover)" style-focus="outline:2px solid var(--focus-ring);outline-offset:2px">Cancel</button>
+        <button type="button" data-dlg-ok="true" onClick="{{ f.closeDlg }}" style="height:40px;padding:0 16px;border:0;border-radius:var(--radius-md);background:var(--primary);color:var(--on-primary);font-family:var(--font-sans);font-size:14px;line-height:20px;font-weight:600;cursor:pointer" style-hover="background:var(--primary-hover)" style-focus="outline:2px solid var(--focus-ring);outline-offset:2px">Start the tour</button>
+      </div>
+    </div>
+  </div>
+</sc-if>
+
+</div>
+</div>
+</div>
+</sc-for>
+</div>
+</section>
+<section class="dv-turn" id="components" data-screen-label="15 Tour components">
+<div class="dv-thd"><a class="dv-tid" href="#components">C</a><span class="dv-tname">Tour components</span></div>
+<p class="dv-note">The component card, rendered from components/tour/ (CoachMark, TourChip, TourEndCard, TourMenuItems). Every state shown is a real prop or data-state on the component.</p>
+<iframe src="components/tour/tour.card.html" title="Tour components" ref="{{ cardRef }}" style="width:1180px;height:2400px;border:1px solid rgba(0,0,0,.08);border-radius:8px;background:#fff"></iframe>
+</section>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  state = { fs: {}, pos: {} };
+  roots = {};
+  timers = [];
+  componentWillUnmount() { clearInterval(this.fitTimer); this.timers.forEach(clearTimeout); }
+  cardRef = el => {
+    if (!el || el === this.cardEl) return;
+    this.cardEl = el;
+    const fit = () => { try { const doc = el.contentDocument; if (!doc || !doc.body) return; const h = doc.body.scrollHeight; if (h > 200 && Math.abs(el.offsetHeight - h - 24) > 4) el.style.height = (h + 24) + 'px'; } catch (err) {} };
+    el.addEventListener('load', fit);
+    let n = 0; clearInterval(this.fitTimer);
+    this.fitTimer = setInterval(() => { fit(); if (++n > 40) clearInterval(this.fitTimer); }, 250);
+  };
+  data() {
+    if (this._d) return this._d;
+    const gl = rows => rows.map(([v, cap, dest, href, mk]) => ({ v, cap, dest, href, mk: !!mk, aria: v + ' ' + cap + '. Open ' + dest }));
+    const emp = ['How many sick days do I get?', 'Book next Friday off', 'What holidays do we have this year?', 'Who do I talk to about a concern?'];
+    const P = {
+      priya: { id: 'priya', initials: 'PR', name: 'Priya Raman', first: 'Priya', title: 'Visual Merchandiser', location: 'Oakland store', nav: 'emp', prompt: 'Ask about California sick leave and book a day off.', qs: emp,
+        glance: gl([['92 hours', 'PTO available', 'Time off', '/time-off'], ['0', 'requests pending', 'Time off', '/time-off'], ['Sep 12', 'Handbook updated', 'Handbook', '/handbook']]) },
+      mateo: { id: 'mateo', initials: 'MA', name: 'Mateo Alvarez', first: 'Mateo', title: 'Warehouse Associate', location: 'Austin warehouse', nav: 'emp', prompt: 'Ask the same questions and get Texas answers.', qs: emp,
+        glance: gl([['48 hours', 'PTO available', 'Time off', '/time-off'], ['0', 'requests pending', 'Time off', '/time-off'], ['Sep 12', 'Handbook updated', 'Handbook', '/handbook']]) },
+      marcus: { id: 'marcus', initials: 'MB', name: 'Marcus Bell', first: 'Marcus', title: 'Store Manager', location: 'Oakland store', nav: 'mgr', prompt: 'Approve a request and check on your team.',
+        qs: ['What’s waiting for my approval?', 'Who on my team is off this week?', 'How many sick days do I get?', 'Who do I talk to about a concern?'],
+        glance: gl([['72 hours', 'PTO available', 'Time off', '/time-off'], ['0', 'requests pending', 'Time off', '/time-off'], ['1', 'approval waiting', 'Approvals', '/approvals', true], ['Sep 12', 'Handbook updated', 'Handbook', '/handbook']]) },
+      dana: { id: 'dana', initials: 'DW', name: 'Dana Whitfield', first: 'Dana', title: 'HR Business Partner', location: 'Denver HQ', nav: 'hr', prompt: 'See the confidential case queue.', qs: [], glance: [] }
+    };
+    const S = {
+      1: { title: 'Ask a policy question', body: 'You’re Priya Raman, a Visual Merchandiser at the Oakland store. Ask about sick days, and the answer cites the California addendum.', chips: ['How many sick days do I get?'] },
+      2: { title: 'Same question, another state', body: 'Now you’re Mateo Alvarez, a Warehouse Associate at the Austin warehouse. Texas has no state sick-leave law, so the answer cites a different section.', chips: ['How many sick days do I get?'] },
+      3: { title: 'Book a day off', body: 'Ask for next Friday. The assistant fills in a card with the date and the balance after. Nothing happens until you confirm.', chips: ['Book next Friday off.'],
+        missing: 'The assistant usually shows a confirm card here, with the date and the balance after. It didn’t this time, which can happen with a live model. Ask again, or go on.' },
+      7: { title: 'Raise something sensitive', body: 'A sensitive topic goes to a person, not the AI. Priya can send her own words to HR as a confidential case.', chips: ['My manager keeps making comments about my age.'],
+        missing: 'The assistant usually shows an HR panel here, with a way to open a confidential case. It didn’t this time. Ask again, or go on.' },
+      9: { title: 'See what the AI did', body: 'The console shows every turn from this tour: the tools, the citations, the cost, and the timing. Priya’s sensitive message is the row with only a date.', chips: [] }
+    };
+    const HR = [
+      { isPerson: true, isTeam: false, ini: 'DW', name: 'Dana Whitfield', role: 'HR Business Partner · Denver HQ', email: 'dana.whitfield@juniperrow.example' },
+      { isPerson: false, isTeam: true, name: 'HR team', role: 'Shared inbox', email: 'hr@juniperrow.example' }
+    ].map(h => ({ ...h, mailto: 'mailto:' + h.email }));
+    const CATS = ['Harassment or discrimination', 'Workplace safety', 'Medical or accommodation', 'Pay concern', 'Something else, or not sure'];
+    const T = [
+      ['i1038', '10:38 AM', 'Employee', 'Oakland, CA', 0, '', '$0.011', '1.1 s', 1], ['b1038', '10:38 AM', 'Employee', 'Oakland, CA', 1, '', '$0.022', '1.7 s'],
+      ['m1036', '10:36 AM', 'Manager', 'Oakland, CA', 1, '', '$0.018', '1.5 s'], ['c1035', '10:35 AM', 'Manager', 'Oakland, CA', 2, '4.1', '$0.026', '2.0 s', 0, 1],
+      ['m1035', '10:35 AM', 'Manager', 'Oakland, CA', 1, '', '$0.019', '1.6 s'], ['c1033', '10:33 AM', 'Employee', 'Oakland, CA', 2, '4.1', '$0.028', '2.2 s', 0, 1],
+      ['a1032', '10:32 AM', 'Employee', 'Austin, TX', 1, '4.3', '$0.020', '1.3 s'], ['a1031', '10:31 AM', 'Employee', 'Oakland, CA', 1, 'CA-4.3', '$0.021', '1.4 s']
+    ];
+    const TILES = [
+      { title: 'Time to first token', pre: 'Median', fig: '1.6 s', lines: ['95th percentile 2.2 s', 'Target 3 s'], foot: '9 turns · Small sample' },
+      { title: 'Safety check time', pre: '95th percentile', fig: '980 ms', lines: ['Target 800 ms'], foot: '9 turns · Small sample' },
+      { title: 'Cost per answered question', fig: '$0.021', lines: ['8 answered questions'], spend: 'Sandbox spend $0.21 of $1.00 cap', foot: 'Small sample' },
+      { title: 'Escalation rate', fig: '11%', lines: ['1 of 9 turns flagged by the safety check'], foot: 'Small sample' },
+      { title: 'Refusals and fallbacks', fig: '0%', lines: ['0 of 9 turns'], foot: 'Small sample' },
+      { title: 'Said the handbook doesn’t cover it', fig: '0', lines: ['of 9 turns'], closest: ['None yet'], foot: 'Small sample' },
+      { title: 'Cards confirmed by a person', rows: [['Time-off requests', '1'], ['Decisions', '1'], ['Cancellations', '0']], foot: 'From the audit log' },
+      { title: 'Possible prompt injections', fig: '1', lines: ['of 9 turns'], foot: 'Small sample' }
+    ];
+    const THREADS = {
+      sick: [{ isUser: true, text: 'How many sick days do I get?' }, { isAi: true, hasChips: true, paras: [
+        { text: 'California employees receive 40 hours (5 days) of paid sick leave at the start of each calendar year. Unused sick leave does not carry over, and it is not paid out when employment ends.', mk: true },
+        { text: 'You can use sick leave for your own illness, injury, or preventive care, or to care for a family member. You do not need to give a reason beyond that the time is sick leave.' },
+        { text: 'If you know about the need ahead of time, such as a scheduled appointment, tell your manager in advance. Otherwise, tell them as soon as you can.', mk: true }] }],
+      book: [{ isUser: true, text: 'Book next Friday off.' }, { isCard: true }],
+      bookMissing: [{ isUser: true, text: 'Book next Friday off.' }, { isAi: true, hasChips: false, paras: [{ text: 'Next Friday is October 30. Do you want to take the whole day as PTO, or part of it?' }] }],
+      sens: [{ isUser: true, text: 'My manager keeps making comments about my age.' }, { isSens: true }]
+    };
+    return this._d = { P, S, HR, CATS, T, TILES, THREADS };
+  }
+  nav(p, cur) {
+    const D = this.data();
+    const items = p.nav === 'hr'
+      ? [['ask', 'Ask', '/ask'], ['time', 'Time off', '/time-off'], ['dir', 'Directory', '/directory'], ['book', 'Handbook', '/handbook'], ['cases', 'Cases', '/cases'], ['con', 'Console', '/console']]
+      : [['ask', 'Ask', '/ask'], ['time', 'Time off', '/time-off'], ['my', 'My cases', '/my-cases'], ['dir', 'Directory', '/directory'], ['book', 'Handbook', '/handbook']].concat(p.nav === 'mgr' ? [['appr', 'Approvals', '/approvals']] : []);
+    return items.map(([k, label, href]) => {
+      const on = k === cur;
+      const count = k === 'cases' ? '3 new' : k === 'appr' ? '1' : '';
+      return { label, href, ac: on ? 'page' : 'false', bg: on ? 'var(--primary-tint)' : 'transparent', fg: on ? 'var(--ink)' : 'var(--ink-nav)', w: on ? 600 : 500,
+        icAsk: k === 'ask', icTime: k === 'time', icLock: k === 'my' || k === 'cases', icDir: k === 'dir', icBook: k === 'book', icAppr: k === 'appr', icCon: k === 'con',
+        hasCount: !!count, count, countSr: k === 'cases' ? '3 new cases' : '1 waiting' };
+    });
+  }
+  caseForm(k) {
+    const D = this.data(), w = 'My manager keeps making comments about my age.', pre = k + '-cf', noop = () => {};
+    return { pre, hLevel: 3, hLevel2: 4, isForm: true, isSent: false, isLimit: false, busy: false, canSend: true, sendErr: false, sendLabel: 'Send to HR', sendOl: 'none', send: noop, close: noop, spinner: null,
+      noBd: 'var(--border-strong)', noFg: 'var(--ink)',
+      opts: D.CATS.map((label, i) => { const on = i === 0; return { v: String(i), label, on, ti: on ? 0 : -1, pick: noop, cur: 'pointer', bd: on ? 'var(--primary)' : 'var(--border-strong)', sh: on ? 'inset 0 0 0 1px var(--primary)' : 'none', bg: on ? 'var(--primary-tint)' : 'var(--surface-raised)', fg: 'var(--ink)', rbd: on ? 'var(--primary)' : 'var(--input-border)', dot: 'var(--primary)' }; }),
+      onKey: noop, hasCatErr: false, catErr: '', catInvalid: 'false', catDesc: pre + '-cl', hint: 'Say what happened, when, where, and who was involved, as much as you know.',
+      words: w, onWords: noop, hasWErr: false, wErr: '', wInvalid: 'false', wDesc: pre + '-wh ' + pre + '-wc', taBd: 'var(--input-border)', taBg: 'var(--surface-raised)', taFg: 'var(--ink)',
+      count: w.length + ' of 4,000 characters', cntFg: 'var(--ink-muted)', cntW: 400, cntRole: 'none', sentText: '', sentLink: false };
+  }
+  console() {
+    const D = this.data();
+    const tiles = D.TILES.map((t, i) => ({ hid: 'tile' + i, title: t.title, sk: false, none: false, hasFig: !!t.fig, hasPre: !!t.pre, pre: t.pre || '', fig: t.fig || '', lines: t.lines || [],
+      hasRows: !!t.rows, rows: (t.rows || []).map(([k, v]) => ({ k, v })), hasClosest: !!t.closest, closest: t.closest || [], hasSpend: !!t.spend, spend: t.spend || '', hasFoot: !!t.foot, foot: t.foot || '' }));
+    const rows = D.T.map(([id, time, who, loc, tools, cited, cost, ft, inj, card]) => ({ id, time, who, loc, outcome: 'Answered', card: !!card, inj: !!inj, tools: String(tools), hasCited: !!cited, noCited: !cited, cited, cost, ft,
+      aria: time + ', ' + who + ', ' + loc + ', Answered', exp: 'false', ctl: '', bg: 'transparent', bar: 'none', ring: 'none', open: () => {}, onFocus: () => {}, onBlur: () => {} }));
+    return { reset: 'Sandbox resets in 24 h', busy: 'false', isError: false, notError: true, isLoading: false, isEmpty: false, isData: true, hasTable: true, tableLabel: '',
+      tiles, rows, skRows: [], cols: '96px minmax(0,1.3fr) minmax(0,1.4fr) minmax(0,1.6fr) 56px 80px 72px 88px', tagDir: 'row', panelOpen: false };
+  }
+  place(k) {
+    const cfg = this.cfgs && this.cfgs[k], r = this.roots[k];
+    if (!cfg || !cfg.coach || !r) return;
+    const st = this.state.fs[k] || {};
+    if (st.left) return;
+    const t = r.querySelector(cfg.coach.sel), card = r.querySelector('[data-coach]');
+    if (!t || !card) return;
+    const R = r.getBoundingClientRect(), sc = R.width / r.offsetWidth || 1, b = t.getBoundingClientRect();
+    const x = (b.left - R.left) / sc, y = (b.top - R.top) / sc, w = b.width / sc, h = b.height / sc;
+    const ch = card.offsetHeight, cw = 360, o = 4, gap = 12;
+    const rad = parseFloat(getComputedStyle(t).borderTopLeftRadius) || 0;
+    const side = cfg.coach.side, align = cfg.coach.align || 'start';
+    let cx, cy, po;
+    if (side === 'bottom' || side === 'top') {
+      cx = align === 'end' ? x + w - cw + 8 : x - 8;
+      cy = side === 'bottom' ? y + h + o + gap : y - o - gap - ch;
+      const tx = w < 160 ? x + w / 2 : (align === 'end' ? x + w - 80 : x + 48);
+      po = Math.max(18, Math.min(cw - 30, tx - cx - 6));
+    } else {
+      cx = x + w + o + gap; cy = y + h / 2 - 44; po = 38;
+    }
+    const pos = { rx: Math.round(x - o), ry: Math.round(y - o), rw: Math.round(w + 2 * o), rh: Math.round(h + 2 * o), rr: Math.round(rad + o), cx: Math.round(cx), cy: Math.round(cy), po: Math.round(po),
+      up: side === 'bottom', down: side === 'top', left: side === 'right', vis: 'visible' };
+    const prev = this.state.pos[k];
+    if (prev && JSON.stringify(prev) === JSON.stringify(pos)) return;
+    this.setState(s => ({ pos: { ...s.pos, [k]: pos } }));
+  }
+  schedule(k) { [60, 300, 800, 1600, 3000].forEach(ms => this.timers.push(setTimeout(() => this.place(k), ms))); }
+  frame(cfg) {
+    const D = this.data(), k = cfg.id, p = D.P[cfg.p || 'priya'];
+    const cur = s => Object.assign({ sent: cfg.sent || [], result: !!cfg.result, left: false, toast: cfg.toast || null, dlg: !!cfg.dlg, ring: !!cfg.dlg, endOpen: true }, s.fs[k] || {});
+    const st = cur(this.state);
+    const upd = o => this.setState(s => ({ fs: { ...s.fs, [k]: { ...cur(s), ...(typeof o === 'function' ? o(cur(s)) : o) } } }));
+    const focusSel = sel => setTimeout(() => { const r = this.roots[k]; const el = r && r.querySelector(sel); if (el) el.focus(); }, 60);
+    const LEFT = 'Tour closed. You can pick it up again from the persona menu.';
+    const leave = () => { upd({ left: true, toast: LEFT }); focusSel('[data-composer]'); };
+    const base = { id: k, href: '#' + k, label: cfg.label, h: cfg.h || '900px', p,
+      rootRef: el => { if (el && this.roots[k] !== el) { this.roots[k] = el; this.schedule(k); } },
+      isLanding: cfg.kind === 'landing', isApp: cfg.kind !== 'landing', isHome: cfg.kind === 'home', isConv: cfg.kind === 'conv', isConsole: cfg.kind === 'console',
+      reset: 'Sandbox resets in ' + (cfg.reset || '24 h'), hr: D.HR,
+      onKey: e => { if (e.key === 'Escape' && cfg.coach && !cur(this.state).left) { e.preventDefault(); leave(); } },
+      leave, skip: () => upd({ result: true }), closeEnd: () => upd({ endOpen: false }),
+      dismissToast: () => upd({ toast: null }), toast: st.toast || '', hasToast: !!st.toast, toastOk: !!st.toast && st.toast !== LEFT, toastInfo: st.toast === LEFT,
+      hasDlg: st.dlg, dlgRing: st.ring ? '2px solid var(--focus-ring)' : 'none',
+      openDlg: () => { upd({ dlg: true, ring: false }); focusSel('[data-dlg-cancel]'); },
+      closeDlg: () => { upd({ dlg: false }); focusSel('[data-tour-item]'); },
+      dlgKey: e => { if (e.key === 'Escape') { e.preventDefault(); upd({ dlg: false }); } },
+      hasEnd: !!cfg.end && st.endOpen, hasCoach: false, cm: {}, pos: {}, msgs: [], padB: '16px', justify: 'flex-start', cv: {}
+    };
+    if (cfg.kind === 'landing') {
+      const busy = !!cfg.starting;
+      return { ...base, h: 'auto', tourIdle: !busy, tourBusy: busy, landStatus: busy ? 'Starting the tour as Priya Raman.' : '', startTour: () => {},
+        cards: ['priya', 'mateo', 'marcus', 'dana'].map(id => { const q = D.P[id]; return { ...q, role: q.title, startLabel: 'Start as ' + q.first, dis: busy, aria: 'Start a sandbox as ' + q.name + ', ' + q.title + ', ' + q.location + '. ' + q.prompt,
+          border: busy ? 'var(--border-subtle)' : 'var(--border)', fg: busy ? 'var(--disabled-fg)' : 'var(--ink)', muted: busy ? 'var(--disabled-fg)' : 'var(--ink-muted)', cta: busy ? 'var(--disabled-fg)' : 'var(--primary)',
+          avBg: busy ? 'var(--disabled-bg)' : 'var(--primary-tint)', cursor: busy ? 'not-allowed' : 'pointer' }; }) };
+    }
+    const curNav = cfg.kind === 'console' ? 'con' : 'ask';
+    const menu = cfg.menu || null;
+    const out = { ...base, nav: this.nav(p, curNav), menuOpen: !!menu, menuExp: menu ? 'true' : 'false', menuTake: menu === 'take', menuResume: menu === 'resume', swBg: menu ? 'var(--neutral-hover)' : 'transparent',
+      personas: ['priya', 'mateo', 'marcus', 'dana'].map(id => { const q = D.P[id]; return { initials: q.initials, name: q.name, title: q.title, isMe: id === p.id, checked: id === p.id ? 'true' : 'false', bg: id === p.id ? 'var(--primary-tint)' : 'transparent' }; }) };
+    if (cfg.kind === 'conv') {
+      out.msgs = D.THREADS[cfg.thread].map(m => ({ isUser: false, isAi: false, isCard: false, isSens: false, hasChips: false, paras: [], ...m, paras: (m.paras || []).map(pa => ({ mk: false, ...pa })), c: m.isSens ? this.caseForm(k) : null }));
+      out.padB = cfg.padB || '16px'; out.justify = cfg.justify || 'flex-start';
+    }
+    if (cfg.kind === 'console') out.cv = this.console();
+    if (cfg.coach && !st.left) {
+      const s = D.S[cfg.coach.step];
+      const chips = s.chips.map((text, i) => { const sent = st.sent.includes(i); return { text, sent, ready: !sent, dis: sent ? 'true' : 'false', aria: sent ? text + ', sent' : 'Send: ' + text, fg: sent ? 'var(--ink-muted)' : 'var(--ink)', cur: sent ? 'default' : 'pointer', hov: sent ? 'transparent' : 'var(--primary-tint)',
+        send: () => { if (cur(this.state).sent.includes(i)) return; upd(c => ({ sent: [...c.sent, i] })); this.timers.push(setTimeout(() => { upd({ result: true }); focusSel('[data-coach-next]'); }, 1200)); } }; });
+      const done = st.result || !chips.length;
+      out.hasCoach = true;
+      out.cm = { stepText: 'Step ' + cfg.coach.step + ' of 10', title: s.title, body: s.body, missing: !!cfg.coach.missing, missingText: s.missing || '', hasChips: chips.length > 0, chips,
+        hasBack: cfg.coach.step > 1, showSkip: !done, showNext: done };
+      out.pos = this.state.pos[k] || { rx: 0, ry: 0, rw: 0, rh: 0, rr: 0, cx: 0, cy: 0, po: 20, up: false, down: false, left: false, vis: 'hidden' };
+    }
+    return out;
+  }
+  renderVals() {
+    const frames = [
+      { id: 'desktop-landing', kind: 'landing', label: 'The landing with "Take the 2-minute tour", the secondary button under the persona picker. The header keeps only the logo.' },
+      { id: 'desktop-starting', kind: 'landing', starting: true, label: 'Starting: the tour button shows a spinner and "Starting the tour…"; all four persona cards are disabled while the sandbox starts as Priya.' },
+      { id: 'desktop-step-1', kind: 'home', p: 'priya', coach: { step: 1, sel: '[data-tt="composer"]', side: 'bottom' }, label: 'Step 1 of 10: Priya’s home. The coach mark sits under the composer with its chip and "Skip this step". No Back on step 1.' },
+      { id: 'desktop-step-1-answer', kind: 'conv', p: 'priya', thread: 'sick', sent: [0], result: true, coach: { step: 1, sel: '[data-tt="src"]', side: 'right' }, label: 'The cited answer arrived. The coach mark moved to the CA-4.3 source chip; the chip shows "Sent" and "Next" replaced "Skip this step".' },
+      { id: 'desktop-switch', kind: 'home', p: 'mateo', toast: 'Now viewing as Mateo Alvarez.', coach: { step: 2, sel: '[data-tt="composer"]', side: 'bottom' }, label: 'Step 2, just after the tour switched to Mateo: the usual toast, then the coach mark on Mateo’s composer, naming who the visitor is now.' },
+      { id: 'desktop-step-3-card', kind: 'conv', p: 'priya', thread: 'book', h: '1100px', sent: [0], result: true, coach: { step: 3, sel: '[data-tt="confirm"]', side: 'bottom' }, label: 'Step 3: screen 10’s Book PTO card, pending, "Expires at 10:48 AM". The coach mark points at Confirm.' },
+      { id: 'desktop-step-3-missing', kind: 'conv', p: 'priya', thread: 'bookMissing', sent: [0], result: true, justify: 'flex-start', coach: { step: 3, sel: '[data-tt="composer"]', side: 'top', missing: true }, label: 'Step 3 when the answer finished without a card: the muted missing line under the body, and "Next" shown anyway.' },
+      { id: 'desktop-step-7-case', kind: 'conv', p: 'priya', thread: 'sens', sent: [0], result: true, justify: 'flex-end', padB: '330px', h: '1400px', coach: { step: 7, sel: '[data-case-send]', side: 'bottom' }, label: 'Step 7: the HR panel with the case form open, "Harassment or discrimination" chosen and Priya’s words in it. The tour scrolled Send into view above the coach mark.' },
+      { id: 'desktop-step-9-console', kind: 'console', p: 'dana', h: '1420px', coach: { step: 9, sel: '[data-tt="flagged"]', side: 'top', align: 'end' }, label: 'Step 9: Dana’s console, screen 13’s default frame. The coach mark points at the flagged row, the one with only a date.' },
+      { id: 'desktop-end', kind: 'console', p: 'dana', h: '1420px', end: true, label: 'The end card, centered over the console. Dana’s page stays behind it, not dimmed.' },
+      { id: 'desktop-menu', kind: 'home', p: 'marcus', menu: 'take', reset: '21 h', label: 'As Marcus, outside the tour: the persona menu gains "Take the tour" below the four personas, above "Sign out".' },
+      { id: 'desktop-menu-confirm', kind: 'home', p: 'marcus', dlg: true, reset: '21 h', label: '"Start the tour?" Cancel is focused first. Starting opens a new sandbox as Priya; the current one stays until it expires.' },
+      { id: 'desktop-left', kind: 'home', p: 'marcus', toast: 'Tour closed. You can pick it up again from the persona menu.', label: 'After leaving at step 5 (X or Escape): the coach mark is gone, the toast says where to pick it up, and focus is on the composer.' },
+      { id: 'desktop-resume', kind: 'home', p: 'marcus', menu: 'resume', label: 'The persona menu while a tour is in progress: "Resume the tour" with "Step 5 of 10", and "Start the tour over".' }
+    ];
+    this.cfgs = {}; frames.forEach(f => { this.cfgs[f.id] = f; });
+    const spinner = React.createElement('svg', { width: 16, height: 16, viewBox: '0 0 24 24', fill: 'none', stroke: 'var(--primary)', strokeWidth: 2, strokeLinecap: 'round', 'data-spin': '', 'aria-hidden': true, style: { animation: 'od-spin 0.9s linear infinite', flex: 'none' } }, React.createElement('path', { d: 'M21 12a9 9 0 1 1-6.219-8.56' }));
+    return { frames: frames.map(f => this.frame(f)), spinner, hr: this.data().HR, cardRef: this.cardRef };
+  }
+}
+</script>
+</body>
+</html>

@@ -154,9 +154,8 @@ fixtures skimmed.
   the context, the fixed texts, or the handbook, so it's the only one with paid calls, and it
   can't merge until its full run is committed.
 - **Stage 5** waits for screens 11 and 12 in `docs/design/screens/` and branches off `dev` after
-  Stage 3 merges (it needs only the generated client). Stages run in plan order: on 2026-10-27
-  the owner dropped the wait for November's budget, so Stage 4 runs its paid calls when they're
-  ready, each on the owner's OK, and Stage 5 follows it.
+  Stage 3 merges (it needs only the generated client). Stages run in plan order: Stage 4 runs
+  its paid calls when they're ready, each on the owner's OK, and Stage 5 follows it.
 - **Stage 6** branches off `dev` after Stages 4 and 5 merge, since its browser tests need the new
   scripted scenarios and the panel's texts.
 
@@ -195,9 +194,8 @@ only for a stubborn bug, then back.
   doesn't exist before Stage 4: Stage 3 builds the plumbing with the scripted summarizer only.
 - Stage 4's paid calls, each with the owner's OK: escalation-set runs while tuning `guard.md`
   (about $0.04 to $0.10 each), one or two case-summary runs (about $1.50 each), one or two smoke
-  runs (about $0.80 each), and the full run (about $11 to $12, cap $16). Nothing waits for a
-  later month's budget (the owner's call of 2026-10-27). A second full run waits for the owner's
-  OK.
+  runs (about $0.80 each), and the full run (about $11 to $12, cap $16). A second full run waits for the
+  owner's OK.
 
 **Calls made while planning:**
 - **The test and CI keyring is a fixed, obviously fake key** (32 zero bytes, ID `test`), set in

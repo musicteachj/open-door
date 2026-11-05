@@ -43,8 +43,8 @@ test.describe('at 1440 px', () => {
     await skipUnlessScriptedDayCounts(test, page, BOOK)
     const pending = railLink(page, 'requests? pending')
     const available = railLink(page, 'PTO available')
-    await expect(pending).toHaveAccessibleName(/^0 requests pending\. Open Time off$/)
-    const availableBefore = await available.getAttribute('aria-label')
+    await expect(pending).toHaveAccessibleName(/^0 requests pending\s?\. Open Time off$/)
+    const availableBefore = await available.ariaSnapshot()
     await askAndWaitForAnswer(page, "what's my balance")
 
     // The real turn runs, but its closing event is held, so the card exists while the answer is
@@ -100,8 +100,8 @@ test.describe('at 1440 px', () => {
     await expect(card(page).getByRole('link', { name: 'View in Time off' })).toBeVisible()
 
     // The rail follows from the summary: one request pending, and PTO available went down.
-    await expect(pending).toHaveAccessibleName(/^1 request pending\. Open Time off$/)
-    expect(await available.getAttribute('aria-label')).not.toBe(availableBefore)
+    await expect(pending).toHaveAccessibleName(/^1 request pending\s?\. Open Time off$/)
+    expect(await available.ariaSnapshot()).not.toBe(availableBefore)
 
     // A reload shows the executed card, not a new one.
     await page.reload()

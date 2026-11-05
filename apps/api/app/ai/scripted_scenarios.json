@@ -30,6 +30,18 @@
     "note": "A normal answer that declines to share another employee's private details. No citation. This is the design's refusal screen."
   },
   {
+    "id": "decline-scope",
+    "trigger": "everyone's data",
+    "behavior": "decline_scope",
+    "note": "A normal answer, with no tool call and no citation, that says it only shares what the person may see. The tour pairs it with the injection scenario."
+  },
+  {
+    "id": "sick-days",
+    "trigger": "how many sick days",
+    "behavior": "sick_days",
+    "note": "It searches the handbook with a sick-leave question, so the answer cites the person's state addendum when there is one (California) and the company section when there is not (Texas)."
+  },
+  {
     "id": "safety-refusal",
     "trigger": "scripted safety refusal",
     "behavior": "safety_refusal",
@@ -99,13 +111,25 @@
     "id": "waiting-on-me",
     "trigger": "anything waiting on me",
     "behavior": "waiting_on_me",
-    "note": "It lists the requests waiting for the person's decision and names the first one."
+    "note": "It lists the requests waiting for the person's decision and names every one."
   },
   {
     "id": "approve-it",
     "trigger": "approve it",
     "behavior": "approve_it",
     "note": "It lists what waits for the person, takes the first request's ID, and asks for an approve card. Nothing is decided until the person confirms."
+  },
+  {
+    "id": "approve-named",
+    "trigger": "approve priya's request",
+    "behavior": "approve_named",
+    "note": "It lists what waits for the person, narrowed to the person named after approve, and asks for an approve card on that person's request. With nothing from them waiting, it says so and makes no card."
+  },
+  {
+    "id": "absence-of",
+    "trigger": "why was leo out",
+    "behavior": "absence_of",
+    "note": "It reads the team's time off for the person named and says only that it was approved, and when. The tool carries no reason, so none is given."
   },
   {
     "id": "deny-it",

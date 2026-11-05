@@ -44,10 +44,38 @@ function setup(props: Partial<CaseQueueTableProps> = {}) {
 describe('CaseQueueTable', () => {
   it('shows a link per case to its detail, named by the facts in order', () => {
     setup()
+    // The link has no label of its own: its name is its content, in reading order (WCAG 2.5.3).
+    // jsdom doesn't lay out the row, so the pieces may run together here; a browser spaces them.
     const link = screen.getByRole('link', {
-      name: 'Priya Raman, Visual Merchandiser, Oakland store. Harassment or discrimination. Sent Mon, Oct 26. Reply due Wed, Oct 28. New.',
+      name: /^Priya Raman, Visual Merchandiser · Oakland store\. Harassment or discrimination\. Sent Mon, Oct 26\. Reply due Wed, Oct 28\. New$/,
     })
     expect(link).toHaveAttribute('href', '/cases/c-priya')
+  })
+
+  it('marks only the case sent most recently as the guided tour’s row', () => {
+    setup({
+      rows: [
+        row({ id: 'c-old', givenName: 'Keisha', sentAt: '2026-10-20T16:00:00Z' }),
+        row({ id: 'c-new' }),
+        row({ id: 'c-mid', givenName: 'Chloe', sentAt: '2026-10-24T16:00:00Z' }),
+      ],
+    })
+    const marked = document.querySelectorAll('[data-tour="case-row"]')
+    expect(marked).toHaveLength(1)
+    expect(marked[0]).toHaveAttribute('href', '/cases/c-new')
+  })
+
+  it('marks the first of the cases sent at the same moment, in the queue’s order', () => {
+    const sentAt = '2026-10-26T16:41:00Z'
+    setup({ rows: [row({ id: 'c-a', sentAt }), row({ id: 'c-b', sentAt })] })
+    const marked = document.querySelectorAll('[data-tour="case-row"]')
+    expect(marked).toHaveLength(1)
+    expect(marked[0]).toHaveAttribute('href', '/cases/c-a')
+  })
+
+  it('marks no row when the queue is empty', () => {
+    setup({ rows: [] })
+    expect(document.querySelector('[data-tour="case-row"]')).toBeNull()
   })
 
   it('has a list named Cases and the column labels, hidden from assistive technology', () => {
@@ -109,8 +137,8 @@ describe('CaseQueueTable', () => {
     const fact = screen.getByText('The safety check routed this message to crisis text.')
     expect(fact.closest('span')).toHaveClass('text-ink-muted')
     expect(fact.parentElement!.querySelector('svg')).toHaveAttribute('aria-hidden', 'true')
-    expect(screen.getByRole('link').getAttribute('aria-label')).toContain(
-      'Harassment or discrimination. The safety check routed this message to crisis text. Sent',
+    expect(screen.getByRole('link')).toHaveAccessibleName(
+      /Harassment or discrimination\. The safety check routed this message to crisis text\. Sent/,
     )
   })
 
@@ -166,7 +194,7 @@ describe('CaseQueueTable', () => {
     setup()
     const link = screen.getByRole('link')
     expect(link.className).toContain('max-sm:grid-cols-[minmax(0,1fr)_auto]')
-    expect(screen.getByText('Mon, Oct 26')).toHaveClass('max-sm:hidden')
+    expect(screen.getByText('Mon, Oct 26')).toHaveClass('max-sm:sr-only')
     expect(link.querySelector('[data-slot="chevron"]')).toHaveClass('max-sm:hidden')
   })
 

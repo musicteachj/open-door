@@ -38,7 +38,7 @@ test('a visitor starts as Priya, switches to Marcus, and signs out', async ({ pa
   await signOut(page)
   expect((await ended).status()).toBe(204)
   await expect(page).toHaveURL('/')
-  await expect(page.getByRole('button', { name: /^Start a sandbox as Priya / })).toBeVisible()
+  await expect(page.getByRole('button', { name: /^Priya / })).toBeVisible()
 
   // Signed out, an app route sends the visitor back to the landing page.
   await page.goto('/ask')

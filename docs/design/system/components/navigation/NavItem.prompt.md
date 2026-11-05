@@ -9,7 +9,7 @@ NavItem is one link in the left sidebar; the current page gets the tint, other i
 </nav>
 ~~~
 
-- Order: Ask, Time off, My cases (folder-lock, /my-cases), Directory, Handbook for everyone. Managers add Approvals (with a waiting count). HR adds Cases (with a "3 new" count while new cases exist) and Console after Handbook; HR's own cases are handled by another HR partner, so HR has no My cases item. How it's built sits at the bottom, above the persona switcher.
+- Order: Ask, Time off, My cases (folder-lock, /my-cases), Directory, Handbook for everyone. Managers add Approvals (with a waiting count). HR adds Cases (with a "3 new" count while new cases exist) and Console after Handbook; HR's own cases are handled by another HR partner, so HR has no My cases item. The persona switcher sits at the bottom.
 - Show an item only once its page exists.
 
 ~~~jsx

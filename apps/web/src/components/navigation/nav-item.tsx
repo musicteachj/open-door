@@ -1,6 +1,5 @@
 import type { LucideIcon } from 'lucide-react'
 import { Link, useMatch } from 'react-router'
-import { navItemLabel } from '@/lib/labels'
 import { cn } from '@/lib/utils'
 
 type NavItemProps = {
@@ -38,11 +37,11 @@ function NavItem({
   return (
     <Link
       to={to}
-      aria-label={navItemLabel(label, count, countWord)}
       aria-current={isCurrent ? 'page' : undefined}
       data-slot="nav-item"
       className={cn(
-        'flex h-control items-center gap-3 rounded-md px-3 text-ui no-underline transition-[color,background-color]',
+        // `relative` keeps the hidden text inside the link, so a scrolling nav clips it.
+        'relative flex h-control items-center gap-3 rounded-md px-3 text-ui no-underline transition-[color,background-color]',
         isCurrent
           ? 'bg-primary-tint font-semibold text-ink hover:text-ink'
           : 'text-ink-nav hover:bg-neutral-hover hover:text-ink',
@@ -50,7 +49,14 @@ function NavItem({
       )}
     >
       <Icon aria-hidden="true" className="size-4.5 flex-none" />
-      <span className="min-w-0 flex-1 truncate">{label}</span>
+      <span className="min-w-0 flex-1 truncate">
+        {label}
+        {count ? (
+          <span className="sr-only">
+            , {count} {countWord}
+          </span>
+        ) : null}
+      </span>
       {count ? (
         <span
           data-slot="nav-count"

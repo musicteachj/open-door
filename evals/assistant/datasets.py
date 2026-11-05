@@ -27,13 +27,21 @@ from app.ai.turn import MAX_QUESTION_CHARACTERS
 from app.domain.handbook.applicability import Asker
 from app.modules.sandbox.seed import SeedCompany, build_company
 from app.modules.sandbox.seed_data import LOCATIONS
-from assistant.eval_sandbox import NoSuchRequest, request_id
+from assistant.eval_sandbox import (
+    CLONEABLE_PERSONAS,
+    CloneSpec,
+    NoSuchRequest,
+    clone_person_id,
+    request_id,
+    template_person_id,
+)
 
 EVAL_DIR = Path(__file__).resolve().parent
 REDTEAM_PATH = EVAL_DIR / "redteam.yaml"
 QA_PATH = EVAL_DIR / "qa.yaml"
 ACTIONS_PATH = EVAL_DIR / "actions.yaml"
 SMOKE_PATH = EVAL_DIR / "smoke.yaml"
+FAIRNESS_PATH = EVAL_DIR.parent / "fairness" / "groups.yaml"
 
 
 def personas_of(company: SeedCompany) -> dict[str, Asker]:
@@ -48,6 +56,19 @@ def personas_of(company: SeedCompany) -> dict[str, Asker]:
         for p in company.people
         if p.persona_key is not None
     }
+
+
+def clone_askers(company: SeedCompany, clones: Collection[CloneSpec]) -> dict[str, Asker]:
+    """Each fairness clone (by key) as the handbook sees them, read from the sandbox's company.
+    A clone has no persona key, so `personas_of` does not find it."""
+    locations = {location.id: location for location in company.locations}
+    people = {person.id: person for person in company.people}
+    found: dict[str, Asker] = {}
+    for spec in clones:
+        person = people[clone_person_id(company.tenant_id, spec.key)]
+        place = locations[person.location_id]
+        found[spec.key] = Asker(place.state, person.employment_type, place.code)
+    return found
 
 
 # The four people the demo talks about: Priya and Marcus (salaried, California), Dana (the HR
@@ -75,7 +96,10 @@ KINDS = (
 )
 
 
-SMOKE_QA_COUNT = 20
+# What a fairness group varies: who asks (name), or the cue in the question.
+ATTRIBUTES = ("name", "parent", "religion", "age", "origin", "spouse")
+
+SMOKE_QA_COUNT = 23
 SMOKE_REDTEAM_COUNT = 13
 SMOKE_ACTION_COUNT = 6
 
@@ -161,6 +185,46 @@ class ActionItem:
     def prompt(self) -> str:
         """The words the asker types."""
         return self.message
+
+
+@dataclass(frozen=True, slots=True)
+class FairnessItem:
+    """One variant of a fairness group: who asks, and the exact words. `asker` is a persona or the
+    key of a clone (see eval_sandbox.py)."""
+
+    id: str
+    group: str
+    attribute: str
+    asker: str
+    question: str
+
+    @property
+    def prompt(self) -> str:
+        """The words the asker types."""
+        return self.question
+
+
+@dataclass(frozen=True, slots=True)
+class FairnessGroup:
+    """The same question asked several ways. Every variant must get the same outcome, the same
+    safety-check category, the `cites` sections cited, and, with `figures`, the same figures."""
+
+    id: str
+    attribute: str
+    cites: tuple[str, ...]
+    figures: bool
+    variants: tuple[FairnessItem, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class FairnessSet:
+    clones: tuple[CloneSpec, ...]
+    groups: tuple[FairnessGroup, ...]
+
+    @property
+    def items(self) -> tuple[FairnessItem, ...]:
+        """Every variant of every group, in the file's order."""
+        return tuple(item for group in self.groups for item in group.variants)
 
 
 @dataclass(frozen=True, slots=True)
@@ -517,6 +581,149 @@ def _reasons(raw: dict[str, Any], where: str, problems: _Problems, group: str) -
     return tuple(_plain(r) for r in listed)
 
 
+# --- The fairness set -------------------------------------------------------------------------
+
+
+def _clones(raw_clones: Any, problems: _Problems) -> list[CloneSpec]:
+    if raw_clones is None:
+        return []
+    if not isinstance(raw_clones, list):
+        problems.add("clones", "must be a list")
+        return []
+    clones: list[CloneSpec] = []
+    keys: set[str] = set()
+    for index, raw in enumerate(raw_clones, start=1):
+        if not isinstance(raw, dict):
+            problems.add(f"clone {index}", "must be a mapping")
+            continue
+        key = _text(raw.get("key"))
+        where = key or f"clone {index}"
+        if key is None:
+            problems.add(where, "needs a key")
+        elif key in PERSONAS:
+            problems.add(key, "a clone's key can't be a persona")
+        elif key in keys:
+            problems.add(key, "duplicate clone key")
+        else:
+            keys.add(key)
+        given, family = _text(raw.get("given")), _text(raw.get("family"))
+        if given is None or family is None:
+            problems.add(where, "needs a `given` and a `family` name")
+        like = raw.get("like")
+        location, employment_type = raw.get("location"), raw.get("employment_type")
+        ok = True
+        if like is not None:
+            if like not in CLONEABLE_PERSONAS:
+                problems.add(
+                    where, f"can't be like {like!r} (an employee: {', '.join(CLONEABLE_PERSONAS)})"
+                )
+                ok = False
+            if location is not None or employment_type is not None:
+                problems.add(where, "takes `like`, or `location` and `employment_type`, not both")
+                ok = False
+        elif location is None or employment_type is None:
+            problems.add(where, "needs `like`, or a `location` and an `employment_type`")
+            ok = False
+        if ok and key and given and family:
+            spec = CloneSpec(
+                key,
+                given,
+                family,
+                None if like is None else str(like),
+                None if location is None else str(location),
+                None if employment_type is None else str(employment_type),
+            )
+            if like is None:
+                try:
+                    template_person_id(UUID(int=1), spec)
+                except ValueError as error:
+                    problems.add(where, str(error).split(": ", 1)[-1])
+                    continue
+            clones.append(spec)
+    return clones
+
+
+def _variants(
+    group: dict[str, Any], where: str, attribute: str, askers: Collection[str], problems: _Problems
+) -> tuple[FairnessItem, ...]:
+    raw_variants = group.get("variants")
+    if not isinstance(raw_variants, list) or len(raw_variants) < 2:
+        problems.add(where, "needs at least two variants")
+        return ()
+    found: list[FairnessItem] = []
+    for index, raw in enumerate(raw_variants, start=1):
+        if not isinstance(raw, dict):
+            problems.add(f"{where} variant {index}", "must be a mapping")
+            continue
+        before = len(problems.lines)
+        name = problems.name(raw, index)
+        asker = raw.get("asker")
+        if not (isinstance(asker, str) and asker in askers):
+            problems.add(name, f"unknown asker {asker!r} (known: {', '.join(sorted(askers))})")
+        question = problems.words(raw, "question", name)
+        if len(problems.lines) == before and question is not None:
+            found.append(FairnessItem(name, where, attribute, str(asker), question))
+    return tuple(found)
+
+
+def _group(
+    raw: dict[str, Any], index: int, askers: Collection[str], problems: _Problems
+) -> FairnessGroup | None:
+    before = len(problems.lines)
+    where = problems.name(raw, index)
+    attribute = raw.get("attribute")
+    if attribute not in ATTRIBUTES:
+        problems.add(where, f"unknown attribute {attribute!r} (known: {', '.join(ATTRIBUTES)})")
+    cites = raw.get("cites")
+    if not isinstance(cites, list) or not cites or not all(isinstance(c, str) and c for c in cites):
+        problems.add(where, "needs `cites`, a list of section IDs written as strings")
+    figures = raw.get("figures")
+    if not isinstance(figures, bool):
+        problems.add(where, "`figures` must be true or false")
+    variants = _variants(raw, where, str(attribute), askers, problems)
+    if len(problems.lines) > before:
+        return None
+    return FairnessGroup(
+        where,
+        str(attribute),
+        tuple(str(c) for c in (cites if isinstance(cites, list) else [])),
+        figures is True,
+        variants,
+    )
+
+
+def load_fairness(path: Path = FAIRNESS_PATH) -> FairnessSet:
+    """The fairness clones and groups in `path`. Raises `DatasetError` listing every problem."""
+    try:
+        data = yaml.safe_load(path.read_text(encoding="utf-8"))
+    except (OSError, yaml.YAMLError) as error:
+        raise DatasetError(f"{path.name}: can't be read: {error}") from error
+    if not isinstance(data, dict):
+        raise DatasetError(f"{path.name}: expected `clones:` and `groups:`")
+    problems = _Problems()
+    clones = _clones(data.get("clones"), problems)
+    askers = {*PERSONAS, *(clone.key for clone in clones)}
+    groups: list[FairnessGroup] = []
+    raw_groups = data.get("groups")
+    if not isinstance(raw_groups, list) or not raw_groups:
+        raise DatasetError(f"{path.name}: expected a non-empty `groups:` list")
+    for index, raw in enumerate(raw_groups, start=1):
+        if not isinstance(raw, dict):
+            problems.add(f"group {index}", "must be a mapping")
+            continue
+        group = _group(raw, index, askers, problems)
+        if group is not None:
+            groups.append(group)
+    asked = {item.asker for group in groups for item in group.variants}
+    problems.lines.extend(
+        f"{clone.key}: no variant is asked by this clone"
+        for clone in clones
+        if clone.key not in asked
+    )
+    problems.raise_if_any()
+    return FairnessSet(tuple(clones), tuple(groups))
+
+
 def load_smoke(path: Path = SMOKE_PATH) -> SmokeSet:
     """The smoke list: Q&A, red-team, and action IDs. `actions` may be left out. Raises
     `DatasetError` on a malformed file."""
@@ -546,10 +753,15 @@ def check_unique_ids(
     redteam: Sequence[RedTeamItem],
     qa: Sequence[QaItem],
     actions: Sequence[ActionItem] = (),
+    *,
+    fairness: Sequence[FairnessItem] = (),
 ) -> None:
     """Every ID is used once across the datasets, so a trace can be found by its ID alone."""
     counts = Counter(
-        [item.id for item in redteam] + [item.id for item in qa] + [item.id for item in actions]
+        [item.id for item in redteam]
+        + [item.id for item in qa]
+        + [item.id for item in actions]
+        + [item.id for item in fairness]
     )
     duplicated = sorted(item_id for item_id, count in counts.items() if count > 1)
     if duplicated:
@@ -579,6 +791,19 @@ def check_sections(qa: Sequence[QaItem], section_ids: Collection[str]) -> None:
         f"{item.id}: no section {section} in the handbook"
         for item in qa
         for section in item.expect
+        if section not in section_ids
+    ]
+    if lines:
+        raise DatasetError("\n".join(lines))
+
+
+def check_fairness_sections(groups: Sequence[FairnessGroup], section_ids: Collection[str]) -> None:
+    """Every section a fairness group cites exists. `section_ids` come from the handbook files or
+    the database."""
+    lines = [
+        f"{group.id}: no section {section} in the handbook"
+        for group in groups
+        for section in group.cites
         if section not in section_ids
     ]
     if lines:

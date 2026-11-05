@@ -44,7 +44,7 @@ export function CasePanel({
   ...panel
 }: CasePanelProps) {
   if (!offerCase || !ended || turnId === null || panel.kind === 'unavailable') {
-    return <EscalationPanel {...panel} />
+    return <EscalationPanel {...panel} turnId={turnId} />
   }
   return <OfferedPanel turnId={turnId} caseOpened={caseOpened} question={question} {...panel} />
 }
@@ -174,6 +174,7 @@ function OfferedPanel({
     <>
       <EscalationPanel
         {...panel}
+        turnId={turnId}
         // Nothing new shows until the form's texts are here, so no button leads nowhere.
         offerCase={caseArea !== null || texts.data !== undefined}
         onOpenCase={() => {

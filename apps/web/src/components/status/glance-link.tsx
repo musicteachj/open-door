@@ -1,6 +1,5 @@
 import { ChevronRight } from 'lucide-react'
 import { Link } from 'react-router'
-import { glanceLinkLabel } from '@/lib/labels'
 import { cn } from '@/lib/utils'
 
 type GlanceLinkProps = {
@@ -17,17 +16,17 @@ type GlanceLinkProps = {
 }
 
 /**
- * One at-a-glance figure. The whole row is a single link, named by `glanceLinkLabel`. From
- * GlanceLink.jsx. The marker sits in the figure's row, and is hidden from the name.
+ * One at-a-glance figure. The whole row is a single link, named by what it shows (the figure, what
+ * it counts, and where it goes), which is what WCAG 2.5.3 asks for. From GlanceLink.jsx. The marker
+ * sits in the figure's row, and is hidden from the name.
  */
 function GlanceLink({ value, label, destination, to, marker = false, className }: GlanceLinkProps) {
   return (
     <Link
       to={to}
-      aria-label={glanceLinkLabel(value, label, destination)}
       data-slot="glance-link"
       className={cn(
-        'group -mx-3 flex items-center gap-3 rounded-md border-b border-border-subtle px-3 py-5 text-ink no-underline transition-[color,background-color] hover:bg-primary-tint hover:text-ink focus-visible:relative focus-visible:z-10',
+        'group relative -mx-3 flex items-center gap-3 rounded-md border-b border-border-subtle px-3 py-5 text-ink no-underline transition-[color,background-color] hover:bg-primary-tint hover:text-ink focus-visible:z-10',
         className,
       )}
     >
@@ -41,9 +40,11 @@ function GlanceLink({ value, label, destination, to, marker = false, className }
               className="size-2 flex-none rounded-full bg-marker"
             />
           )}
-        </span>
+        </span>{' '}
         <span className="text-ui text-ink-muted">{label}</span>
       </span>
+      {/* Hidden words and pauses keep the name starting with what is shown: "11.5 days PTO available. Open Time off". */}
+      <span className="sr-only">. Open</span>{' '}
       <span className="flex items-center gap-1 text-small font-semibold text-primary underline-offset-3 group-hover:underline">
         {destination}
         <ChevronRight aria-hidden="true" className="size-4" />

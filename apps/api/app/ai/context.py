@@ -28,6 +28,8 @@ class ActorView:
     given_name: str
     role: Role
     location_name: str
+    # The location's city. Not in the model's context text: the console labels the asker with it.
+    city: str
     state: str
     location_code: str
     timezone: str
@@ -50,6 +52,7 @@ def actor_view(me: Me) -> ActorView:
         given_name=me.given_name,
         role=role,
         location_name=me.location.name,
+        city=me.location.city,
         state=me.location.state,
         location_code=me.location.code,
         timezone=me.location.timezone,

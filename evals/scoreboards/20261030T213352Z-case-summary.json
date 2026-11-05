@@ -1,0 +1,43 @@
+{
+  "schema": 1,
+  "set": "case-summary",
+  "stamp": "20261030T213352Z",
+  "facts": {
+    "model": "claude-opus-5-5",
+    "models": {
+      "summary": "claude-opus-5-5",
+      "judge": "claude-sonnet-5-5"
+    },
+    "effort": null,
+    "promptVersion": "2026-11.2",
+    "toolsetVersion": null,
+    "guardPromptVersion": null,
+    "judgeVersion": "2026-11.1",
+    "datasetSha256": {
+      "narratives.yaml": "337d3ec791ad7ac94945753ae59df9e1408d48773311fa407767a06877851474"
+    },
+    "commit": "e33a2f7dcdc7918ce3ab49446aacd40843a84ead-dirty",
+    "trials": 3,
+    "date": "2026-10-30",
+    "live": true,
+    "partial": false
+  },
+  "metrics": {
+    "passed_every_check": {
+      "mean": 1.0,
+      "min": 1.0,
+      "itemsPerTrial": 22
+    },
+    "passed_by_judge": {
+      "mean": 1.0,
+      "min": 1.0,
+      "itemsPerTrial": 22,
+      "notJudgedPerTrial": 0
+    }
+  },
+  "failures": [],
+  "costUsd": {
+    "total": "0.516096",
+    "cap": "3.00"
+  }
+}

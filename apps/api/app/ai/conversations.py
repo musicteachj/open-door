@@ -13,19 +13,23 @@ one row that changes is a turn, which is added as `running` and finished once (`
 
 import base64
 import json
+import logging
 from collections.abc import Sequence
 from dataclasses import asdict, dataclass, field
 from datetime import date, datetime, timedelta
 from decimal import Decimal
 from typing import Any, Literal, Self, cast
 from uuid import UUID, uuid4
+from zoneinfo import ZoneInfo
 
 from sqlalchemy import CursorResult, Interval, func, insert, literal, select, true, update
 from sqlalchemy.exc import DBAPIError, IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.ai.console_rows import build_abandoned_row
 from app.ai.pricing import HAIKU
 from app.ai.prompts.versions import PROMPT_VERSION, TOOLSET_VERSION
+from app.ai.text import error_name
 from app.ai.transport import count_search_results
 from app.core.encryption import (
     DataKey,
@@ -38,8 +42,11 @@ from app.core.encryption import (
     wrap_aad,
 )
 from app.db.errors import constraint_name, has_sqlstate
-from app.db.models import AiConversation, AiFeedback, AiMessage, AiTurn
+from app.db.models import AiConsoleTurn, AiConversation, AiFeedback, AiMessage, AiTurn
+from app.domain.cases import HQ_TIMEZONE
 from app.policy import Actor
+
+logger = logging.getLogger(__name__)
 
 ONE_RUNNING_TURN_INDEX = "uq_ai_turns_one_running_per_conversation"
 FEEDBACK_ONCE_CONSTRAINT = "uq_ai_feedback_tenant_id_turn_id"
@@ -569,6 +576,26 @@ async def finish_turn(
         raise LookupError("no such turn")
 
 
+async def write_console_row(db: AsyncSession, tenant_id: UUID, row: dict[str, Any]) -> bool:
+    """Add a console row (`console_rows.build_console_row`) in the caller's transaction, in a
+    savepoint of its own. Returns whether it was written.
+
+    The console must never hurt the person: a row the database refuses (its check constraint, say)
+    rolls back only the savepoint, is logged by the error's type alone (a message can hold what the
+    row held), and is dropped. The turn still finishes and commits.
+
+    A Core insert with no RETURNING: only HR can read a console row, and Postgres checks RETURNING
+    against the read rule, which the person writing the row doesn't pass.
+    """
+    try:
+        async with db.begin_nested():
+            await db.execute(insert(AiConsoleTurn).values(id=uuid4(), tenant_id=tenant_id, **row))
+    except Exception as error:
+        logger.error("Writing the console row failed (%s)", error_name(error))
+        return False
+    return True
+
+
 async def recover_abandoned(
     db: AsyncSession, conversation_id: UUID, *, older_than: timedelta = ABANDONED_AFTER
 ) -> list[UUID]:
@@ -576,7 +603,10 @@ async def recover_abandoned(
     question can start. A task that crashed or was restarted leaves its turn running for good.
 
     Returns the IDs of the turns it marked. The caller cancels their proposals in the same
-    transaction (`proposals.recover_abandoned_turns` does both), after this update.
+    transaction (`proposals.recover_abandoned_turns` does both), after this update. Each turn also
+    gets a redacted console row, in a savepoint, dated by when it was asked: it never stored a
+    verdict, so nothing proves it was an ordinary turn. A failed row never fails the person's new
+    question.
     """
     result = await db.execute(
         update(AiTurn)
@@ -586,10 +616,15 @@ async def recover_abandoned(
             AiTurn.started_at < func.now() - literal(older_than, Interval()),
         )
         .values(status="failed", error_code="abandoned", ended_at=func.clock_timestamp())
-        .returning(AiTurn.id)
+        .returning(AiTurn.id, AiTurn.tenant_id, AiTurn.started_at)
         .execution_options(synchronize_session=False)
     )
-    return list(result.scalars().all())
+    recovered = list(result.all())
+    for _, tenant_id, started_at in recovered:
+        # Dated by when the turn was asked, not by when it was recovered.
+        row = build_abandoned_row(occurred_at=started_at, hq_timezone=ZoneInfo(HQ_TIMEZONE))
+        await write_console_row(db, tenant_id, row)
+    return [turn_id for turn_id, _, _ in recovered]
 
 
 async def search_sources(db: AsyncSession, conversation_id: UUID) -> list[SourceEntry]:

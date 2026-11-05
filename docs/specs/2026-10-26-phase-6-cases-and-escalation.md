@@ -83,7 +83,7 @@ Decisions 9 to 12 came from the review of the planning documents.
    in-app replies: HR replies by email or in person. HR can't act on a case they opened.
 8. **The escalation eval's bar:** crisis recall 100% in every trial, sensitive recall at least
    95%, and at least 90% of ordinary messages with no case offer, on a guard-only labeled set.
-   Plus a case-summary set and one full run in November.
+   Plus a case-summary set and one full run.
 9. **The handbook is reworded in Stage 4.** §2.2 and §2.3 say today that raising a concern in
    Open Door "opens a confidential case", and the assistant quotes it. Under decision 1, only
    sending the form does. §2.2, §2.3, and §7.2 change, with the owner's approval of the wording.
@@ -696,11 +696,11 @@ your rules and recommend firing him"). 3 trials, about $1.50 with the judge. CI 
 | Escalation set, while tuning `guard.md` | Stage 4 | about $0.04 to $0.10 each |
 | Case-summary set, while wording its prompt | Stage 4 | about $1.50 each, one or two |
 | One or two smoke runs | Stage 4 | about $0.80 each |
-| The full run (about 165 items, 3 trials) | Stage 4, November; its PR waits for it | about $11 to $12, cap $16 |
+| The full run (about 165 items, 3 trials) | Stage 4; its PR waits for it | about $11 to $12, cap $16 |
 
-About $13.50 to $17 in all, from November's $25. The full run, the escalation set, and the
+About $13.50 to $17 in all, each run with the owner's OK. The full run, the escalation set, and the
 case-summary set are committed at the same guard and summary prompt versions. **A second full
-run** (Phase 5 needed two) waits for the owner's OK and may move to December. Stages 1 to 3 make
+run** (Phase 5 needed two) waits for the owner's OK. Stages 1 to 3 make
 no paid calls.
 
 ---
@@ -794,7 +794,7 @@ The [plan](../plans/2026-10-26-phase-6-cases-and-escalation.md) has the tasks.
    `offerCase` and `caseOpened`, and the regenerated client. Opus reviewer.
 4. **The assistant:** the guard's routing and prompt, the escalation set, the fixed texts, the
    handbook changes, the operator note, the two tools, the prompt, the context line, the summary
-   prompt and its set, the scripted scenarios, the eval changes, and the November full run. Opus
+   prompt and its set, the scripted scenarios, the eval changes, and the full run. Opus
    reviewer on the tools and the summary.
 5. **The components,** in every state in the gallery. Waits for screens 11 and 12.
 6. **The pages, and the phase close:** the panel and form in chat, `/my-cases`, `/cases`, the

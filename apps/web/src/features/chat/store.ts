@@ -73,6 +73,30 @@ export type SendDeps = {
   texts: AssistantTextsOut
 }
 
+/**
+ * How a send ended, for a caller that must know whether the server took the question.
+ * `not-sent`: it was refused here, or the API refused it before taking it (still answering,
+ * waiting, nothing to send to, or a 4xx problem from the API: 409 turn-running, 422 personal data).
+ * `accepted`: the server took it and this is its turn, resolved once the stream is over.
+ * `failed-after-accept`: the server may hold the question but its turn is not known, so a caller
+ * must not send it again.
+ * One rule: "never sent twice" wins over "always retryable". `not-sent` only when the request
+ * certainly never reached the server: it was refused locally before it was issued, or the API
+ * itself answered with a 4xx problem (409 turn running, 422 personal data, 404, 429, 401, 403).
+ * Anything after the request was issued that is not such an answer is `failed-after-accept`: a 5xx,
+ * a response that is not the API's problem (a proxy's 502 or 504, a 200 HTML page), a stream that
+ * ended before it named its turn, a network failure (a reset connection cannot be told from being
+ * offline), or an abort (the visitor's Stop, leaving). The server starts the turn's row before it
+ * streams and saves a turn whose client left as stopped, so a Stop before any response can still
+ * leave a (stopped) turn there. The chat's own Stop puts
+ * the question back in the box because nothing is shown for it, which is about the draft, not
+ * about whether the server holds it; so a caller must not give the question back.
+ */
+export type SendOutcome =
+  { kind: 'not-sent' } | { kind: 'accepted'; turnId: string } | { kind: 'failed-after-accept' }
+
+export const NOT_SENT: SendOutcome = { kind: 'not-sent' }
+
 /** A finished live turn whose saved copy has not arrived yet, shown in order until it does. */
 export type SettlingTurn = { turn: LiveTurn; phase: 'idle' | 'error' | 'stopped' }
 
@@ -110,15 +134,34 @@ export type ChatState = {
   /**
    * Asks a question. Does nothing for a blank one. While an answer is coming it sends nothing and
    * shows the "still answering" text. A question that looks like a Social Security or card number
-   * is not sent and sets `warning`.
+   * is not sent and sets `warning`. Resolves to how the send ended (`SendOutcome`) when it is over.
+   * `onAccepted` is called once, as soon as the server's turn ID is known, so a caller need not
+   * wait for the whole answer to learn it. `onIssued` is called once, right before the request
+   * goes out: from then on the server may hold the question.
    */
-  send: (question: string, deps: SendDeps, origin?: SendOrigin) => Promise<void>
+  send: (
+    question: string,
+    deps: SendDeps,
+    origin?: SendOrigin,
+    onAccepted?: (turnId: string) => void,
+    onIssued?: () => void,
+  ) => Promise<SendOutcome>
   /** Stops the answer: the connection closes, and the turn shows "Stopped" with what arrived. */
   stop: (deps: Pick<SendDeps, 'invalidateConversation'>) => void
   /** The refetched conversation holds the finished turn: drop the live copy. */
   settle: (turnId: string) => void
   /** A new conversation was created: forget the old one's live turn and errors. */
   beginConversation: (conversationId: string) => void
+}
+
+/** A question is being sent or is streaming its answer. */
+export function isRunning(state: Pick<ChatState, 'status'>): boolean {
+  return state.status === 'sending' || state.status === 'streaming'
+}
+
+/** A question is being sent or answered, or one is waiting for its conversation to be created. */
+export function isChatBusy(state: Pick<ChatState, 'status' | 'waitingToSend'>): boolean {
+  return isRunning(state) || state.waitingToSend
 }
 
 const EMPTY = {
@@ -280,6 +323,17 @@ function applyEvent(turn: LiveTurn, event: TurnStreamEvent): [LiveTurn, boolean]
   }
 }
 
+/**
+ * The API itself refused the question before taking it: a 4xx with its own problem document (401,
+ * 403, 404, 409, 422, 429). A 5xx, or a response that is not the API's problem (a proxy's 502 or
+ * 504, a 200 HTML page), says nothing about whether the turn started.
+ */
+function refusedByApi(error: unknown): boolean {
+  return (
+    error instanceof ApiError && error.problem !== null && error.status >= 400 && error.status < 500
+  )
+}
+
 function problemText(error: ApiError): string {
   return error.problem?.detail || conversationCopy.sendFailed
 }
@@ -299,17 +353,16 @@ export const useChatStore = create<ChatState>((set, get) => ({
       }
     }),
 
-  async send(question, deps, origin = 'composer') {
+  async send(question, deps, origin = 'composer', onAccepted, onIssued) {
     const trimmed = trimLikePython(question)
-    if (trimmed === '') return
-    const { status } = get()
-    if (status === 'sending' || status === 'streaming') {
+    if (trimmed === '') return NOT_SENT
+    if (isRunning(get())) {
       set({ sendError: deps.texts.stillAnswering })
-      return
+      return NOT_SENT
     }
     if (kindOfPersonalData(trimmed) !== null) {
       set({ warning: deps.texts.personalData })
-      return
+      return NOT_SENT
     }
 
     const mine = ++generation
@@ -333,7 +386,26 @@ export const useChatStore = create<ChatState>((set, get) => ({
     }))
 
     const live = () => mine === generation && !controller.signal.aborted
+    // What the server did with this send, whoever is still watching: it answered with a stream,
+    // and the turn's ID once an event gives it.
+    let responded = false
+    // The request was issued: from here the server may hold the question even if no response was
+    // read, so an abort (stop, leaving) leaves it unknown and a caller must not send it again.
+    let requested = false
+    let acceptedId: string | null = null
+    const outcome = (): SendOutcome => {
+      if (acceptedId !== null) return { kind: 'accepted', turnId: acceptedId }
+      return responded || (requested && controller.signal.aborted)
+        ? { kind: 'failed-after-accept' }
+        : NOT_SENT
+    }
     const onEvent = (event: TurnStreamEvent) => {
+      if (event.type === 'turn.started' || event.type === 'turn.completed') {
+        if (acceptedId === null && live()) {
+          acceptedId = event.data.turnId
+          onAccepted?.(event.data.turnId)
+        }
+      }
       if (!live()) return
       let refetch = false
       set((state) => {
@@ -379,23 +451,26 @@ export const useChatStore = create<ChatState>((set, get) => ({
         if (deps.conversationId === null && myEpoch === epoch && get().conversationId === null) {
           set({ conversationId })
         }
-        return
+        return NOT_SENT
       }
       set({ conversationId })
+      requested = true
+      onIssued?.()
       await streamTurn(conversationId, trimmed, {
         signal: controller.signal,
         onEvent,
         onResponse: () => {
+          responded = true
           if (!live()) return
           set((state) => (state.turn === null ? {} : { turn: { ...state.turn, accepted: true } }))
         },
       })
-      if (!live()) return
+      if (!live()) return outcome()
       // The stream ended. With no closing event the connection dropped, which the server saves as
       // stopped.
       endWithoutClosingEvent(deps, origin)
     } catch (error) {
-      if (!live()) return
+      if (!live()) return outcome()
       const turn = get().turn
       if (
         turn !== null &&
@@ -405,17 +480,22 @@ export const useChatStore = create<ChatState>((set, get) => ({
         // The server had answered: keep what arrived (it saved the turn as stopped), or, if it had
         // not yet said which turn, treat it as a turn it holds all the same.
         endWithoutClosingEvent(deps, origin)
-        return
+        return outcome()
       }
       failSend(error, deps)
+      // A failure before the request was issued is not sent, and so is a refusal the API itself
+      // gave (`refusedByApi`). Anything else after it was issued is unknown: it may have arrived.
+      if (requested && !refusedByApi(error)) return { kind: 'failed-after-accept' }
+      return NOT_SENT
     } finally {
       if (inFlight === controller) inFlight = null
     }
+    return outcome()
   },
 
   stop(deps) {
     const { status, turn } = get()
-    if (turn === null || (status !== 'sending' && status !== 'streaming')) return
+    if (turn === null || !isRunning({ status })) return
     if (turn.turnId === null && turn.accepted) {
       // The server has answered, so it has the turn and will save it stopped; only its id has not
       // been read yet. Nothing is shown or put back in the box until it is (`pendingStop`).
@@ -449,7 +529,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
     // Any turn that has finished (completed, stopped, errored, or ended by its escalation) goes
     // to the server's copy. One still coming does not.
     if (turn === null || turn.turnId !== turnId) return
-    if (status === 'sending' || status === 'streaming') return
+    if (isRunning({ status })) return
     set({ status: 'idle', turn: null })
   },
 
@@ -480,7 +560,7 @@ function endWithoutClosingEvent(
   origin: SendOrigin,
 ) {
   const { status, turn } = useChatStore.getState()
-  if (turn === null || (status !== 'sending' && status !== 'streaming')) return
+  if (turn === null || !isRunning({ status })) return
   if (turn.turnId === null) {
     // No event came, so there is no turn to show. If the server had answered (200) it holds the
     // question, and saves the turn stopped: the question is not an unsent draft any more (as

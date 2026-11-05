@@ -111,7 +111,7 @@ test.describe('at 390 px', () => {
     const label = chip.locator('.truncate')
     expect(await label.evaluate((el) => el.scrollWidth > el.clientWidth)).toBe(true)
     await expect(label).toHaveCSS('text-overflow', 'ellipsis')
-    await expect(chip).toHaveAccessibleName(/^Source 1: Handbook \S+, .+$/)
+    await expect(chip).toHaveAccessibleName(/^Handbook \S+ · .+\s?, source 1$/)
     await page.reload()
 
     // The expanded work and the open reason form stay inside the column too.

@@ -3,6 +3,7 @@ import { http, HttpResponse } from 'msw'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { useChatStore } from '@/features/chat/store'
 import { PERSONAS } from '@/features/personas/personas'
+import { accessibleNameOf } from '@/test/accessible-name'
 import { installFakeApi } from '@/test/fake-api'
 import {
   CONVERSATION_ID,
@@ -250,7 +251,9 @@ describe('the page', () => {
     for (let i = 0; i < 15; i++) {
       await user.tab()
       const el = document.activeElement as HTMLElement
-      seen.push(`${el.tagName.toLowerCase()}:${el.getAttribute('aria-label') ?? el.textContent}`)
+      seen.push(
+        `${el.tagName.toLowerCase()}:${el.getAttribute('aria-label') ?? accessibleNameOf(el)}`,
+      )
     }
     expect(seen).toEqual([
       'a:Ask',
@@ -258,7 +261,7 @@ describe('the page', () => {
       'a:My cases',
       'a:Directory',
       'a:Handbook',
-      'button:Switch persona. Current: Priya Raman, Visual Merchandiser',
+      'button:Priya Raman, Visual Merchandiser. Current persona. Switch persona',
       'textarea:Ask Open Door',
       'button:Ask',
       'button:How many sick days do I get?',

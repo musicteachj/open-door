@@ -185,7 +185,7 @@ describe('the router', () => {
   it('starts a sandbox as the chosen person', async () => {
     const api = installFakeApi()
     const { user, router } = renderApp({ at: '/' })
-    await user.click(await screen.findByRole('button', { name: /^Start a sandbox as Marcus / }))
+    await user.click(await screen.findByRole('button', { name: /^Marcus / }))
     await signedInAs('Marcus Bell')
     expect(router.state.location.pathname).toBe('/ask')
     expect(api.signedInAs()).toBe('marcus')

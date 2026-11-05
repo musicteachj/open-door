@@ -1,7 +1,8 @@
 """The tables. Migration 0003 creates the tenant tables, with their row-level security and grants.
 Migration 0004 adds the handbook tables, which are global and read-only to the API, migration
 0008 adds the assistant's tables, and migration 0009 adds the time-off tables and proposals at the
-end of this file. Migration 0013 adds the three case tables after them.
+end of this file. Migration 0013 adds the three case tables after them, and migration 0016 adds the
+console's table.
 
 Every table except `tenants` and `sessions` is a tenant table: it has a tenant_id, and Postgres
 shows the API only the rows of the tenant its transaction is scoped to (see app/db/tenancy.py).
@@ -993,3 +994,114 @@ class CaseEvent(Base):
     to_status: Mapped[str | None]
     # Stamped by a trigger from the HR flag of the transaction, whatever an insert says.
     written_by_hr: Mapped[bool] = mapped_column(server_default=false())
+
+
+class AiConsoleTurn(Base):
+    """One finished turn as HR's AI Ops console shows it. Insert-only, and HR alone can read it.
+
+    Labels copied from the turn when it ends: no person ID, no conversation ID, no name, and no
+    text. A flagged row (the safety check said sensitive or crisis, or an HR panel showed, or the
+    turn was abandoned and so stored no verdict) holds only its date, counts, and the model's
+    labels; the check constraints refuse more. A turn with no verdict for another reason (the
+    safety check was unavailable or errored, or the budget stopped it first) is a normal timed
+    row (ADR 0016).
+    """
+
+    __tablename__ = "ai_console_turns"
+    __table_args__ = (
+        CheckConstraint(
+            "NOT flagged OR (turn_id IS NULL AND occurred_at IS NULL AND asker_role IS NULL"
+            " AND asker_location IS NULL AND outcome IS NULL AND refusal_category IS NULL"
+            " AND guard_category IS NULL AND injection_suspected IS NULL"
+            " AND tools IS NULL AND sections_retrieved IS NULL AND sections_cited IS NULL"
+            " AND card_action IS NULL)",
+            name="flagged_row_is_redacted",
+        ),
+        CheckConstraint(
+            "flagged OR (turn_id IS NOT NULL AND occurred_at IS NOT NULL"
+            " AND asker_role IS NOT NULL AND asker_location IS NOT NULL AND outcome IS NOT NULL"
+            " AND injection_suspected IS NOT NULL AND tools IS NOT NULL"
+            " AND sections_retrieved IS NOT NULL AND sections_cited IS NOT NULL)",
+            name="unflagged_row_is_complete",
+        ),
+        CheckConstraint(
+            "flagged OR guard_category IS NULL OR guard_category = 'ordinary'",
+            name="unflagged_row_is_ordinary",
+        ),
+        CheckConstraint("NOT abandoned OR flagged", name="abandoned_row_is_flagged"),
+        CheckConstraint(
+            "refusal_category IS NULL OR refusal_category ~ '^[A-Za-z][A-Za-z0-9_-]{0,39}$'",
+            name="refusal_category_is_a_word",
+        ),
+        CheckConstraint(
+            "outcome IN ('answered', 'not_found', 'refused', 'stopped', 'failed', 'budget',"
+            " 'guard_unavailable')",
+            name="outcome",
+        ),
+        CheckConstraint("asker_role IN ('employee', 'manager', 'hr')", name="asker_role"),
+        CheckConstraint(
+            "card_action IN ('timeoff.request', 'timeoff.decide', 'timeoff.cancel')",
+            name="card_action",
+        ),
+        CheckConstraint(
+            "(input_tokens IS NULL OR input_tokens >= 0)"
+            " AND (output_tokens IS NULL OR output_tokens >= 0)"
+            " AND (cache_read_tokens IS NULL OR cache_read_tokens >= 0)"
+            " AND (cache_write_tokens IS NULL OR cache_write_tokens >= 0)"
+            " AND (cost_usd IS NULL OR cost_usd >= 0)"
+            " AND (guard_ms IS NULL OR guard_ms >= 0)"
+            " AND (first_text_ms IS NULL OR first_text_ms >= 0)"
+            " AND (total_ms IS NULL OR total_ms >= 0)",
+            name="counts_not_negative",
+        ),
+        # The turn list: newest day first, a day's timed rows newest first, then its flagged rows.
+        Index(
+            "ix_ai_console_turns_tenant_id_occurred_on_occurred_at_id",
+            "tenant_id",
+            text("occurred_on DESC"),
+            text("occurred_at DESC NULLS LAST"),
+            "id",
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, server_default=func.gen_random_uuid())
+    tenant_id: Mapped[uuid.UUID] = mapped_column(ForeignKey(TENANT_FK, ondelete="CASCADE"))
+    # The API's own lookup key. Not a foreign key: nothing in the database links this row to the
+    # person's turn. Null on a flagged row.
+    turn_id: Mapped[uuid.UUID | None]
+    # The date in Denver HQ's time zone.
+    occurred_on: Mapped[date]
+    occurred_at: Mapped[datetime | None]
+    flagged: Mapped[bool]
+    # The turn's process died before it stored a verdict, so the row is flagged (redacted) without
+    # being an escalation. Reveals only that a turn died.
+    abandoned: Mapped[bool] = mapped_column(server_default=text("false"))
+    # employee, manager, or hr; and "Oakland, CA". Labels copied when the row is written.
+    asker_role: Mapped[str | None]
+    asker_location: Mapped[str | None]
+    outcome: Mapped[str | None]
+    # The model service's refusal category, never its explanation.
+    refusal_category: Mapped[str | None]
+    guard_category: Mapped[str | None]
+    injection_suspected: Mapped[bool | None]
+    # [{name, ok, durationMs}], in call order. Never an input.
+    tools: Mapped[list[dict[str, Any]] | None] = mapped_column(JSONB(none_as_null=True))
+    sections_retrieved: Mapped[list[str] | None] = mapped_column(ARRAY(Text))
+    sections_cited: Mapped[list[str] | None] = mapped_column(ARRAY(Text))
+    card_action: Mapped[str | None]
+    served_by: Mapped[list[str]] = mapped_column(ARRAY(Text), server_default=text("'{}'::text[]"))
+    # Another model served some of the answer. About what answered, not who asked, so a flagged
+    # row keeps it like `served_by`.
+    fallback: Mapped[bool] = mapped_column(server_default=text("false"))
+    effort: Mapped[str | None]
+    prompt_version: Mapped[str | None]
+    toolset_version: Mapped[str | None]
+    input_tokens: Mapped[int] = mapped_column(server_default=text("0"))
+    output_tokens: Mapped[int] = mapped_column(server_default=text("0"))
+    cache_read_tokens: Mapped[int] = mapped_column(server_default=text("0"))
+    cache_write_tokens: Mapped[int] = mapped_column(server_default=text("0"))
+    cost_usd: Mapped[Decimal] = mapped_column(Numeric(12, 6), server_default=text("0"))
+    # The safety check's own time; the time to the first word of the answer; the whole turn.
+    guard_ms: Mapped[int | None]
+    first_text_ms: Mapped[int | None]
+    total_ms: Mapped[int | None]

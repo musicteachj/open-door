@@ -23,9 +23,9 @@ type DateFieldProps = {
 
 /**
  * The Dates field (DateField.jsx): a button that opens the picker under it. It shows the short form
- * ("Wed, Nov 25 to Fri, Nov 27") so a range fits on one line, and is named by its label and the
- * full form ("Wednesday, November 25 to Friday, November 27"), since the short form is
- * abbreviated.
+ * ("Wed, Nov 25 to Fri, Nov 27") so a range fits on one line, and is named by its label and
+ * the short form it shows (WCAG 2.5.3, Label in Name), and described by the full form
+ * ("Wednesday, November 25 to Friday, November 27"), since the short form is abbreviated.
  */
 function DateField({
   start,
@@ -41,9 +41,9 @@ function DateField({
   const id = useId()
   const labelId = `${id}-label`
   const valueId = `${id}-value`
+  const shownId = `${id}-shown`
   const errorId = `${id}-error`
   const shortForm = start ? shortRange(start, end ?? start) : null
-  const fullForm = start ? longRange(start, end ?? start) : timeOffCopy.datesPlaceholder
   const Chevron = open ? ChevronUp : ChevronDown
   return (
     <div data-slot="date-field" className={cn('flex flex-col gap-2', className)}>
@@ -55,9 +55,12 @@ function DateField({
         type="button"
         aria-expanded={open}
         aria-controls={controls}
-        aria-labelledby={`${labelId} ${valueId}`}
+        aria-labelledby={`${labelId} ${shownId}`}
         data-invalid={error ? '' : undefined}
-        aria-describedby={error ? errorId : undefined}
+        // The full form is the description, once there are dates: the name holds what is shown.
+        aria-describedby={
+          [start ? valueId : null, error ? errorId : null].filter(Boolean).join(' ') || undefined
+        }
         disabled={disabled}
         onClick={onToggle}
         className={cn(
@@ -75,7 +78,7 @@ function DateField({
           className="size-4 flex-none text-ink-muted group-disabled:text-disabled-fg"
         />
         <span
-          aria-hidden="true"
+          id={shownId}
           className={cn(
             'min-w-0 flex-1 truncate tabular-nums',
             shortForm === null && 'text-ink-placeholder',
@@ -83,9 +86,11 @@ function DateField({
         >
           {shortForm ?? timeOffCopy.datesPlaceholder}
         </span>
-        <span id={valueId} className="sr-only">
-          {fullForm}
-        </span>
+        {start && (
+          <span id={valueId} className="sr-only">
+            {longRange(start, end ?? start)}
+          </span>
+        )}
         <Chevron
           aria-hidden="true"
           className="size-4 flex-none text-ink-muted group-disabled:text-disabled-fg"

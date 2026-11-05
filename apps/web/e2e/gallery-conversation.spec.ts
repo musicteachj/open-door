@@ -64,7 +64,7 @@ test('pressing a marker opens its passage, marks only that marker, and moves foc
   await expect(marker).toHaveAttribute('aria-expanded', 'true')
   await expect(passagePanel(page).getByRole('heading', { name: 'Sick leave' })).toBeFocused()
   const markers = state(page, 'conversation-source-panel').getByRole('button', {
-    name: /^Source \d: /,
+    name: /^Source \d: |, source \d$/,
     expanded: true,
   })
   // Two are active: the marker for the open passage, and its section's chip (a chip shows open
@@ -73,7 +73,7 @@ test('pressing a marker opens its passage, marks only that marker, and moves foc
   await expect(
     state(page, 'conversation-source-panel')
       .getByRole('list', { name: 'Sources' })
-      .getByRole('button', { name: /^Source 1: /, expanded: true }),
+      .getByRole('button', { name: /\s?, source 1$/, expanded: true }),
   ).toHaveCount(1)
   // The close button puts focus back on the marker.
   await passagePanel(page).getByRole('button', { name: 'Close passage' }).click()

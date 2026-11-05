@@ -1,6 +1,7 @@
 import { screen, waitFor, within } from '@testing-library/react'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { useChatStore } from '@/features/chat/store'
+import { accessibleNameOf } from '@/test/accessible-name'
 import { installFakeApi } from '@/test/fake-api'
 import { installFakeHandbook, searchResult } from '@/test/fake-handbook'
 import { renderApp } from '@/test/render-app'
@@ -36,7 +37,7 @@ const listReady = () => screen.findByRole('heading', { level: 2, name: 'Welcome'
 const slot = (name: string, within: ParentNode = document) =>
   Array.from(within.querySelectorAll<HTMLElement>(`[data-slot="${name}"]`))
 const rows = () => slot('section-row')
-const rowNames = () => rows().map((row) => row.getAttribute('aria-label')!)
+const rowNames = () => rows().map((row) => accessibleNameOf(row))
 const urlSearch = (r: { router: { state: { location: { search: string } } } }) =>
   r.router.state.location.search
 
@@ -160,11 +161,11 @@ describe('searching', () => {
     await user.type(screen.getByRole('searchbox', { name: 'Search the handbook' }), 'overtime')
     expect(await screen.findByText('3 sections match “overtime”')).toBeInTheDocument()
     const links = slot('search-result-row')
-    expect(links.map((l) => l.getAttribute('aria-label'))).toEqual([
-      '3.2 Overtime, Company handbook',
-      'CA-3.2 Overtime, California addendum',
-      'CO-3.2 Overtime, Colorado addendum',
-    ])
+    // Each link is named by its content, so the name starts with the number, title, and source.
+    expect(links).toHaveLength(3)
+    expect(links[0]).toHaveAccessibleName(/^3\.2\s*Overtime\s*·\s*Company handbook/)
+    expect(links[1]).toHaveAccessibleName(/^CA-3\.2\s*Overtime\s*·\s*California addendum/)
+    expect(links[2]).toHaveAccessibleName(/^CO-3\.2\s*Overtime\s*·\s*Colorado addendum/)
     expect(links[0]).toHaveAttribute('href', '/handbook/3.2?passage=p3')
     expect(within(links[0]!).getByText('overtime').tagName).toBe('MARK')
     expect(api.searches()).toEqual(['overtime'])
@@ -341,9 +342,9 @@ describe('"Applies to me"', () => {
   it('keeps only the results that apply to the person, and counts those', async () => {
     await openHandbook('mateo', '/handbook?show=mine&q=overtime')
     expect(await screen.findByText('1 section matches “overtime”')).toBeInTheDocument()
-    expect(slot('search-result-row').map((l) => l.getAttribute('aria-label'))).toEqual([
-      '3.2 Overtime, Company handbook',
-    ])
+    const links = slot('search-result-row')
+    expect(links).toHaveLength(1)
+    expect(links[0]).toHaveAccessibleName(/^3\.2\s*Overtime\s*·\s*Company handbook/)
   })
 
   it('says none that apply match, not that none match, and offers to show all', async () => {

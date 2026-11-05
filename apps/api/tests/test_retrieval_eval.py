@@ -6,6 +6,7 @@ tests/integration/test_retrieval_eval_real.py.
 
 import json
 from contextlib import asynccontextmanager
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -209,6 +210,70 @@ def test_the_report_names_misses_negatives_and_fulltext(tmp_path: Path) -> None:
     assert "Check: FAILED" in text
 
 
+# --- expect_heading: the passage-level check ------------------------------------------------
+
+HEADING = """
+questions:
+  - id: h
+    asker: dana
+    question: carry over unused
+    expect: [CO-4.3]
+    expect_heading: Carryover of unused sick hours
+"""
+
+
+def heading_outcome(tmp_path: Path, headings: tuple[str | None, ...]) -> Any:
+    question = parse(tmp_path, HEADING)[0]
+    return run.Outcome(question, "hybrid", ("CO-4.3",) * len(headings), headings)
+
+
+def test_a_chunk_under_the_expected_heading_is_a_hit(tmp_path: Path) -> None:
+    hit = heading_outcome(tmp_path, ("How much", "Carryover of unused sick hours"))
+    assert run.first_hit_rank(hit) == 2
+
+
+def test_a_chunk_of_the_section_under_another_heading_is_a_miss(tmp_path: Path) -> None:
+    miss = heading_outcome(tmp_path, ("How much", None))
+    assert run.first_hit_rank(miss) is None
+    summary = run.summarize([miss])
+    text = run.render(summary)
+    assert "wanted CO-4.3 under heading 'Carryover of unused sick hours'" in text
+    assert "got CO-4.3 (How much), CO-4.3" in text
+
+
+def test_expect_heading_is_in_the_json_for_a_miss(tmp_path: Path) -> None:
+    summary = run.summarize([heading_outcome(tmp_path, ("How much",))])
+    dataset = write_dataset(tmp_path / "d.yaml", HEADING)
+    board = run.scoreboard(
+        summary, dataset=dataset, version_label="x", commit="c", when=datetime.now(UTC)
+    )
+    assert board["misses"][0]["expectHeading"] == "Carryover of unused sick hours"
+
+
+def test_a_question_without_expect_heading_still_counts_any_chunk(tmp_path: Path) -> None:
+    question = parse(tmp_path, GOOD)[0]
+    assert run.first_hit_rank(run.Outcome(question, "hybrid", ("4.3",))) == 1
+
+
+@pytest.mark.parametrize(
+    ("body", "expected"),
+    [
+        (HEADING.replace("expect: [CO-4.3]", "must_not: [CO-4.3]"), "can't go with `must_not`"),
+        (HEADING.replace("[CO-4.3]", "[CO-4.3, 4.3]"), "exactly one section"),
+        (HEADING.replace("Carryover of unused sick hours", '""'), "non-empty string"),
+    ],
+)
+def test_expect_heading_errors_are_named(tmp_path: Path, body: str, expected: str) -> None:
+    assert expected in problems(tmp_path, body)
+
+
+def test_an_expect_heading_the_loaded_handbook_lacks_is_named(tmp_path: Path) -> None:
+    questions = parse(tmp_path, HEADING)
+    run.check_sections(questions, {"CO-4.3"}, {"CO-4.3": {"Carryover of unused sick hours"}})
+    with pytest.raises(run.DatasetError, match=r"h: no heading 'Carryover of unused sick hours'"):
+        run.check_sections(questions, {"CO-4.3"}, {"CO-4.3": {"Carryover"}})
+
+
 # --- The whole run: exit codes and the scoreboard -------------------------------------------
 
 
@@ -387,3 +452,52 @@ async def test_no_published_handbook_is_unavailable_not_a_traceback(
     monkeypatch.setattr(run, "tenant_session", refusing_session)
     with pytest.raises(run.EvalUnavailableError, match="Run `make db` first"):
         await run.run_searches_on(object(), [], [])
+
+
+async def test_write_board_commits_a_board_only_when_asked(tmp_path: Path) -> None:
+    dataset = write_dataset(tmp_path / "d.yaml", GOOD)
+    cache = cache_for(tmp_path, QUESTIONS)
+    runner = fake_runner({"a": ("1.1", "4.3"), "b": ("CA-3.2",)})
+    out = tmp_path / "scoreboards"
+
+    await run.run(["--boards-dir", str(out)], dataset=dataset, cache_path=cache, runner=runner)
+    assert not out.exists()
+
+    code = await run.run(
+        ["--write-board", "--boards-dir", str(out)],
+        dataset=dataset,
+        cache_path=cache,
+        runner=runner,
+    )
+
+    (written,) = out.glob("*-retrieval.json")
+    board = json.loads(written.read_text(encoding="utf-8"))
+    assert code == 0
+    assert board["set"] == "retrieval"
+    assert board["facts"]["handbookVersion"] == "2026.10"
+    assert board["facts"]["trials"] == 1
+
+
+def test_a_board_of_a_run_with_full_text_fallbacks_is_marked_partial(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    document = {
+        "model": "voyage-3",
+        "datasetSha256": "ee",
+        "commit": "f00",
+        "date": "2026-11-01T12:00:00+00:00",
+        "handbookVersion": "2026.11.1",
+        "overall": {"questions": 2, "hits": 2, "hitRateAt5": 1.0, "meanReciprocalRank": 1.0},
+        "misses": [],
+        "negatives": [],
+        "fulltextFallbacks": ["q-2"],
+    }
+
+    written = run.write_board(document, tmp_path)
+    clean = run.write_board(
+        {**document, "fulltextFallbacks": [], "date": "2026-11-01T13:00:00+00:00"}, tmp_path
+    )
+
+    assert json.loads(written.read_text(encoding="utf-8"))["facts"]["partial"] is True
+    assert "full-text" in capsys.readouterr().out
+    assert json.loads(clean.read_text(encoding="utf-8"))["facts"]["partial"] is False

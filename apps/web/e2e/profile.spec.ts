@@ -242,7 +242,7 @@ test.describe('every link on a profile is reachable by keyboard, with a visible 
       [page.getByRole('link', { name: 'leo.nakamura@juniperrow.example' }), 'mail'],
     ]
     // From the persona switcher, the last control before the page, walk forward in order.
-    await page.getByRole('button', { name: /^Switch persona/ }).focus()
+    await page.getByRole('button', { name: /Switch persona$/ }).focus()
     await page.keyboard.press('Tab')
     for (const [link, name] of ordered) {
       await expect(link, `${name} link`).toBeFocused()

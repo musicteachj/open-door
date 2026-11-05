@@ -49,6 +49,7 @@ from app.ai.guard import (
     INJECTION_NOTE,
     SENSITIVE_NOTE,
     TOPIC_NOTE,
+    TOPIC_NOTE_HR,
     build_guard_request,
     guard_reservation_usd,
 )
@@ -203,11 +204,12 @@ def finished(
     iterations: tuple[IterationUsage, ...] | None = None,
     fell_back: bool = False,
     served_by: str = "scripted",
+    stop_details: dict[str, Any] | None = None,
 ) -> Finished:
     return Finished(
         message=message(content),
         stop_reason=stop_reason,
-        stop_details=None,
+        stop_details=stop_details,
         usage=usage,
         iterations=iterations or (IterationUsage("scripted", usage),),
         served_by=served_by,
@@ -613,6 +615,28 @@ async def test_contradictory_guard_verdicts_route_safer(
     sent = json.dumps(sensitive.transport.requests[0].messages, default=str)
     assert TOPIC_NOTE in sent
     assert SENSITIVE_NOTE not in sent
+
+
+async def test_hr_gets_the_topic_note_without_my_cases_and_others_keep_it(
+    app_engine: AsyncEngine, seeded_sandbox: SeedCompany
+) -> None:
+    """HR has no My cases page, so HR's topic note names the panel's form instead."""
+    sent_by: dict[str, str] = {}
+    for persona in ("dana", "mateo", "priya"):
+        env = await make_env(
+            app_engine,
+            seeded_sandbox,
+            persona=persona,
+            transport=PlanTransport(text_plan(), guard_result=guard_result("ordinary", "pay")),
+        )
+        await env.ask("hello")
+        sent_by[persona] = json.dumps(env.transport.requests[0].messages, default=str)
+    assert TOPIC_NOTE_HR in sent_by["dana"]
+    assert TOPIC_NOTE not in sent_by["dana"]
+    assert "My cases" not in TOPIC_NOTE_HR
+    for persona in ("mateo", "priya"):
+        assert TOPIC_NOTE in sent_by[persona]
+        assert TOPIC_NOTE_HR not in sent_by[persona]
 
 
 # --- Stop reasons -----------------------------------------------------------------------------

@@ -2,6 +2,7 @@ import { QueryClient } from '@tanstack/react-query'
 import { HttpResponse } from 'msw'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { CitationOut } from '@/api/generated'
+import { ApiError } from '@/lib/api-fetch'
 import { resetIdentity } from '@/lib/identity'
 import * as streamModule from '@/lib/stream-turn'
 import { citation } from '@/test/assistant-fixtures'
@@ -655,6 +656,118 @@ describe('a send that fails', () => {
     expect(state().sendError).toBe(message)
     expect(state().status).toBe('idle')
     expect(state().turn).toBeNull()
+  })
+
+  it('reports failed-after-accept when the request failed with no response (it may have arrived)', async () => {
+    onTurn(() => HttpResponse.error())
+    expect(await state().send('Hello', makeDeps())).toEqual({ kind: 'failed-after-accept' })
+  })
+
+  it.each([
+    ['a 500 problem from the API', () => problemResponse(500, 'about:blank', 'The server broke.')],
+    ['a proxy 502 page', () => new HttpResponse('<html>Bad gateway</html>', { status: 502 })],
+    ['a proxy 504 page', () => new HttpResponse('<html>Gateway timeout</html>', { status: 504 })],
+    [
+      'a 4xx that is not a problem',
+      () => new HttpResponse('<html>Too big</html>', { status: 413 }),
+    ],
+    [
+      'a 200 that is not a stream',
+      () =>
+        new HttpResponse('<html>Hello</html>', {
+          status: 200,
+          headers: { 'Content-Type': 'text/html' },
+        }),
+    ],
+  ])(
+    'reports failed-after-accept after %s, since the API may have started the turn',
+    async (_name, response) => {
+      onTurn(response)
+      state().setDraft('Hello')
+      expect(await state().send('Hello', makeDeps())).toEqual({ kind: 'failed-after-accept' })
+      // The plain chat still treats it as a failed send the person can retry by hand.
+      expect(state().draft).toBe('Hello')
+      expect(state().status).toBe('idle')
+      expect(state().sendError).not.toBeNull()
+    },
+  )
+
+  it.each([
+    [401, 'about:blank'],
+    [403, 'about:blank'],
+    [404, 'about:blank'],
+    [409, 'turn-running'],
+    [409, 'conversation-outdated'],
+    [422, 'personal-data'],
+    [429, 'budget-daily'],
+  ])('reports not-sent when the API itself refused with %i %s', async (status, type) => {
+    onTurn(() => problemResponse(status, type, 'Refused.'))
+    expect(await state().send('Hello', makeDeps())).toEqual({ kind: 'not-sent' })
+  })
+
+  it('reports not-sent when creating the conversation failed with a server error', async () => {
+    const deps = makeDeps({
+      conversationId: null,
+      createConversation: () => Promise.reject(new ApiError(502, null, null)),
+    })
+    expect(await state().send('Hello', deps)).toEqual({ kind: 'not-sent' })
+  })
+
+  it('reports not-sent when creating the conversation failed with a network error', async () => {
+    const deps = makeDeps({
+      conversationId: null,
+      createConversation: () => Promise.reject(new TypeError('Failed to fetch')),
+    })
+    expect(await state().send('Hello', deps)).toEqual({ kind: 'not-sent' })
+  })
+
+  it('reports failed-after-accept when a stop aborts the request before any response', async () => {
+    let signal: AbortSignal | undefined
+    vi.spyOn(streamModule, 'streamTurn').mockImplementation(
+      (_id, _question, options) =>
+        new Promise<void>((_resolve, reject) => {
+          signal = options.signal
+          options.signal?.addEventListener('abort', () =>
+            reject(new DOMException('x', 'AbortError')),
+          )
+        }),
+    )
+    const deps = makeDeps()
+    const sending = state().send('Hello', deps)
+    await vi.waitFor(() => expect(signal).toBeDefined())
+    state().stop(deps)
+    expect(await sending).toEqual({ kind: 'failed-after-accept' })
+  })
+
+  it('calls onIssued once, right before the request goes out, and not when refused earlier', async () => {
+    const onIssued = vi.fn<() => void>()
+    onTurn(() => HttpResponse.error())
+    await state().send('Hello', makeDeps(), 'composer', undefined, onIssued)
+    expect(onIssued).toHaveBeenCalledTimes(1)
+    const refused = vi.fn<() => void>()
+    await state().send('123-45-6789', makeDeps(), 'composer', undefined, refused)
+    expect(refused).not.toHaveBeenCalled()
+  })
+
+  it('reports not-sent when a stop comes before the request was issued', async () => {
+    let create!: (id: string) => void
+    const deps = makeDeps({
+      conversationId: null,
+      createConversation: () => new Promise<string>((r) => (create = r)),
+    })
+    const sending = state().send('Hello', deps)
+    await vi.waitFor(() => expect(state().status).toBe('sending'))
+    state().stop(deps)
+    create('c-new')
+    expect(await sending).toEqual({ kind: 'not-sent' })
+  })
+
+  it('reports failed-after-accept once the stream had begun but never named its turn', async () => {
+    const stream = openStream()
+    onTurn(() => stream.response())
+    const sent = state().send('Hello', makeDeps())
+    stream.close()
+    expect(await sent).toEqual({ kind: 'failed-after-accept' })
   })
 
   it('asks the session guard to check who is signed in after a 401', async () => {

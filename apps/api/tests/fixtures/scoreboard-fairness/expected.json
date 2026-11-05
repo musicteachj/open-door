@@ -1,0 +1,164 @@
+{
+  "schema": 1,
+  "sets": [
+    {
+      "key": "retrieval",
+      "name": "Retrieval",
+      "detail": null,
+      "notRun": true,
+      "headline": null,
+      "lowest": null,
+      "also": [],
+      "facts": null
+    },
+    {
+      "key": "qa",
+      "name": "Policy Q&A",
+      "detail": "Full run, Nov 5, 2026",
+      "notRun": false,
+      "headline": {
+        "label": "Program checks",
+        "value": 0.97,
+        "display": "97%"
+      },
+      "lowest": {
+        "value": 0.96,
+        "display": "96%"
+      },
+      "also": [],
+      "facts": {
+        "model": "claude-opus-5-5",
+        "models": {
+          "assistant": "claude-opus-5-5",
+          "guard": "claude-haiku-5-5",
+          "judge": "claude-sonnet-5-5"
+        },
+        "effort": "low",
+        "promptVersion": "2026-11.3",
+        "toolsetVersion": "2026-11.2",
+        "guardPromptVersion": "2026-11.1",
+        "judgeVersion": "2026-10.3",
+        "datasetSha256": {
+          "groups.yaml": "aa11",
+          "fairness-judge.md": "bb22"
+        },
+        "commit": "1d18e453d3d9aa9722edba74b7ed429d255a5b2b-dirty",
+        "trials": 3,
+        "date": "2026-11-05",
+        "live": true,
+        "partial": false,
+        "itemsPerTrial": 206,
+        "stamp": "20261105T140000Z",
+        "set": "full"
+      }
+    },
+    {
+      "key": "quality",
+      "name": "Answer quality",
+      "detail": null,
+      "notRun": true,
+      "headline": null,
+      "lowest": null,
+      "also": [],
+      "facts": null
+    },
+    {
+      "key": "redteam",
+      "name": "Red team",
+      "detail": null,
+      "notRun": true,
+      "headline": null,
+      "lowest": null,
+      "also": [],
+      "facts": null
+    },
+    {
+      "key": "actions",
+      "name": "Actions",
+      "detail": null,
+      "notRun": true,
+      "headline": null,
+      "lowest": null,
+      "also": [],
+      "facts": null
+    },
+    {
+      "key": "fairness",
+      "name": "Fairness",
+      "detail": "Nov 5, 2026",
+      "notRun": false,
+      "headline": {
+        "label": "Groups consistent",
+        "value": 1.0,
+        "display": "12 of 12"
+      },
+      "lowest": {
+        "value": null,
+        "display": "Groups are judged across all trials."
+      },
+      "also": [
+        "No identity assumption in any trial",
+        "Judge equivalence 95% (lowest trial 93%)",
+        "Groups consistent by attribute: name 100%, parent 100%, religion 100%, age 100%, origin 100%, spouse 100%."
+      ],
+      "facts": {
+        "model": "claude-opus-5-5",
+        "models": {
+          "assistant": "claude-opus-5-5",
+          "guard": "claude-haiku-5-5",
+          "judge": "claude-sonnet-5-5"
+        },
+        "effort": "low",
+        "promptVersion": "2026-11.3",
+        "toolsetVersion": "2026-11.2",
+        "guardPromptVersion": "2026-11.1",
+        "judgeVersion": "2026-10.3",
+        "datasetSha256": {
+          "groups.yaml": "aa11",
+          "fairness-judge.md": "bb22"
+        },
+        "commit": "1d18e453d3d9aa9722edba74b7ed429d255a5b2b-dirty",
+        "trials": 3,
+        "date": "2026-11-05",
+        "live": true,
+        "partial": false,
+        "itemsPerTrial": 206,
+        "stamp": "20261105T140000Z",
+        "set": "full"
+      }
+    },
+    {
+      "key": "escalation",
+      "name": "Escalation",
+      "detail": null,
+      "notRun": true,
+      "headline": null,
+      "lowest": null,
+      "also": [],
+      "facts": null
+    },
+    {
+      "key": "case-summary",
+      "name": "Case summary",
+      "detail": null,
+      "notRun": true,
+      "headline": null,
+      "lowest": null,
+      "also": [],
+      "facts": null
+    }
+  ],
+  "history": [
+    {
+      "stamp": "20261105T140000Z",
+      "date": "Nov 5, 2026, 14:00 UTC",
+      "model": "claude-opus-5-5",
+      "qa": "97%",
+      "unanswerable": null,
+      "redteam": null,
+      "actions": null,
+      "judge": null,
+      "cost": "$13.50"
+    }
+  ]
+}

@@ -49,7 +49,7 @@ test('a directory row stacks its cells below 760 px, and the table drops its col
   const table = page.locator('section[aria-labelledby="directory-table-default"]')
   await table.scrollIntoViewIfNeeded()
   await expect(table.getByText('Department', { exact: true })).toBeHidden()
-  const cells = table.getByRole('link').first().locator(':scope > span')
+  const cells = table.getByRole('link').first().locator(':scope > span:not(.sr-only)')
   const boxes = await Promise.all([0, 1, 2, 3].map((i) => cells.nth(i).boundingBox()))
   for (let i = 1; i < 4; i += 1) {
     // Each cell starts below the previous one's top, not beside it.
