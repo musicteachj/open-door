@@ -24,6 +24,10 @@ records are never rewritten.
 | [0016](0016-console-rows-redacted-at-write.md) | The console reads its own rows, redacted when written, with no person ID | Accepted | 2026-10-31 |
 | [0017](0017-scoreboards-from-committed-boards.md) | Scoreboards are generated from committed run boards | Accepted | 2026-10-31 |
 | [0018](0018-default-model.md) | Claude Opus 5.5 stays the assistant's default model | Accepted | 2026-11-03 |
+| [0019](0019-replay-mode-is-a-recorded-walkthrough.md) | At the daily limit, the demo offers a recorded walkthrough, not replayed model calls | Accepted | 2026-11-05 |
+| [0020](0020-one-image-one-origin.md) | One production image serves the API and the web app from one origin, under a nonce-based CSP | Accepted | 2026-11-05 |
+| [0021](0021-sandbox-entry-protection.md) | Starting a sandbox needs a Turnstile check and is limited per address and per day | Accepted | 2026-11-05 |
+| [0022](0022-claude-api-from-aws.md) | On AWS, the API reaches Claude through the Claude API, not Amazon Bedrock | Accepted | 2026-11-05 |
 
 New records copy this shape:
 
