@@ -44,7 +44,7 @@ prompts; the owner designs and approves each screen; Claude Code syncs it here w
 | Phase 5 | Time off, approvals queue, confirm cards in every state (designed, in `screens/08-time-off/`, `screens/09-approvals/`, and `screens/10-confirm-cards/`) |
 | Phase 6 | Escalation panel, confidential-case form, and "My cases"; HR case queue and case detail (designed, in `screens/11-escalation-cases/` and `screens/12-hr-cases/`) |
 | Phase 7 | AI Ops console and the guided tour (designed, in `screens/13-ai-ops-console/` and `screens/15-guided-tour/`). "How it's built" (14) was dropped on 2026-10-31 |
-| Phase 8 | The walkthrough page and the landing's two additions (16, to design). The start refusals, the Turnstile checkbox, and the daily-limit banner's link reuse existing components and are checked in the capture report |
+| Phase 8 | The walkthrough page and the landing's two additions (designed, in `screens/16-walkthrough/`). The start refusals, the Turnstile checkbox, and the daily-limit banner's link reuse existing components and are checked in the capture report |
 
 ## Folder format
 

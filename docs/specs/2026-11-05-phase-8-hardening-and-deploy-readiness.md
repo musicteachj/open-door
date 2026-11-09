@@ -510,6 +510,23 @@ model, the transcript step by step, and "Back to the demo"), and the landing wit
 walkthrough. Desktop only, like every mockup; the build checks it at 390 px. Sample data follows
 the tour's script and the seed.
 
+**Designed and approved (2026-11-09):** see
+[`design/screens/16-walkthrough/`](../design/screens/16-walkthrough/notes.md).
+
+### Decisions from the design round
+
+- **The poster is a recording frame with nothing important under its center,** where the
+  browser's play button may sit.
+- **"Back to the demo" returns the visitor to where they came from** inside Open Door, and to the
+  landing otherwise.
+- **The video is `preload="none"`;** the poster shows without downloading the video.
+- **A step reads: label, title, persona line, coach mark words, then the exchanges;** each
+  exchange is a speaker column beside the words, answers labeled as the AI's, and the HR panel's
+  text labeled "Fixed text written by a person, not the AI".
+- **Step 10's words are the first paragraph of screen 15's end card.**
+- **The landing's link sits left of the tour button;** the Cloudflare line is a second muted line
+  under the sandbox note.
+
 **Not designed, built from existing components:** the start refusals and the failed or unreachable
 check (the inline error the landing and the banner already use, with Retry), the daily-limit
 banner's link (a link under the existing banner's text), and the rare Turnstile checkbox

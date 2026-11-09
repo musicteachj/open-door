@@ -157,7 +157,8 @@ Each has its test in the task named.
   48's phase review diffs against it.
 - **Design screen 16 in Claude Design** (the walkthrough page and the landing's two additions) and
   approve it, with the spec's texts. It is synced into `docs/design/screens/` in its own docs PR
-  before any stage starts.
+  before any stage starts. **Done 2026-11-09:** approved and synced
+  (`docs/phase-8-screens`).
 - **In Stage 6:** OK each paid run.
 - **In Stage 9:** OK the live check and the recording, and approve the video before it is
   committed.
@@ -901,7 +902,7 @@ Batches: **A** Task 44, **B** Tasks 45–46 (paid), **C** Tasks 47–48.
 
 Tests first:
 - [ ] `/walkthrough` works without a session; the video has native controls, a poster, no
-      autoplay, and `preload="metadata"`
+      autoplay, and `preload="none"` (screen 16's build decisions)
 - [ ] the transcript renders from `walkthrough.json` (each step's coach-mark words, question, and
       answer), with the recording's date and model
 - [ ] "Back to the demo" returns to where the visitor came from (the landing if none)

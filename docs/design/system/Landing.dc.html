@@ -54,8 +54,14 @@
       </sc-if>
       <div aria-live="polite" style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap">{{ status }}</div>
       <div style="display:flex;align-items:center;justify-content:space-between;gap:24px;flex-wrap:wrap;margin-top:24px">
-        <p style="margin:0;font-size:var(--text-small);line-height:var(--leading-small);color:var(--ink-muted);max-width:640px;text-wrap:pretty">Each visit gets its own private copy of Juniper Row, a fictional company. It resets after 24 hours.</p>
+        <div style="display:flex;flex-direction:column;gap:4px;max-width:640px">
+          <p style="margin:0;font-size:var(--text-small);line-height:var(--leading-small);color:var(--ink-muted);text-wrap:pretty">Each visit gets its own private copy of Juniper Row, a fictional company. It resets after 24 hours.</p>
+          <p style="margin:0;font-size:var(--text-small);line-height:var(--leading-small);color:var(--ink-muted);text-wrap:pretty">Starting a sandbox runs a quick Cloudflare check to keep the demo safe.</p>
+        </div>
+        <div style="display:flex;align-items:center;gap:24px;flex-wrap:wrap">
+        <a href="Walkthrough.dc.html#1b" style="font-size:var(--text-ui);line-height:var(--leading-ui);font-weight:600;color:var(--primary);text-decoration:underline;text-decoration-thickness:1px;text-underline-offset:3px;border-radius:2px" style-hover="color:var(--primary-hover)" style-focus="outline:2px solid var(--focus-ring);outline-offset:2px">Watch the recorded walkthrough</a>
         <button type="button" style="height:40px;padding:0 16px;border:1px solid var(--border-strong);border-radius:var(--radius-md);background:var(--surface-raised);color:var(--ink);display:inline-flex;align-items:center;gap:8px;font-family:var(--font-sans);font-size:var(--text-ui);font-weight:600;cursor:pointer;white-space:nowrap" style-hover="background:var(--surface-hover);border-color:var(--border-strong-hover)" style-focus="outline:2px solid var(--focus-ring);outline-offset:2px"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><path d="m10 8 6 4-6 4z"></path></svg>Take the 2-minute tour</button>
+        </div>
       </div>
     </section>
   </main>
