@@ -61,3 +61,27 @@ stage. Text columns can no longer hold `CHECK` limits on length, so the service 
 Phase 7's console decrypts only what HR may see and shows guard-flagged turns as redacted. Losing
 the keyring makes every sandbox unreadable, which for 24-hour demo sandboxes means starting new
 ones.
+
+## Amendment (2026-11-05): the KMS provider
+
+Phase 8's planning settles how the KMS provider works, without changing the decision above. **On
+2026-11-09 the owner moved the provider itself to Phase 9,** with the rest of the AWS work; until
+then production uses the local keyring, passed in its environment.
+
+- **The `KeyProvider` interface stays as it is.** The API still makes each record's data key
+  itself; the KMS provider's `wrap` encrypts it with KMS `Encrypt`, and `unwrap` calls `Decrypt`.
+  The encryption context carries the same binding as the local provider's associated data (the
+  table, the sandbox, and the row), so a wrapped key moved to another row fails to unwrap, and AWS
+  logs each use with that context.
+- **The stored key ID is the KMS key's ARN,** so rotating the key in KMS (or moving to a new key)
+  leaves every older record readable.
+- **One call per record, as planned:** a turn unwraps its conversation's key once; a list of
+  time-off requests unwraps only the rows that hold a denial note. Calls run off the event loop,
+  with a 2-second timeout and two retries; a failure is an error, never a fallback to plaintext.
+- **`KEY_PROVIDER` chooses `local` or `kms`; production refuses `local`.** Tests use moto, and the
+  local production run uses moto's server, so no AWS account is needed before Phase 9.
+- **Rejected: decrypting a keyring once at startup with KMS** and wrapping locally after that. It
+  is cheaper, but the key-encryption key would sit in the task's memory, which is what KMS is for
+  avoiding.
+- **The time-off denial note** moves into the encrypted scope in Phase 8, with a data key per
+  request that has one, under the local keyring until the KMS provider exists.
