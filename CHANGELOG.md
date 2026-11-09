@@ -10,6 +10,14 @@ version (`0.x.y` while the app is being built, `1.0.0` when it is complete).
 
 ## [Unreleased]
 
+### Added
+
+- **The Phase 8 screen** (Phase 8, design). Screen 16, the recorded walkthrough: a public page with
+  the demo video of the guided tour, its recording date and model, and a step-by-step transcript,
+  plus the landing's link to it and a line saying a quick Cloudflare check runs when a sandbox
+  starts. Designed in Claude Design and approved in one round, with its build decisions and
+  acceptance criteria in its notes. No new tokens or icons.
+
 ## [0.7.0] - 2026-11-05
 
 Phase 7: the AI Ops console, the reviewer experience, and the model decision. HR now has a

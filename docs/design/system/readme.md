@@ -38,6 +38,7 @@ Sources: everything here was designed in this project. The decision record is `A
 - `AI Ops Console.dc.html`: screen 13, the AI Ops console (/console, HR only): sandbox tiles, the turn list, the docked trace panel, and page states. Screenshots and notes are in `screen-13-ai-ops-console/`; components in `components/console/`.
 - `Scoreboard.dc.html`: the AI Ops console's eval scoreboard, made self-contained.
 - `Guided Tour.dc.html`: screen 15, the ten-step guided tour: coach marks, persona switching, leaving and resuming, the end card, and the persona menu's tour items. Screenshots and notes are in `screen-15-guided-tour/`; components in `components/tour/`.
+- `Walkthrough.dc.html`: screen 16, the recorded walkthrough (/walkthrough, public): the paused video and its transcript, plus the landing's "Watch the recorded walkthrough" link and Cloudflare line. Screenshots and notes are in `screen-16-walkthrough/`.
 - `guidelines/`: foundation specimen cards (colors, type, spacing, radius, shadows, focus, logo, icons).
 - `assets/`: `logo-mark.svg` (32 px master), favicons (`favicon.svg`, `favicon-16.svg`, `favicon-16.png`, `favicon-32.png`, `apple-touch-icon.png` at 180, `icon-512.png`), `logo-explorations/` (round 1 candidates), `fonts/` (Instrument Sans, Geist Mono, self-hosted woff2).
 - `preview/loader.js`: preview-only helper so cards and kits render without a build.
