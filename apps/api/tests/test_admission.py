@@ -2,6 +2,7 @@
 
 from datetime import UTC, datetime
 from decimal import Decimal
+from zoneinfo import ZoneInfo
 
 import pytest
 
@@ -13,6 +14,7 @@ from app.ai.admission import (
     history_tokens,
     room_needed_usd,
     scope_without_room,
+    seconds_until_next_utc_day,
     short_scopes,
 )
 from app.ai.budget import BudgetState
@@ -215,3 +217,21 @@ def test_the_guards_share_of_the_need_covers_any_possible_previous_answer(filler
     )
 
     assert needed(question) - first_call_usd(question) >= possible
+
+
+@pytest.mark.parametrize(
+    ("now", "seconds"),
+    [
+        (datetime(2026, 11, 9, 0, 0, 0, tzinfo=UTC), 86_400),
+        (datetime(2026, 11, 9, 12, 0, 0, tzinfo=UTC), 43_200),
+        (datetime(2026, 11, 9, 23, 59, 30, 400_000, tzinfo=UTC), 30),
+        (datetime(2026, 11, 9, 23, 59, 59, 999_999, tzinfo=UTC), 1),
+        (datetime(2026, 12, 31, 18, 0, 0, tzinfo=UTC), 21_600),
+        # Another zone's clock is still read as the instant it is: 20:00 in New York is 01:00 UTC.
+        (datetime(2026, 11, 9, 20, 0, 0, tzinfo=ZoneInfo("America/New_York")), 82_800),
+    ],
+)
+def test_retry_after_counts_whole_seconds_to_the_next_utc_midnight(
+    now: datetime, seconds: int
+) -> None:
+    assert seconds_until_next_utc_day(now) == seconds

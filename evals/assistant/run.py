@@ -129,6 +129,7 @@ from app.ai.turn import (
 from app.ai.turn import TextDelta as AnswerText
 from app.core.config import Settings, get_settings
 from app.core.encryption import KeyProvider
+from app.core.owner_settings import DatabaseUrlError, owner_database_url
 from app.db.engine import create_engine
 from app.db.models import (
     AiProposal,
@@ -2557,12 +2558,14 @@ async def _engines(
     if env.app_engine is not None and env.owner_engine is not None:
         yield env.app_engine, env.owner_engine
         return
-    if settings.migration_database_url is None:
-        raise EvalFailure(
-            "MIGRATION_DATABASE_URL is not set: the eval removes its sandbox as the owner"
-        )
+    try:
+        owner_url = owner_database_url()
+    except DatabaseUrlError as error:
+        raise EvalFailure(f"{error} The eval removes its sandbox as the owner.") from None
     app = env.app_engine or create_engine(str(settings.database_url))
-    owner = env.owner_engine or create_engine(str(settings.migration_database_url))
+    # No statement timeout for the owner: pruning a large run's sandboxes cascades through every
+    # table and can take longer than the app's 10 seconds.
+    owner = env.owner_engine or create_engine(owner_url, statement_timeout="0")
     try:
         yield app, owner
     finally:

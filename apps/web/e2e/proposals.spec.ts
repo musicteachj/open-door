@@ -63,7 +63,12 @@ test.describe('at 1440 px', () => {
     // Every fact is the API's: the card's amount is the label the conversation read carries, and
     // the AI tag and expiry are there while it waits.
     const stored = await page.evaluate(async () => {
-      const response = await fetch('/api/v1/assistant/conversations/current')
+      const csrf = {
+        headers: {
+          'X-CSRF-Token': /(?:^|; )__Host-od_csrf=([^;]*)/.exec(document.cookie)?.[1] ?? '',
+        },
+      }
+      const response = await fetch('/api/v1/assistant/conversations/current', csrf)
       const body = (await response.json()) as {
         turns: { proposals: { card: { amountLabel: string; startDate: string } }[] }[]
       }

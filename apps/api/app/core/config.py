@@ -1,9 +1,10 @@
 """Application settings, read from the environment and validated once at startup."""
 
+import ipaddress
 import re
 from decimal import Decimal
 from functools import lru_cache
-from typing import Any, Literal, Self
+from typing import Annotated, Any, Literal, Self
 
 from pydantic import (
     Field,
@@ -16,6 +17,7 @@ from pydantic import (
 from pydantic.fields import FieldInfo
 from pydantic_settings import (
     BaseSettings,
+    NoDecode,
     PydanticBaseSettingsSource,
     SettingsConfigDict,
 )
@@ -29,6 +31,21 @@ from app.core.encryption import DEFAULT_KEYRING_PATH
 ORIGIN_PATTERN = re.compile(r"(https?)://[a-z0-9.-]+(?::([0-9]{1,5}))?")
 # Browsers leave the default port out of the Origin header, so it can never appear in APP_ORIGIN.
 DEFAULT_PORTS = {"http": 80, "https": 443}
+DEFAULT_APP_ORIGIN = "http://localhost:5173"
+# The only hosts a production origin may use over plain http: the local production run. The match is
+# exact, so http://localhost.example.com and http://127.0.0.2 are refused.
+LOOPBACK_HOSTS = ("localhost", "127.0.0.1")
+
+type Network = ipaddress.IPv4Network | ipaddress.IPv6Network
+
+
+def require_asyncpg_scheme(value: PostgresDsn, name: str) -> PostgresDsn:
+    """The one check every database URL setting shares (also used by owner_settings)."""
+    if value.scheme != "postgresql+asyncpg":
+        msg = f"{name.upper()} must use the postgresql+asyncpg:// scheme"
+        raise ValueError(msg)
+    return value
+
 
 # The settings whose empty or blank value in the environment is ignored, so that the value in .env
 # is used. A shell can export a key as an empty string (a claude agent shell exports
@@ -76,12 +93,15 @@ class Settings(BaseSettings):
     app_env: Literal["development", "test", "production"] = "development"
     # The API's own login, a member of od_app. Row-level security applies to it.
     database_url: PostgresDsn = Field(repr=False)
-    # The database owner, for Alembic and the bootstrap script. The API never uses it.
-    migration_database_url: PostgresDsn | None = Field(default=None, repr=False)
-    # The cleanup login, a member of od_cleanup: its tests now, and the cleanup job in Phase 8.
-    cleanup_database_url: PostgresDsn | None = Field(default=None, repr=False)
-    # The web app's origin, for the same-origin check on requests that change state.
-    app_origin: str = "http://localhost:5173"
+    # The owner's and the cleanup login's URLs are not here: the API process holds only its own
+    # login. Alembic and the owner scripts read OwnerSettings, the cleanup job and its tests read
+    # CleanupSettings (app.core.owner_settings). A .env may still hold them; extra keys are ignored.
+    # The web app's origin, for the same-origin check on every request. Production requires it.
+    app_origin: str = DEFAULT_APP_ORIGIN
+    # The client addresses (and networks) whose X-Forwarded-For uvicorn may trust: the load
+    # balancer's. A comma list in FORWARDED_ALLOW_IPS; empty means only the direct peer, never "*".
+    # Stage 2 passes it to uvicorn's --forwarded-allow-ips.
+    forwarded_allow_ips: Annotated[tuple[Network, ...], NoDecode] = ()
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR"] = "INFO"
     # `make embed` and the API with AI_TRANSPORT=anthropic use it (the API embeds each handbook
     # question). Without it the search is full-text only. An empty value counts as unset.
@@ -166,15 +186,34 @@ class Settings(BaseSettings):
             raise ValueError(msg)
         return self
 
-    @field_validator("database_url", "migration_database_url", "cleanup_database_url")
+    @field_validator("database_url")
     @classmethod
-    def require_asyncpg_driver(
-        cls, value: PostgresDsn | None, info: ValidationInfo
-    ) -> PostgresDsn | None:
-        if value is not None and value.scheme != "postgresql+asyncpg":
-            msg = f"{str(info.field_name).upper()} must use the postgresql+asyncpg:// scheme"
+    def require_asyncpg_driver(cls, value: PostgresDsn, info: ValidationInfo) -> PostgresDsn:
+        return require_asyncpg_scheme(value, str(info.field_name))
+
+    @field_validator("forwarded_allow_ips", mode="before")
+    @classmethod
+    def parse_forwarded_allow_ips(cls, value: object) -> object:
+        if not isinstance(value, str):
+            return value
+        entries = [entry.strip() for entry in value.split(",") if entry.strip()]
+        try:
+            networks = tuple(ipaddress.ip_network(entry, strict=True) for entry in entries)
+        except ValueError as error:
+            detail = (
+                " (host bits set: write the network's own address)"
+                if "host bits" in str(error)
+                else ""
+            )
+            msg = (
+                "FORWARDED_ALLOW_IPS must be a comma list of addresses and networks "
+                f"such as 10.0.1.5,10.0.2.0/24 (no wildcard){detail}"
+            )
+            raise ValueError(msg) from None
+        if any(network.prefixlen == 0 for network in networks):
+            msg = "FORWARDED_ALLOW_IPS must not include 0.0.0.0/0 or ::/0: that trusts every client"
             raise ValueError(msg)
-        return value
+        return networks
 
     @field_validator("app_origin")
     @classmethod
@@ -199,6 +238,26 @@ class Settings(BaseSettings):
                 msg = "APP_ORIGIN must leave the default port out, because browsers omit it"
                 raise ValueError(msg)
         return value
+
+    @model_validator(mode="after")
+    def refuse_a_test_origin_in_production(self) -> Self:
+        if self.app_env != "production":
+            return self
+        if self.app_origin == DEFAULT_APP_ORIGIN:
+            msg = "APP_ORIGIN must be set in production: it is still the development default"
+            raise ValueError(msg)
+        match = ORIGIN_PATTERN.fullmatch(self.app_origin)
+        assert match is not None  # noqa: S101  # require_bare_origin already checked it.
+        scheme, port = match.groups()
+        host = self.app_origin.removeprefix(f"{scheme}://").split(":")[0]
+        loopback_with_port = host in LOOPBACK_HOSTS and port is not None
+        if scheme != "https" and not loopback_with_port:
+            msg = (
+                "APP_ORIGIN must use https in production (only http://localhost:<port> and "
+                "http://127.0.0.1:<port> may use http)"
+            )
+            raise ValueError(msg)
+        return self
 
 
 @lru_cache

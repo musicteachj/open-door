@@ -30,8 +30,6 @@ def settings_with(**overrides: Any) -> Settings:
         "_env_file": None,
         "app_env": "test",
         "database_url": UNREACHABLE_DATABASE_URL,
-        "migration_database_url": None,
-        "cleanup_database_url": None,
         "anthropic_api_key": None,
         "voyage_api_key": None,
         "ai_transport": "scripted",
@@ -73,7 +71,7 @@ def test_anthropic_without_a_voyage_key_searches_by_full_text_only() -> None:
 
 def test_production_refuses_the_scripted_transport_at_boot() -> None:
     with pytest.raises(ValueError, match="AI_TRANSPORT must be anthropic"):
-        create_app(settings_with(app_env="production"))
+        create_app(settings_with(app_env="production", app_origin="https://opendoor.example.com"))
 
 
 def test_replay_is_refused_for_the_app_at_boot() -> None:
@@ -276,7 +274,14 @@ def test_a_keyring_file_only_its_owner_can_read_is_accepted(tmp_path: Path, mode
 def test_the_test_key_is_refused_outside_the_test_environment() -> None:
     for env in ("development", "production"):
         with pytest.raises(ValueError, match="test key"):
-            create_app(settings_with(app_env=env, ai_transport="anthropic", anthropic_api_key=KEY))
+            create_app(
+                settings_with(
+                    app_env=env,
+                    app_origin="https://opendoor.example.com",
+                    ai_transport="anthropic",
+                    anthropic_api_key=KEY,
+                )
+            )
 
 
 def test_the_test_key_in_a_file_is_refused_outside_the_test_environment(tmp_path: Path) -> None:
@@ -328,3 +333,32 @@ def test_the_key_dependency_accepts_any_object_with_wrap_and_unwrap() -> None:
     fake = FakeKeys()
     app.state.keys = fake
     assert get_keys(request_for(app)) is fake
+
+
+def production_settings() -> Settings:
+    return settings_with(
+        app_env="production",
+        app_origin="https://opendoor.example.com",
+        ai_transport="anthropic",
+        anthropic_api_key=KEY,
+        encryption_keyring=REAL_KEYRING,
+    )
+
+
+@pytest.mark.parametrize("path", ["/docs", "/redoc", "/openapi.json"])
+def test_production_hides_the_api_docs(path: str) -> None:
+    with TestClient(create_app(production_settings())) as client:
+        assert client.get(path).status_code == 404
+
+
+@pytest.mark.parametrize("path", ["/docs", "/redoc", "/openapi.json"])
+def test_the_docs_are_served_outside_production(path: str) -> None:
+    with TestClient(create_app(settings_with())) as client:
+        assert client.get(path).status_code == 200
+
+
+def test_the_schema_export_is_the_same_with_the_docs_hidden() -> None:
+    production = create_app(production_settings()).openapi()
+    development = create_app(settings_with(app_env="development", encryption_keyring=REAL_KEYRING))
+
+    assert production == development.openapi()

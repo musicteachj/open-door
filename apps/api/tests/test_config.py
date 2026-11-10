@@ -7,9 +7,19 @@ import pytest
 from pydantic import ValidationError
 
 from app.core.config import Settings
+from app.core.owner_settings import (
+    CleanupSettings,
+    DatabaseUrlError,
+    OwnerSettings,
+    cleanup_database_url,
+    optional_cleanup_database_url,
+    owner_database_url,
+)
 
 APP_URL = "postgresql+asyncpg://od_app_login:od_app_dev@localhost/opendoor"
-DATABASE_URL_FIELDS = ("database_url", "migration_database_url", "cleanup_database_url")
+HTTPS_ORIGIN = "https://opendoor.example.com"
+OWNER_URL = "postgresql+asyncpg://opendoor:opendoor@localhost/opendoor"
+CLEANUP_URL = "postgresql+asyncpg://od_cleanup_login:od_cleanup_dev@localhost/opendoor"
 
 
 @pytest.fixture(autouse=True)
@@ -20,6 +30,7 @@ def clean_environment(monkeypatch: pytest.MonkeyPatch) -> None:
         "DATABASE_URL",
         "MIGRATION_DATABASE_URL",
         "CLEANUP_DATABASE_URL",
+        "FORWARDED_ALLOW_IPS",
         "APP_ORIGIN",
         "LOG_LEVEL",
         "ANTHROPIC_API_KEY",
@@ -38,30 +49,47 @@ def test_a_missing_database_url_stops_startup() -> None:
         Settings(_env_file=None)
 
 
-@pytest.mark.parametrize("field", DATABASE_URL_FIELDS)
-def test_every_database_url_must_use_the_asyncpg_driver(field: str) -> None:
-    urls: dict[str, Any] = {
-        "database_url": APP_URL,
-        field: "postgresql://opendoor:opendoor@localhost/opendoor",
-    }
+def test_the_database_url_must_use_the_asyncpg_driver() -> None:
+    with pytest.raises(ValidationError, match=r"DATABASE_URL must use the postgresql\+asyncpg"):
+        Settings(_env_file=None, database_url="postgresql://opendoor:opendoor@localhost/opendoor")
+
+
+@pytest.mark.parametrize(
+    ("cls", "field"),
+    [(OwnerSettings, "migration_database_url"), (CleanupSettings, "cleanup_database_url")],
+)
+def test_the_owner_and_cleanup_urls_must_use_the_asyncpg_driver(
+    cls: type[OwnerSettings] | type[CleanupSettings], field: str
+) -> None:
+    urls: dict[str, Any] = {field: "postgresql://opendoor:opendoor@localhost/opendoor"}
     with pytest.raises(ValidationError, match=rf"{field.upper()} must use the postgresql\+asyncpg"):
-        Settings(_env_file=None, **urls)
+        cls(_env_file=None, **urls)
 
 
 def test_defaults_apply_when_only_the_database_url_is_set() -> None:
     settings = Settings(_env_file=None, database_url=APP_URL)
     assert settings.app_env == "development"
     assert settings.log_level == "INFO"
-    assert settings.migration_database_url is None
-    assert settings.cleanup_database_url is None
     assert settings.app_origin == "http://localhost:5173"
 
 
-@pytest.mark.parametrize("field", DATABASE_URL_FIELDS)
-def test_a_malformed_database_url_does_not_leak_its_password(field: str) -> None:
-    urls: dict[str, Any] = {"database_url": APP_URL, field: "postgresql://app:hunter2@db/app"}
+def test_a_malformed_database_url_does_not_leak_its_password() -> None:
     with pytest.raises(ValidationError) as excinfo:
-        Settings(_env_file=None, **urls)
+        Settings(_env_file=None, database_url="postgresql://app:hunter2@db/app")
+
+    assert "hunter2" not in str(excinfo.value)
+
+
+@pytest.mark.parametrize(
+    ("cls", "field"),
+    [(OwnerSettings, "migration_database_url"), (CleanupSettings, "cleanup_database_url")],
+)
+def test_a_malformed_owner_or_cleanup_url_does_not_leak_its_password(
+    cls: type[OwnerSettings] | type[CleanupSettings], field: str
+) -> None:
+    urls: dict[str, Any] = {field: "postgresql://app:hunter2@db/app"}
+    with pytest.raises(ValidationError) as excinfo:
+        cls(_env_file=None, **urls)
 
     assert "hunter2" not in str(excinfo.value)
 
@@ -70,12 +98,16 @@ def test_no_database_password_appears_in_the_settings_repr() -> None:
     settings = Settings(
         _env_file=None,
         database_url="postgresql+asyncpg://app:hunter2@localhost/app",
-        migration_database_url="postgresql+asyncpg://owner:swordfish@localhost/app",
-        cleanup_database_url="postgresql+asyncpg://cleanup:letmein@localhost/app",
+    )
+    owner = OwnerSettings(
+        _env_file=None, migration_database_url="postgresql+asyncpg://owner:swordfish@localhost/app"
+    )
+    cleanup = CleanupSettings(
+        _env_file=None, cleanup_database_url="postgresql+asyncpg://cleanup:letmein@localhost/app"
     )
 
-    for password in ("hunter2", "swordfish", "letmein"):
-        assert password not in repr(settings)
+    for password, shown in (("hunter2", settings), ("swordfish", owner), ("letmein", cleanup)):
+        assert password not in repr(shown)
 
 
 @pytest.mark.parametrize(
@@ -162,7 +194,11 @@ def test_settings_accept_production_with_any_transport(transport: str) -> None:
     # call the model, so they must not need the assistant's variables. The rule that production
     # runs `anthropic` is checked when the API starts (app.ai.transport).
     settings = Settings(
-        _env_file=None, database_url=APP_URL, app_env="production", ai_transport=transport
+        _env_file=None,
+        database_url=APP_URL,
+        app_env="production",
+        app_origin=HTTPS_ORIGIN,
+        ai_transport=transport,
     )
     assert settings.ai_transport == transport
 
@@ -172,6 +208,7 @@ def test_production_accepts_the_anthropic_transport_with_a_key() -> None:
         _env_file=None,
         database_url=APP_URL,
         app_env="production",
+        app_origin=HTTPS_ORIGIN,
         ai_transport="anthropic",
         anthropic_api_key="sk-ant-test",
     )
@@ -187,6 +224,7 @@ def test_settings_accept_the_anthropic_transport_with_no_key(env: str, key: str 
         _env_file=None,
         database_url=APP_URL,
         app_env=env,
+        app_origin=HTTPS_ORIGIN,
         ai_transport="anthropic",
         anthropic_api_key=key,
     )
@@ -425,3 +463,197 @@ def test_a_blank_keyring_file_in_the_environment_leaves_the_default_without_a_do
     settings = Settings(_env_file=env_file)
     assert settings.encryption_keyring_file is not None
     assert settings.encryption_keyring_file.get_secret_value() == ".keys/keyring"
+
+
+def test_settings_has_no_owner_or_cleanup_url() -> None:
+    # The API process holds only its own login.
+    assert "migration_database_url" not in Settings.model_fields
+    assert "cleanup_database_url" not in Settings.model_fields
+
+
+def test_an_env_file_that_still_holds_the_owner_urls_loads_and_the_api_never_sees_them(
+    tmp_path: Path,
+) -> None:
+    env_file = tmp_path / ".env"
+    env_file.write_text(
+        f"DATABASE_URL={APP_URL}\nMIGRATION_DATABASE_URL={OWNER_URL}\n"
+        f"CLEANUP_DATABASE_URL={CLEANUP_URL}\n",
+        encoding="utf-8",
+    )
+
+    settings = Settings(_env_file=env_file)
+
+    assert not hasattr(settings, "migration_database_url")
+    assert "opendoor:opendoor" not in repr(settings.model_dump())
+    assert OwnerSettings(_env_file=env_file).migration_database_url is not None
+    assert CleanupSettings(_env_file=env_file).cleanup_database_url is not None
+
+
+def test_owner_settings_load_only_their_own_url(tmp_path: Path) -> None:
+    env_file = tmp_path / ".env"
+    env_file.write_text(
+        f"DATABASE_URL={APP_URL}\nMIGRATION_DATABASE_URL={OWNER_URL}\n"
+        f"CLEANUP_DATABASE_URL={CLEANUP_URL}\n",
+        encoding="utf-8",
+    )
+
+    owner = OwnerSettings(_env_file=env_file)
+    cleanup = CleanupSettings(_env_file=env_file)
+
+    assert str(owner.migration_database_url) == OWNER_URL
+    assert not hasattr(owner, "database_url")
+    assert not hasattr(owner, "cleanup_database_url")
+    assert str(cleanup.cleanup_database_url) == CLEANUP_URL
+    assert not hasattr(cleanup, "migration_database_url")
+
+
+def test_owner_and_cleanup_settings_refuse_a_missing_url() -> None:
+    with pytest.raises(ValidationError, match="migration_database_url"):
+        OwnerSettings(_env_file=None)
+    with pytest.raises(ValidationError, match="cleanup_database_url"):
+        CleanupSettings(_env_file=None)
+
+
+def test_owner_and_cleanup_settings_read_the_environment(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("MIGRATION_DATABASE_URL", OWNER_URL)
+    monkeypatch.setenv("CLEANUP_DATABASE_URL", CLEANUP_URL)
+    assert str(OwnerSettings(_env_file=None).migration_database_url) == OWNER_URL
+    assert str(CleanupSettings(_env_file=None).cleanup_database_url) == CLEANUP_URL
+
+
+PRODUCTION: dict[str, Any] = {"app_env": "production"}
+
+
+def test_production_refuses_the_default_origin() -> None:
+    with pytest.raises(ValidationError, match="APP_ORIGIN"):
+        Settings(_env_file=None, database_url=APP_URL, **PRODUCTION)
+
+
+def test_production_refuses_an_explicit_default_origin() -> None:
+    with pytest.raises(ValidationError, match="APP_ORIGIN"):
+        Settings(
+            _env_file=None,
+            database_url=APP_URL,
+            app_origin="http://localhost:5173",
+            **PRODUCTION,
+        )
+
+
+@pytest.mark.parametrize(
+    "origin",
+    [
+        "http://opendoor.example.com",
+        "http://localhost",
+        "http://localhost.example.com",
+        "http://localhost.example.com:8100",
+        "http://127.0.0.2:8100",
+        "http://127.0.0.1",
+        "http://notlocalhost:8100",
+    ],
+)
+def test_production_refuses_http_unless_the_origin_is_loopback_with_a_port(origin: str) -> None:
+    with pytest.raises(ValidationError, match="https"):
+        Settings(_env_file=None, database_url=APP_URL, app_origin=origin, **PRODUCTION)
+
+
+@pytest.mark.parametrize(
+    "origin",
+    [
+        "https://opendoor.example.com",
+        "https://localhost.example.com",
+        "http://localhost:8100",
+        "http://127.0.0.1:8100",
+    ],
+)
+def test_production_accepts_https_and_a_loopback_origin_with_a_port(origin: str) -> None:
+    settings = Settings(_env_file=None, database_url=APP_URL, app_origin=origin, **PRODUCTION)
+    assert settings.app_origin == origin
+
+
+@pytest.mark.parametrize("env", ["development", "test"])
+def test_other_environments_keep_the_default_origin(env: str) -> None:
+    settings = Settings(_env_file=None, database_url=APP_URL, app_env=env)
+    assert settings.app_origin == "http://localhost:5173"
+
+
+def test_forwarded_allow_ips_defaults_to_the_peer_only() -> None:
+    settings = Settings(_env_file=None, database_url=APP_URL)
+    assert settings.forwarded_allow_ips == ()
+
+
+@pytest.mark.parametrize("value", ["", "  ", " , "])
+def test_an_empty_forwarded_allow_ips_means_the_peer_only(value: str) -> None:
+    settings = Settings(_env_file=None, database_url=APP_URL, forwarded_allow_ips=value)
+    assert settings.forwarded_allow_ips == ()
+
+
+def test_forwarded_allow_ips_parses_addresses_and_networks() -> None:
+    settings = Settings(
+        _env_file=None,
+        database_url=APP_URL,
+        forwarded_allow_ips="10.0.1.5, 10.0.2.0/24,2001:db8::1 , 2001:db8:1::/48",
+    )
+    assert [str(network) for network in settings.forwarded_allow_ips] == [
+        "10.0.1.5/32",
+        "10.0.2.0/24",
+        "2001:db8::1/128",
+        "2001:db8:1::/48",
+    ]
+
+
+def test_forwarded_allow_ips_reads_the_environment(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("DATABASE_URL", APP_URL)
+    monkeypatch.setenv("FORWARDED_ALLOW_IPS", "10.0.0.0/8")
+    settings = Settings(_env_file=None)
+    assert [str(network) for network in settings.forwarded_allow_ips] == ["10.0.0.0/8"]
+
+
+@pytest.mark.parametrize("value", ["*", "not-an-ip", "10.0.0.1, nope", "10.0.0.0/33"])
+def test_forwarded_allow_ips_refuses_anything_that_is_not_an_address_or_network(
+    value: str,
+) -> None:
+    # A wildcard would let any client spoof its logged address.
+    with pytest.raises(ValidationError, match="FORWARDED_ALLOW_IPS"):
+        Settings(_env_file=None, database_url=APP_URL, forwarded_allow_ips=value)
+
+
+@pytest.mark.parametrize("value", ["0.0.0.0/0", "::/0", "10.0.0.1, 0.0.0.0/0", "::/0, 10.0.0.1"])
+def test_forwarded_allow_ips_refuses_a_network_that_trusts_every_client(value: str) -> None:
+    with pytest.raises(ValidationError, match="FORWARDED_ALLOW_IPS"):
+        Settings(_env_file=None, database_url=APP_URL, forwarded_allow_ips=value)
+
+
+@pytest.mark.parametrize("value", ["10.0.0.5/24", "2001:db8::1/48"])
+def test_forwarded_allow_ips_refuses_a_network_with_host_bits_set(value: str) -> None:
+    # It would silently widen to the whole network.
+    with pytest.raises(ValidationError, match=r"FORWARDED_ALLOW_IPS.*host bits"):
+        Settings(_env_file=None, database_url=APP_URL, forwarded_allow_ips=value)
+
+
+def test_the_url_helpers_say_which_variable_is_missing(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.chdir(tmp_path)  # No .env here.
+
+    with pytest.raises(DatabaseUrlError, match="MIGRATION_DATABASE_URL is not set"):
+        owner_database_url()
+    with pytest.raises(DatabaseUrlError, match="CLEANUP_DATABASE_URL is not set"):
+        cleanup_database_url()
+    assert optional_cleanup_database_url() is None
+
+
+def test_the_url_helpers_return_the_url_and_never_echo_a_bad_one(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("MIGRATION_DATABASE_URL", OWNER_URL)
+    assert owner_database_url() == OWNER_URL
+
+    monkeypatch.setenv("MIGRATION_DATABASE_URL", "postgresql://opendoor:hunter2@localhost/app")
+    monkeypatch.setenv("CLEANUP_DATABASE_URL", "postgresql://cleanup:hunter3@localhost/app")
+    with pytest.raises(DatabaseUrlError, match="must use the postgresql") as owner_error:
+        owner_database_url()
+    with pytest.raises(DatabaseUrlError, match="must use the postgresql") as cleanup_error:
+        optional_cleanup_database_url()  # A set but malformed URL is an error, not "unset".
+    assert "hunter2" not in str(owner_error.value)
+    assert "hunter3" not in str(cleanup_error.value)

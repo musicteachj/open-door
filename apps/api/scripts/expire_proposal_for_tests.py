@@ -23,6 +23,7 @@ from sqlalchemy.exc import DBAPIError
 from sqlalchemy.ext.asyncio import create_async_engine
 
 from app.core.config import get_settings
+from app.core.owner_settings import DatabaseUrlError, owner_database_url
 
 LOCAL_HOSTS = frozenset({"localhost", "127.0.0.1", "::1"})
 AGE_MINUTES = 16
@@ -62,11 +63,12 @@ def build_parser() -> argparse.ArgumentParser:
 
 async def main(arguments: argparse.Namespace) -> None:
     settings = get_settings()
-    if settings.migration_database_url is None:
-        raise SystemExit("MIGRATION_DATABASE_URL is not set. See apps/api/.env.example.")
     if settings.app_env == "production":
         raise SystemExit("Refusing to run: the app is set to production. Nothing was changed.")
-    url = str(settings.migration_database_url)
+    try:
+        url = owner_database_url()
+    except DatabaseUrlError as error:
+        raise SystemExit(str(error)) from None
     refuse_unless_local(url)
     engine = create_async_engine(url, hide_parameters=True)
     try:

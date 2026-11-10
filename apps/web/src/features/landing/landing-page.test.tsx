@@ -57,6 +57,24 @@ describe('the landing page after the sandbox expired', () => {
   })
 })
 
+describe('the landing page after the CSRF cookie is lost', () => {
+  it('stays on the landing page when the cached /me failed with the CSRF refusal', async () => {
+    const api = installFakeApi('priya')
+    const { queryClient, router } = renderApp({ at: '/ask' })
+    await screen.findByRole('heading', { level: 1, name: /^Good (morning|afternoon|evening),/ })
+    api.failMe(403, 'csrf-rejected')
+    await act(() => queryClient.invalidateQueries({ queryKey: getGetMeQueryKey() }))
+    await act(() => router.navigate('/'))
+    expect(
+      await screen.findByRole('heading', {
+        level: 1,
+        name: 'Your open-door policy, now always open.',
+      }),
+    ).toBeInTheDocument()
+    expect(router.state.location.pathname).toBe('/')
+  })
+})
+
 describe('the landing page', () => {
   it('shows the pitch, the picker, the sandbox note, and the footer', async () => {
     installFakeApi()

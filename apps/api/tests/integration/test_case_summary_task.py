@@ -434,7 +434,10 @@ async def test_an_error_while_reserving_is_a_transport_failure_not_a_budget_one(
 
 
 def retry(browser: Browser, case_id: str, *, csrf: bool = True) -> Any:
-    return browser.client.post(f"{BASE}/{case_id}/summary", headers=browser.csrf if csrf else {})
+    if csrf:
+        return browser.client.post(f"{BASE}/{case_id}/summary", headers=browser.csrf)
+    with browser.without_csrf():
+        return browser.client.post(f"{BASE}/{case_id}/summary")
 
 
 def failed_case(browser: Browser, words: str = WORDS) -> tuple[Sent, FakeSummarizer]:

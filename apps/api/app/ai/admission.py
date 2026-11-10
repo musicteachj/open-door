@@ -17,8 +17,9 @@ offer comes earlier than a real token count would put it, and that is the safe s
 """
 
 import json
+import math
 from collections.abc import Sequence
-from datetime import datetime
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from typing import Any, Literal
 
@@ -117,3 +118,11 @@ def scope_without_room(
     if daily_short:
         return "daily"
     return None
+
+
+def seconds_until_next_utc_day(now: datetime) -> int:
+    """Whole seconds, at least 1, until the next UTC midnight: when the day's budget resets, and
+    so the `Retry-After` of a daily-limit 429. Rounded up, so waiting this long is enough."""
+    moment = now.astimezone(UTC)
+    midnight = (moment + timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
+    return max(1, math.ceil((midnight - moment).total_seconds()))

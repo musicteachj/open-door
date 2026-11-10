@@ -7,11 +7,12 @@ from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
 import pytest
-from sqlalchemy import event
+from sqlalchemy import event, select
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 from sqlalchemy.orm import Session
 
 from app.core.logging import JsonFormatter
+from app.db.models import Person
 from app.db.tenancy import TenantContext, tenant_session
 from app.modules.identity import deps as identity_deps
 from app.modules.identity import routes as identity_routes
@@ -19,6 +20,7 @@ from app.modules.identity.cookies import CSRF_COOKIE, SESSION_COOKIE
 from app.modules.identity.sessions import (
     SessionRecord,
     end_session,
+    end_session_family,
     rotate_session,
     start_session,
 )
@@ -281,10 +283,11 @@ def test_a_change_without_the_right_csrf_token_is_refused(
     wrong_kind = {"X-CSRF-Token": browser.session_token}
 
     for attempt in (headers, wrong_kind):
-        switch = browser.client.put(
-            "/api/v1/session/persona", json={"persona": "marcus"}, headers=attempt
-        )
-        sign_out = browser.client.delete("/api/v1/session", headers=attempt)
+        with browser.without_csrf():
+            switch = browser.client.put(
+                "/api/v1/session/persona", json={"persona": "marcus"}, headers=attempt
+            )
+            sign_out = browser.client.delete("/api/v1/session", headers=attempt)
         assert (switch.status_code, sign_out.status_code) == (403, 403)
 
     assert browser.client.get("/api/v1/me").json()["personaKey"] == "priya"
@@ -439,12 +442,12 @@ async def test_signing_out_of_a_session_that_is_already_gone_audits_nothing_twic
 ) -> None:
     sandbox = browser.start_sandbox()
 
-    async def end_it_in_another_tab_first(db: AsyncSession, token_hash: bytes) -> bool:
-        await end_session(db, token_hash)
+    async def end_it_in_another_tab_first(db: AsyncSession, current: SessionRecord) -> bool:
+        await end_session_family(db, current)
         # This request's own delete now finds nothing, so it didn't end the session.
-        return await end_session(db, token_hash)
+        return await end_session_family(db, current)
 
-    monkeypatch.setattr(identity_routes, "end_session", end_it_in_another_tab_first)
+    monkeypatch.setattr(identity_routes, "end_session_family", end_it_in_another_tab_first)
 
     response = browser.client.delete("/api/v1/session", headers=browser.csrf)
 
@@ -454,6 +457,62 @@ async def test_signing_out_of_a_session_that_is_already_gone_audits_nothing_twic
     assert "__Host-od_session" not in browser.client.cookies
     events = await audit_events(app_engine, UUID(sandbox["tenant"]["id"]))
     assert [event.action for event in events] == ["sandbox.created"]
+
+
+async def test_a_sign_out_racing_a_persona_switch_ends_the_new_persona_too(
+    browser: Browser, app_engine: AsyncEngine, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Two tabs: one switches persona and the other signs out within milliseconds. The sign-out's
+    lookup found the old session, then the switch committed, then the sign-out deleted. The new
+    persona's session must not survive."""
+    sandbox = browser.start_sandbox()
+    tenant_id = UUID(sandbox["tenant"]["id"])
+    replacement: list[SessionTokens] = []
+    real = end_session_family
+
+    async def switch_first_then_sign_out(db: AsyncSession, current: SessionRecord) -> bool:
+        # The other tab's switch commits here, in a transaction of its own.
+        # (The app's own engine: the test client runs the app in its own event loop.)
+        assert isinstance(db.bind, AsyncEngine)
+        async with tenant_session(db.bind, TenantContext(tenant_id, None)) as other:
+            dana = await other.scalar(select(Person.id).where(Person.persona_key == "dana"))
+            assert dana is not None
+            replacement.append(await rotate_session(other, current, dana))
+        return await real(db, current)
+
+    monkeypatch.setattr(identity_routes, "end_session_family", switch_first_then_sign_out)
+
+    response = browser.client.delete("/api/v1/session", headers=browser.csrf)
+
+    assert response.status_code == 204
+    monkeypatch.undo()
+    # The second tab holds the new persona's cookies. They are refused.
+    [tokens] = replacement
+    second_tab = browser.client.get(
+        "/api/v1/me",
+        headers={**session_cookie(tokens.session), "X-CSRF-Token": tokens.csrf},
+    )
+    assert second_tab.status_code == 401
+    events = await audit_events(app_engine, tenant_id)
+    assert [event.action for event in events] == ["sandbox.created", "session.ended"]
+
+
+async def test_after_a_switch_signing_out_leaves_no_session_in_the_family(
+    browser: Browser, app_engine: AsyncEngine
+) -> None:
+    sandbox = browser.start_sandbox()
+    browser.client.put("/api/v1/session/persona", json={"persona": "dana"}, headers=browser.csrf)
+    session_token, csrf_token = browser.session_token, browser.csrf_token
+
+    ended = browser.client.delete("/api/v1/session", headers=browser.csrf)
+
+    assert ended.status_code == 204
+    again = browser.client.get(
+        "/api/v1/me", headers={**session_cookie(session_token), "X-CSRF-Token": csrf_token}
+    )
+    assert again.status_code == 401
+    events = await audit_events(app_engine, UUID(sandbox["tenant"]["id"]))
+    assert [event.action for event in events].count("session.ended") == 1
 
 
 def test_every_api_response_is_marked_no_store(open_browser: OpenBrowser) -> None:

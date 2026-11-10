@@ -14,7 +14,6 @@ from sqlalchemy.exc import DBAPIError
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 from app.ai.budget import Caps, reserve
-from app.core.config import Settings
 from app.db.spend_cleanup import SpendRow, remove_sandboxes, spend_rows_of
 from app.db.tenancy import TenantContext
 from tests.integration.conftest import MakeTenant
@@ -86,14 +85,14 @@ async def test_the_proxy_checks_cleanup_removes_its_sandbox_and_ledger_rows(
     app_engine: AsyncEngine,
     owner_engine: AsyncEngine,
     make_tenant: MakeTenant,
-    database_settings: Settings,
+    owner_url: str,
 ) -> None:
     spec = importlib.util.spec_from_file_location("proxy_check_script", SCRIPT)
     assert spec is not None
     assert spec.loader is not None
     script = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(script)
-    url = str(database_settings.migration_database_url)
+    url = owner_url
     before = await daily_ids(owner_engine)
     started_at = await script.database_now(url)
     tenant_id, _rows = await reserved_sandbox(app_engine, owner_engine, make_tenant)

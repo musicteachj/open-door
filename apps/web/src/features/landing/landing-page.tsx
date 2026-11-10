@@ -8,7 +8,7 @@ import { PersonaCard } from '@/components/landing/persona-card'
 import { TourStartButton } from '@/components/tour/tour-start-button'
 import { useStartTour } from '@/features/tour/use-start-tour'
 import { PERSONAS } from '@/features/personas/personas'
-import { ApiError } from '@/lib/api-fetch'
+import { isSignedOutError } from '@/lib/api-fetch'
 import { AI_DISCLOSURE } from '@/lib/disclosure'
 import { SANDBOX_START_FAILED } from '@/lib/sandbox-copy'
 
@@ -28,9 +28,10 @@ export function LandingPage() {
   const start = useStartSandbox()
   const tour = useStartTour()
 
-  // A signed-in visitor has nothing to choose. Cached data whose latest fetch was a 401 is not a
+  // A signed-in visitor has nothing to choose. Cached data whose latest fetch was a 401 (or the CSRF
+  // refusal, which is the same to the app) is not a
   // signed-in visitor: the sandbox ended, and sending them on would bounce them to the reset page.
-  const unauthorized = me.error instanceof ApiError && me.error.status === 401
+  const unauthorized = isSignedOutError(me.error)
   if (me.data && !unauthorized) return <Navigate to="/ask" replace />
   if (me.isPending) return <output className="sr-only">Loading…</output>
 

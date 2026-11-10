@@ -13,7 +13,13 @@ APP_URL = "postgresql+asyncpg://od_app_login:od_app_dev@localhost/opendoor"
 
 
 def settings_for(app_env: str, transport: str) -> Settings:
-    return Settings(_env_file=None, database_url=APP_URL, app_env=app_env, ai_transport=transport)
+    return Settings(
+        _env_file=None,
+        database_url=APP_URL,
+        app_env=app_env,
+        app_origin="https://opendoor.example.com",
+        ai_transport=transport,
+    )
 
 
 @pytest.mark.parametrize("transport", ["scripted", "replay"])

@@ -306,12 +306,6 @@ phase makes it, since its full run covers them all.
   sandbox's table in a 21-day window; a case sent in late December in a sandbox with no rows for
   the next year would get a reply-by date on a closed day. Check the seed always writes the next
   year's holidays, or read them from the calendar. (v0.6.0 release review.)
-- **Tie the CSRF header to the audited read itself.** Audited reads require `X-CSRF-Token` through
-  a dependency each route opts into (`AuditedReadDep`), so a future audited route that forgets it
-  could be started by a plain navigation from an HR partner's browser, and no test would fail.
-  Since the web client now sends the header on every `/api/` request, either require it on every
-  signed-in `/api/` request, or have the audited-read services check that the request carried it.
-  (Phase 6 stage 3, `/code-review medium` round 4.)
 
 - **The sticky composer can cover "Show your work".** At a 900-pixel-high window, with a tall HR
   panel above it, the conversation page's sticky composer partly covers the "Show your work"
@@ -419,7 +413,7 @@ phase makes it, since its full run covers them all.
   event. Keep a running size on the conversation, or pass the admitted history into `begin`
   (which also closes the small window in which a recovered turn could carry the history past the
   limit after the check). (Phase 4 stage 4 `/code-review medium`.) Moved from Phase 4 at its close: it fits the cost and load test.
-- **Small API polish from stage 4's reviews:** a `Retry-After` header on the budget 429s; problem
+- **Small API polish from stage 4's reviews:** problem
   `type` values are bare codes (`turn-running`), a relative URI reference that RFC 9457 allows but
   that a full URI would make unambiguous; there's no limit on how many conversations one person
   starts (sandbox expiry cleans them up). (Phase 4 stage 4 reviews.) Moved from Phase 4 at its close: for the hardening pass.
@@ -461,10 +455,6 @@ phase makes it, since its full run covers them all.
   time, so the work grows with the square of the answer's length. Batch deltas per animation frame
   in the store, or memoize finished blocks; measure on a low-end phone first. (v0.4.0 release
   review.)
-- **Give the app's database login a `statement_timeout`.** The engine sets none, so a hung query
-  waits forever. The assistant's end-of-turn writes are bounded in code (10 seconds), but other
-  requests aren't. A role-level `statement_timeout` (and `idle_in_transaction_session_timeout`)
-  bounds them all. (Phase 4 stage 2 review.)
 - **Delete handbook versions no sandbox uses.** Each `make ingest` of changed text adds a version,
   and nothing removes old ones. A cleanup step can delete unpublished versions and published ones
   that are neither the newest nor pinned by any sandbox; the foreign key already refuses to delete
@@ -475,55 +465,17 @@ phase makes it, since its full run covers them all.
   with the filters. Measure in the load test first. (Phase 2 close-out review.)
 - **Keyboard shortcuts.** Add `/` to focus the composer (never while typing in a field) and ⌘K to
   jump to a page. Both need screen-reader and conflict checks. (2026-10-06 design brainstorm.)
-- **Notice another tab's session change at once.** If another tab switches persona or signs out,
-  this tab keeps showing what it had loaded, such as HR's view of someone's private details, until
-  it next refetches `/me`: on focus, on navigation, or after a 401. It's the same visitor, and every
-  new read goes out with the new cookie and is refused, so nothing new leaks. Listen for the
-  change and refetch `/me` straight away, for example with a `BroadcastChannel` message from the
-  tab that changed it. (Phase 2 stage 6 security check.)
-- **Make sign-out end a session's replacements too.** If one tab switches persona while another
-  signs out, the switch replaces the session first. The sign-out then finds nothing to end and
-  answers 204, but the new persona's session stays valid until the sandbox expires. Give each
-  session a `family_id` that rotation carries over, and have sign-out delete the whole family.
-  The race needs two tabs acting within milliseconds, in a 24-hour sandbox, and exposes nothing
-  across users. (`/code-review medium` on Phase 1, stage 3.)
 
-- **Cap request body size.** Nothing limits it: a 40 MiB JSON body to `POST /sandboxes` was read
-  and parsed in full, using about 120 MiB of memory. Phase 1 already reads the body before any
-  session check. Cap bodies at about 64 KiB in the ASGI layer or at the proxy, so a few large
-  requests can't exhaust a task's memory. (Stage 3 security review.)
 
-- **Require `APP_ORIGIN` in production.** It defaults to `http://localhost:5173`, so a production
-  deploy that forgets it refuses every state-changing request. That fails closed, but silently.
-  Make settings refuse to start when `APP_ENV=production` and `APP_ORIGIN` is still the default.
-  (Stage 3 security review.)
-- **Trust forwarded client IPs only from the load balancer.** Security events log the client IP
-  that uvicorn reports. Behind the load balancer that depends on `--forwarded-allow-ips`. Setting it
-  to `*` would let a client spoof the logged IP, so list only the load balancer's addresses.
-  (Stage 3 security review.)
+- **Pass `FORWARDED_ALLOW_IPS` to uvicorn.** Phase 8 stage 1 added the setting (a comma list of
+  addresses and networks; empty means the direct peer only). The Dockerfile and the task definition
+  still need to run uvicorn with `--proxy-headers --forwarded-allow-ips "$FORWARDED_ALLOW_IPS"`, set
+  to the load balancer's addresses only, never `*`. (Phase 8, stage 2.)
 
 - **Data migrations can't see tenant rows on AWS.** With row-level security forced, a table
   owner that isn't a superuser sees no rows. That is the managed-Postgres case, unlike
   development and CI, where the owner is a superuser. A migration that changes data must set the
   tenant context for each tenant, or run under a role made for it. (Stage 1 security review.)
-- **Look up sessions without granting the table.** `od_app` can read every tenant's `sessions`
-  rows, because a session is looked up before the tenant is known. The spec accepts this. A
-  `SECURITY DEFINER` function that returns one session by its token hash would let `od_app` drop
-  its `SELECT` on the table. (Stage 1 security review.) `od_app` can also insert and delete any
-  tenant's sessions, with any expiry: the Phase 1 close-out security review forged an HR session in
-  another tenant from `psql`. No route can do this, since `start_session` builds the row through a
-  tenant-scoped select, but SQL access as `od_app` would become a working login anywhere. Enable
-  row-level security on `sessions`, with an insert policy that requires the current tenant and
-  person, keep the expiry within the tenant's, and test that an insert for another tenant fails.
-- **Keep the owner's database URL out of the API.** The API's settings load
-  `MIGRATION_DATABASE_URL` and `CLEANUP_DATABASE_URL` though it uses neither, so the API process
-  holds the owner's credentials, which bypass row-level security. Give Alembic and the bootstrap
-  script their own settings class, and give the API task only `DATABASE_URL` in the AWS secrets
-  contract. (Phase 1 close-out review.)
-- **One transaction per signed-in request.** `signed_in` looks the session up in one transaction
-  and does the tenant's work in a second, so each request pays two round trips and two pool
-  checkouts, and a session can end between them. Set the tenant context in the lookup's own
-  transaction. (Phase 1 close-out review.)
 - **Postgres 16 or later.** The bootstrap script grants roles `WITH INHERIT TRUE`, which needs
   Postgres 16. Development and CI run 17. The managed Postgres chosen in Phase 9 must be 16 or
   later.
@@ -545,12 +497,11 @@ phase makes it, since its full run covers them all.
   closing the connection can take longer than the timeout, because SQLAlchemy shields the close.
   The orchestrator's own probe timeout covers it; revisit only if health checks need a strict
   bound.
-- **Hide the API docs in production.** Set `docs_url`, `redoc_url` and `openapi_url` to `None`
-  when `APP_ENV=production`, and keep `app.openapi()` working for the schema export. Also drop
-  the `server: uvicorn` header (`--no-server-header`) and send `Cache-Control: no-store` on
-  health.
-- **Keep probe traffic out of logs and traces.** Filter `/api/v1/health` from `uvicorn.access`,
-  and from OpenTelemetry if it's enabled.
+- **Drop the `server: uvicorn` header.** Run uvicorn with `--no-server-header` in the Dockerfile
+  and the task definition. (Phase 8 stage 1 hid the docs in production and set `no-store` on
+  health; the header is stage 2's.)
+- **Keep probe traffic out of traces.** Phase 8 stage 1 filters both health paths from
+  `uvicorn.access`; if OpenTelemetry is enabled, filter them there too.
 
 From the Phase 1 review ([the spec's Later phases](specs/2026-10-03-phase-1-tenancy-identity-permissions.md#later-phases)):
 
@@ -574,10 +525,6 @@ From the Phase 1 review ([the spec's Later phases](specs/2026-10-03-phase-1-tena
   test could also check the other way, that every theme token has a source in the design export.
   (Theme-token fix review, 2026-10-20.)
 
-- **Give the confirm a lock timeout.** A confirm that has passed its expiry check can still wait
-  on the person's time-off lock, held only by short time-off writes, so its overrun past the 15
-  minutes is small but has no stated bound. A `SET LOCAL lock_timeout` in the confirm would make
-  it explicit. (Phase 5 stage 3 security review.)
 
 ## Phase 9: deploy to AWS
 
@@ -592,17 +539,10 @@ From the Phase 1 review ([the spec's Later phases](specs/2026-10-03-phase-1-tena
   it, so another database's login granted `od_app` would inherit Open Door's access. Check
   `pg_auth_members` in both directions. (Phase 1 close-out review.)
 
-- **Separate liveness from readiness.** ECS container health checks must not depend on the
-  database, or an RDS failover would restart every task. Add `GET /api/v1/health/live`, which
-  never touches the database, for the container check, and keep `/api/v1/health` as the load
-  balancer's readiness check.
-- **Align the ping and probe timeouts.** The ping and asyncpg connect timeouts are both 5 s, the
-  same as the default load balancer and ECS probe timeouts, so a blackholed database times the
-  probe out instead of returning a clean 503. Use about 2 s for the health ping, or a probe
-  timeout of 6 s or more.
-- **Protect the health endpoint from abuse.** Every call is an unauthenticated database round
-  trip. Cache the result for 1–2 s with a single in-flight check, or rate-limit the path at the
-  load balancer.
+- **Point the probes at the right health path.** Phase 8 stage 1 added `GET /api/v1/health/live`
+  (never touches the database) and kept `GET /api/v1/health` (readiness, with a 2-second ping).
+  The ECS container check must use `/live`, or an RDS failover would restart every task; the load
+  balancer uses `/health` with a probe timeout above 2 seconds.
 
 - **Line up the shutdown timeouts.** uvicorn runs with `--timeout-graceful-shutdown 15`, and the
   app then waits up to 12 seconds for open streams to save, so a container needs about 27

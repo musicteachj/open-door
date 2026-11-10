@@ -1014,7 +1014,85 @@ The roadmap's "checklist is closed" means each of these is ticked, with its task
 
 ## Changes made during execution
 
-(Filled in as the stages run. Stage 1 records Phase 8's base commit here.)
+**Phase 8's base commit is `bdabc23`** (`dev` after the planning PR #105 merged; the screens PR
+#106 followed). Task 48's phase review diffs against it.
+
+### Stage 1 (`feat/phase-8-requests`, 2026-11-09)
+
+Built in three batches: A (Tasks 1 to 4, with an Opus 5.5 security reviewer on the sessions
+migration and the one-transaction change, and a Sonnet review of the settings split), B (Tasks 5
+to 8, one Sonnet review), C (this close). No paid AI calls; every recorded fixture still replays.
+
+What the code forced, or the reviews changed:
+- **Settings (Task 2).** `OwnerSettings` and `CleanupSettings` live in `app/core/owner_settings.py`
+  with small helpers (`owner_database_url()`, `cleanup_database_url()`) whose error never echoes a
+  password. They need no API keys, so they skip the blank-key rule. `FORWARDED_ALLOW_IPS` is only a
+  setting in this stage (uvicorn's flags come with the Dockerfile in Stage 2); after the review it
+  also refuses a /0 network and a network with host bits set. **Production refuses
+  `http://localhost:5173`** because it is the development default, so Stage 3's `make prod-local`
+  must use another port.
+- **Sessions (Task 3).** The policies read `app.current_session_token_hash()` (hex in the
+  setting). Sign-out's `end_session_family` runs two statements on purpose: it deletes the
+  presented token first (waiting on a switch that hasn't committed), then deletes by family in a
+  new statement whose fresh snapshot sees the replacement. A new sandbox also ends the old family,
+  not one row. A sign-out sent with the old cookie after a switch has committed is a 401 and can't
+  reach the family; tabs share one cookie jar, so this needs a request already in flight during
+  the switch (the Opus reviewer's low; not fixed). **The reviewer's medium:** row-level security
+  stops a code path from writing a session outside its transaction's sandbox, but raw SQL as
+  `od_app_login` sets its own context; the threat model now lists that login's password as a
+  full-access secret, and a test records it. The audit `NULL` migration's `UPDATE` is a no-op on a
+  managed database whose owner isn't a superuser, which is fine because Phase 9 starts empty. The
+  review also found the audit-`NULL` test rewrote every audit row; it now runs in a rolled-back
+  transaction.
+- **One transaction (Task 4).** `signed_in` does the lookup, the CSRF check (any method), the
+  tenant context (`SET_CONTEXT` plus `db.info["tenant"]`), the actor, and the HR flag in one
+  transaction; a CSRF refusal now comes before any tenant work. `current_session` stays as the
+  short lookup for the turn stream and `GET /assistant/texts`. The task's "a session ended between
+  them can't happen" holds only for the second lookup it removes: under `READ COMMITTED` a sign-out
+  can still commit during a request, which then finishes (the review's round 2). A CSRF refusal is
+  a 403 of type `csrf-rejected`, which the web app treats as signed out (a plain 403 stays a
+  permission error). The audited reads' OpenAPI summaries
+  still mention the header, so the schema didn't change. The browser tests' own `fetch` reads (15
+  calls in 11 files) now send the header.
+- **Body cap (Task 5).** The middleware sits just inside the request-ID and no-store middleware
+  (so a 413 carries both) and outside the same-origin check. The 32 KB figure for the largest case
+  body assumes a client that sends UTF-8 as is, as browsers do; one that escapes every character
+  (`ensure_ascii`) would pass 64 KiB. No chunked test sits at the exact 64 KiB edge (the review's
+  low; the `Content-Length` edge is tested).
+- **Timeouts (Task 6).** `create_engine` takes the two timeouts as arguments. The tests' owner
+  engine, the end-of-run tenant cleanup, and the eval harness's owner engine pass `"0"`, since
+  deleting thousands of sandboxes legitimately takes longer than 10 seconds. The bootstrap sets the
+  values on the cleanup login too, so **Stage 4's 60-second cleanup timeout must use
+  `SET LOCAL statement_timeout`** (or its own engine setting). Seeding a sandbox measured 0.1 to
+  0.2 seconds.
+- **Health and `Retry-After` (Task 7).** The readiness cache stamps its answer when the ping
+  returns, so an answer is never served more than 1 second after its check finished (the review's
+  low; kept). The only HTTP 429 is the question's admission; budget refusals inside the stream are
+  events and carry no header.
+- **Another tab (Task 8).** The listener is `app/use-session-channel.ts`, mounted once in
+  `Root.tsx`, with its own test. A tab whose session another tab ended shows the existing
+  "This sandbox has reset" page.
+
+**The close's reviews.** `/security-review` found nothing high or medium. The `/code-review
+medium` loop ran three rounds and stopped at the third, which had nothing high or medium:
+- Round 1 (fixed): a stalled readiness ping held its lock, so queued probes waited without bound
+  (they now wait the ping's budget plus half a second, then answer the last result if it is under
+  a second old, or 503); the bootstrap gave the cleanup login the app's 10-second statement
+  timeout (it now gets 60 seconds); and a browser with the session cookie but no CSRF cookie got
+  stuck on an error. Also reuse of `has_sqlstate`, one `scope_transaction` helper in
+  `app/db/tenancy.py`, and one shared validator for the owner settings.
+- Round 2 (fixed): the "can't end between them" overclaim (above); the CSRF refusal became the
+  problem type `csrf-rejected`, and the web app's three signed-out checks share one helper
+  (`isSignedOutError`); the body cap sends no 413 once a response has started; two comments.
+- Lows recorded, not fixed: a database error raised after a streamed response has started is
+  logged as Starlette's `RuntimeError` (the original is chained to it); sign-out and the
+  proposal cancel set no `lock_timeout`, so contention waits up to the 10-second statement timeout
+  before a 503; `FORWARDED_ALLOW_IPS` is checked only when it arrives as text (the environment
+  always gives text) and nothing reads it until Stage 2; a readiness probe whose lock holder was
+  canceled can wait 2.5 seconds and then ping for 2 more; a question padded past 4,000 characters
+  with whitespace gets the schema's 422, not the route's own text; the session lookup spends one
+  round trip on `set_config`; the health log filter matches exact paths, so a `--root-path` would
+  need it updated; small duplications in `health.py`, `config.py`, and `owner_settings.py`.
 
 ## Backlog
 

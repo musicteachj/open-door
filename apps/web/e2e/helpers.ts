@@ -81,7 +81,12 @@ export const problem = (status: number, title: string) =>
 /** The sandbox's expiry, as /me reports it, in milliseconds since the epoch. */
 export async function sandboxExpiry(page: Page): Promise<number> {
   const expires = await page.evaluate(async () => {
-    const response = await fetch('/api/v1/me')
+    const csrf = {
+      headers: {
+        'X-CSRF-Token': /(?:^|; )__Host-od_csrf=([^;]*)/.exec(document.cookie)?.[1] ?? '',
+      },
+    }
+    const response = await fetch('/api/v1/me', csrf)
     return ((await response.json()) as { tenantExpiresAt: string }).tenantExpiresAt
   })
   return Date.parse(expires)

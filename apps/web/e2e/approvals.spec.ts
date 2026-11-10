@@ -135,8 +135,14 @@ test.describe('at 1440 px', () => {
     await startAs(page, 'Priya')
     await bookOnPage(page)
     const listed = await page.evaluate(async () => {
+      const csrf = {
+        headers: {
+          'X-CSRF-Token': /(?:^|; )__Host-od_csrf=([^;]*)/.exec(document.cookie)?.[1] ?? '',
+        },
+      }
       const response = await fetch(
         '/api/v1/time-off/requests?scope=mine&from=2000-01-01&to=2100-01-01',
+        csrf,
       )
       const { items } = (await response.json()) as { items: { id: string; status: string }[] }
       return items.find((item) => item.status === 'pending')!

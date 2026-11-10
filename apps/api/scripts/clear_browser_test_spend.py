@@ -31,7 +31,7 @@ from sqlalchemy import text
 from sqlalchemy.exc import DBAPIError
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 
-from app.core.config import get_settings
+from app.core.owner_settings import DatabaseUrlError, owner_database_url
 
 MAX_AGE = timedelta(hours=24)
 
@@ -92,11 +92,12 @@ async def clear_since(engine: AsyncEngine, since: datetime) -> tuple[int, Decima
 
 
 async def main(arguments: argparse.Namespace) -> None:
-    settings = get_settings()
-    if settings.migration_database_url is None:
-        raise SystemExit("MIGRATION_DATABASE_URL is not set. See apps/api/.env.example.")
+    try:
+        url = owner_database_url()
+    except DatabaseUrlError as error:
+        raise SystemExit(str(error)) from None
     # hide_parameters keeps bound values out of SQLAlchemy's error messages.
-    engine = create_async_engine(str(settings.migration_database_url), hide_parameters=True)
+    engine = create_async_engine(url, hide_parameters=True)
     try:
         if arguments.now:
             print((await database_now(engine)).isoformat())

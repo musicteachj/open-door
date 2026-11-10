@@ -46,6 +46,22 @@ describe('the router', () => {
     expect(router.state.location.pathname).toBe('/')
   })
 
+  it('sends an app route to the landing page when the first /me is the CSRF refusal', async () => {
+    const api = installFakeApi('priya')
+    api.failMe(403, 'csrf-rejected')
+    const { router } = renderApp({ at: '/ask' })
+    await heading(LANDING)
+    expect(router.state.location.pathname).toBe('/')
+  })
+
+  it('does not treat a plain 403 on the first /me as signed out', async () => {
+    const api = installFakeApi('priya')
+    api.failMe(403)
+    renderApp({ at: '/ask' })
+    await heading('Something went wrong on our side.')
+    expect(screen.getByRole('button', { name: 'Retry' })).toBeInTheDocument()
+  })
+
   it('shows the plain error, outside the shell, when the first /me fails with a 500', async () => {
     const api = installFakeApi('priya')
     api.failMe(500)

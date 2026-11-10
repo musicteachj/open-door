@@ -78,7 +78,12 @@ test.describe('at 1440 px', () => {
 
     // The balance cards and the schedule line are the API's labels and nothing else.
     const balances = await page.evaluate(async () => {
-      const response = await fetch('/api/v1/time-off/balances')
+      const csrf = {
+        headers: {
+          'X-CSRF-Token': /(?:^|; )__Host-od_csrf=([^;]*)/.exec(document.cookie)?.[1] ?? '',
+        },
+      }
+      const response = await fetch('/api/v1/time-off/balances', csrf)
       return (await response.json()) as {
         pto: { availableLabel: string }
         sick: { availableLabel: string }[]

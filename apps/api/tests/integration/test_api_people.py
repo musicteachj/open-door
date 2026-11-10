@@ -588,7 +588,8 @@ async def test_an_audited_read_without_the_csrf_header_is_refused_and_writes_no_
     sandbox = browser.start_sandbox("dana")
     headers = {} if header is None else {"X-CSRF-Token": header}
 
-    response = browser.client.get(path(person_id(sandbox, "leo"), "private"), headers=headers)
+    with browser.without_csrf():
+        response = browser.client.get(path(person_id(sandbox, "leo"), "private"), headers=headers)
 
     assert response.status_code == 403
     assert response.headers["content-type"] == "application/problem+json"
@@ -601,7 +602,10 @@ async def test_an_audited_read_without_the_csrf_header_is_refused_and_writes_no_
     ]
 
 
-def test_an_ordinary_read_still_needs_no_csrf_header(browser: Browser) -> None:
+def test_an_ordinary_read_needs_the_csrf_header_too(browser: Browser) -> None:
+    # Since Phase 8 every signed-in request does, so an audited read cannot be added without it.
     browser.start_sandbox("priya")
 
+    with browser.without_csrf():
+        assert browser.client.get("/api/v1/people").status_code == 403
     assert browser.client.get("/api/v1/people").status_code == 200

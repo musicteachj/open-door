@@ -3,7 +3,9 @@ from collections.abc import Iterator
 import pytest
 from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
+from sqlalchemy.exc import DBAPIError
 
+from app.core.cache_control import NoStoreMiddleware
 from app.core.problems import ProblemError, install_problem_handlers
 from app.core.request_id import RequestIdMiddleware
 
@@ -33,6 +35,10 @@ def client() -> Iterator[TestClient]:
     @app.get("/coded")
     async def coded() -> None:
         raise ProblemError(409, "turn-running", "Still answering the last question.")
+
+    @app.get("/waits")
+    async def waits() -> None:
+        raise ProblemError(429, "budget-daily", "Come back.", headers={"Retry-After": "120"})
 
     @app.get("/nonstandard-status")
     async def nonstandard_status() -> None:
@@ -152,3 +158,47 @@ def test_a_problem_error_carries_its_code_as_the_problem_type(client: TestClient
         "detail": "Still answering the last question.",
         "requestId": response.headers["X-Request-ID"],
     }
+
+
+def test_a_problem_error_carries_its_headers(client: TestClient) -> None:
+    response = client.get("/waits")
+
+    assert response.status_code == 429
+    assert response.headers["Retry-After"] == "120"
+    assert response.json()["type"] == "budget-daily"
+    assert response.headers["X-Request-ID"] == response.json()["requestId"]
+
+
+def test_a_problem_error_without_headers_adds_none(client: TestClient) -> None:
+    response = client.get("/coded")
+
+    assert "retry-after" not in response.headers
+
+
+class FakeDriverError(Exception):
+    def __init__(self, sqlstate: str) -> None:
+        super().__init__("driver error")
+        self.sqlstate = sqlstate
+
+
+def test_a_database_timeout_is_a_503_that_the_no_store_middleware_covers() -> None:
+    app = FastAPI()
+    app.add_middleware(NoStoreMiddleware)
+    install_problem_handlers(app)
+
+    @app.get("/api/v1/busy")
+    async def busy() -> None:
+        raise DBAPIError("SELECT 1", {}, FakeDriverError("57014"))
+
+    @app.get("/api/v1/other")
+    async def other() -> None:
+        raise DBAPIError("SELECT 1", {}, FakeDriverError("23505"))
+
+    with TestClient(app, raise_server_exceptions=False) as client:
+        busy_response = client.get("/api/v1/busy")
+        other_response = client.get("/api/v1/other")
+
+    assert busy_response.status_code == 503
+    assert busy_response.json()["type"] == "database-busy"
+    assert busy_response.headers["cache-control"] == "no-store"
+    assert other_response.status_code == 500

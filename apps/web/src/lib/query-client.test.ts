@@ -11,6 +11,12 @@ function setup() {
 }
 
 const apiError = (status: number) => new ApiError(status, null, null)
+const csrfRejected = () =>
+  new ApiError(
+    403,
+    { type: 'csrf-rejected', title: 'Forbidden', status: 403, instance: '/api/v1/me' },
+    null,
+  )
 
 let runs = 0
 
@@ -102,6 +108,40 @@ describe('createQueryClient unauthorized', () => {
       .execute(undefined)
       .catch(() => undefined)
     expect(onUnauthorized).toHaveBeenCalledTimes(1)
+  })
+
+  it('calls onUnauthorized when /me gets the CSRF refusal', async () => {
+    const { client, onUnauthorized } = setup()
+    await runRead(client, csrfRejected, getGetMeQueryKey())
+    expect(onUnauthorized).toHaveBeenCalledTimes(1)
+  })
+
+  it('calls onUnauthorized when a write gets the CSRF refusal', async () => {
+    const { client, onUnauthorized } = setup()
+    await client
+      .getMutationCache()
+      .build(client, {
+        mutationFn: async () => {
+          throw csrfRejected()
+        },
+      })
+      .execute(undefined)
+      .catch(() => undefined)
+    expect(onUnauthorized).toHaveBeenCalledTimes(1)
+  })
+
+  it('does not call onUnauthorized for a write refused with a plain 403', async () => {
+    const { client, onUnauthorized } = setup()
+    await client
+      .getMutationCache()
+      .build(client, {
+        mutationFn: async () => {
+          throw apiError(403)
+        },
+      })
+      .execute(undefined)
+      .catch(() => undefined)
+    expect(onUnauthorized).not.toHaveBeenCalled()
   })
 
   it('does not call onUnauthorized for other failures', async () => {

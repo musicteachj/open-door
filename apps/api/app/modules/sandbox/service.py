@@ -15,7 +15,7 @@ from app.db.models import Tenant
 from app.db.tenancy import NO_TENANT, TenantContext, tenant_session
 from app.modules.audit.service import record_event
 from app.modules.identity.actor import load_actor
-from app.modules.identity.sessions import end_session, find_session, start_session
+from app.modules.identity.sessions import end_session_family, find_session, start_session
 from app.modules.identity.tokens import SessionTokens
 from app.modules.people.queries import get_me
 from app.modules.people.schemas import Me, PersonaKey
@@ -50,13 +50,14 @@ class NewSandbox:
 
 
 async def _end_replaced_session(engine: AsyncEngine, token_hash: bytes) -> None:
-    # The sessions table has no row-level security, so the lookup needs no tenant.
+    # The lookup presents the hash, so it needs no tenant. The whole family ends, in the old
+    # sandbox's own context, where `session.ended` is audited once.
     async with tenant_session(engine, NO_TENANT) as db:
         old = await find_session(db, token_hash)
     if old is None:
         return
     async with tenant_session(engine, TenantContext(old.tenant_id, old.person_id)) as db:
-        if await end_session(db, token_hash):
+        if await end_session_family(db, old):
             await record_event(
                 db, tenant_id=old.tenant_id, actor_id=old.person_id, action="session.ended"
             )

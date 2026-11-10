@@ -278,7 +278,8 @@ async def test_a_write_without_the_csrf_header_is_forbidden_and_writes_nothing(
 ) -> None:
     world = start("priya")
 
-    response = world.browser.client.post(BASE + path, json=body)
+    with world.browser.without_csrf():
+        response = world.browser.client.post(BASE + path, json=body)
 
     assert problem_of(response, 403)["detail"] == "The CSRF token is missing or wrong."
     assert await world.timeoff_events() == []

@@ -1,5 +1,6 @@
 import { expect, test } from '@playwright/test'
-import { signOut, startAs, switchTo } from './helpers'
+import { openDirectory, openProfileBySearch } from './directory-helpers'
+import { greetingHeading, signOut, startAs, switchTo } from './helpers'
 
 test('a visitor starts as Priya, switches to Marcus, and signs out', async ({ page }) => {
   await startAs(page, 'Priya')
@@ -43,4 +44,48 @@ test('a visitor starts as Priya, switches to Marcus, and signs out', async ({ pa
   // Signed out, an app route sends the visitor back to the landing page.
   await page.goto('/ask')
   await expect(page).toHaveURL('/')
+})
+
+// All the tabs of one browser share the session cookie, so a change in one leaves the others
+// showing a person who is no longer signed in. Each test waits for the other tab to notice with
+// no click, focus, or reload: the BroadcastChannel message refetches /me.
+
+test('signing out in one tab ends HR’s open private details in the other, with no click', async ({
+  page,
+}) => {
+  await openDirectory(page, 'Dana')
+  await openProfileBySearch(page, 'Nakamura', /^Leo Nakamura/)
+  const privateDetails = page.getByRole('region', { name: 'Private details' })
+  await expect(privateDetails.getByText('Home address')).toBeVisible()
+  await expect(privateDetails.getByText('Visible to Leo and HR')).toHaveCount(0)
+
+  // A second tab in the same browser, signed in as the same Dana through the shared cookies.
+  const second = await page.context().newPage()
+  await second.goto('/ask')
+  await expect(greetingHeading(second, 'Dana')).toBeVisible()
+  await signOut(second)
+  await expect(second).toHaveURL('/')
+
+  // The first tab was never touched. It resets on its own: HR's view of Leo is gone.
+  await expect(page.getByRole('heading', { name: 'This sandbox has reset.' })).toBeVisible()
+  await expect(page.getByRole('region', { name: 'Private details' })).toHaveCount(0)
+  await expect(page.getByText('Home address')).toHaveCount(0)
+  await second.close()
+})
+
+test('switching persona in one tab resets the other to the new person, with no click', async ({
+  page,
+}) => {
+  await startAs(page, 'Dana')
+  await expect(greetingHeading(page, 'Dana')).toBeVisible()
+
+  const second = await page.context().newPage()
+  await second.goto('/ask')
+  await expect(greetingHeading(second, 'Dana')).toBeVisible()
+  await switchTo(second, 'Marcus')
+  await expect(greetingHeading(second, 'Marcus')).toBeVisible()
+
+  await expect(greetingHeading(page, 'Marcus')).toBeVisible()
+  await expect(greetingHeading(page, 'Dana')).toHaveCount(0)
+  await second.close()
 })
