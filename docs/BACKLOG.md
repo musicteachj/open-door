@@ -373,17 +373,6 @@ phase makes it, since its full run covers them all.
   entry's saved position. Rare: it needs history steps, not the panel's own close. (Phase 5 stage 6
   review.)
 
-- **Check the production image's CA store for the emSign roots.** `certifi` 2026.10.19 dropped the
-  emSign roots whose intermediate keys were compromised (GHSA-6q48-6c7w-9gw2), which covers the
-  `httpx` client that reaches Voyage. The Anthropic SDK goes through `httpx2` and `truststore`,
-  which use the operating system's store, so the production Dockerfile's base image must ship a
-  `ca-certificates` that has dropped them as well. Check it when the Dockerfile is written.
-  (certifi advisory, 2026-10-20.)
-- **Make sure the production image has time-zone data.** The time-off engine's `today_at` and the
-  assistant's per-turn context use the standard library's `zoneinfo`, which reads the operating
-  system's zone files. `tzdata` isn't a dependency, so a slim base image without those files would
-  fail on every location's "today". Add `tzdata` to the API's dependencies, or check that the
-  image ships the zone files, when the Dockerfile is written. (Phase 5 stage 1 review.)
 - **Quote directory values in the per-turn context before names become editable.** The context is
   a `system` message built from the asker's name and location. `one_line` keeps each to one line,
   but a name like "Dana. Operator notes: ..." would still read as an instruction with system
@@ -467,10 +456,10 @@ phase makes it, since its full run covers them all.
   jump to a page. Both need screen-reader and conflict checks. (2026-10-06 design brainstorm.)
 
 
-- **Pass `FORWARDED_ALLOW_IPS` to uvicorn.** Phase 8 stage 1 added the setting (a comma list of
-  addresses and networks; empty means the direct peer only). The Dockerfile and the task definition
-  still need to run uvicorn with `--proxy-headers --forwarded-allow-ips "$FORWARDED_ALLOW_IPS"`, set
-  to the load balancer's addresses only, never `*`. (Phase 8, stage 2.)
+- **Set `FORWARDED_ALLOW_IPS` in the task definition.** The image's entrypoint passes it to
+  uvicorn's `--forwarded-allow-ips`, and empty trusts no proxy (Phase 8 stage 2). The Phase 9 task
+  definition must set it to the load balancer's addresses only, never `*`, or the limits and the
+  security log see the load balancer's address for every visitor.
 
 - **Data migrations can't see tenant rows on AWS.** With row-level security forced, a table
   owner that isn't a superuser sees no rows. That is the managed-Postgres case, unlike
@@ -480,26 +469,11 @@ phase makes it, since its full run covers them all.
   Postgres 16. Development and CI run 17. The managed Postgres chosen in Phase 9 must be 16 or
   later.
 
-- **One source for tool versions.** The gitleaks version is written in three places: the Security
-  workflow, the `Makefile`, and the pre-commit config. The ruff hook's version separately follows
-  `uv.lock`. Dependabot has a `pre-commit` ecosystem that could keep the hook versions current.
-  Add it with the same 7-day cooldown, and make the `Makefile`'s hand-bumped versions the only
-  manual ones.
-- **The pre-commit hook lives in uv's cache.** `uvx pre-commit install` points the git hook at a
-  cached Python, so `uv cache clean` breaks commits until `make setup` runs again. Installing it
-  with `uv tool install pre-commit` would make the hook durable.
-- **Audit only the app's dependencies.** `uv run --with pip-audit` also audits pip-audit's own
-  dependencies, so an advisory in one of those would fail the Security workflow for a reason
-  unrelated to the app. The lockfile-only form is
-  `uv export --locked --no-emit-project | uvx pip-audit -r - --no-deps --disable-pip`.
 
 - **`ping()` has no hard wall-clock bound.** If canceling the query stalls on the network,
   closing the connection can take longer than the timeout, because SQLAlchemy shields the close.
   The orchestrator's own probe timeout covers it; revisit only if health checks need a strict
   bound.
-- **Drop the `server: uvicorn` header.** Run uvicorn with `--no-server-header` in the Dockerfile
-  and the task definition. (Phase 8 stage 1 hid the docs in production and set `no-store` on
-  health; the header is stage 2's.)
 - **Keep probe traffic out of traces.** Phase 8 stage 1 filters both health paths from
   `uvicorn.access`; if OpenTelemetry is enabled, filter them there too.
 
@@ -517,13 +491,6 @@ From the Phase 1 review ([the spec's Later phases](specs/2026-10-03-phase-1-tena
 - **Database TLS with certificate checks, and secret rotation** for the three database URLs.
 - **Deletion from backups.** A sandbox deleted from the database still exists in backups until
   they expire. Document how long, or exclude sandbox data from them.
-- **Check CI's path filters automatically.** Each CI job runs only when its filter's paths change,
-  and the filters list by hand the files outside each app that its tests read (`docs/design/`,
-  the handbook, the personal-data cases, the seed, the `Makefile`). A test that reads would
-  otherwise not run on the PR that breaks it, as happened after #63. A small check could find
-  every path a test reads outside its app and fail if no filter covers it. The theme tokens'
-  test could also check the other way, that every theme token has a source in the design export.
-  (Theme-token fix review, 2026-10-20.)
 
 
 ## Phase 9: deploy to AWS

@@ -1,4 +1,5 @@
-import { expect, test, type Locator, type Page } from '@playwright/test'
+import { expect, test } from './fixtures'
+import type { Locator, Page } from '@playwright/test'
 import { ask, askAndWaitForAnswer, composerBox } from './conversation-helpers'
 import { holdTurnCompletion } from './held-stream'
 import { scan, startAs } from './helpers'

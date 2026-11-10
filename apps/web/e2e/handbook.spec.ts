@@ -1,4 +1,5 @@
-import { expect, test, type Page } from '@playwright/test'
+import { expect, test } from './fixtures'
+import type { Page } from '@playwright/test'
 import { hasVisibleFocus } from './directory-helpers'
 import { holdRequests, scan, startAs, type FirstName } from './helpers'
 

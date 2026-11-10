@@ -49,3 +49,13 @@ inline scripts.
   policy is proven, so a new library that injects styles fails CI there.
 - The proxy check starts the container, so the graceful-shutdown run exercises the real
   entrypoint.
+
+## Amendment (2026-11-10): `Referrer-Policy: same-origin`
+
+Phase 8's Stage 2 review found that `no-referrer` makes a browser send `Origin: null` on the app's
+own writes (the Fetch standard ties the `Origin` of a non-`GET` request to the referrer policy).
+The same-origin check accepts a write by `Sec-Fetch-Site: same-origin`, or, from a browser that
+doesn't send Fetch Metadata (Safari before 16.4, or behind a proxy that strips it), by an `Origin`
+equal to the app's. Under `no-referrer` that second path would refuse every write. The policy is
+`same-origin` instead: the full referrer on the app's own requests, and none to any other site,
+which keeps the decision's intent.

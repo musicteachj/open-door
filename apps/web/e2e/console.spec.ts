@@ -1,4 +1,5 @@
-import { expect, test, type Page } from '@playwright/test'
+import { expect, test } from './fixtures'
+import type { Page } from '@playwright/test'
 import { SENSITIVE_QUESTION } from './cases-helpers'
 import { askAndWaitForAnswer, QUESTIONS } from './conversation-helpers'
 import { scan, startAs } from './helpers'

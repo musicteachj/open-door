@@ -6,15 +6,18 @@ API := apps/api
 WEB := apps/web
 
 # Linters and scanners run through uvx or Docker. Dependabot can't see these versions, so bump them
-# by hand. GITLEAKS matches the version the Security workflow downloads.
+# by hand. GITLEAKS matches the version the Security workflow downloads and the pre-commit hook's
+# `rev`; `make check-workflows` fails when the three differ (scripts/check_tool_versions.py).
 TYPOS := typos@1.50.3
 LYCHEE := lycheeverse/lychee:0.24.2
 ACTIONLINT := rhysd/actionlint:1.7.12
 ZIZMOR := zizmor@1.30.1
 GITLEAKS := ghcr.io/gitleaks/gitleaks:v8.30.1
+PIP_AUDIT := pip-audit@2.10.1
+PRE_COMMIT := pre-commit@4.7.0
 
 .DEFAULT_GOAL := help
-.PHONY: help setup keyring db db-stop migrate bootstrap-db ingest embed eval-retrieval eval-offline eval-live scoreboard migrations-roundtrip dev dev-api dev-web openapi check check-api check-web e2e proxy-check captures check-docs check-workflows audit
+.PHONY: help setup keyring db db-stop migrate bootstrap-db ingest embed eval-retrieval eval-offline eval-live scoreboard migrations-roundtrip dev dev-api dev-web openapi check check-api check-web e2e e2e-image proxy-check image image-check captures check-docs check-workflows audit
 
 help: ## List the available commands
 	@grep -E '^[a-zA-Z_-]+:.*## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*## "}; {printf "  %-22s %s\n", $$1, $$2}'
@@ -22,7 +25,8 @@ help: ## List the available commands
 setup: ## Install dependencies and git hooks; create apps/api/.env and the encryption keyring if missing
 	cd $(API) && uv sync
 	cd $(WEB) && npm ci
-	uvx pre-commit install
+	uv tool install $(PRE_COMMIT)
+	"$$(uv tool dir --bin)/pre-commit" install
 	@test -f $(API)/.env || (cp $(API)/.env.example $(API)/.env && echo "Created $(API)/.env")
 	$(MAKE) keyring
 
@@ -124,11 +128,19 @@ openapi: ## Regenerate the OpenAPI schema and the web app's API client
 	cd $(API) && uv run python scripts/export_openapi.py
 	cd $(WEB) && npm run generate:api
 
-check: check-api check-web e2e proxy-check check-docs check-workflows ## Run everything CI runs (start Postgres first with `make db`)
+# CI inspects the image, runs the browser tests against it, and runs the proxy check on it, so
+# `check` does too; `make e2e` is the quicker local loop. Both images are built once, then each
+# step is told to skip its own build.
+check: check-api check-web ## Run everything CI runs (start Postgres first with `make db`)
+	$(MAKE) image
+	$(MAKE) image-check SKIP_BUILD=1
+	$(MAKE) e2e-image SKIP_BUILD=1
+	$(MAKE) proxy-check SKIP_BUILD=1
+	$(MAKE) check-docs check-workflows
 
 check-api: ## Lint, type-check, migrate, load the handbook, and test the API; confirm the schema is current
-	cd $(API) && uv run ruff check . ../../evals ../../scripts/proxy-check --config pyproject.toml
-	cd $(API) && uv run ruff format --check . ../../evals ../../scripts/proxy-check --config pyproject.toml
+	cd $(API) && uv run ruff check . ../../evals ../../scripts --config pyproject.toml
+	cd $(API) && uv run ruff format --check . ../../evals ../../scripts --config pyproject.toml
 	cd $(API) && uv run mypy
 	cd $(API) && uv run lint-imports
 	cd $(API) && uv run alembic upgrade head
@@ -156,15 +168,39 @@ e2e: ## Run the browser tests in Chromium, against the real API and a build with
 	cd $(WEB) && npx playwright install chromium
 	cd $(WEB) && npm run e2e
 
+# The test image (the production image plus the component gallery) is what the image targets run.
+# SKIP_BUILD=1 uses the one already built (CI builds both with its cache first).
+BUILD_TEST_IMAGE = $(if $(filter 1,$(SKIP_BUILD)),@echo "using the open-door:test image already built",docker build --build-arg GALLERY=true -t open-door:test .)
+
+# Same specs, but against the production image: `open-door:test` serves the web app and the API on
+# one origin (:8100) with the real Content Security Policy, and every test also fails on a CSP
+# violation. Playwright starts the container (scripts/image/serve.py); the line after the run
+# removes it if the launcher was killed before it could. Needs `make db` and Docker. SKIP_BUILD=1
+# skips the image build.
+e2e-image: ## Run the browser tests against the production image (open-door:test, built first); needs `make db` and Docker
+	$(BUILD_TEST_IMAGE)
+	@docker rm -f open-door-e2e >/dev/null 2>&1 || true
+	cd $(WEB) && npx playwright install chromium
+	cd $(WEB) && E2E_TARGET=image npm run e2e; status=$$?; docker rm -f open-door-e2e >/dev/null 2>&1; exit $$status
+
 # Runs the turn stream through nginx with a 20-second read timeout, in five runs: the pass run (a
 # 45-second silence that the heartbeat must carry), the holding reference and the holding control
 # (a one-second heartbeat through the normal nginx and through one that gzips the stream; only the
 # gzipping one may hold events back), the heartbeat control (heartbeat off; nginx must cut the
 # silent stream), and the shutdown run (SIGTERM mid-stream; the turn must be saved as stopped). It
-# starts the API on :8200 and nginx on :8201 itself, with the scripted model, and needs Docker and
-# the seeded database (`make db`). About two minutes; don't run it beside other database-heavy work.
-proxy-check: ## Run the turn stream through a strict nginx: the pass, holding, heartbeat control, and shutdown runs (needs `make db` and Docker)
+# starts the API on :8200 (the open-door:test image, built first; SKIP_BUILD=1 skips the build) and
+# nginx on :8201 itself, with the scripted model, and needs Docker and the seeded database (`make
+# db`). About two minutes; don't run it beside other database-heavy work.
+proxy-check: ## Run the turn stream through a strict nginx: the pass, holding, heartbeat control, and shutdown runs (builds open-door:test; needs `make db` and Docker)
+	$(BUILD_TEST_IMAGE)
 	cd $(API) && uv run python ../../scripts/proxy-check/check.py
+
+image: ## Build the production image (open-door:prod) and the browser-test image with the gallery (open-door:test)
+	docker build -t open-door:prod .
+	docker build --build-arg GALLERY=true -t open-door:test .
+
+image-check: ## Build both images and inspect them: non-root, no secrets or tests, tzdata, no emSign root, no gallery, headers (needs `make db` and Docker; SKIP_BUILD=1 skips the build)
+	cd $(API) && IMAGE_CHECK_NO_BUILD=$(filter 1,$(SKIP_BUILD)) uv run python ../../scripts/image/check.py
 
 # Local only: `make check` and CI never run it. The specimen pages load React and Babel from
 # unpkg.com, so it needs a network. The screens start real sandboxes, so it needs Postgres up with
@@ -179,7 +215,8 @@ captures: ## Photograph the build's gallery beside the design specimens; write a
 audit: ## Scan for leaked secrets and vulnerable dependencies (what the Security workflow runs)
 	@test -d "$(CURDIR)/.git" || { echo "make audit needs a normal checkout: in a git worktree the container can't read the history."; exit 1; }
 	docker run --rm -v "$(CURDIR):/repo:ro" $(GITLEAKS) git --redact --exit-code 1 /repo
-	cd $(API) && uv run --with pip-audit pip-audit --skip-editable
+	@# Through a file, not a pipe: make's shell has no pipefail, and pip-audit passes on an empty list.
+	cd $(API) && reqs=$$(mktemp) && { uv export --locked --no-emit-project > "$$reqs" && uvx $(PIP_AUDIT) -r "$$reqs" --no-deps --disable-pip; rc=$$?; rm -f "$$reqs"; exit $$rc; }
 	cd $(WEB) && npm audit --audit-level=high
 
 check-docs: ## Check spelling (American English), links between files, and leftover placeholders
@@ -188,6 +225,8 @@ check-docs: ## Check spelling (American English), links between files, and lefto
 	@if git grep --untracked -n -I -w -E 'T[O]DO|TB[D]|FIXM[E]|XX[X]|[Ll]orem [i]psum' -- '*.md'; then echo "Finish or remove the placeholders above."; exit 1; fi
 	@if LC_ALL=C git grep --untracked -n -I -P '\xE2\x80\x94' -- . ':!docs/plans/2026-09-29-open-door-initial-plan.md' ':!docs/design/' ':!evals/**/fixtures/**' ':!evals/assistant/hand-grades.yaml' ':!*.lock' ':!**/package-lock.json'; then echo "Replace the em dashes above (CLAUDE.md, Writing)."; exit 1; fi
 
-check-workflows: ## Check the GitHub Actions workflows for mistakes (actionlint) and security (zizmor)
+check-workflows: ## Check the workflows for mistakes (actionlint) and security (zizmor), the gitleaks versions, and the CI path filters
+	uv run --quiet --no-project --python 3.13 scripts/check_tool_versions.py
+	uv run --quiet --no-project --python 3.13 scripts/check_path_filters.py
 	docker run --rm -v "$(CURDIR):/repo:ro" -w /repo $(ACTIONLINT) -no-color
 	uvx $(ZIZMOR) .

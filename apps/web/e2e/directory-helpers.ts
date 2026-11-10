@@ -1,6 +1,7 @@
 import { execFileSync } from 'node:child_process'
 import { resolve } from 'node:path'
 import { expect, type Browser, type Page } from '@playwright/test'
+import { guardedContext } from './fixtures'
 import { startAs, type FirstName } from './helpers'
 
 // Shared by directory.spec.ts and profile.spec.ts.
@@ -54,7 +55,7 @@ export type LeoPrivate = {
  * writes no audit event in the sandbox under test.
  */
 export async function leosPrivateValues(browser: Browser, baseURL: string): Promise<LeoPrivate> {
-  const context = await browser.newContext({ baseURL })
+  const context = await guardedContext(browser, { baseURL })
   try {
     const page = await context.newPage()
     await startAs(page, 'Dana')

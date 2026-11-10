@@ -1,6 +1,7 @@
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
+import { applyNonce } from '@/lib/csp-nonce'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './select'
 
 const FOCUS_RING = [
@@ -140,5 +141,30 @@ describe('Select', () => {
       'flex-col',
       'gap-0.5',
     )
+  })
+
+  it('gives the nonce to the viewport’s inline style, so the CSP allows it', () => {
+    // The page's path: the meta tag, then applyNonce (as main.tsx runs it), then the Select.
+    document.head.innerHTML = '<meta name="csp-nonce" content="test-nonce-123">'
+    applyNonce()
+    try {
+      render(
+        <Select defaultOpen>
+          <SelectTrigger aria-label="Location">
+            <SelectValue placeholder="All locations" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="sf">San Francisco</SelectItem>
+          </SelectContent>
+        </Select>,
+      )
+      const viewportStyle = [...document.querySelectorAll('style')].find((style) =>
+        style.textContent?.includes('data-radix-select-viewport'),
+      )
+      expect(viewportStyle).toBeDefined()
+      expect(viewportStyle?.getAttribute('nonce')).toBe('test-nonce-123')
+    } finally {
+      document.head.innerHTML = ''
+    }
   })
 })

@@ -1,4 +1,5 @@
-import { expect, test, type Locator, type Page } from '@playwright/test'
+import { expect, guardedContext, test } from './fixtures'
+import type { Locator, Page } from '@playwright/test'
 import {
   announcements,
   ask,
@@ -88,7 +89,7 @@ test.describe('the demo steps', () => {
       ],
       ['Mateo', 'Handbook §4.3 · Time off', 'Source 1: Handbook §4.3, Time off'],
     ] as const) {
-      const context = await browser.newContext()
+      const context = await guardedContext(browser)
       try {
         const page = await context.newPage()
         await startAs(page, name)

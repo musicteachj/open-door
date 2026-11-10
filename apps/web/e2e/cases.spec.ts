@@ -1,4 +1,5 @@
-import { expect, test, type Page } from '@playwright/test'
+import { expect, guardedContext, test } from './fixtures'
+import type { Page } from '@playwright/test'
 import { askAndWaitForAnswer } from './conversation-helpers'
 import {
   CRISIS_FACT,
@@ -65,8 +66,11 @@ test.describe('the demo, from the panel and from My cases, at 1440 px', () => {
   let page: Page
   let priyaCaseId: string
 
+  // This context is shared by the serial tests, so the per-test CSP guard does not cover it; the
+  // guarded context checks when it closes.
   test.beforeAll(async ({ browser }) => {
-    page = await (await browser.newContext({ viewport: { width: 1440, height: 900 } })).newPage()
+    const context = await guardedContext(browser, { viewport: { width: 1440, height: 900 } })
+    page = await context.newPage()
   })
   test.afterAll(async () => {
     await page.context().close()

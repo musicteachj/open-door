@@ -1094,6 +1094,111 @@ medium` loop ran three rounds and stopped at the third, which had nothing high o
   round trip on `set_config`; the health log filter matches exact paths, so a `--root-path` would
   need it updated; small duplications in `health.py`, `config.py`, and `owner_settings.py`.
 
+### Stage 2 (`feat/phase-8-image`, 2026-11-10)
+
+Built in three batches: A (Tasks 10 to 12) and B (Tasks 13 and 14), each by an implementer with a
+Sonnet review before the next, and C (this close). No paid AI calls; every recorded fixture still
+replays.
+
+What the code forced, or the reviews changed:
+- **Serving the web app (Task 10).** The page server is the router's fallback
+  (`app.router.default`), not a `GET` catch-all route: a catch-all made a write to an unknown
+  `/api/` path a 405, and an all-methods one would have turned a wrong method on a real route into a
+  404. So every `/api/` path answers exactly as before, and a write to a page path is the JSON 404.
+  `WEB_DIST_DIR` turns it on (the image sets it). A public `TURNSTILE_SITE_KEY` setting arrives now
+  to fill the page's meta tag; Stage 4 adds the secret and the production rules. `/index.html` gets
+  the rendered page, never the raw file. Hidden files (any path part starting with `.`) are never
+  served, in `/assets/` or the root. `StaticFiles` raises its 404 instead of sending it, so the
+  assets wrapper answers it itself with `no-store` (a hashed file missing during a deploy must not
+  be cached).
+- **The headers.** The middleware is outermost, but Starlette sends a 500 from outside every
+  middleware, so the 500 handler sets the same headers itself (`set_security_headers`); the Batch A
+  review found it.
+- **The nonce (Task 11).** `applyNonce()` in `src/lib/csp-nonce.ts` runs in `main.tsx` before
+  render; it is not unit-tested through `main.tsx` (importing it renders the app), and the browser
+  suite against the image proves it. `get-nonce` is pinned at 1.0.1.
+- **The Dockerfile (Task 12).** The web stage runs `vite build` without `tsc -b`, whose test
+  configs read `evals/`, outside the image's context; CI type-checks the web app separately. The
+  API is installed editable at `/app/apps/api` (`app.__version__` reads the package metadata), so
+  `ingest_handbook.py` still finds `/app/handbook`. **Debian trixie's `ca-certificates`
+  (20250419+deb13u1) still ships three emSign roots** (C1, G1, ECC C3); the Dockerfile deletes them
+  and rebuilds the store (148 to 145), and `make image-check` fails if one returns. uvicorn reads an
+  unset `FORWARDED_ALLOW_IPS` as `127.0.0.1,::1`, so the entrypoint exports it empty when unset
+  (empty trusts no proxy) and passes the flag only when it has a value; `make image-check` proves
+  a forged header is ignored, and trusted only from the address named. The entrypoint also takes
+  `PORT` (default 8000), so the Linux test runs, which use host networking, can serve on :8100 and
+  :8200. The base image's empty `/root/.python_history` is removed.
+- **CI against the image (Task 13).** The launcher is `scripts/image/serve.py` (not `run.py`,
+  which mypy refused as a duplicate module name), with `scripts/image/container.py` shared by the
+  launcher, the image check, and the proxy check. The test runs use `APP_ENV=test` and the fake
+  keyring, passed as `--env NAME` with the value in the docker client's environment, so no
+  password or key is on a command line. macOS publishes the port on 127.0.0.1; Linux uses host
+  networking, which binds 0.0.0.0 (CI and throwaway machines only). The launcher keeps the
+  container's last 200 lines and prints them only when it exits early. The first run against the
+  image found three CSP violations, all from tests injecting their own styles with
+  `page.addStyleTag`; they now use `addTestStyle` (a constructed stylesheet, which the CSP doesn't
+  govern), and the policy was not loosened. A test that opens its own browser context uses
+  `guardedContext` from `e2e/fixtures.ts`, and a unit test refuses a bare `.newContext(` in the
+  browser tests. The proof spec asserts a `style-src` violation is reported (not `test.fail()`,
+  which any failure would satisfy). The proxy check's shutdown run sends SIGTERM with
+  `docker kill`, and a clean stop is exit code 0 or 143 (137, a hard kill, is not). CI's job keeps
+  the id `e2e` and the name "E2E" so a required check isn't renamed; its timeout rose to 45
+  minutes. zizmor flags the job's uv, npm, and Playwright caches because the image build looks like
+  a publishing step; the images are only loaded, never pushed, and the job has read-only
+  permissions and no secrets, so those three are ignored inline with the reason. `make check`
+  builds both images once (`make image`), then runs the image check, the image's browser suite,
+  and the proxy check with `SKIP_BUILD=1`.
+- **CI tidying (Task 14).** The gitleaks version stays in three files (pre-commit's `rev:` can't
+  read a file), and `scripts/check_tool_versions.py` fails when they differ, so a Dependabot bump
+  of the hook needs the other two edited by hand. `pip-audit` reads the export from `/dev/stdin`
+  (2.10.1 refuses `-r -`). The two check scripts need Python 3.10 or later and run with uv's 3.13
+  (the Mac's system Python is 3.9); they parse the filters with a small standard-library parser.
+  `scripts/check_path_filters.py` reads test sources for `Path(__file__)` expressions with literal
+  segments and the web tests' relative imports and reads, so a path built any other way is
+  invisible to it. It found three gaps in the API job's filter (`CLAUDE.md`, the Phase 7 spec, and
+  `scripts/` beyond the proxy check), now added.
+- **The full browser suite on a busy Mac** with eight workers twice lost three tests to database
+  connection errors over Docker Desktop's `host.docker.internal` (different tests each time; each
+  file passes alone). With one worker, as CI runs it, all 464 passed.
+
+**The close's reviews.** `/security-review` found nothing high or medium (its one low: on Linux the
+test image shared the host's network on every interface, since fixed below). The `/code-review
+medium` loop ran six rounds and stopped at the sixth, which had nothing high or medium:
+- Round 1 (fixed): the health check called port 8000 while the entrypoint listened on `PORT`; a
+  signal that reached the launcher before the container existed was lost (the stop now retries
+  until `docker run` exits). Also one uvicorn command line in the entrypoint, one `docker logs`
+  read, the app's own modules compiled at build time, and the stale "bump it by hand" comment.
+- Round 2 (fixed): the base images were pinned by digest alone, which Dependabot can't update; they
+  are now pinned by tag and digest. On Linux the test container bound every interface; it now binds
+  the loopback, or the docker bridge's gateway for the proxy check (`HOST`, read by the
+  entrypoint, default `0.0.0.0`). Also one hidden-path rule, `MutableHeaders`, and typed launcher
+  state.
+- Round 3 (fixed): the test containers ran under `docker run --init`, so the shutdown the proxy
+  check proved was not the deployed one, where uvicorn is PID 1; they now run without an init (the
+  shutdown run exits 0 or 143). `PROXY_CHECK_BIND` is back for unusual Linux setups.
+- Round 4 (fixed): `pip-audit` read `uv export` through a pipe without `pipefail`, so a failed
+  export passed as an audit of nothing; the workflow step runs under `shell: bash`, and `make audit`
+  goes through a file. The health check now reads `HOST` too.
+- Round 5 (fixed): **`Referrer-Policy: no-referrer` makes a browser send `Origin: null` on the
+  app's own writes,** and a browser without Fetch Metadata (Safari before 16.4) would then fail the
+  same-origin check on every write. The policy is `same-origin`, recorded in
+  [ADR 0020's amendment](../adr/0020-one-image-one-origin.md#amendment-2026-11-10-referrer-policy-same-origin);
+  this differs from the spec's `no-referrer`. Also: a build with no `assets/` folder refuses to
+  start, a blank `WEB_DIST_DIR` means unset, the image check waits for the access log, the guard's
+  unit test catches `browser.newPage()` and scans subfolders, and the health probe handles IPv6.
+- Round 6 lows fixed: the launcher's stop grace is 30 seconds (uvicorn's 15 plus the stream save),
+  the image check refuses a busy port, `.env.example` lists the two new settings, and Select reads
+  the nonce from `get-nonce`.
+- Lows recorded, not fixed: `make check` and CI no longer run the Vite-preview browser target
+  (`make e2e` stays as the quicker local loop); the image check runs only the test variant (the
+  production variant is inspected, not started); the graceful-shutdown 15 seconds lives in the
+  entrypoint and the proxy check's limits separately; the health wait is written twice (the image
+  check and the proxy check); the CSP fixture gives every test a context and a 50 ms wait, and
+  `guardedContext`'s `close()` can report a CSP failure over an earlier error; the page renders
+  `index.html` with two regular-expression substitutions per response; `scripts/image/check.py`
+  is outside mypy (its module name clashes with the proxy check's); a root path ending in a file
+  extension that doesn't exist gets the page, not a 404.
+
 ## Backlog
 
 (Low findings from the stages' reviews, with their reasons.)

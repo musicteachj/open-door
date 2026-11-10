@@ -62,6 +62,21 @@ version (`0.x.y` while the app is being built, `1.0.0` when it is complete).
   (`od.session`), with no token or name, and every other tab refetches `/me` once, so a tab showing
   HR's private details resets without a focus or a click. A tab ignores its own message.
 
+- **The browser tests and the proxy check run against the production image** (Phase 8, stage 2).
+  CI's E2E job builds both image variants with a cache, inspects them (`make image-check`), runs the
+  whole browser suite against the test image on one origin with the real CSP (`E2E_TARGET=image`,
+  `make e2e-image`), and runs the proxy check with the API in the container, so the shutdown run
+  sends SIGTERM through the real entrypoint. Every browser test now also fails on a Content Security
+  Policy violation, including in contexts a test opens itself. `make check` builds the images once
+  and runs the same three; `make e2e` stays the quicker local loop against the Vite preview.
+- **CI tidying** (Phase 8, stage 2). `pip-audit` audits only the app's locked dependencies, not its
+  own; the pre-commit hook is installed with `uv tool install`, so clearing uv's cache no longer
+  breaks commits; Dependabot also proposes updates for the Docker base images, the proxy check's
+  nginx, and the pre-commit hooks; `make check-workflows` and CI fail when the three copies of the
+  gitleaks version differ, or when a test reads a file outside its CI job's path filter. That check
+  found three gaps, now in the API job's filter: `CLAUDE.md`, the Phase 7 spec, and all of
+  `scripts/`.
+
 ### Security
 
 - **Sessions are under row-level security** (Phase 8, stage 1, migration 0017). The API's login
@@ -80,6 +95,17 @@ version (`0.x.y` while the app is being built, `1.0.0` when it is complete).
 - **The owner's and the cleanup login's credentials stay out of the API process** (Phase 8, stage
   1), as above.
 
+- **Security headers on every response and a strict Content Security Policy** (Phase 8, stage 2,
+  ADR 0020). HSTS, `nosniff`, `Referrer-Policy: same-origin` (no referrer to any other site), a `Permissions-Policy` that turns off
+  camera, microphone, geolocation, payment, and USB, and `Cross-Origin-Opener-Policy: same-origin`
+  go on every response, refusals and 500s included. The page allows scripts only from its own
+  origin and Cloudflare's challenge host, and styles only from its own origin or with the page's
+  nonce, which is new for every response; it can't be framed.
+- **The image's certificate store has no emSign root** (Phase 8, stage 2). Debian's
+  `ca-certificates` still ships the three emSign roots whose intermediate keys were compromised
+  (GHSA-6q48-6c7w-9gw2), which the Anthropic SDK would trust through the operating system's store;
+  the Dockerfile removes them, and `make image-check` fails if one returns.
+
 ### Fixed
 
 - **Audit events store SQL `NULL` for "nothing"** (Phase 8, stage 1, migration 0017). `before` and
@@ -87,6 +113,16 @@ version (`0.x.y` while the app is being built, `1.0.0` when it is complete).
   existing rows.
 
 ### Added
+
+- **The production image** (Phase 8, stage 2, ADR 0020). One `Dockerfile` builds the web app and
+  the API into a slim Python image that runs uvicorn as a non-root user and serves both from one
+  origin: hashed assets cached for a year, every other page path given `index.html` (never cached)
+  with a fresh nonce in its CSP header and meta tag. It carries `tzdata` (now an API dependency),
+  no `.env`, keyring, or tests, and runs with `--no-server-header`; an empty `FORWARDED_ALLOW_IPS`
+  trusts no proxy. `make image` builds it and a test variant with the component gallery, and
+  `make image-check` inspects both. Base images are pinned by digest. The web app hands the nonce
+  to Radix's injected styles (`get-nonce`, Select's viewport). A public `TURNSTILE_SITE_KEY`
+  setting fills the page's site-key tag; Stage 4 adds the check itself.
 
 - **The threat model** (Phase 8, stage 1): [`docs/THREAT-MODEL.md`](docs/THREAT-MODEL.md) names
   what Open Door protects, who might attack it, and its six trust boundaries, and for each boundary
