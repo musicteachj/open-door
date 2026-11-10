@@ -192,10 +192,10 @@ class FeedbackGivenOut(CamelModel):
 
 
 class TurnIn(CamelModel):
-    # Trimmed and measured by the route, which answers 422 with its own wording. This limit only
-    # refuses an absurd question early, with the schema's 422, before the route's work (the body
-    # has been read by then). Limiting the body's size is the reverse proxy's job (Phase 8).
-    question: Annotated[str, Field(max_length=20_000)]
+    # Trimmed and measured by the route, which answers 422 with its own wording. This limit, twice
+    # the route's 2,000, only refuses an absurd question early, with the schema's 422, before the
+    # route's work. The body's size is capped at 64 KiB by the body-limit middleware.
+    question: Annotated[str, Field(max_length=4_000)]
 
 
 class ConfirmIn(CamelModel):
@@ -205,5 +205,5 @@ class ConfirmIn(CamelModel):
     model_config = ConfigDict(extra="forbid")
 
     # Checked by the proposal service (at most 300 characters, only for a denial), which answers
-    # 422 with its own wording. This limit only refuses an absurd body early.
-    note: Annotated[str | None, Field(max_length=20_000)] = None
+    # 422 with its own wording. This limit, twice that, only refuses an absurd body early.
+    note: Annotated[str | None, Field(max_length=600)] = None

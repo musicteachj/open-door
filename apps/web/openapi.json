@@ -5,6 +5,27 @@
     "version": "0.0.0"
   },
   "paths": {
+    "/api/v1/health/live": {
+      "get": {
+        "tags": [
+          "health"
+        ],
+        "summary": "Report that the API process is up, without touching the database",
+        "operationId": "getHealthLive",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LiveResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/health": {
       "get": {
         "tags": [
@@ -3836,7 +3857,7 @@
             "anyOf": [
               {
                 "type": "string",
-                "maxLength": 20000
+                "maxLength": 600
               },
               {
                 "type": "null"
@@ -5354,6 +5375,25 @@
         ],
         "title": "ListPassage"
       },
+      "LiveResponse": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "const": "ok",
+            "title": "Status"
+          },
+          "version": {
+            "type": "string",
+            "title": "Version"
+          }
+        },
+        "type": "object",
+        "required": [
+          "status",
+          "version"
+        ],
+        "title": "LiveResponse"
+      },
       "LocationCount": {
         "properties": {
           "id": {
@@ -5571,7 +5611,7 @@
           },
           "text": {
             "type": "string",
-            "maxLength": 20000,
+            "maxLength": 8000,
             "title": "Text"
           },
           "turnId": {
@@ -7428,7 +7468,7 @@
         "properties": {
           "question": {
             "type": "string",
-            "maxLength": 20000,
+            "maxLength": 4000,
             "title": "Question"
           }
         },

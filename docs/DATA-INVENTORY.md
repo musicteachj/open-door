@@ -33,8 +33,8 @@ automated-decision systems apply that to the data such systems use and produce.
 ## Who can see what
 
 - **Tenant isolation.** Postgres row-level security shows the API only the rows of the sandbox its
-  transaction belongs to. The API's database login can't skip that rule. The one exception is
-  `sessions`, described below.
+  transaction belongs to. The API's database login can't skip that rule. `sessions` has rules of
+  its own, described below.
 - **Directory fields** are visible to everyone in the same sandbox.
 - **The assistant's conversations** (messages, turns, and feedback) are visible only to the person
   they belong to, with no HR exception. A second, restrictive Postgres rule enforces it.
@@ -135,13 +135,22 @@ Visible to everyone in the sandbox. Deleted with the sandbox.
 | Column | Holds | Why |
 |---|---|---|
 | `token_hash` | The SHA-256 hash of the session token | Finds the session from the cookie. The raw token is only in the visitor's cookie. |
-| `csrf_hash` | The SHA-256 hash of the CSRF token | Checks the `X-CSRF-Token` header on requests that change something. |
+| `csrf_hash` | The SHA-256 hash of the CSRF token | Checks the `X-CSRF-Token` header on every signed-in request, reads included (Phase 8). |
 | `tenant_id`, `person_id` | The sandbox, and the persona signed in | Scopes every request to that sandbox and person. |
 | `created_at`, `expires_at` | When the session started, and the sandbox's expiry | A session never outlives its sandbox. |
+| `family_id` | A random UUID shared by a session and the sessions a persona switch made from it (migration 0017) | Signing out deletes the whole family, so a switch in one tab racing a sign-out in another can't leave the new persona signed in. It names no one and is never sent to the browser. |
 
-Outside row-level security, because a session is looked up before its sandbox is known. The API
-finds a session only by its token hash, and never lists sessions. Switching persona deletes the
-row and creates a new one, and signing out deletes it. Deleted with the sandbox in any case.
+Under row-level security with rules of its own (migration 0017), because a session is looked up
+before its sandbox is known. The lookup presents the token's hash in its transaction
+(`app.session_token_hash`), and the API's login then sees only that row, or the rows of the sandbox
+its transaction is scoped to. A bare `SELECT` with no context sees nothing, so the login can no
+longer list every sandbox's sessions. It may insert a session only for its own sandbox, expiring no
+later than the sandbox, and delete only its own sandbox's sessions or the presented one. (A code
+path can't step outside its transaction's sandbox. Raw SQL as that login can set another sandbox's
+context itself, an accepted risk: the login's password is a full-access secret.) It has no
+`UPDATE`. Switching persona deletes the row and creates a new one in the same family, and signing
+out deletes the family. Deleted with the sandbox in any case (a referential action, which the
+rules don't block).
 
 ### `audit_events`: what happened
 
@@ -151,7 +160,7 @@ row and creates a new one, and signing out deletes it. Deleted with the sandbox 
 | `occurred_at` | When it happened (UTC) | The record. |
 | `actor_person_id`, `via` | Who acted, and how: `ui`, `assistant`, or `system` | Every action, including the assistant's from Phase 4, is attributed. |
 | `action`, `target_type`, `target_id` | What was done, and to what | Phase 1 records `sandbox.created`, `session.persona_switched`, `session.ended`, and `person_private.read`. Phase 4 adds `escalation.offered` (target `ai_turn`), written when the assistant shows the crisis, sensitive, or "can't answer right now" panel, and when a budget stop ends a turn before the safety check could run (`kind` `unavailable`, `reason` `budget`: the budget message carries 911 and 988 instead of a panel), and `person_private.read` with `via` `assistant` when `get_my_profile` runs. Phase 5 adds `timeoff.requested` (PTO) and `timeoff.recorded` (sick time) when a request is made, `timeoff.approved`, `timeoff.denied`, and `timeoff.canceled` (target `time_off_request`), and `proposal.created`, `proposal.confirmed`, `proposal.canceled`, and `proposal.failed` (target `ai_proposal`). Phase 6 adds the case events, each with target `case`: `case.opened` (`via` `ui`), `case.summary.written` and `case.summary.failed` (`via` `assistant`, no actor when the system wrote it), `case.summary.retried` (`via` `ui`, HR as the actor, written in the retry request's own transaction; `after` holds only `screenFirst`), `case.screened` (`via` `assistant`, HR as the actor, when a retry's screening is written back to the case, either from `unscreened` or raising it to `crisis`; `after` holds only the `screening` label), `case.viewed` (HR read a summary), `case.text.read` (HR read the words), `case.status_changed`, and `case.listed` (`via` `assistant`, HR as the actor, written when the assistant's `list_cases` tool runs; `after` holds the count and the status filter only). |
-| `before`, `after` | Non-private fields only, such as `personaKey`, the names of the private fields read, an escalation's `kind`, or a time-off request's `status`, `type`, `startDate`, and `endDate` | Never private values, so a privacy deletion request never means editing this log. A denial's note (`decisionNote`, `note`) and a case's `text`, `summary`, `words`, or `narrative` are refused here like a private field, at any depth, so text a person wrote can't be logged by mistake. A case event holds only labels: `screening` and `category` (`case.opened`), `model` and `promptVersion` or a failure's `reason` (the summary events), and the status before and after (`case.status_changed`). |
+| `before`, `after` | Non-private fields only, such as `personaKey`, the names of the private fields read, an escalation's `kind`, or a time-off request's `status`, `type`, `startDate`, and `endDate` | Never private values, so a privacy deletion request never means editing this log. A denial's note (`decisionNote`, `note`) and a case's `text`, `summary`, `words`, or `narrative` are refused here like a private field, at any depth, so text a person wrote can't be logged by mistake. A case event holds only labels: `screening` and `category` (`case.opened`), `model` and `promptVersion` or a failure's `reason` (the summary events), and the status before and after (`case.status_changed`). An absent value is SQL `NULL` (since migration 0017, which converted the JSON `null` that older rows held), so `IS NULL` finds it. |
 | `proposal_id` | The confirmed proposal, from Phase 5. It is a foreign key to `ai_proposals`, within the same sandbox | Ties an executed action to what the person confirmed. |
 | `request_id` | The request's ID | Matches the event with that request's log lines. |
 
@@ -510,6 +519,14 @@ The web app uses no `localStorage`. It keeps four keys in `sessionStorage`:
 Only the person at that browser tab can see it. It is gone when the tab closes, and the API never
 receives it.
 
+### Cross-tab message
+
+When a tab switches persona, signs out, or starts a sandbox, it posts one message on the browser's
+`BroadcastChannel` named `od.session`: `{ kind, from }`, where `kind` is `switch`, `sign-out`, or
+`start`, and `from` is a random ID made when that tab's page loads. It holds no token, name, or
+person's ID, is not stored, never leaves the browser, and the API never receives it. Other tabs of
+the same browser on this origin refetch `/me` when they hear it (Phase 8).
+
 ### Security log
 
 Refused requests are written to the JSON application log under the `app.security` logger, not to
@@ -522,6 +539,11 @@ the audit table. The events are `security.session_invalid`, `security.origin_rej
 - the target person's ID, for a denied read
 - the client's IP address
 - the first 8 characters of the session token's hash
+
+The access log (uvicorn's, one line per request) leaves out the two health paths,
+`/api/v1/health` and `/api/v1/health/live`, which probes call every few seconds. A statement or lock
+timeout logs a warning with only the SQLSTATE code (`57014` or `55P03`). A request body over 64 KiB
+is refused with a 413 and logs nothing about its contents.
 
 A request with no session cookie at all, such as a first visit, isn't a refusal worth recording, so
 it logs nothing here (only a DEBUG line with the method and path). A raw token, a cookie value, or a

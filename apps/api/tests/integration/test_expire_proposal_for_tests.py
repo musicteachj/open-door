@@ -130,7 +130,9 @@ async def test_it_refuses_a_url_whose_query_names_another_host(parameter: str) -
 
 
 async def test_it_refuses_to_run_in_production() -> None:
-    run = await run_script(str(uuid4()), APP_ENV="production")
+    run = await run_script(
+        str(uuid4()), APP_ENV="production", APP_ORIGIN="https://opendoor.example.com"
+    )
 
     assert run.returncode != 0
     assert "production" in run.output

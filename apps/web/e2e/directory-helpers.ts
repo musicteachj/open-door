@@ -59,17 +59,16 @@ export async function leosPrivateValues(browser: Browser, baseURL: string): Prom
     const page = await context.newPage()
     await startAs(page, 'Dana')
     const values = await page.evaluate(async () => {
-      const people = (await (await fetch('/api/v1/people?q=Nakamura')).json()) as {
+      // Every API request carries the CSRF header, as the app's own do.
+      const csrf = {
+        headers: {
+          'X-CSRF-Token': /(?:^|; )__Host-od_csrf=([^;]*)/.exec(document.cookie)?.[1] ?? '',
+        },
+      }
+      const people = (await (await fetch('/api/v1/people?q=Nakamura', csrf)).json()) as {
         items: { id: string }[]
       }
-      // An audited read needs the CSRF header, like a write.
-      const token = document.cookie
-        .split('; ')
-        .find((part) => part.startsWith('__Host-od_csrf='))
-        ?.slice('__Host-od_csrf='.length)
-      const response = await fetch(`/api/v1/people/${people.items[0]!.id}/private`, {
-        headers: { 'X-CSRF-Token': token ?? '' },
-      })
+      const response = await fetch(`/api/v1/people/${people.items[0]!.id}/private`, csrf)
       return (await response.json()) as LeoPrivate
     })
     for (const value of Object.values(values)) expect(value.length).toBeGreaterThan(3)
@@ -81,7 +80,14 @@ export async function leosPrivateValues(browser: Browser, baseURL: string): Prom
 
 /** The person's ID as the API reports it for the signed-in person. */
 export const myId = (page: Page) =>
-  page.evaluate(async () => ((await (await fetch('/api/v1/me')).json()) as { id: string }).id)
+  page.evaluate(async () => {
+    const csrf = {
+      headers: {
+        'X-CSRF-Token': /(?:^|; )__Host-od_csrf=([^;]*)/.exec(document.cookie)?.[1] ?? '',
+      },
+    }
+    return ((await (await fetch('/api/v1/me', csrf)).json()) as { id: string }).id
+  })
 
 export type AuditEvent = {
   action: string

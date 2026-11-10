@@ -1,9 +1,9 @@
 """The assistant: the current conversation, a new one, feedback on an answer, and the turn stream.
 
-Every route needs a session, and the routes that change something need the CSRF token and the
-same-origin check like every other. Whose data is read comes only from the session (invariant 1):
-Postgres shows a person only their own conversations and turns, so another person's IDs are a 404
-here, never a 403, and an ID can't be probed.
+Every route needs a session and the CSRF token, on any method, and the routes that change something
+need the same-origin check like every other. Whose data is read comes only from the session
+(invariant 1): Postgres shows a person only their own conversations and turns, so another
+person's IDs are a 404 here, never a 403, and an ID can't be probed.
 
 **The stream's checks run before it opens**, each a problem response and not an event, in the
 spec's order: the conversation (404), its pins (409 `conversation-outdated`), the question (422, and
@@ -35,6 +35,7 @@ from app.ai.admission import (
     history_tokens,
     room_needed_usd,
     scope_without_room,
+    seconds_until_next_utc_day,
     short_scopes,
 )
 from app.ai.budget import Caps, budget_state
@@ -654,7 +655,15 @@ async def admit_question(
         scope = scope_without_room(await budget_state(db, caps), needed)
         if scope is not None:
             code = f"budget-{scope}"
-            raise ProblemError(status.HTTP_429_TOO_MANY_REQUESTS, code, ERROR_TEXTS[code])
+            # Only the day's limit resets (at the next UTC midnight). A sandbox's own never does,
+            # so it has no `Retry-After`. This 429 is a plain HTTP response: a refusal inside the
+            # turn stream (`spend-limit`, a budget `error` event) can't carry a header.
+            retry_after = (
+                {"Retry-After": str(seconds_until_next_utc_day(now))} if scope == "daily" else None
+            )
+            raise ProblemError(
+                status.HTTP_429_TOO_MANY_REQUESTS, code, ERROR_TEXTS[code], headers=retry_after
+            )
     return Admitted(conversation, question, asker, caps, cipher)
 
 

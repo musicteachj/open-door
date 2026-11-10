@@ -311,6 +311,8 @@ async def test_a_sandbox_without_room_is_429_budget_sandbox_and_starts_no_turn(
     assert response.headers["content-type"] == "application/problem+json"
     assert response.json()["type"] == "budget-sandbox"
     assert response.json()["detail"] == BUDGET_SANDBOX_TEXT
+    # A sandbox's own limit never resets, so there is nothing to wait for.
+    assert "retry-after" not in response.headers
     # Checked before the turn's row is added: nothing was left `running`.
     rows = await turn_rows(app_engine, tenant_id, person_id)
     assert [r.status for r in rows] == ["stopped"]
@@ -329,6 +331,9 @@ async def test_a_day_without_room_is_429_budget_daily(open_browser_with: OpenBro
     assert response.status_code == 429
     assert response.json()["type"] == "budget-daily"
     assert response.json()["detail"] == BUDGET_DAILY_TEXT
+    # Whole seconds to the next UTC midnight, when the day's budget resets.
+    retry_after = int(response.headers["retry-after"])
+    assert 1 <= retry_after <= 86_400
 
 
 async def test_the_checks_run_in_the_specs_order(browser: Browser, app_engine: AsyncEngine) -> None:
@@ -355,7 +360,8 @@ def test_the_stream_needs_the_csrf_token_and_the_same_origin_check(browser: Brow
     sign_in(browser)
     conversation_id = new_conversation(browser)["id"]
 
-    no_csrf = browser.client.post(turns_url(conversation_id), json={"question": SICK})
+    with browser.without_csrf():
+        no_csrf = browser.client.post(turns_url(conversation_id), json={"question": SICK})
     cross_site = browser.client.post(
         turns_url(conversation_id),
         json={"question": SICK},

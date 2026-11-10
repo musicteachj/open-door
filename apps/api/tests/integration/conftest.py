@@ -18,7 +18,7 @@ import hashlib
 import json
 import secrets
 from collections.abc import AsyncIterator, Iterator
-from contextlib import ExitStack
+from contextlib import ExitStack, contextmanager
 from dataclasses import dataclass
 from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
@@ -29,7 +29,6 @@ import httpx2 as httpx
 import pytest
 import pytest_asyncio
 from fastapi.testclient import TestClient
-from pydantic import PostgresDsn
 from sqlalchemy import delete, insert, select, text
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 
@@ -52,6 +51,11 @@ from app.core.encryption import (
     new_data_key,
     seal,
     wrap_aad,
+)
+from app.core.owner_settings import (
+    DatabaseUrlError,
+    cleanup_database_url,
+    owner_database_url,
 )
 from app.db.engine import create_engine
 from app.db.models import (
@@ -94,22 +98,33 @@ def database_settings() -> Settings:
     )
 
 
-def required_url(url: PostgresDsn | None, variable: str) -> str:
-    if url is None:
-        pytest.fail(f"{variable} is not set, so this test can't run. See apps/api/.env.example.")
-    return str(url)
+@pytest.fixture(scope="session")
+def owner_url() -> str:
+    """MIGRATION_DATABASE_URL, read through OwnerSettings: the API's Settings never holds it."""
+    try:
+        return owner_database_url()
+    except DatabaseUrlError as error:
+        pytest.fail(f"{error} So this test can't run.")
+
+
+@pytest.fixture(scope="session")
+def cleanup_url() -> str:
+    """CLEANUP_DATABASE_URL, read through CleanupSettings."""
+    try:
+        return cleanup_database_url()
+    except DatabaseUrlError as error:
+        pytest.fail(f"{error} So this test can't run.")
 
 
 @pytest_asyncio.fixture(scope="session", loop_scope="session", autouse=True)
-async def sweep_leftover_test_roles(database_settings: Settings) -> None:
+async def sweep_leftover_test_roles(owner_url: str) -> None:
     """Drop roles that an earlier, interrupted run left behind.
 
     Roles belong to the whole Postgres server, so a test that was killed before its cleanup leaves
     its throwaway roles in the database for good, some of them with powers such as SUPERUSER. The
     tests give every such role a name that starts with `od_test_`, which nothing else uses.
     """
-    url = required_url(database_settings.migration_database_url, "MIGRATION_DATABASE_URL")
-    engine = create_engine(url)
+    engine = create_engine(owner_url)
     try:
         async with engine.begin() as connection:
             leftovers = await connection.scalars(
@@ -126,14 +141,13 @@ async def sweep_leftover_test_roles(database_settings: Settings) -> None:
 
 
 @pytest_asyncio.fixture(scope="session", loop_scope="session", autouse=True)
-async def handbook_is_published(database_settings: Settings) -> None:
+async def handbook_is_published(owner_url: str) -> None:
     """Fail at the start of the session if no handbook version is published.
 
     A trigger pins every new sandbox to the newest published version and refuses to create one
     without it, so a forgotten ingest would otherwise show up as dozens of baffling failures.
     """
-    url = required_url(database_settings.migration_database_url, "MIGRATION_DATABASE_URL")
-    engine = create_engine(url)
+    engine = create_engine(owner_url)
     try:
         async with engine.connect() as connection:
             published = await connection.scalar(
@@ -154,19 +168,17 @@ async def app_engine(database_settings: Settings) -> AsyncIterator[AsyncEngine]:
 
 
 @pytest.fixture
-async def owner_engine(database_settings: Settings) -> AsyncIterator[AsyncEngine]:
-    """The database owner, which runs the migrations."""
-    url = required_url(database_settings.migration_database_url, "MIGRATION_DATABASE_URL")
-    engine = create_engine(url)
+async def owner_engine(owner_url: str) -> AsyncIterator[AsyncEngine]:
+    """The database owner, which runs the migrations (so no statement timeout)."""
+    engine = create_engine(owner_url, statement_timeout="0")
     yield engine
     await engine.dispose()
 
 
 @pytest.fixture
-async def cleanup_engine(database_settings: Settings) -> AsyncIterator[AsyncEngine]:
+async def cleanup_engine(cleanup_url: str) -> AsyncIterator[AsyncEngine]:
     """The cleanup login: a member of od_cleanup, which may delete only expired tenants."""
-    url = required_url(database_settings.cleanup_database_url, "CLEANUP_DATABASE_URL")
-    engine = create_engine(url)
+    engine = create_engine(cleanup_url)
     yield engine
     await engine.dispose()
 
@@ -487,15 +499,14 @@ class MakeTenant(Protocol):
 
 
 @pytest_asyncio.fixture(scope="session", loop_scope="session")
-async def owner_is_superuser(database_settings: Settings) -> None:
+async def owner_is_superuser(owner_url: str) -> None:
     """Fail at the start of the session if the owner login is not a superuser.
 
     The tests delete the tenants they create through the owner, and that only works because a
     superuser bypasses row-level security. Any other login sees no tenant rows, so its DELETE
     would remove nothing without an error and leave the tenants in the database.
     """
-    url = required_url(database_settings.migration_database_url, "MIGRATION_DATABASE_URL")
-    engine = create_engine(url)
+    engine = create_engine(owner_url)
     try:
         async with engine.connect() as connection:
             is_superuser = await connection.scalar(
@@ -512,9 +523,7 @@ async def owner_is_superuser(database_settings: Settings) -> None:
 
 
 @pytest.fixture(scope="session")
-def created_tenant_ids(
-    database_settings: Settings, owner_is_superuser: None
-) -> Iterator[list[UUID]]:
+def created_tenant_ids(owner_url: str, owner_is_superuser: None) -> Iterator[list[UUID]]:
     """Every tenant the tests create, deleted through the owner when the test session ends.
 
     The owner is the Compose superuser in development and CI, and a superuser bypasses row-level
@@ -523,12 +532,13 @@ def created_tenant_ids(
     tenant_ids: list[UUID] = []
     yield tenant_ids
     if tenant_ids:
-        url = required_url(database_settings.migration_database_url, "MIGRATION_DATABASE_URL")
-        asyncio.run(delete_tenants(url, tenant_ids))
+        asyncio.run(delete_tenants(owner_url, tenant_ids))
 
 
 async def delete_tenants(url: str, tenant_ids: list[UUID]) -> None:
-    engine = create_engine(url)
+    # No statement timeout: the end-of-session cleanup deletes every tenant the run made, thousands
+    # of them with their cascades, which legitimately takes longer than the app's 10 seconds.
+    engine = create_engine(url, statement_timeout="0")
     try:
         async with engine.begin() as connection:
             await connection.execute(delete(Tenant).where(Tenant.id.in_(tenant_ids)))
@@ -620,6 +630,7 @@ def make_tenant(app_engine: AsyncEngine, created_tenant_ids: list[UUID]) -> Make
                     tenant_id=tenant_id,
                     person_id=employee.id,
                     expires_at=expires_at,
+                    family_id=uuid4(),
                 )
             )
             session.add(
@@ -664,6 +675,28 @@ async def seeded_sandbox(app_engine: AsyncEngine, created_tenant_ids: list[UUID]
     return company
 
 
+class BrowserClient(TestClient):
+    """A test client that sends `X-CSRF-Token` on every `/api/` request the cookie jar can answer,
+    as the web app does (`apiFetch` adds it on every method, reads included).
+
+    A header the test sets itself is never replaced. `without_csrf()` turns the automatic one off,
+    to see what a request that lacks it gets.
+    """
+
+    sends_csrf = True
+
+    def send(self, request: httpx.Request, *args: Any, **kwargs: Any) -> httpx.Response:
+        token = self.cookies.get(CSRF_COOKIE)
+        if (
+            self.sends_csrf
+            and token
+            and CSRF_HEADER not in request.headers
+            and request.url.path.startswith("/api/")
+        ):
+            request.headers[CSRF_HEADER] = token
+        return super().send(request, *args, **kwargs)
+
+
 class Browser:
     """The web app in a browser, as the API sees it.
 
@@ -672,9 +705,18 @@ class Browser:
     own app, database engine, and cookie jar.
     """
 
-    def __init__(self, client: TestClient, created_tenant_ids: list[UUID]) -> None:
+    def __init__(self, client: BrowserClient, created_tenant_ids: list[UUID]) -> None:
         self.client = client
         self._created_tenant_ids = created_tenant_ids
+
+    @contextmanager
+    def without_csrf(self) -> Iterator[None]:
+        """Requests in the block carry no automatic `X-CSRF-Token`, as a script's would not."""
+        self.client.sends_csrf = False
+        try:
+            yield
+        finally:
+            self.client.sends_csrf = True
 
     def create_sandbox(self, body: object = None, **kwargs: Any) -> httpx.Response:
         """POST /sandboxes. A sandbox it creates is deleted when the test session ends."""
@@ -727,7 +769,7 @@ def open_browser(
         def open_one(
             *, same_origin_header: bool = True, raise_server_exceptions: bool = True
         ) -> Browser:
-            client = TestClient(
+            client = BrowserClient(
                 create_app(database_settings),
                 base_url="https://testserver",
                 raise_server_exceptions=raise_server_exceptions,
@@ -777,7 +819,7 @@ def open_browser_with(
     with ExitStack() as stack:
 
         def open_one(**setting_changes: Any) -> Browser:
-            client = TestClient(
+            client = BrowserClient(
                 create_app(database_settings.model_copy(update=setting_changes)),
                 base_url="https://testserver",
                 headers={"Sec-Fetch-Site": "same-origin"},

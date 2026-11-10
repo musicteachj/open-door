@@ -52,7 +52,9 @@ async def test_more_concurrent_questions_than_the_pool_holds_do_not_stall_the_ap
             )
             await asyncio.sleep(0.3)
             other_started = time.monotonic()
-            visitor = await other.get("/api/v1/me")
+            # The web app sends the CSRF header on every request, reads included.
+            csrf = {"X-CSRF-Token": other.cookies["__Host-od_csrf"]}
+            visitor = await other.get("/api/v1/me", headers=csrf)
             other_seconds = time.monotonic() - other_started
             results = await flood
             seconds = time.monotonic() - started

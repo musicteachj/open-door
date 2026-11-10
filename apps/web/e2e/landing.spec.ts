@@ -99,7 +99,12 @@ for (const persona of PERSONAS) {
     await expect(greetingHeading(page, persona.firstName as FirstName)).toBeVisible()
 
     const me = await page.evaluate(async () => {
-      const response = await fetch('/api/v1/me')
+      const csrf = {
+        headers: {
+          'X-CSRF-Token': /(?:^|; )__Host-od_csrf=([^;]*)/.exec(document.cookie)?.[1] ?? '',
+        },
+      }
+      const response = await fetch('/api/v1/me', csrf)
       return (await response.json()) as {
         givenName: string
         familyName: string

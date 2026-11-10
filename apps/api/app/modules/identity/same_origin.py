@@ -39,8 +39,8 @@ from app.core.api_paths import is_api_request
 from app.core.problems import problem_response
 from app.modules.identity.security_log import SecurityEvent, log_security_event
 
-# Compared exactly, so a lowercase "get" is not safe and gets the check. The CSRF check in deps.py
-# uses this same set, so the two can't disagree about what changes data.
+# Compared exactly, so a lowercase "get" is not safe and gets the check. (The CSRF check in deps.py
+# no longer looks at the method: it runs on every signed-in request.)
 SAFE_METHODS = frozenset({"GET", "HEAD", "OPTIONS"})
 JSON_MEDIA_TYPE = "application/json"
 # What Sec-Fetch-Site says about a request from another site, or from a sibling subdomain.

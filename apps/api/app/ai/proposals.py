@@ -63,6 +63,7 @@ from sqlalchemy import (
     literal_column,
     null,
     select,
+    text,
     update,
 )
 from sqlalchemy import cast as sql_cast
@@ -104,6 +105,8 @@ type AutomaticReason = Literal["replaced", "turn-incomplete"]
 PROPOSAL_LIFETIME: ColumnElement[Any] = literal_column("interval '15 minutes'")
 # The SQLSTATE of migration 0009's triggers: a proposal ends once, and never executes after expiry.
 PROPOSAL_TRIGGER_SQLSTATE = "OD003"
+# How long a confirm waits for the proposal's row or the person's time-off lock.
+CONFIRM_LOCK_TIMEOUT = "5s"
 # For a stored failure code nobody recognizes: a fixed sentence, never a stored string.
 UNKNOWN_FAILURE_TEXT = "This card could not be completed."
 # One request per proposal: the unique index on time_off_requests (tenant_id, proposal_id).
@@ -803,6 +806,10 @@ async def confirm(
     `note` is a denial's note, the only thing that comes from the client. InvalidNote if it can't be
     stored or isn't for a denial, with nothing written.
     """
+    # A wait for the proposal's row or the person's lock past this fails the confirm (SQLSTATE
+    # 55P03, a 503 "database-busy") and rolls everything back, so the card stays pending and the
+    # person can press Confirm again.
+    await db.execute(text(f"SET LOCAL lock_timeout = '{CONFIRM_LOCK_TIMEOUT}'"))
     # The row first, then the person's lock (the service takes it): see the module's note.
     row = await _lock_proposal(db, proposal_id)
     if row is None or row.person_id != actor.person_id:

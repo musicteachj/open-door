@@ -609,8 +609,10 @@ async function reachApprovals(page: Page, state: ApprovalsState) {
     await switchPersona(page, 'Priya')
     await bookOnPage(page)
     const listed = await page.evaluate(async () => {
+      const csrf = { headers: { 'X-CSRF-Token': /(?:^|; )__Host-od_csrf=([^;]*)/.exec(document.cookie)?.[1] ?? '' } }
       const response = await fetch(
         '/api/v1/time-off/requests?scope=mine&from=2000-01-01&to=2100-01-01',
+        csrf,
       )
       const { items } = (await response.json()) as { items: { status: string }[] }
       return items.find((item) => item.status === 'pending')!
@@ -710,7 +712,8 @@ async function reachConfirmCard(page: Page, state: ConfirmCardState) {
       await askAndWaitForAnswer(page, BOOK)
       // The same day is booked behind the card's back, so Confirm is refused for real.
       const taken = await page.evaluate(async () => {
-        const read = await fetch('/api/v1/assistant/conversations/current')
+        const csrf = { headers: { 'X-CSRF-Token': /(?:^|; )__Host-od_csrf=([^;]*)/.exec(document.cookie)?.[1] ?? '' } }
+        const read = await fetch('/api/v1/assistant/conversations/current', csrf)
         const body = (await read.json()) as {
           turns: { proposals: { card: { startDate: string; endDate: string } }[] }[]
         }
@@ -997,7 +1000,8 @@ async function danaMoves(page: Page, caseId: string, to: 'in_review' | 'closed')
 /** The open cases a filter lists, as Dana's queue reports them. */
 function caseIdsIn(page: Page, status: string): Promise<string[]> {
   return page.evaluate(async (filter) => {
-    const response = await fetch(`/api/v1/cases?status=${filter}`)
+    const csrf = { headers: { 'X-CSRF-Token': /(?:^|; )__Host-od_csrf=([^;]*)/.exec(document.cookie)?.[1] ?? '' } }
+    const response = await fetch(`/api/v1/cases?status=${filter}`, csrf)
     return ((await response.json()) as { items: { id: string }[] }).items.map((item) => item.id)
   }, status)
 }

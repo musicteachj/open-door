@@ -3,6 +3,7 @@ import { useCallback } from 'react'
 import { useNavigate } from 'react-router'
 import { useCreateSandbox } from '@/api/generated'
 import { useTourStore } from '@/features/tour/store'
+import { announceSessionChange } from '@/lib/session-channel'
 import { useIdentityBusy, useIdentityBusyNow } from './useIdentityBusy'
 import { signInAs } from './useMe'
 
@@ -26,6 +27,7 @@ export function useStartSandbox({ tour = false }: { tour?: boolean } = {}) {
     mutation: {
       onSuccess: ({ me }) => {
         signInAs(queryClient, me)
+        announceSessionChange('start')
         if (tour) useTourStore.getState().begin()
         void navigate('/ask')
       },

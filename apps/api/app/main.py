@@ -13,7 +13,9 @@ from app.ai.embeddings import Embedder, QueryEmbeddingLru, VoyageEmbedder
 from app.ai.scripted import ScriptedSummarizer, ScriptedTransport
 from app.ai.transport import Transport, require_a_transport_fit_for
 from app.api.problems import document_problems_as_problem_json
+from app.api.v1.health import ReadinessCache
 from app.api.v1.router import api_router
+from app.core.body_limit import BodyLimitMiddleware
 from app.core.cache_control import NoStoreMiddleware
 from app.core.config import Settings, get_settings
 from app.core.encryption import LocalKeyProvider, load_key_provider
@@ -121,14 +123,25 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             finally:
                 await app.state.engine.dispose()
 
-    app = FastAPI(title="Open Door API", version=__version__, lifespan=lifespan)
+    # Production serves no interactive docs or schema; `app.openapi()` still builds the schema for
+    # `make openapi`.
+    docs_urls: dict[str, str | None] = (
+        {"docs_url": None, "redoc_url": None, "openapi_url": None}
+        if settings.app_env == "production"
+        else {}
+    )
+    app = FastAPI(title="Open Door API", version=__version__, lifespan=lifespan, **docs_urls)  # type: ignore[arg-type]
     app.state.settings = settings
+    app.state.readiness = ReadinessCache()
     app.state.keys = keys
     # The middleware added last runs first. The request-ID middleware wraps the same-origin check,
     # so even a refused request carries its ID, and the no-store middleware wraps both, so a refusal
     # carries `Cache-Control: no-store` too. There is no CORS middleware: the web app reaches the
     # API on the same origin, so the browser blocks every cross-origin read by default.
     app.add_middleware(SameOriginMiddleware, app_origin=settings.app_origin)
+    # Inside the request-ID and no-store middleware so its 413 carries both, and outside the
+    # same-origin check so no refusal path reads an oversized body.
+    app.add_middleware(BodyLimitMiddleware)
     app.add_middleware(RequestIdMiddleware)
     app.add_middleware(NoStoreMiddleware)
     install_problem_handlers(app)

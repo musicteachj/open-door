@@ -143,10 +143,13 @@ def test_every_route_needs_a_session(browser: Browser) -> None:
 def test_the_routes_that_change_state_need_the_csrf_token(browser: Browser) -> None:
     sign_in(browser)
 
-    create = browser.client.post(f"{BASE}/conversations")
-    feedback = browser.client.post(f"{BASE}/turns/{uuid4()}/feedback", json={"helpful": True})
+    with browser.without_csrf():
+        create = browser.client.post(f"{BASE}/conversations")
+        feedback = browser.client.post(f"{BASE}/turns/{uuid4()}/feedback", json={"helpful": True})
+        current = browser.client.get(f"{BASE}/conversations/current")
 
-    assert (create.status_code, feedback.status_code) == (403, 403)
+    # A read is refused too, since Phase 8.
+    assert (create.status_code, feedback.status_code, current.status_code) == (403, 403, 403)
     assert browser.client.get(f"{BASE}/conversations/current").json() is None
 
 

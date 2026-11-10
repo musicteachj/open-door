@@ -949,6 +949,11 @@ export interface ListPassage {
   items: Inline[][]
 }
 
+export interface LiveResponse {
+  status: 'ok'
+  version: string
+}
+
 export type MeEmploymentType = (typeof MeEmploymentType)[keyof typeof MeEmploymentType]
 
 export const MeEmploymentType = {
@@ -991,7 +996,7 @@ export interface NewSandboxRequest {
 export interface OpenCaseBody {
   submissionId: string
   category: Category
-  /** @maxLength 20000 */
+  /** @maxLength 8000 */
   text: string
   turnId?: string | null
 }
@@ -1218,7 +1223,7 @@ export const SummaryRetryOutValue = {
 export type SummaryRetryOut = typeof SummaryRetryOutValue
 
 export interface TurnIn {
-  /** @maxLength 20000 */
+  /** @maxLength 4000 */
   question: string
 }
 
@@ -1307,6 +1312,119 @@ const withQueryKey = <T extends object, K>(query: T, queryKey: K): T & { queryKe
     })
   }
   return result
+}
+
+export const getGetHealthLiveUrl = () => {
+  return `/api/v1/health/live`
+}
+
+/**
+ * @summary Report that the API process is up, without touching the database
+ */
+export const getHealthLive = async (
+  options?: Parameters<typeof apiFetch>[1],
+): Promise<LiveResponse> => {
+  return apiFetch<LiveResponse>(getGetHealthLiveUrl(), {
+    ...options,
+    method: 'GET',
+  })
+}
+
+export const getGetHealthLiveQueryKey = () => {
+  return [`/api/v1/health/live`] as const
+}
+
+export const getGetHealthLiveQueryOptions = <
+  TData = Awaited<ReturnType<typeof getHealthLive>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof getHealthLive>>, TError, TData>>
+  request?: SecondParameter<typeof apiFetch>
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {}
+
+  const queryKey = queryOptions?.queryKey ?? getGetHealthLiveQueryKey()
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getHealthLive>>> = ({ signal }) =>
+    getHealthLive({ signal, ...requestOptions })
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getHealthLive>>,
+    TError,
+    TData
+  > & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type GetHealthLiveQueryResult = NonNullable<Awaited<ReturnType<typeof getHealthLive>>>
+export type GetHealthLiveQueryError = ErrorType<unknown>
+
+export function useGetHealthLive<
+  TData = Awaited<ReturnType<typeof getHealthLive>>,
+  TError = ErrorType<unknown>,
+>(
+  options: {
+    query: Partial<UseQueryOptions<Awaited<ReturnType<typeof getHealthLive>>, TError, TData>> &
+      Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getHealthLive>>,
+          TError,
+          Awaited<ReturnType<typeof getHealthLive>>
+        >,
+        'initialData'
+      >
+    request?: SecondParameter<typeof apiFetch>
+  },
+  queryClient?: QueryClient,
+): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetHealthLive<
+  TData = Awaited<ReturnType<typeof getHealthLive>>,
+  TError = ErrorType<unknown>,
+>(
+  options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof getHealthLive>>, TError, TData>> &
+      Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getHealthLive>>,
+          TError,
+          Awaited<ReturnType<typeof getHealthLive>>
+        >,
+        'initialData'
+      >
+    request?: SecondParameter<typeof apiFetch>
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetHealthLive<
+  TData = Awaited<ReturnType<typeof getHealthLive>>,
+  TError = ErrorType<unknown>,
+>(
+  options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof getHealthLive>>, TError, TData>>
+    request?: SecondParameter<typeof apiFetch>
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary Report that the API process is up, without touching the database
+ */
+
+export function useGetHealthLive<
+  TData = Awaited<ReturnType<typeof getHealthLive>>,
+  TError = ErrorType<unknown>,
+>(
+  options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof getHealthLive>>, TError, TData>>
+    request?: SecondParameter<typeof apiFetch>
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+  const queryOptions = getGetHealthLiveQueryOptions(options)
+
+  const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
+    queryKey: DataTag<QueryKey, TData, TError>
+  }
+
+  return withQueryKey(query, queryOptions.queryKey)
 }
 
 export const getGetHealthUrl = () => {

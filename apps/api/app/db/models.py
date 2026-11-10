@@ -179,9 +179,12 @@ class Holiday(Base):
 
 
 class UserSession(Base):
-    """A signed-in visitor. Outside row-level security: it is looked up before the tenant is known.
+    """A signed-in visitor. Under row-level security with rules of its own (migration 0017): a row
+    is visible to a transaction that presented its token hash, or that is scoped to its sandbox.
 
-    Both hashes are SHA-256 digests. The raw tokens live only in the visitor's cookies.
+    Both hashes are SHA-256 digests. The raw tokens live only in the visitor's cookies. The
+    `family_id` is shared by a session and the sessions a persona switch made from it; sign-out
+    ends the whole family.
     """
 
     __tablename__ = "sessions"
@@ -190,6 +193,7 @@ class UserSession(Base):
         CheckConstraint("octet_length(token_hash) = 32", name="token_hash_is_sha256"),
         CheckConstraint("octet_length(csrf_hash) = 32", name="csrf_hash_is_sha256"),
         Index(None, "tenant_id", "person_id"),
+        Index(None, "family_id"),
     )
 
     token_hash: Mapped[bytes] = mapped_column(primary_key=True)
@@ -199,6 +203,7 @@ class UserSession(Base):
     created_at: Mapped[datetime] = mapped_column(server_default=func.now())
     # Copied from the tenant: a session never outlives its sandbox.
     expires_at: Mapped[datetime]
+    family_id: Mapped[uuid.UUID]
 
 
 class AuditEvent(Base):
@@ -240,8 +245,9 @@ class AuditEvent(Base):
     target_type: Mapped[str | None]
     target_id: Mapped[uuid.UUID | None]
     # Directory fields only. A read of private details records the field names, never the values.
-    before: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
-    after: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
+    # None is SQL NULL, not the JSON value null (migration 0017), so `IS NULL` finds it.
+    before: Mapped[dict[str, Any] | None] = mapped_column(JSONB(none_as_null=True))
+    after: Mapped[dict[str, Any] | None] = mapped_column(JSONB(none_as_null=True))
     proposal_id: Mapped[uuid.UUID | None]
     request_id: Mapped[str | None]
 

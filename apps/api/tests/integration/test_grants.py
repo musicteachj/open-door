@@ -20,6 +20,8 @@ EXPECTED_TABLE_GRANTS = {
     # Append-only: no UPDATE or DELETE, ever.
     ("od_app", "audit_events", "SELECT"),
     ("od_app", "audit_events", "INSERT"),
+    # Row-level security on sessions (migration 0017) narrows these; the grants are unchanged. No
+    # UPDATE: a rotated session is a delete and an insert.
     ("od_app", "sessions", "SELECT"),
     ("od_app", "sessions", "INSERT"),
     ("od_app", "sessions", "DELETE"),
@@ -149,14 +151,12 @@ SCHEMA_GRANTS = """
 """
 
 
-def login_roles(database_settings: Settings) -> tuple[str, str]:
+def login_roles(database_settings: Settings, cleanup_url: str) -> tuple[str, str]:
     """The two login users, named by the usernames in the configured URLs."""
     app_url = database_settings.database_url
-    cleanup_url = database_settings.cleanup_database_url
     assert app_url is not None
-    assert cleanup_url is not None
     app_login = make_url(str(app_url)).username
-    cleanup_login = make_url(str(cleanup_url)).username
+    cleanup_login = make_url(cleanup_url).username
     assert app_login
     assert cleanup_login
     return app_login, cleanup_login
@@ -188,10 +188,10 @@ def direct_grants(rows: set[tuple[str, ...]], roles: tuple[str, ...]) -> set[tup
 
 
 async def test_the_login_users_have_no_privileges_of_their_own(
-    app_engine: AsyncEngine, database_settings: Settings
+    app_engine: AsyncEngine, database_settings: Settings, cleanup_url: str
 ) -> None:
     """Everything reaches the logins through od_app and od_cleanup, never by a direct grant."""
-    logins = login_roles(database_settings)
+    logins = login_roles(database_settings, cleanup_url)
     assert set(logins).isdisjoint(ROLES)
     assert direct_grants(await grants(app_engine, TABLE_GRANTS, logins), logins) == set()
     assert direct_grants(await grants(app_engine, COLUMN_GRANTS, logins), logins) == set()
@@ -211,9 +211,9 @@ OWNED_TABLES = """
 
 
 async def test_neither_role_nor_login_owns_a_table(
-    app_engine: AsyncEngine, database_settings: Settings
+    app_engine: AsyncEngine, database_settings: Settings, cleanup_url: str
 ) -> None:
-    roles = (*ROLES, *login_roles(database_settings))
+    roles = (*ROLES, *login_roles(database_settings, cleanup_url))
     assert await grants(app_engine, OWNED_TABLES, roles) == set()
 
 

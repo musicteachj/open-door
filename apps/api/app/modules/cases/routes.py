@@ -8,8 +8,9 @@ which the service refuses with a 403 `case-own`: HR already sees it in the queue
 Fixed paths (`/mine`, `/texts`, `/counts`) are declared before `/{case_id}`, or the UUID parameter
 would answer them with a 422.
 
-The two reads that decrypt (`/summary` and `/text`) need the `X-CSRF-Token` header on a GET, are
-audited by the service, and send `Cache-Control: no-store` (the middleware covers refusals).
+The two reads that decrypt (`/summary` and `/text`) are audited by the service and send
+`Cache-Control: no-store` (the middleware covers refusals). Like every signed-in route, a GET needs
+the `X-CSRF-Token` header (see identity/deps.py), so a navigation can't trigger an audited read.
 """
 
 from typing import Annotated
@@ -46,7 +47,7 @@ from app.modules.cases.api_schemas import (
 )
 from app.modules.cases.schemas import OpenCase, QueueFilter
 from app.modules.cases.summary_task import SummaryJob, run_summary_job
-from app.modules.identity.deps import AuditedReadDep, CallerDep, SignedInDep
+from app.modules.identity.deps import CallerDep, SignedInDep
 
 router = APIRouter(prefix="/cases", tags=["cases"])
 
@@ -214,7 +215,6 @@ async def get_case(case_id: UUID, signed_in: SignedInDep) -> CaseDetailOut:
     summary="A case's AI summary, for HR. An audited read; needs the CSRF header.",
     response_model=CaseSummaryOut,
     responses=AUDITED_ERRORS,
-    dependencies=[AuditedReadDep],
 )
 async def get_case_summary(
     case_id: UUID,
@@ -234,7 +234,6 @@ async def get_case_summary(
     summary="A case's words, for HR. An audited read; needs the CSRF header.",
     response_model=CaseTextOut,
     responses=AUDITED_ERRORS,
-    dependencies=[AuditedReadDep],
 )
 async def get_case_text(
     case_id: UUID,

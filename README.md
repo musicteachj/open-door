@@ -67,6 +67,7 @@ The sets are small (206 items in the full set), so a single item can move a figu
 | [What this is not](docs/WHAT-THIS-IS-NOT.md) | Scope limits, what the assistant will never do, and what the evidence does not prove |
 | [Decision records](docs/adr/README.md) | The big architecture decisions and what was rejected |
 | [Data inventory](docs/DATA-INVENTORY.md) | Every piece of data stored, why, who can see it, and how long it's kept |
+| [Threat model](docs/THREAT-MODEL.md) | What is protected, who might attack, and the control and test behind each threat |
 | [Design handoff](docs/design/README.md) | How designs from Claude Design become screens |
 | [Initial plan](docs/plans/2026-09-29-open-door-initial-plan.md) | The frozen record of the original planning decisions |
 | [Project rules](CLAUDE.md) | How work is done in this repository |

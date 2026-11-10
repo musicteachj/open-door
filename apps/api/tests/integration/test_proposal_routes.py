@@ -156,7 +156,8 @@ async def test_a_write_without_the_csrf_header_is_forbidden_and_changes_nothing(
     await world.fund("priya")
     proposal_id = await book(world)
 
-    response = world.browser.client.post(path_for(kind, proposal_id))
+    with world.browser.without_csrf():
+        response = world.browser.client.post(path_for(kind, proposal_id))
 
     assert problem_of(response, 403)["detail"] == "The CSRF token is missing or wrong."
     assert await proposal_status(world, proposal_id) == "pending"

@@ -26,7 +26,12 @@ export const railLink = (page: Page, words: RegExp | string) =>
 /** The id of the newest confirm card in the person's conversation, as the API reports it. */
 export async function newestProposalId(page: Page): Promise<string> {
   const id = await page.evaluate(async () => {
-    const response = await fetch('/api/v1/assistant/conversations/current')
+    const csrf = {
+      headers: {
+        'X-CSRF-Token': /(?:^|; )__Host-od_csrf=([^;]*)/.exec(document.cookie)?.[1] ?? '',
+      },
+    }
+    const response = await fetch('/api/v1/assistant/conversations/current', csrf)
     const body = (await response.json()) as { turns: { proposals: { id: string }[] }[] } | null
     return body?.turns.flatMap((turn) => turn.proposals).at(-1)?.id ?? null
   })
@@ -75,7 +80,12 @@ export type Facts = { today: string; weekdays: number[]; holidays: string[] }
 /** Today at the person's location, their scheduled weekdays (1 is Monday), and the holidays. */
 export function factsOf(page: Page): Promise<Facts> {
   return page.evaluate(async () => {
-    const get = async (url: string) => (await fetch(url)).json()
+    const csrf = {
+      headers: {
+        'X-CSRF-Token': /(?:^|; )__Host-od_csrf=([^;]*)/.exec(document.cookie)?.[1] ?? '',
+      },
+    }
+    const get = async (url: string) => (await fetch(url, csrf)).json()
     const { today } = (await get('/api/v1/time-off/summary')) as { today: string }
     const calendar = (await get(
       `/api/v1/time-off/calendar?from=${today}&to=${Number(today.slice(0, 4)) + 1}-12-31`,
@@ -111,7 +121,12 @@ const MAX_REQUEST_DAYS = 31
  */
 export async function daysPastBalance(page: Page, facts: Facts): Promise<string[]> {
   const { availableMinutes, dayMinutes } = await page.evaluate(async (today) => {
-    const get = async (url: string) => (await fetch(url)).json()
+    const csrf = {
+      headers: {
+        'X-CSRF-Token': /(?:^|; )__Host-od_csrf=([^;]*)/.exec(document.cookie)?.[1] ?? '',
+      },
+    }
+    const get = async (url: string) => (await fetch(url, csrf)).json()
     const summary = (await get('/api/v1/time-off/summary')) as { ptoAvailableMinutes: number }
     const calendar = (await get(`/api/v1/time-off/calendar?to=${today}`)) as { dayMinutes: number }
     return { availableMinutes: summary.ptoAvailableMinutes, dayMinutes: calendar.dayMinutes }

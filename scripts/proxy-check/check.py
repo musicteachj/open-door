@@ -498,13 +498,12 @@ def wait_for_nginx() -> None:
 def owner_database_url() -> str:
     os.chdir(API_DIR)  # So the settings find apps/api/.env.
     sys.path.insert(0, str(API_DIR))
-    from app.core.config import Settings
+    from app.core.owner_settings import DatabaseUrlError, owner_database_url
 
-    settings = Settings()
-    url = settings.migration_database_url
-    if url is None:
-        raise CheckError("MIGRATION_DATABASE_URL is not set, so the check cannot clean up.")
-    return str(url)
+    try:
+        return owner_database_url()
+    except DatabaseUrlError as error:
+        raise CheckError(f"{error} So the check cannot clean up.") from None
 
 
 async def database_now(url: str) -> Any:

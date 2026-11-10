@@ -9,23 +9,23 @@ import { server } from './msw'
 // signing out change what GET /me returns, as the real server does.
 const url = (path: string) => `${window.location.origin}${path}`
 
-function problem(status: number, title: string) {
+function problem(status: number, title: string, type = 'about:blank') {
   return HttpResponse.json(
-    { type: 'about:blank', title, status, instance: '/api/v1/me' },
+    { type, title, status, instance: '/api/v1/me' },
     { status, headers: { 'X-Request-ID': 'a'.repeat(32) } },
   )
 }
 
 export function installFakeApi(initial: PersonaKey | null = null) {
   let current: PersonaKey | null = initial
-  let meFailure: number | null = null
+  let meFailure: { status: number; type?: string } | null = null
   // When the sandbox resets, or null for the fixtures' default (21.5 hours from now).
   let expiresAt: string | null = null
   const me = (persona: PersonaKey) => meFor(persona, expiresAt ?? undefined)
 
   server.use(
     http.get(url('/api/v1/me'), () => {
-      if (meFailure !== null) return problem(meFailure, 'Failure')
+      if (meFailure !== null) return problem(meFailure.status, 'Failure', meFailure.type)
       return current === null ? problem(401, 'Not signed in') : HttpResponse.json(me(current))
     }),
     // The assistant home's "Handbook updated" figure reads the handbook's version, so every
@@ -88,9 +88,9 @@ export function installFakeApi(initial: PersonaKey | null = null) {
     setExpiry: (iso: string) => {
       expiresAt = iso
     },
-    /** Make GET /me answer this status, or work again with null. */
-    failMe: (status: number | null) => {
-      meFailure = status
+    /** Make GET /me answer this status (and problem type), or work again with null. */
+    failMe: (status: number | null, type?: string) => {
+      meFailure = status === null ? null : type === undefined ? { status } : { status, type }
     },
   }
 }

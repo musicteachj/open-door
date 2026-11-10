@@ -5,7 +5,7 @@ from collections.abc import Iterator
 
 import pytest
 
-from app.core.logging import JsonFormatter, configure_logging
+from app.core.logging import HealthAccessFilter, JsonFormatter, configure_logging
 from app.core.request_id import request_id_var
 
 UVICORN_LOGGERS = ("uvicorn", "uvicorn.error", "uvicorn.access")
@@ -109,3 +109,45 @@ def test_structured_fields_are_added_but_never_replace_the_standard_keys() -> No
 
     assert entry["tenantId"] == "t-1"
     assert (entry["message"], entry["level"]) == ("security.csrf_rejected", "INFO")
+
+
+def access_record(path: str) -> logging.LogRecord:
+    """A record shaped like uvicorn's access log: (client, method, path, http version, status)."""
+    return logging.LogRecord(
+        "uvicorn.access",
+        logging.INFO,
+        __file__,
+        1,
+        '%s - "%s %s HTTP/%s" %d',
+        ("10.0.0.1:5000", "GET", path, "1.1", 200),
+        None,
+    )
+
+
+@pytest.mark.parametrize(
+    "path", ["/api/v1/health", "/api/v1/health/live", "/api/v1/health?x=1", "/api/v1/health/live?"]
+)
+def test_the_access_log_drops_both_health_paths(path: str) -> None:
+    assert HealthAccessFilter().filter(access_record(path)) is False
+
+
+@pytest.mark.parametrize(
+    "path",
+    ["/api/v1/me", "/api/v1/health/other", "/api/v1/healthz", "/health", "/api/v1/people?q=health"],
+)
+def test_the_access_log_keeps_everything_else(path: str) -> None:
+    assert HealthAccessFilter().filter(access_record(path)) is True
+
+
+def test_other_records_on_the_access_logger_pass() -> None:
+    assert HealthAccessFilter().filter(make_record("started")) is True
+
+
+def test_configure_logging_filters_the_uvicorn_access_logger_once(restore_logging: None) -> None:
+    configure_logging("INFO")
+    configure_logging("INFO")
+    access = logging.getLogger("uvicorn.access")
+
+    assert sum(isinstance(f, HealthAccessFilter) for f in access.filters) == 1
+    assert not access.filter(access_record("/api/v1/health"))
+    assert access.filter(access_record("/api/v1/me"))

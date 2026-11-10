@@ -10,8 +10,90 @@ version (`0.x.y` while the app is being built, `1.0.0` when it is complete).
 
 ## [Unreleased]
 
+### Changed
+
+- **The API no longer holds the owner's database URL** (Phase 8, stage 1). `Settings` loses
+  `MIGRATION_DATABASE_URL` and `CLEANUP_DATABASE_URL`; Alembic, the owner-only scripts, the eval
+  harness, and the proxy check read them from `OwnerSettings` and `CleanupSettings`
+  (`app/core/owner_settings.py`), each of which loads only its own URL and refuses to build without
+  it. An `.env` that still holds them loads fine, and the API ignores them.
+- **Production refuses a test origin** (Phase 8, stage 1). With `APP_ENV=production`, `APP_ORIGIN`
+  must be set (the development default is refused) and must be `https`, except a loopback origin
+  (`http://localhost:<port>` or `http://127.0.0.1:<port>`, matched exactly) for the local
+  production run.
+- **A `FORWARDED_ALLOW_IPS` setting** (Phase 8, stage 1): a comma list of addresses and networks,
+  parsed with `ipaddress`, empty meaning the direct peer only. A wildcard, a /0 network such as
+  `0.0.0.0/0`, and a network with host bits set such as `10.0.0.5/24` are refused. Stage 2 passes
+  it to uvicorn.
+- **One transaction per signed-in request** (Phase 8, stage 1). The session lookup, the tenant
+  context, the actor, and the route's work share one transaction and one connection, so each
+  request pays one round trip fewer. A sign-out that commits mid-request does not stop that request.
+  The turn stream keeps its own short transactions.
+- **CSRF on every signed-in request, reads included** (Phase 8, stage 1). A `GET` without a valid
+  `X-CSRF-Token` is now a 403 of problem type `csrf-rejected` (the web app treats it as signed out), logged as
+  `security.csrf_rejected`. This replaces the per-route `AuditedReadDep`, so a future audited read cannot forget it. The web client already sent the
+  header on every call; the browser tests' own `fetch` calls now do too.
+- **Request bodies are capped at 64 KiB** (Phase 8, stage 1). A pure ASGI middleware refuses a
+  `Content-Length` over the cap with a 413 problem before the app reads a byte, and counts a
+  chunked body as it is read, cutting it off at the cap. The schemas' early-reject ceilings come
+  down to twice the routes' real limits: a question 4,000 characters, a case's words 8,000, a
+  denial note 600 (the routes' own limits and texts, 2,000, 4,000, and 300, are unchanged). The
+  largest body that still passes them, 8,000 four-byte characters as JSON, is about 32 KB.
+- **Database timeouts** (Phase 8, stage 1). The app's engine sets a 10-second `statement_timeout`
+  and a 30-second `idle_in_transaction_session_timeout` on every connection, and the bootstrap
+  script sets the same on each login with `ALTER ROLE ... SET`, except that the cleanup login gets
+  60 seconds for statements (deleting an expired sandbox cascades through every table). A canceled
+  statement or a timed-out lock wait is a 503 `database-busy` problem, not a hang or a 500. The
+  time-off confirm sets `lock_timeout` to 5 seconds, so a held person lock fails the confirm cleanly with the card left
+  pending. Seeding a sandbox takes about 0.1 second, its slowest statement 0.03 second.
+- **Health is split into liveness and readiness** (Phase 8, stage 1). `GET /api/v1/health/live`
+  never touches the database. `GET /api/v1/health` pings it with a 2-second limit, keeps the result
+  for 1 second, and runs one check at a time (a probe queued behind a stalled check waits at most
+  2.5 seconds, then gets the last answer if it is under a second old, or 503). Both send `Cache-Control: no-store`, and neither is
+  written to the access log (nothing else is dropped from it).
+- **Production serves no API docs** (Phase 8, stage 1). With `APP_ENV=production`, `/docs`,
+  `/redoc`, and `/openapi.json` are 404; `make openapi` still exports the same schema.
+- **`Retry-After` on the daily budget 429** (Phase 8, stage 1): whole seconds to the next UTC
+  midnight, at least 1. A sandbox's own budget 429 has none, since it never resets. A budget refusal
+  inside the turn stream is an event, not an HTTP status, so it carries no header. `ProblemError`
+  can now carry response headers.
+- **Another tab's session change is noticed at once** (Phase 8, stage 1). A tab that switches
+  persona, signs out, or starts a sandbox posts `{kind, from}` on a `BroadcastChannel`
+  (`od.session`), with no token or name, and every other tab refetches `/me` once, so a tab showing
+  HR's private details resets without a focus or a click. A tab ignores its own message.
+
+### Security
+
+- **Sessions are under row-level security** (Phase 8, stage 1, migration 0017). The API's login
+  could read, insert, and delete every sandbox's sessions, and the Phase 1 close-out review inserted
+  an HR session in another sandbox from `psql`. Now a lookup presents its token's hash
+  (`app.session_token_hash`) and sees only that row or its own sandbox's rows; a bare `SELECT` sees
+  nothing; an insert must be for the current sandbox and expire no later than it; a delete reaches
+  only the current sandbox's rows or the presented one. Tests run that insert as
+  `od_app_login` and watch it fail. Raw SQL as that login can still set another sandbox's context
+  itself, then insert there (expiry still capped); the threat model accepts that, since the login's
+  password is a full-access secret.
+- **Sign-out ends a session's replacements** (Phase 8, stage 1, migration 0017). Each session has a
+  `family_id` that a persona switch copies, and sign-out deletes the whole family, so a switch in
+  one tab racing a sign-out in another can no longer leave the new persona signed in. The delete
+  waits for a switch that has not committed and then takes a fresh snapshot, which tests prove.
+- **The owner's and the cleanup login's credentials stay out of the API process** (Phase 8, stage
+  1), as above.
+
+### Fixed
+
+- **Audit events store SQL `NULL` for "nothing"** (Phase 8, stage 1, migration 0017). `before` and
+  `after` used to hold the JSON value `null`, which `IS NULL` never found; the migration converts
+  existing rows.
+
 ### Added
 
+- **The threat model** (Phase 8, stage 1): [`docs/THREAT-MODEL.md`](docs/THREAT-MODEL.md) names
+  what Open Door protects, who might attack it, and its six trust boundaries, and for each boundary
+  the threats (spoofing, tampering, repudiation, disclosure, denial of service, elevation) with the
+  control and the test or eval behind each. It maps the OWASP Top 10 for LLM applications to the
+  seven invariants and lists the accepted risks and what Phase 9 owns. Every later Phase 8 stage
+  and the phase's security review read it as their brief.
 - **The Phase 8 screen** (Phase 8, design). Screen 16, the recorded walkthrough: a public page with
   the demo video of the guided tour, its recording date and model, and a step-by-step transcript,
   plus the landing's link to it and a line saying a quick Cloudflare check runs when a sandbox
