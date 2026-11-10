@@ -55,9 +55,14 @@ jobs:
         with:
           enable-cache: true
           cache-dependency-glob: apps/api/uv.lock
-      - run: uv sync --locked
-      # --skip-editable skips the API itself, which isn't a published package.
-      - run: uv run --with pip-audit pip-audit --skip-editable
+      # Audits exactly what uv.lock pins, with hashes, and nothing else: no virtual environment, and
+      # no pip-audit dependencies mixed in. --no-emit-project leaves out the API itself, which isn't
+      # a published package. The version is pinned by hand, as the Makefile's PIP_AUDIT is.
+      # `shell: bash` turns on pipefail, so a failed export fails the step instead of auditing an
+      # empty list (pip-audit passes on no input).
+      - name: Audit the locked dependencies
+        shell: bash
+        run: uv export --locked --no-emit-project | uvx pip-audit@2.10.1 -r /dev/stdin --no-deps --disable-pip
 
   web-dependencies:
     name: Vulnerable web dependencies (npm audit)

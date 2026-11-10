@@ -1,4 +1,5 @@
-import { expect, test, type Page } from '@playwright/test'
+import { expect, test } from './fixtures'
+import type { Page } from '@playwright/test'
 import { GALLERY_STATE_IDS } from './gallery-ids'
 import {
   expectNoViolationsIn,

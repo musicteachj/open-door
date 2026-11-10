@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test'
+import { expect, test } from './fixtures'
 import { GALLERY_STATE_IDS } from './gallery-ids'
 import {
   expectSectionHeadings,

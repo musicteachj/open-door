@@ -8,6 +8,32 @@ import { defineConfig, devices } from '@playwright/test'
 const WEB_ORIGIN = 'http://localhost:4173'
 const API_ORIGIN = 'http://127.0.0.1:8100'
 
+// E2E_TARGET=image (`make e2e-image`, and CI) runs the same specs against the production image
+// instead: the test variant of `open-door:test`, which has the gallery, serving the whole app and
+// the API on one origin, :8100, with the real Content Security Policy and security headers. The
+// launcher (scripts/image/serve.py) is the one web server, so Playwright stops the container when
+// it ends. The default stays the Vite preview plus a host uvicorn, which starts faster.
+const IMAGE_TARGET = process.env.E2E_TARGET === 'image'
+const IMAGE_ORIGIN = 'http://localhost:8100'
+
+const imageServer = {
+  // The launcher passes the API only its own settings (APP_ENV=test, the scripted model, and the
+  // raised daily budget for the reason given on the host server below). It runs from apps/api for
+  // the database URL in .env (or the job's environment in CI).
+  command: `uv run python ../../scripts/image/serve.py --port 8100 --origin ${IMAGE_ORIGIN}`,
+  cwd: '../api',
+  url: `${API_ORIGIN}/api/v1/health/live`,
+  // Never reused, like the host API: a server already on :8100 would be tested in its place.
+  reuseExistingServer: false,
+  // SIGTERM reaches the launcher, which stops the container (uvicorn drains) before it exits.
+  gracefulShutdown: { signal: 'SIGTERM' as const, timeout: 30_000 },
+  timeout: 120_000,
+  stdout: 'ignore' as const,
+  // The launcher prints the container's last lines to stderr only when it exits early, so a
+  // failed start shows why and a normal run stays quiet.
+  stderr: 'pipe' as const,
+}
+
 export default defineConfig({
   testDir: './e2e',
   // Notes the database's time before the run and deletes the daily AI ledger rows made since, after.
@@ -23,42 +49,45 @@ export default defineConfig({
   workers: process.env.CI ? 1 : undefined,
   reporter: process.env.CI ? [['github'], ['html', { open: 'never' }]] : 'list',
   use: {
-    baseURL: WEB_ORIGIN,
+    baseURL: IMAGE_TARGET ? IMAGE_ORIGIN : WEB_ORIGIN,
     trace: 'retain-on-failure',
   },
   projects: [{ name: 'chromium', use: { ...devices['Desktop Chrome'] } }],
-  webServer: [
-    {
-      // `env -u` because an agent shell may export ANTHROPIC_API_KEY as an empty string, which
-      // would shadow the key in .env. The API connects with the DATABASE_URLs in apps/api/.env
-      // (or the job's environment in CI) and accepts requests from the preview server's origin.
-      command: 'env -u ANTHROPIC_API_KEY uv run uvicorn --factory app.main:create_app --port 8100',
-      cwd: '../api',
-      url: `${API_ORIGIN}/api/v1/health`,
-      // AI_TRANSPORT is pinned on the API this config starts, and `reuseExistingServer` is false so
-      // no other API can stand in for it: a local .env set to `anthropic`, or a stray server on
-      // :8100, can't make the browser tests pay for calls (a busy :8100 fails the run instead).
-      // The daily budget is raised because a stopped or failed turn keeps its
-      // reservation (ADR 0011, "errs toward spending less"), about $0.17 each, so the scripted
-      // Stop and error tests would otherwise use up the demo's $3 day and every later turn would
-      // get the daily banner. The ledger is shared by every run on the same database, so
-      // e2e/ledger-cleanup.ts deletes the rows a run made when it ends (the API's own tests would
-      // fail past the real $3 cap otherwise).
-      env: { APP_ORIGIN: WEB_ORIGIN, AI_TRANSPORT: 'scripted', AI_DAILY_BUDGET_USD: '1000' },
-      reuseExistingServer: false,
-      stdout: 'ignore',
-      stderr: 'ignore',
-    },
-    {
-      // Builds with the gallery into dist-e2e/, so the production dist/ is never replaced, then
-      // serves it with /api forwarded to the e2e API (vite.config.ts reads API_PROXY_TARGET).
-      command: 'npm run build:e2e && npm run preview -- --outDir dist-e2e',
-      url: WEB_ORIGIN,
-      env: { API_PROXY_TARGET: API_ORIGIN },
-      reuseExistingServer: !process.env.CI,
-      timeout: 120_000,
-      stdout: 'ignore',
-      stderr: 'ignore',
-    },
-  ],
+  webServer: IMAGE_TARGET
+    ? [imageServer]
+    : [
+        {
+          // `env -u` because an agent shell may export ANTHROPIC_API_KEY as an empty string, which
+          // would shadow the key in .env. The API connects with the DATABASE_URLs in apps/api/.env
+          // (or the job's environment in CI) and accepts requests from the preview server's origin.
+          command:
+            'env -u ANTHROPIC_API_KEY uv run uvicorn --factory app.main:create_app --port 8100',
+          cwd: '../api',
+          url: `${API_ORIGIN}/api/v1/health`,
+          // AI_TRANSPORT is pinned on the API this config starts, and `reuseExistingServer` is false so
+          // no other API can stand in for it: a local .env set to `anthropic`, or a stray server on
+          // :8100, can't make the browser tests pay for calls (a busy :8100 fails the run instead).
+          // The daily budget is raised because a stopped or failed turn keeps its
+          // reservation (ADR 0011, "errs toward spending less"), about $0.17 each, so the scripted
+          // Stop and error tests would otherwise use up the demo's $3 day and every later turn would
+          // get the daily banner. The ledger is shared by every run on the same database, so
+          // e2e/ledger-cleanup.ts deletes the rows a run made when it ends (the API's own tests would
+          // fail past the real $3 cap otherwise).
+          env: { APP_ORIGIN: WEB_ORIGIN, AI_TRANSPORT: 'scripted', AI_DAILY_BUDGET_USD: '1000' },
+          reuseExistingServer: false,
+          stdout: 'ignore',
+          stderr: 'ignore',
+        },
+        {
+          // Builds with the gallery into dist-e2e/, so the production dist/ is never replaced, then
+          // serves it with /api forwarded to the e2e API (vite.config.ts reads API_PROXY_TARGET).
+          command: 'npm run build:e2e && npm run preview -- --outDir dist-e2e',
+          url: WEB_ORIGIN,
+          env: { API_PROXY_TARGET: API_ORIGIN },
+          reuseExistingServer: !process.env.CI,
+          timeout: 120_000,
+          stdout: 'ignore',
+          stderr: 'ignore',
+        },
+      ],
 })

@@ -1,5 +1,6 @@
 import AxeBuilder from '@axe-core/playwright'
-import { expect, test, type Page } from '@playwright/test'
+import { expect, test } from './fixtures'
+import type { Page } from '@playwright/test'
 import { GALLERY_STATE_IDS } from './gallery-ids'
 import { AXE_TAGS, focusRing, themeColor } from './helpers'
 

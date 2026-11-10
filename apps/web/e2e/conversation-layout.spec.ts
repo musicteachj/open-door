@@ -1,4 +1,5 @@
-import { expect, test, type Locator, type Page } from '@playwright/test'
+import { expect, test } from './fixtures'
+import type { Locator, Page } from '@playwright/test'
 import {
   ask,
   askAndWaitForAnswer,
@@ -14,7 +15,7 @@ import {
   stubConversation,
   waitForTurnSaved,
 } from './conversation-helpers'
-import { MODAL_OVERLAY_RULES, scan, startAs } from './helpers'
+import { addTestStyle, MODAL_OVERLAY_RULES, scan, startAs } from './helpers'
 
 // The conversation page's layout in a real browser, measured on the real page (not the gallery's
 // frame, whose column is a different width). Two rules keep these from failing on another
@@ -103,9 +104,7 @@ test.describe('at 390 px', () => {
     // chip's accessible name keeps all of it. (The squeeze is the test's own, so no axe scan after.)
     const chips = page.locator('[data-slot="source-chips"] ul')
     await expect(chips).toHaveCSS('flex-wrap', 'wrap')
-    await page.addStyleTag({
-      content: '[data-slot="source-chips"] ul { width: 130px !important; }',
-    })
+    await addTestStyle(page, '[data-slot="source-chips"] ul { width: 130px !important; }')
     const chip = page.locator('[data-slot="source-chip"]')
     expect((await boxOf(chip)).width).toBeLessThanOrEqual(131)
     const label = chip.locator('.truncate')

@@ -1,5 +1,9 @@
 # Fast checks before each commit. CI runs the full set, so these are a head start, not the gate.
-# Install once with `make setup`; run by hand with `uvx pre-commit run --all-files`.
+# Install once with `make setup`, which installs pre-commit itself with `uv tool install` (so the
+# git hook points at a durable tool, not uvx's cache) and then runs `pre-commit install`. Run by
+# hand with `pre-commit run --all-files`.
+# The gitleaks `rev` below must equal the Makefile's GITLEAKS and the Security workflow's
+# GITLEAKS_VERSION: `make check-workflows` fails when they differ.
 repos:
   - repo: https://github.com/astral-sh/ruff-pre-commit
     rev: v0.16.9

@@ -55,11 +55,16 @@ jobs:
               - 'apps/web/src/generated/**'
               - 'evals/**'
               - 'handbook/**'
-              - 'scripts/proxy-check/**'
+              # The scripts the API's tests import or read (the image check's judgment, the proxy
+              # check's, and the entrypoint).
+              - 'scripts/**'
               - 'compose.yaml'
               # The eval runner's tests read the eval-live target and the fixtures' ignore rule.
               - 'Makefile'
               - '.gitignore'
+              # The cost-report tests read the rules the evals follow, and the spec that sets them.
+              - 'CLAUDE.md'
+              - 'docs/specs/2026-10-31-phase-7-ai-ops-reviewer-model.md'
               - '.github/workflows/ci.yml'
             web:
               - 'apps/web/**'
@@ -76,6 +81,10 @@ jobs:
               - 'apps/api/**'
               # The API the browser tests run against loads the handbook from here.
               - 'handbook/**'
+              # The image they run against is built from these, and the proxy check runs it.
+              - 'Dockerfile'
+              - '.dockerignore'
+              - 'scripts/image/**'
               - 'scripts/proxy-check/**'
               - 'Makefile'
               - '.nvmrc'
@@ -127,9 +136,10 @@ jobs:
           cache-dependency-glob: apps/api/uv.lock
       # --locked fails if uv.lock is out of date with pyproject.toml instead of quietly updating it.
       - run: uv sync --locked
-      # ../../evals holds the retrieval eval's runner; --config gives it the API's lint rules.
-      - run: uv run ruff check . ../../evals ../../scripts/proxy-check --config pyproject.toml
-      - run: uv run ruff format --check . ../../evals ../../scripts/proxy-check --config pyproject.toml
+      # ../../evals holds the retrieval eval's runner and ../../scripts the image, proxy check, and
+      # CI scripts; --config gives them the API's lint rules.
+      - run: uv run ruff check . ../../evals ../../scripts --config pyproject.toml
+      - run: uv run ruff format --check . ../../evals ../../scripts --config pyproject.toml
       - run: uv run mypy
       - name: Domain and policy code import no framework
         run: uv run lint-imports
@@ -207,16 +217,20 @@ jobs:
       - name: The committed API client matches openapi.json
         run: npm run check:api-client
 
-  # The browser tests: Chromium against the real API and the real database, and the web app built
-  # with the component gallery (VITE_GALLERY) into dist-e2e/. No paid AI calls.
+  # The production image, built once and tested three ways: inspected (`make image-check`), driven
+  # by the browser tests (Chromium against the real database, the whole app on one origin with the
+  # real Content Security Policy, and every test also failing on a CSP violation), and run behind a
+  # strict nginx (`make proxy-check`). The browser tests run against the image, not the Vite
+  # preview. The gallery specs need the test variant, so both variants are built. No paid AI calls.
   e2e:
     name: E2E
     needs: changes
     if: needs.changes.outputs.e2e == 'true' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
-    # The browser tests run on one worker (playwright.config.ts) and took about 18 minutes after
-    # Phase 5 stage 5; 30 leaves room for a slow runner and Stage 6's page tests.
-    timeout-minutes: 30
+    # About 18 minutes of browser tests on one worker (playwright.config.ts), plus the two image
+    # builds (a cold build is several minutes, a cached one about one), the image check, and the
+    # proxy check (about two). 45 leaves room for a cold cache and a slow runner.
+    timeout-minutes: 45
     services:
       # The same service as the API job.
       postgres:
@@ -232,8 +246,8 @@ jobs:
           --health-interval 5s
           --health-timeout 5s
           --health-retries 10
-    # The API's settings, as in the API job. Playwright starts the API on :8100 and sets its
-    # APP_ORIGIN to the preview server's, so none is set here.
+    # The API's settings, as in the API job. The launcher (scripts/image/serve.py) passes the
+    # container only the ones it needs, and sets its APP_ORIGIN itself.
     env:
       APP_ENV: test
       # The fixed, obviously fake test key (32 zero bytes). The API refuses it unless APP_ENV=test.
@@ -245,7 +259,31 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      # Both variants are loaded into the runner's Docker under the tags the Makefile uses, so the
+      # steps below start them without building again (SKIP_BUILD=1). Each has its own cache scope.
+      - name: Build the production image
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          load: true
+          tags: open-door:prod
+          cache-from: type=gha,scope=image-prod
+          cache-to: type=gha,scope=image-prod,mode=max
+      - name: Build the test image (the production image plus the component gallery)
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          load: true
+          tags: open-door:test
+          build-args: GALLERY=true
+          cache-from: type=gha,scope=image-test
+          cache-to: type=gha,scope=image-test,mode=max
+      # zizmor flags every cache in this job because build-push-action looks like it publishes
+      # artifacts. It does not here: the images are loaded into the runner (load: true), never
+      # pushed, and the job has read-only permissions and no secrets. The three ignores below are
+      # for that reason, so a poisoned cache could at worst fail this job's own run.
+      - uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2 # zizmor: ignore[cache-poisoning]
         with:
           enable-cache: true
           cache-dependency-glob: apps/api/uv.lock
@@ -262,35 +300,41 @@ jobs:
       - name: Load the handbook
         run: uv run python scripts/ingest_handbook.py ingest
         working-directory: apps/api
-      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0 # zizmor: ignore[cache-poisoning]
         with:
           node-version-file: .nvmrc
           cache: npm
           cache-dependency-path: apps/web/package-lock.json
       - run: npm ci
         working-directory: apps/web
+      # Non-root, no secrets or tests inside, tzdata, no emSign root, no gallery in the production
+      # build, the security headers and the CSP nonce, and the forwarded-address rule.
+      - name: Inspect the images
+        run: make image-check SKIP_BUILD=1
       # The cache key names the installed Playwright version, so a new version downloads fresh
       # browsers. The system libraries are installed on every run, because they are not cached.
       - name: Read the Playwright version
         id: playwright
         run: echo "version=$(npx playwright --version | cut -d' ' -f2)" >> "$GITHUB_OUTPUT"
         working-directory: apps/web
-      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0 # zizmor: ignore[cache-poisoning]
         with:
           path: ~/.cache/ms-playwright
           key: playwright-${{ runner.os }}-${{ steps.playwright.outputs.version }}
       - name: Install Chromium and its system libraries
         run: npx playwright install --with-deps chromium
         working-directory: apps/web
-      - name: Browser tests
+      # Playwright starts the test image through scripts/image/serve.py (E2E_TARGET=image).
+      - name: Browser tests, against the image
         run: npm run e2e
         working-directory: apps/web
+        env:
+          E2E_TARGET: image
       # The turn stream through a strict nginx (a 20-second read timeout), on Docker and the same
-      # database the browser tests used. It starts its own API on :8200 and nginx on :8201, with
-      # the scripted model, so no paid AI calls. The job's environment already has the database
-      # URLs. About two minutes.
+      # database the browser tests used. It starts the test image on :8200 and nginx on :8201,
+      # with the scripted model, so no paid AI calls. About two minutes.
       - name: Proxy check
-        run: make proxy-check
+        run: make proxy-check SKIP_BUILD=1
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: failure()
         with:
@@ -320,7 +364,9 @@ jobs:
         with:
           persist-credentials: false
       - uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
-      - name: Workflow mistakes (actionlint) and security problems (zizmor)
+      # Also runs scripts/check_tool_versions.py (one gitleaks version in three files) and
+      # scripts/check_path_filters.py (every file a test reads is inside its job's filter).
+      - name: Workflow mistakes (actionlint, zizmor), tool versions, and path filters
         # The token lets zizmor confirm that each pinned commit really belongs to its action.
         env:
           GH_TOKEN: ${{ github.token }}

@@ -14,6 +14,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from app.core.api_paths import is_api_request
 from app.core.cache_control import CACHE_CONTROL_HEADER, NO_STORE
 from app.core.request_id import REQUEST_ID_HEADER
+from app.core.security_headers import set_security_headers
 from app.db.errors import has_sqlstate
 
 PROBLEM_JSON = "application/problem+json"
@@ -146,10 +147,13 @@ async def _unhandled(request: Request, exc: Exception) -> JSONResponse:
     logger.error("Unhandled error", exc_info=exc, extra={"request_id": request_id})
     # Like the request-ID header, this can't come from a middleware: this response is sent from
     # outside all of them.
+    # The security headers are set here for the same reason.
     headers = {CACHE_CONTROL_HEADER: NO_STORE} if is_api_request(request.scope) else None
-    return problem_response(
+    response = problem_response(
         request, status.HTTP_500_INTERNAL_SERVER_ERROR, "Something went wrong.", headers=headers
     )
+    set_security_headers(response.headers)
+    return response
 
 
 def install_problem_handlers(app: FastAPI) -> None:

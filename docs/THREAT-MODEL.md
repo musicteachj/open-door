@@ -78,8 +78,8 @@ root folder.
 | S | A cross-site page sends a state-changing request with the visitor's cookie | `__Host-` cookies with `SameSite=Lax`; the same-origin check on unsafe methods (`app/modules/identity/same_origin.py`); the CSRF token in `X-CSRF-Token`, compared in constant time | `tests/test_same_origin.py`, `tests/integration/test_api_sessions.py` |
 | S | A cross-site page reads data with a signed-in `GET` (a navigation, an `<img>`, a form) | **Phase 8, Stage 1:** CSRF on every signed-in API request, any method, which retires the per-route audited-read check. A refusal is a 403 of type `csrf-rejected`, which the web app treats as signed out | `tests/integration/test_csrf.py` |
 | T | A huge body exhausts a task's memory | **Phase 8, Stage 1:** a 64 KiB body cap in the ASGI layer, by `Content-Length` and by counting a streamed body; schema ceilings at twice the real limits | `tests/test_body_limit.py` |
-| I | The page loads script or style from somewhere else, or is framed | **Phase 8, Stage 2:** strict CSP with a per-response nonce, no inline script, `frame-ancestors 'none'`, and the other security headers (ADR 0020) | the browser suite fails on any CSP violation (Stage 2) |
-| I | API docs reveal every route in production | **Phase 8, Stage 1:** `/docs`, `/redoc`, `/openapi.json` are 404 in production; `--no-server-header` (Stage 2) | `tests/test_app_state.py` |
+| I | The page loads script or style from somewhere else, or is framed | **Phase 8, Stage 2:** the API serves the built app with a strict CSP and a fresh nonce on every page (`app/web_app.py`), no inline script, `frame-ancestors 'none'`; HSTS, `nosniff`, `Referrer-Policy: same-origin`, a closed `Permissions-Policy`, and COOP on every response, a 500 included (`app/core/security_headers.py`; ADR 0020) | `tests/test_web_app.py`, `tests/test_security_headers.py`; CI runs the browser suite against the image, and any CSP violation fails the test (`apps/web/e2e/fixtures.ts`, proved by `e2e/csp-guard.spec.ts`) |
+| I | API docs reveal every route in production | **Phase 8, Stage 1:** `/docs`, `/redoc`, `/openapi.json` are 404 in production; **Stage 2:** the image runs uvicorn with `--no-server-header` | `tests/test_app_state.py`, `make image-check` |
 | D | A script starts sandboxes in a loop | **Phase 8, Stage 4:** Cloudflare Turnstile on `POST /sandboxes`, per-address and daily limits in Postgres, `Retry-After` (ADR 0021) | Stage 4's limit and Turnstile tests |
 | D | A script spends the AI budget | Insert-only budget ledger, per-sandbox and per-day caps checked before every call (ADR 0011, `app/ai/budget.py`, `app/ai/admission.py`); a 429 with **Phase 8, Stage 1** `Retry-After` for the daily cap | `tests/integration/test_budget.py`, `tests/test_admission.py`, `tests/integration/test_turn_stream.py` |
 | E | Another tab keeps showing HR's private view after this tab signed out | **Phase 8, Stage 1:** a `BroadcastChannel` message makes every tab refetch `/me` at once | `apps/web/src/lib/session-channel.test.ts`, `apps/web/e2e/session.spec.ts` |
@@ -88,7 +88,7 @@ root folder.
 
 | | Threat | Control | Proof |
 |---|---|---|---|
-| S | A client forges `X-Forwarded-For` to dodge the limits or poison the security log | **Phase 8:** the `FORWARDED_ALLOW_IPS` setting (Stage 1) feeds uvicorn's `--forwarded-allow-ips` (Stage 2); unset, the peer address is used | `tests/test_config.py`; the limit tests rotate the header (Stage 4) |
+| S | A client forges `X-Forwarded-For` to dodge the limits or poison the security log | **Phase 8:** the `FORWARDED_ALLOW_IPS` setting (Stage 1) feeds uvicorn's `--forwarded-allow-ips` through the image's entrypoint (Stage 2); unset or empty, no proxy is trusted and the peer address is used | `tests/test_config.py`, `tests/test_image_check_script.py`, `make image-check` (a forged header is ignored, and trusted only from the named address); the limit tests rotate the header (Stage 4) |
 | I | A raw client address is stored | Only the existing security log sees an address; the limits store a keyed hash (Stage 4, ADR 0021) | Stage 4's tests |
 | D | Health checks load the database or flood the log | **Phase 8, Stage 1:** `/health/live` never touches the database; `/health` pings with a 2-second limit, cached for 1 second, one check at a time; both kept out of the access log | `tests/test_health.py` |
 
@@ -113,7 +113,7 @@ root folder.
 | | Threat | Control | Proof |
 |---|---|---|---|
 | S | A forged Turnstile token passes | **Phase 8, Stage 4:** server-side `siteverify`, refusing a failed, spent, or unreachable check | Stage 4's Turnstile tests |
-| I | A key leaks in a log, a problem response, or the image | Keys are `SecretStr` and never print; problems carry no exception text; gitleaks in pre-commit and CI; the keyring stays out of the image (Stage 2) | `tests/test_config.py`, `tests/test_problems.py`, `.github/workflows/security.yml` |
+| I | A key leaks in a log, a problem response, or the image | Keys are `SecretStr` and never print; problems carry no exception text; gitleaks in pre-commit and CI; **Stage 2:** the keyring, `.env`, and tests stay out of the image (`.dockerignore`), and the test runs pass the keyring through the environment, never on the command line | `tests/test_config.py`, `tests/test_problems.py`, `.github/workflows/security.yml`, `make image-check`, `tests/test_image_container.py` |
 | I | More personal data than needed reaches a vendor | The personal-data check refuses card and ID numbers before a question is sent; only the needed fields reach the model | `tests/test_personal_data.py`, `apps/web/src/lib/personal-data.test.ts` |
 | T | A test transport reaches production | Production refuses the scripted and replay transports and the test keyring at start | `tests/test_transport_startup.py` |
 | D | A vendor outage hangs a turn | Timeouts on every model call; the guard's 10-second limit (ADR 0009) | `tests/integration/test_turn.py`, `tests/test_guard.py` |
@@ -134,9 +134,9 @@ root folder.
 
 | | Threat | Control | Proof |
 |---|---|---|---|
-| T | A compromised action or base image runs in CI or ships | Every action pinned by commit, every Docker base image by digest (Stage 2); Dependabot opens updates as PRs | `.github/workflows/`, `.github/dependabot.yml` |
-| T | A vulnerable dependency ships | `pip-audit` and `npm audit` in CI (`security.yml`), `make audit` locally | `.github/workflows/security.yml` |
-| I | A secret is committed | gitleaks in pre-commit and on every commit in CI | `.github/workflows/security.yml`, `.pre-commit-config.yaml` |
+| T | A compromised action or base image runs in CI or ships | Every action pinned by commit, every Docker base image by digest (Stage 2); Dependabot opens updates as PRs, now for the Docker images and pre-commit hooks too; the image's CA store has no emSign root | `.github/workflows/`, `.github/dependabot.yml`, `Dockerfile`, `make image-check` |
+| T | A vulnerable dependency ships | `pip-audit` (over the app's locked dependencies only, **Stage 2**) and `npm audit` in CI (`security.yml`), `make audit` locally | `.github/workflows/security.yml` |
+| I | A secret is committed | gitleaks in pre-commit and on every commit in CI, one version in all three places (**Stage 2**) | `.github/workflows/security.yml`, `.pre-commit-config.yaml`, `scripts/check_tool_versions.py` |
 | E | CI spends money on the model | CI replays recorded fixtures; no paid call on push or PR; a live eval is a local, capped run | `make eval-offline` in CI |
 | E | The deploy role does more than deploy | Phase 9 | Phase 9 |
 

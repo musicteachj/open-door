@@ -3,7 +3,8 @@
 Run it with `make proxy-check`, after `make db` (locally) or the E2E job's setup (in CI): it
 uses the seeded database.
 
-It starts the API itself on :8200 (no reload, the scripted model), puts nginx in front of it on
+It starts the API itself on :8200 as the production image (`open-door:test`, built by `make
+proxy-check` first; the scripted model), puts nginx in front of it on
 :8201 and :8202 (`compose.yaml`, `nginx.conf`), starts a sandbox as a browser would, and runs four
 checks. Two of them are controls that show an assertion can fail:
 
@@ -22,9 +23,11 @@ checks. Two of them are controls that show an assertion can fail:
    nothing readable may arrive in time. It proves the pass run's timing assertions can fail.
    (`proxy_buffering on` alone does not hold a small stream in nginx: see `nginx.conf`.) The runs
    disconnect after 5 seconds, which stops their turns.
-4. The shutdown run sends SIGTERM to the API in the middle of a silent stream. It must exit cleanly
-   (code 0, or ended by SIGTERM after uvicorn's shutdown) within its grace period, and the turn
-   must be saved as `stopped`.
+4. The shutdown run sends SIGTERM to the container (`docker kill --signal TERM`) in the middle of a
+   silent stream, so it proves the signal reaches uvicorn through the entrypoint, with uvicorn as
+   PID 1 as the deploy runs it. The container must exit cleanly within its grace period
+   (`docker wait`: code 0, or 143 if uvicorn's re-raised SIGTERM ends it), and the turn must be
+   saved as `stopped`.
 
 Everything it starts is stopped at the end, even on failure, and the sandbox and daily-ledger rows
 its turns added are deleted. The judgment (`problems_in_*`) is plain functions on recorded
@@ -34,11 +37,9 @@ timelines, tested offline in `apps/api/tests/test_proxy_check_script.py`.
 import asyncio
 import codecs
 import os
-import signal
 import socket
 import subprocess
 import sys
-import tempfile
 import threading
 import time
 from collections.abc import Callable
@@ -48,16 +49,20 @@ from typing import Any
 
 import httpx
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "image"))
+import container
+from container import ContainerError, remove, run
+
 API_PORT = 8200
 NGINX_PORT = 8201
 BUFFERED_PORT = 8202
 NGINX_ORIGIN = f"http://127.0.0.1:{NGINX_PORT}"
 BUFFERED_ORIGIN = f"http://127.0.0.1:{BUFFERED_PORT}"
-API_ORIGIN = f"http://127.0.0.1:{API_PORT}"
 # The buffering control listens this long for a first event, then disconnects.
 BUFFERING_LISTEN_SECONDS = 5.0
 HERE = Path(__file__).resolve().parent
 API_DIR = HERE.parents[1] / "apps" / "api"
+API_CONTAINER = "open-door-proxy-check-api"
 
 # The scripted model's silent scenario: no events for 45 seconds, then an answer.
 SILENCE_QUESTION = "scripted silence: how much paid sick leave do I get?"
@@ -79,6 +84,7 @@ CONTROL_CUT_BETWEEN_SECONDS = (15.0, 30.0)
 # save the streams still open (see `app/main.py`), so 15 + 12 fits inside the 30 with room to spare.
 GRACEFUL_SHUTDOWN_SECONDS = 15
 SHUTDOWN_EXIT_LIMIT_SECONDS = 40.0
+CLEAN_EXIT_CODES = frozenset({0, 143})
 
 
 # --- The judgment: plain functions on what was seen ---------------------------------------
@@ -228,12 +234,15 @@ def problems_in_buffering_control(timeline: Timeline) -> list[str]:
 
 def problems_in_shutdown_run(*, exit_code: int | None, turn_statuses: list[str]) -> list[str]:
     problems: list[str] = []
-    # uvicorn finishes its shutdown and then re-raises the signal, so a clean stop ends the process
-    # by SIGTERM itself (Python reports -15; a shell reports 143). A crash is 1, a kill is -9.
-    if exit_code not in (0, -signal.SIGTERM):
+    # uvicorn finishes its shutdown and then re-raises the signal. As PID 1 (no init, as
+    # deployed) the kernel ignores that default-action signal and the process exits 0; under an
+    # init it would end by SIGTERM itself, which Docker reports as 143 (128 + 15). A crash is 1,
+    # and a kill is 137.
+    if exit_code not in CLEAN_EXIT_CODES:
         problems.append(
-            f"The API's exit code after SIGTERM was {exit_code}; a clean stop is 0 or "
-            f"{-signal.SIGTERM} (ended by SIGTERM itself, after uvicorn finished shutting down)."
+            f"The API container's exit code after SIGTERM was {exit_code}; a clean stop is one of "
+            f"{sorted(CLEAN_EXIT_CODES)} (0, or 143: ended by SIGTERM itself, after uvicorn "
+            "finished shutting down)."
         )
     if turn_statuses != ["stopped"]:
         problems.append(
@@ -241,24 +250,6 @@ def problems_in_shutdown_run(*, exit_code: int | None, turn_statuses: list[str])
             f"{turn_statuses}."
         )
     return problems
-
-
-def bind_host_for(platform: str, *, override: str | None, bridge_gateway: str | None) -> str:
-    """Where the API listens so that nginx in Docker can reach it, and nothing wider.
-
-    Docker Desktop (macOS) forwards `host.docker.internal` to the host's loopback. On Linux,
-    `host-gateway` is the docker bridge's gateway address, so the API listens only there.
-    `PROXY_CHECK_BIND` overrides either."""
-    if override:
-        return override
-    if platform == "darwin":
-        return "127.0.0.1"
-    if bridge_gateway:
-        return bridge_gateway
-    raise CheckError(
-        "Could not find the docker bridge gateway for the API to listen on. "
-        "Set PROXY_CHECK_BIND to an address nginx in Docker can reach."
-    )
 
 
 # --- Talking to the stream ----------------------------------------------------------------
@@ -354,78 +345,79 @@ def turns_url(conversation_id: str, origin: str = NGINX_ORIGIN) -> str:
     return f"{origin}/api/v1/assistant/conversations/{conversation_id}/turns"
 
 
-class CheckError(Exception):
-    """The proxy check found something wrong; the message is for a person."""
+CheckError = ContainerError
 
 
 # --- Processes ----------------------------------------------------------------------------
 
 
 class Api:
-    """The API under test: uvicorn without reload, as production runs it."""
+    """The API under test: the test image, as production runs it, with each run's settings."""
 
-    def __init__(self, log: Path, host: str) -> None:
-        self.log = log
+    def __init__(self, host: str) -> None:
         self.host = host
-        self.process: subprocess.Popen[bytes] | None = None
+        self.started = False
 
-    def start(self, **extra_env: str) -> None:
-        env = {
-            **os.environ,
-            "AI_TRANSPORT": "scripted",
-            "APP_ORIGIN": NGINX_ORIGIN,
-            **extra_env,
-        }
-        command = [
-            sys.executable,
-            "-m",
-            "uvicorn",
-            "--factory",
-            "app.main:create_app",
-            "--host",
-            self.host,
-            "--port",
-            str(API_PORT),
-            "--timeout-graceful-shutdown",
-            str(GRACEFUL_SHUTDOWN_SECONDS),
-        ]
-        with self.log.open("ab") as log:
-            self.process = subprocess.Popen(  # noqa: S603
-                command, cwd=API_DIR, env=env, stdout=log, stderr=subprocess.STDOUT
-            )
+    def start(self, **settings: str) -> None:
+        """A fresh container. `settings` are `api_env` keywords, like `heartbeat_seconds`."""
+        env = container.api_env(origin=NGINX_ORIGIN, port=API_PORT, bind_host=self.host, **settings)
+        remove(API_CONTAINER)
+        run(*container.run_args(API_CONTAINER, env, port=API_PORT, detach=True), env=env)
+        self.started = True
         self._wait_until_healthy()
+
+    def _running(self) -> bool:
+        state = run("docker", "inspect", "-f", "{{.State.Running}}", API_CONTAINER, check=False)
+        return state.stdout.strip() == "true"
 
     def _wait_until_healthy(self) -> None:
         deadline = time.monotonic() + 60
         while time.monotonic() < deadline:
-            if self.process is not None and self.process.poll() is not None:
-                raise CheckError(f"The API exited at startup. Its log:\n{self.tail()}")
+            if not self._running():
+                raise CheckError(f"The API container exited at startup. Its log:\n{self.tail()}")
             try:
-                if (
-                    httpx.get(f"http://{self.host}:{API_PORT}/api/v1/health", timeout=2).status_code
-                    == 200
-                ):
+                health = f"http://{self.host}:{API_PORT}/api/v1/health"
+                if httpx.get(health, timeout=2).status_code == 200:
                     return
             except httpx.HTTPError:
                 pass
             time.sleep(0.5)
         raise CheckError(f"The API did not start within 60 s. Its log:\n{self.tail()}")
 
-    def stop(self) -> None:
-        process = self.process
-        if process is None or process.poll() is not None:
-            return
-        process.terminate()
+    def terminate(self) -> int:
+        """SIGTERM to the container, as ECS sends it; wait for it to stop and return its exit
+        code."""
+        run("docker", "kill", "--signal", "TERM", API_CONTAINER)
         try:
-            process.wait(timeout=SHUTDOWN_EXIT_LIMIT_SECONDS)
+            waited = run(
+                "docker", "wait", API_CONTAINER, timeout=SHUTDOWN_EXIT_LIMIT_SECONDS
+            ).stdout.strip()
         except subprocess.TimeoutExpired:
-            process.kill()
-            process.wait()
+            raise CheckError(
+                f"The API was still running {SHUTDOWN_EXIT_LIMIT_SECONDS:.0f} s after SIGTERM "
+                f"(the graceful timeout is {GRACEFUL_SHUTDOWN_SECONDS} s plus about 12 s to save "
+                f"streams)."
+            ) from None
+        return int(waited)
+
+    def stop(self) -> None:
+        if not self.started:
+            return
+        run(
+            "docker",
+            "stop",
+            "--time",
+            str(int(SHUTDOWN_EXIT_LIMIT_SECONDS)),
+            API_CONTAINER,
+            check=False,
+            timeout=SHUTDOWN_EXIT_LIMIT_SECONDS + 30,
+        )
+        remove(API_CONTAINER)
+        self.started = False
 
     def tail(self, lines: int = 40) -> str:
-        if not self.log.exists():
-            return ""
-        return "\n".join(self.log.read_text(errors="replace").splitlines()[-lines:])
+        logs = run("docker", "logs", "--tail", str(lines), API_CONTAINER, check=False)
+        return (logs.stdout + logs.stderr).strip()
 
 
 def compose(*arguments: str) -> None:
@@ -440,29 +432,30 @@ def compose(*arguments: str) -> None:
         ) from None
 
 
-def docker_bridge_gateway() -> str | None:
-    result = subprocess.run(
-        [  # noqa: S607
-            "docker",
-            "network",
-            "inspect",
-            "bridge",
-            "-f",
-            "{{(index .IPAM.Config 0).Gateway}}",
-        ],
-        capture_output=True,
-        text=True,
-        check=False,
+def api_host_for(platform: str, *, bridge_gateway: str | None, override: str | None = None) -> str:
+    """Where the API answers, for this check and for nginx in Docker, and nothing wider.
+
+    On macOS the container publishes its port on the host's loopback, which Docker Desktop's
+    `host.docker.internal` reaches. On Linux the container shares the host's network and binds the
+    docker bridge's gateway, which is what `host-gateway` (nginx's `host.docker.internal`) is.
+    On Linux, `PROXY_CHECK_BIND` overrides the gateway (a custom bridge, or rootless Docker). On
+    macOS it has nothing to override: the published port is always on the loopback."""
+    if platform == "darwin":
+        return "127.0.0.1"
+    if override:
+        return override
+    if bridge_gateway:
+        return bridge_gateway
+    raise CheckError(
+        "Could not find the docker bridge gateway for the API container to bind. "
+        "Set PROXY_CHECK_BIND to an address nginx in Docker can reach."
     )
-    gateway = result.stdout.strip()
-    return gateway if result.returncode == 0 and gateway else None
 
 
-def refuse_if_in_use(host: str) -> None:
+def refuse_if_in_use(api_host: str) -> None:
     """A server already on these ports would be checked instead of the one this starts."""
     for name, address, port in (
-        ("the API", host, API_PORT),
-        ("the API", "127.0.0.1", API_PORT),
+        ("the API", api_host, API_PORT),
         ("nginx", "127.0.0.1", NGINX_PORT),
         ("the buffering nginx", "127.0.0.1", BUFFERED_PORT),
     ):
@@ -472,7 +465,7 @@ def refuse_if_in_use(host: str) -> None:
                 raise CheckError(
                     f"Something already answers on {address}:{port}, where the check starts "
                     f"{name}. Stop it first (a leftover `docker compose -p open-door-proxy-check "
-                    "down`, or a stray uvicorn)."
+                    "down`, or a stray API container or uvicorn)."
                 )
 
 
@@ -625,23 +618,9 @@ def shutdown_run(client: httpx.Client, session: Session, api: Api) -> None:
     if not started.wait(timeout=10):
         raise CheckError("The silent stream did not start within 10 s.")
     time.sleep(1)  # Into the silence.
-    process = api.process
-    if process is None:
-        raise CheckError("The API is not running.")
     sent = time.monotonic()
-    process.send_signal(signal.SIGTERM)
-    try:
-        process.wait(timeout=SHUTDOWN_EXIT_LIMIT_SECONDS)
-    except subprocess.TimeoutExpired:
-        raise CheckError(
-            f"The API was still running {SHUTDOWN_EXIT_LIMIT_SECONDS:.0f} s after SIGTERM "
-            f"(the graceful timeout is {GRACEFUL_SHUTDOWN_SECONDS} s plus about 12 s to save "
-            f"streams)."
-        ) from None
-    print(
-        f"  the API exited {time.monotonic() - sent:.1f} s after SIGTERM,"
-        f" exit code {process.returncode}"
-    )
+    exit_code = api.terminate()
+    print(f"  the API exited {time.monotonic() - sent:.1f} s after SIGTERM, exit code {exit_code}")
     reader.join(timeout=10)
 
     api.start()  # Fresh, as a replacement container would be.
@@ -653,7 +632,7 @@ def shutdown_run(client: httpx.Client, session: Session, api: Api) -> None:
     turns = current["turns"] if current else []
     statuses = [turn["status"] for turn in turns]
     print(f"  the conversation's turn is now: {statuses}")
-    problems = problems_in_shutdown_run(exit_code=process.returncode, turn_statuses=statuses)
+    problems = problems_in_shutdown_run(exit_code=exit_code, turn_statuses=statuses)
     if not current or current["id"] != conversation_id:
         problems.append("The current conversation is not the one the shutdown run asked in.")
     fail_on(problems, "shutdown run")
@@ -682,20 +661,17 @@ def main() -> int:
     sys.stdout.reconfigure(line_buffering=True)  # type: ignore[union-attr]
     started_at = time.monotonic()
     tenant_ids: list[str] = []
-    log = Path(tempfile.mkdtemp(prefix="od-proxy-check-")) / "api.log"
     failed = False
     api: Api | None = None
     url: str | None = None
     db_started: Any = None
     try:
         url = owner_database_url()
-        host = bind_host_for(
-            sys.platform,
-            override=os.environ.get("PROXY_CHECK_BIND"),
-            bridge_gateway=docker_bridge_gateway() if sys.platform != "darwin" else None,
-        )
-        refuse_if_in_use(host)
-        api = Api(log, host)
+        override = os.environ.get("PROXY_CHECK_BIND")
+        bridge = None if override or sys.platform == "darwin" else container.docker_bridge_gateway()
+        api_host = api_host_for(sys.platform, bridge_gateway=bridge, override=override)
+        refuse_if_in_use(api_host)
+        api = Api(api_host)
         db_started = asyncio.run(database_now(url))
         compose("up", "--detach", "--wait")
         api.start()
@@ -706,11 +682,11 @@ def main() -> int:
             pass_run(client, session)
 
             api.stop()
-            api.start(AI_HEARTBEAT_SECONDS="1")
+            api.start(heartbeat_seconds="1")
             buffering_control_run(session)
 
             api.stop()
-            api.start(AI_HEARTBEAT_SECONDS="0")
+            api.start(heartbeat_seconds="0")
             control_run(client, session)
 
             api.stop()
@@ -726,9 +702,9 @@ def main() -> int:
         )
     finally:
         if api is not None:
-            api.stop()
-            if failed:
+            if failed and api.started:
                 print(f"\nThe API's log (last lines):\n{api.tail()}", file=sys.stderr)
+            api.stop()
         try:
             compose("down", "--remove-orphans")
         except CheckError as error:

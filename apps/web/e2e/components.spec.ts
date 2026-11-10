@@ -1,4 +1,5 @@
-import { expect, test, type Locator } from '@playwright/test'
+import { expect, test } from './fixtures'
+import type { Locator } from '@playwright/test'
 import { focusRing, galleryState, themeColor } from './helpers'
 
 // What the browser paints for the Stage 3 and 4 components, read with getComputedStyle after real

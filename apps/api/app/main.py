@@ -22,9 +22,11 @@ from app.core.encryption import LocalKeyProvider, load_key_provider
 from app.core.logging import configure_logging
 from app.core.problems import install_problem_handlers
 from app.core.request_id import RequestIdMiddleware
+from app.core.security_headers import SecurityHeadersMiddleware
 from app.db.engine import create_engine
 from app.modules.assistant.sse import CLOSE_TIMEOUT_SECONDS, StreamTracker
 from app.modules.identity.same_origin import SameOriginMiddleware
+from app.web_app import install_web_app
 
 # How long the shutdown waits for open turn streams to save their turns before it closes the
 # database engine. It is a stream's own close bound plus a second, so a cleanup that is still inside
@@ -144,7 +146,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.add_middleware(BodyLimitMiddleware)
     app.add_middleware(RequestIdMiddleware)
     app.add_middleware(NoStoreMiddleware)
+    # Outermost, so every response carries the security headers, refusals included.
+    app.add_middleware(SecurityHeadersMiddleware)
     install_problem_handlers(app)
     document_problems_as_problem_json(app)
     app.include_router(api_router)
+    # After the API router, so its routes match first; does nothing without WEB_DIST_DIR.
+    install_web_app(app, settings)
     return app

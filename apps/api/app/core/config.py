@@ -4,6 +4,7 @@ import ipaddress
 import re
 from decimal import Decimal
 from functools import lru_cache
+from pathlib import Path
 from typing import Annotated, Any, Literal, Self
 
 from pydantic import (
@@ -102,6 +103,12 @@ class Settings(BaseSettings):
     # balancer's. A comma list in FORWARDED_ALLOW_IPS; empty means only the direct peer, never "*".
     # Stage 2 passes it to uvicorn's --forwarded-allow-ips.
     forwarded_allow_ips: Annotated[tuple[Network, ...], NoDecode] = ()
+    # The built web app (its `dist/`), which the production image sets. Unset in development, where
+    # Vite serves the web app: then the API serves nothing outside /api/ and sends no CSP.
+    web_dist_dir: Path | None = None
+    # Cloudflare Turnstile's public site key, written into the page's meta tag. It is public by
+    # design. The secret key and the production rules for both arrive with the sign-in gate.
+    turnstile_site_key: str = ""
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR"] = "INFO"
     # `make embed` and the API with AI_TRANSPORT=anthropic use it (the API embeds each handbook
     # question). Without it the search is full-text only. An empty value counts as unset.
@@ -190,6 +197,15 @@ class Settings(BaseSettings):
     @classmethod
     def require_asyncpg_driver(cls, value: PostgresDsn, info: ValidationInfo) -> PostgresDsn:
         return require_asyncpg_scheme(value, str(info.field_name))
+
+    @field_validator("web_dist_dir", mode="before")
+    @classmethod
+    def blank_web_dist_dir_is_unset(cls, value: object) -> object:
+        # `WEB_DIST_DIR=` means "not set", as an empty key does; Path("") would be the working
+        # directory and turn the web serving on.
+        if isinstance(value, str) and not value.strip():
+            return None
+        return value
 
     @field_validator("forwarded_allow_ips", mode="before")
     @classmethod

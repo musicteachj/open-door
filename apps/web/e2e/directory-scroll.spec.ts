@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test'
+import { expect, test } from './fixtures'
 import { startAs } from './helpers'
 
 // jsdom has no layout, so scroll position can only be proved in a browser. The page (the window)

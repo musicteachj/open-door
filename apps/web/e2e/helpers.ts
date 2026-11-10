@@ -1,5 +1,6 @@
 import AxeBuilder from '@axe-core/playwright'
-import { expect, test, type Locator, type Page } from '@playwright/test'
+import { expect, test } from './fixtures'
+import type { Locator, Page } from '@playwright/test'
 
 /** The four demo personas, by first name, as the landing page's cards are labeled. */
 export type FirstName = 'Priya' | 'Mateo' | 'Marcus' | 'Dana'
@@ -100,6 +101,19 @@ export async function setSandboxLeft(page: Page, msLeft: number) {
   const expiry = await sandboxExpiry(page)
   await page.clock.setFixedTime(new Date(expiry - msLeft))
   await page.reload()
+}
+
+/**
+ * Adds CSS to the page for this test only. Not `page.addStyleTag`: that injects a <style> element
+ * with no nonce, which the production image's Content Security Policy blocks. A constructed
+ * stylesheet is built through the CSS object model, which the policy does not govern.
+ */
+export async function addTestStyle(page: Page, css: string) {
+  await page.evaluate((text) => {
+    const sheet = new CSSStyleSheet()
+    sheet.replaceSync(text)
+    document.adoptedStyleSheets = [...document.adoptedStyleSheets, sheet]
+  }, css)
 }
 
 export const HOUR_MS = 3_600_000

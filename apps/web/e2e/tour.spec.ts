@@ -1,4 +1,5 @@
-import { expect, test, type Page } from '@playwright/test'
+import { expect, test } from './fixtures'
+import type { Page } from '@playwright/test'
 import { TOUR, type TourStep } from '../src/features/tour/script'
 import { HARASSMENT, openCaseButton, queueRows, sentLine } from './cases-helpers'
 import { assistantMessages, composerBox, stopButton, userMessages } from './conversation-helpers'

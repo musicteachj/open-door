@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test'
+import { expect, test } from './fixtures'
 import { openDirectory, openProfileBySearch } from './directory-helpers'
 import { greetingHeading, signOut, startAs, switchTo } from './helpers'
 
