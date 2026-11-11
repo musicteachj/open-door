@@ -77,6 +77,15 @@ version (`0.x.y` while the app is being built, `1.0.0` when it is complete).
   found three gaps, now in the API job's filter: `CLAUDE.md`, the Phase 7 spec, and all of
   `scripts/`.
 
+- **A repeated case send is decided once** (Phase 8, stage 3). A second send of the same case (the
+  same submission, or a second tab for the same turn) is no longer screened again: the first look
+  only learns that an earlier case exists, and the decision is made under the person's lock, where
+  the stored words are opened once. Same words return the first case and write the audit event
+  `case.resubmitted` (no words in it); different words are still the 409.
+- **The key provider is typed as its interface** (Phase 8, stage 3), so Phase 9's KMS provider
+  drops in beside the local keyring. Production still takes the keyring from `ENCRYPTION_KEYRING`
+  (or a file only its owner can read) and refuses the test key.
+
 ### Security
 
 - **Sessions are under row-level security** (Phase 8, stage 1, migration 0017). The API's login
@@ -106,13 +115,50 @@ version (`0.x.y` while the app is being built, `1.0.0` when it is complete).
   (GHSA-6q48-6c7w-9gw2), which the Anthropic SDK would trust through the operating system's store;
   the Dockerfile removes them, and `make image-check` fails if one returns.
 
+- **A time-off denial's note is stored encrypted** (Phase 8, stage 3, migration 0018, ADR 0015's
+  amendment). `decision_note` is gone; a request with a note holds a key ID, a wrapped data key of
+  its own, and the sealed note, bound to its request, so a note copied to another row does not
+  open. The same people read it as before (the requester, the decider, and HR, and the decider in
+  the assistant's conversation), and a list opens only the rows that have a note. The 300-character
+  limit moves to the service. The migration seals any existing notes; it loads the keyring only
+  when a note exists, and runs its data step with the table's forced row-level security off, so an
+  owner that isn't a superuser still sees every row. A note that won't decrypt is left off the
+  page, with a warning naming only the request.
+
 ### Fixed
 
 - **Audit events store SQL `NULL` for "nothing"** (Phase 8, stage 1, migration 0017). `before` and
   `after` used to hold the JSON value `null`, which `IS NULL` never found; the migration converts
   existing rows.
+- **A conversation whose stored text won't decrypt no longer fails** (Phase 8, stage 3). The
+  conversation read answers `unreadable: true` with no turns and the fixed line "This conversation
+  can't be shown. Start a new conversation to keep asking." (owner-approved, served by
+  `GET /assistant/texts`), with "Start a new conversation"; a question to it is a 409
+  `conversation-unreadable`, writing nothing, and the page reads the conversation again; the
+  budget read still answers. A feedback reason that won't decrypt is left out on its own. The log
+  names only the conversation and turn.
+- **The personal-data check reads digits of any script** (Phase 8, stage 3). Both copies map every
+  Unicode decimal digit to its ASCII value before matching, so a Social Security or card number in
+  Arabic-Indic, Devanagari, or other digits is refused like one in ASCII. The shared cases gain
+  them, and lose two that asserted the old behavior.
+- **The proxy check no longer fails on CI after the browser suite** (Phase 8, stage 3, fixing
+  stage 2). Since stage 2 the two run in one CI job against one database, and on CI the suite's
+  scripted turns stay in the day's AI ledger, which could pass the real $3 daily cap and make the
+  check's own questions 429s ("the silent stream did not start within 10 s"). The check's API now
+  gets a daily budget it can't use up, as the browser tests' does, and a refused stream says so.
+- **The reply-by date over New Year's** (Phase 8, stage 3): a test proves a sandbox seeded in late
+  December holds next year's Denver holidays, and a docstring that said otherwise is corrected.
 
 ### Added
+
+- **`make prod-local`** (Phase 8, stage 3): the production image with production settings on its
+  own empty, throwaway Postgres (a private Docker network, never published, random passwords per
+  run), at `http://localhost:8300`. A one-off container runs the migrations, the login setup, and
+  the handbook load first, as a deploy would, with no keyring or API key. The API gets the local
+  keyring and the Anthropic key through its environment, never a command line, so any question
+  asked through it is a paid call; without the key it stops before starting anything.
+  `make prod-local-check` starts it, checks the page and its Content Security Policy, and stops,
+  asking the model nothing. See [`scripts/prod-local/README.md`](scripts/prod-local/README.md).
 
 - **The production image** (Phase 8, stage 2, ADR 0020). One `Dockerfile` builds the web app and
   the API into a slim Python image that runs uvicorn as a non-root user and serves both from one

@@ -50,9 +50,11 @@ from app.modules.timeoff.service import (
 )
 from app.policy import Action, Actor
 from tests.integration.conftest import (
+    TEST_KEYS,
     MakeTenant,
     SampleTenant,
     audit_events,
+    opened_note,
     write_assistant_rows,
 )
 
@@ -303,7 +305,7 @@ async def test_a_pto_request_is_pending_with_its_audit_event(
     row = await get_request(app_engine, org, result.request_id)
     assert (row.type, row.status, row.amount_minutes) == ("pto", "pending", 960)
     assert (row.start_date, row.end_date) == (date(2026, 11, 9), date(2026, 11, 10))
-    assert (row.created_via, row.proposal_id, row.decided_by, row.decision_note) == (
+    assert (row.created_via, row.proposal_id, row.decided_by, row.note_ciphertext) == (
         "ui",
         None,
         None,
@@ -599,7 +601,9 @@ async def test_a_decision_made_after_a_cancel_sees_the_cancel_and_writes_nothing
 
         async def decide() -> Decided | Refused:
             async with acting(app_engine, org.tenant.id, org.manager) as (db, manager):
-                return await service.decide(db, manager, request_id, "approve", None, NOW, via="ui")
+                return await service.decide(
+                    db, manager, request_id, "approve", None, NOW, keys=TEST_KEYS, via="ui"
+                )
 
         deciding = asyncio.create_task(decide())
         await one_waiting_at_the_lock(owner_engine)
@@ -625,7 +629,9 @@ async def decide_as(
     note: str | None = None,
 ) -> Decided | Refused:
     async with acting(engine, org.tenant.id, person_id) as (db, actor):
-        return await service.decide(db, actor, request_id, decision, note, NOW, via="ui")
+        return await service.decide(
+            db, actor, request_id, decision, note, NOW, keys=TEST_KEYS, via="ui"
+        )
 
 
 async def test_the_direct_manager_approves_and_it_is_audited(
@@ -638,7 +644,7 @@ async def test_the_direct_manager_approves_and_it_is_audited(
 
     assert isinstance(result, Decided)
     row = await get_request(app_engine, org, request_id)
-    assert (row.status, row.decided_by, row.decided_at, row.decision_note) == (
+    assert (row.status, row.decided_by, row.decided_at, row.note_ciphertext) == (
         "approved",
         org.manager,
         NOW,
@@ -667,7 +673,7 @@ async def test_a_denial_keeps_its_note_on_the_request_and_never_in_the_log(
 
     assert isinstance(result, Decided)
     row = await get_request(app_engine, org, request_id)
-    assert (row.status, row.decision_note) == ("denied", note)
+    assert (row.status, opened_note(row)) == ("denied", note)
     (event,) = await events(app_engine, org)
     assert event.action == "timeoff.denied"
     assert event.after is not None
@@ -746,7 +752,9 @@ async def test_someone_who_cannot_read_the_request_gets_not_found(
     # exist all look the same: not found, never "not allowed".
     peer = await decide_as(app_engine, org, org.peer, request_id)
     async with acting(app_engine, other_tenant.id, other_tenant.hr_id) as (db, stranger):
-        outsider = await service.decide(db, stranger, request_id, "approve", None, NOW, via="ui")
+        outsider = await service.decide(
+            db, stranger, request_id, "approve", None, NOW, keys=TEST_KEYS, via="ui"
+        )
     missing = await decide_as(app_engine, org, org.manager, uuid4())
 
     assert [refused(r).code for r in (peer, outsider, missing)] == ["not-found"] * 3
@@ -763,7 +771,15 @@ async def test_a_decision_made_by_the_assistant_audits_its_proposal(
     async with acting(app_engine, org.tenant.id, org.manager) as (db, manager):
         proposal_id = await put_proposal(db, org, org.manager)
         result = await service.decide(
-            db, manager, request_id, "approve", None, NOW, via="assistant", proposal_id=proposal_id
+            db,
+            manager,
+            request_id,
+            "approve",
+            None,
+            NOW,
+            keys=TEST_KEYS,
+            via="assistant",
+            proposal_id=proposal_id,
         )
 
     assert isinstance(result, Decided)
@@ -784,7 +800,15 @@ async def test_a_decision_from_the_ui_cannot_carry_a_proposal(
     async with acting(app_engine, org.tenant.id, org.manager) as (db, manager):
         with pytest.raises(ValueError, match="proposal"):
             await service.decide(
-                db, manager, request_id, "approve", None, NOW, via="ui", proposal_id=uuid4()
+                db,
+                manager,
+                request_id,
+                "approve",
+                None,
+                NOW,
+                keys=TEST_KEYS,
+                via="ui",
+                proposal_id=uuid4(),
             )
     assert (await get_request(app_engine, org, request_id)).status == "pending"
 
@@ -815,7 +839,9 @@ async def test_a_decision_needs_a_timezone_aware_now(
 
     async with acting(app_engine, org.tenant.id, org.manager) as (db, manager):
         with pytest.raises(ValueError, match="timezone-aware"):
-            await service.decide(db, manager, request_id, "approve", None, naive, via="ui")
+            await service.decide(
+                db, manager, request_id, "approve", None, naive, keys=TEST_KEYS, via="ui"
+            )
     assert (await get_request(app_engine, org, request_id)).status == "pending"
 
 

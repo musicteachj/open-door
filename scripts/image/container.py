@@ -20,6 +20,8 @@ import sys
 from urllib.parse import urlsplit, urlunsplit
 
 TEST_TAG = "open-door:test"
+# The production image: no component gallery. `make prod-local` runs it.
+PROD_TAG = "open-door:prod"
 # The fake keyring the tests use (app.core.encryption); the API accepts it only with APP_ENV=test.
 TEST_KEYRING = "test:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="
 
@@ -94,21 +96,34 @@ def api_env(
 
 
 def run_args(
-    name: str, env: dict[str, str], *, port: int, platform: str = sys.platform, detach: bool
+    name: str,
+    env: dict[str, str],
+    *,
+    port: int,
+    platform: str = sys.platform,
+    detach: bool,
+    image: str = TEST_TAG,
+    network: str | None = None,
 ) -> list[str]:
     """`docker run` for the test image, as the deploy runs it: no `--init`, so uvicorn is PID 1
     and the shutdown the proxy check proves is the shipped one (uvicorn starts no child processes,
     so nothing needs reaping). Each setting is `--env KEY` with no value: Docker reads the value
-    from its own environment, which the caller sets with `client_env(env)`."""
+    from its own environment, which the caller sets with `client_env(env)`.
+
+    With `network` (a user-defined docker network, as `make prod-local` uses to reach its own
+    database) the container joins it and publishes the port on the host's loopback on every
+    platform, since it is on a bridge, not the host's network."""
     args = ["docker", "run", "--name", name]
     args += ["--detach"] if detach else ["--rm"]
-    if platform == "darwin":
+    if network is not None:
+        args += ["--network", network, "--publish", f"127.0.0.1:{port}:{port}"]
+    elif platform == "darwin":
         args += ["--publish", f"127.0.0.1:{port}:{port}"]
     else:
         args += ["--network", "host"]
     for key in env:
         args += ["--env", key]
-    return [*args, TEST_TAG]
+    return [*args, image]
 
 
 def client_env(values: dict[str, str]) -> dict[str, str]:

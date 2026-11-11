@@ -41,6 +41,7 @@ from tests.integration.conftest import (
     MakeTenant,
     OpenBrowser,
     audit_events,
+    sealed_note_columns,
 )
 
 pytestmark = pytest.mark.integration
@@ -143,7 +144,7 @@ class World:
             "created_via": "ui",
             "decided_by": decider if decided else None,
             "decided_at": (decided_at or self.now) if decided else None,
-            "decision_note": note if status == "denied" else None,
+            **sealed_note_columns(self.tenant_id, request_id, note if status == "denied" else None),
             "canceled_at": self.now if status == "canceled" else None,
         }
         if created_at is not None:

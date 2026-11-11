@@ -261,6 +261,8 @@ make image      build the production image (open-door:prod) and its test variant
 make image-check  build and inspect both images: non-root, no secrets or tests, tzdata, no emSign root, headers
 make e2e-image  the browser tests against the test image on one origin, with the real CSP (what CI runs)
 make proxy-check  the turn stream through a strict nginx, the API in the test image (needs `make db` and Docker)
+make prod-local  the production image with production settings on its own empty database at :8300; any question asked is paid
+make prod-local-check  start prod-local, check the page and its CSP, and stop; asks the model nothing
 make captures   a local report of each design beside the build (needs `make db` and a network; not in CI)
 make openapi    after changing an API route: regenerate the schema and the web client
 make audit      scan for leaked secrets and vulnerable dependencies
@@ -269,8 +271,8 @@ make audit      scan for leaked secrets and vulnerable dependencies
 Run a single API test: `cd apps/api && uv run pytest tests/test_health.py -q`. Run a single web
 test: `cd apps/web && npx vitest run src/lib/api-fetch.test.ts`. Run a single browser test:
 `cd apps/web && npx playwright test e2e/session.spec.ts` (add `E2E_TARGET=image` to run it against
-the test image; `SKIP_BUILD=1` on `make image-check`, `make e2e-image`, or `make proxy-check` reuses
-the images already built). The first `make e2e` (and so the first
+the test image; `SKIP_BUILD=1` on `make image-check`, `make e2e-image`, `make proxy-check`, or
+`make prod-local` reuses the images already built). The first `make e2e` (and so the first
 `make check`) downloads Chromium, about 170 MB. The component gallery is at `/gallery` in
 development and never in a production build.
 

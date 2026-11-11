@@ -98,7 +98,15 @@ UPDATABLE_TURN_COLUMNS = {
     "fallback",
     "injection_suspected",
 }
-UPDATABLE_REQUEST_COLUMNS = {"status", "decided_by", "decided_at", "decision_note", "canceled_at"}
+UPDATABLE_REQUEST_COLUMNS = {
+    "status",
+    "decided_by",
+    "decided_at",
+    "note_key_id",
+    "note_wrapped_key",
+    "note_ciphertext",
+    "canceled_at",
+}
 UPDATABLE_PROPOSAL_COLUMNS = {"status", "ended_at", "outcome"}
 # A case's status moves one way, by trigger, and HR alone can change it. Its words, category, dates,
 # and owner are never updatable, and a summary and a timeline event never change at all.

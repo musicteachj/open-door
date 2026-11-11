@@ -789,6 +789,20 @@ describe('a send that fails', () => {
     },
   )
 
+  it('keeps the draft, reads the conversation again, and offers a new one after conversation-unreadable', async () => {
+    onTurn(() =>
+      problemResponse(409, 'conversation-unreadable', "This conversation can't be shown."),
+    )
+    const deps = makeDeps()
+    state().setDraft('Hello')
+    await state().send('Hello', deps)
+    expect(deps.invalidateConversation).toHaveBeenCalledTimes(1)
+    expect(state().offerNewConversation).toBe(true)
+    // The notice says it, from the conversation read; not under the box as well.
+    expect(state().sendError).toBeNull()
+    expect(state().draft).toBe('Hello')
+  })
+
   it.each(['budget-sandbox', 'budget-daily'])(
     'keeps the draft, asks again, and says the problem’s words under the box (the banner, if it shows, wins there) after a 429 %s',
     async (type) => {

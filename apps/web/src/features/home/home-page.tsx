@@ -72,7 +72,10 @@ function Assistant({
   live: LiveTurn | null
   settling: readonly SettlingTurn[]
 }) {
-  const showConversation = turns.length > 0 || live !== null || settling.length > 0
+  // A conversation that can't be opened has no turns to draw, and still shows its own page: the
+  // notice and "Start a new conversation", not the home's greeting.
+  const showConversation =
+    turns.length > 0 || live !== null || settling.length > 0 || (conversation?.unreadable ?? false)
   // The page changing shape (the first question, or "Start a new conversation") unmounts the
   // control that had focus, so the view that takes over focuses its composer. Noticed while
   // rendering, so the new view knows from its first render.

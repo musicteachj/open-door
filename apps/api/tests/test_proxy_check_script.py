@@ -237,3 +237,18 @@ def test_the_api_binds_the_loopback_on_macos_and_the_bridge_gateway_on_linux() -
         check.api_host_for("linux", bridge_gateway=None)
     assert check.api_host_for("linux", bridge_gateway=None, override="10.1.2.3") == "10.1.2.3"
     assert check.api_host_for("darwin", bridge_gateway=None, override="10.1.2.3") == "127.0.0.1"
+
+
+def test_the_api_gets_a_daily_budget_the_check_cannot_use_up(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """On CI the browser suite's turns stay in the day's ledger before the check runs, so the
+    check's API must not run with the real $3 cap (each run's own settings still apply)."""
+    monkeypatch.setattr(check.container, "database_url_for_container", lambda url, **_: url)
+    api = check.Api("127.0.0.1")
+
+    assert api.env()["AI_DAILY_BUDGET_USD"] == check.DAILY_BUDGET_USD
+    with_heartbeat = api.env(heartbeat_seconds="1")
+    assert with_heartbeat["AI_DAILY_BUDGET_USD"] == check.DAILY_BUDGET_USD
+    assert with_heartbeat["AI_HEARTBEAT_SECONDS"] == "1"
+    assert float(check.DAILY_BUDGET_USD) >= 100

@@ -59,7 +59,7 @@ select = ["E", "W", "F", "I", "N", "UP", "B", "SIM", "ASYNC", "DTZ", "S", "PT", 
 [tool.mypy]
 strict = true
 plugins = ["pydantic.mypy"]
-files = ["app", "tests", "scripts", "migrations", "../../evals", "../../scripts/proxy-check", "../../scripts/image/container.py", "../../scripts/image/serve.py"]
+files = ["app", "tests", "scripts", "migrations", "../../evals", "../../scripts/proxy-check", "../../scripts/image/container.py", "../../scripts/image/serve.py", "../../scripts/prod-local/start.py"]
 # (scripts/image/check.py shares its name with the proxy check's, so mypy skips it, as before.)
 # The proxy check imports the image scripts' shared module the way it does at run time.
 mypy_path = ["../../scripts/image"]

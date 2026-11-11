@@ -25,7 +25,13 @@ from app.ai.fixed_texts import STILL_ANSWERING_TEXT
 from app.domain.timeoff.evaluate import NewRequest
 from app.modules.assistant.routes import PROPOSAL_CONFLICT_TEXTS
 from app.modules.timeoff.texts import refusal_text
-from tests.integration.conftest import Browser, OpenBrowser, audit_events, turn_row
+from tests.integration.conftest import (
+    Browser,
+    OpenBrowser,
+    audit_events,
+    opened_note,
+    turn_row,
+)
 from tests.integration.test_proposals import (
     Chat,
     age,
@@ -285,7 +291,7 @@ async def test_confirming_a_decision_decides_as_the_manager_and_keeps_the_note_o
     assert response.status_code == 200, response.text
     assert response.json()["status"] == "executed"
     [request] = [r for r in await requests_for(world, "priya") if r.id == request_id]
-    assert (request.status, request.decided_by, request.decision_note) == (
+    assert (request.status, request.decided_by, opened_note(request)) == (
         "denied",
         world.person("marcus"),
         note,
@@ -1084,7 +1090,7 @@ async def test_nobody_else_reads_the_note_and_the_read_makes_one_extra_query_at_
     seen: list[str] = []
 
     def record(conn: Any, cursor: Any, statement: str, *rest: Any) -> None:
-        if "decision_note" in statement:
+        if "note_ciphertext" in statement:
             seen.append(statement)
 
     event.listen(Engine, "before_cursor_execute", record)
@@ -1123,3 +1129,80 @@ async def test_a_note_on_a_request_this_person_did_not_decide_is_not_read(
         )
 
     assert only(world)["deniedNote"] is None
+
+
+async def test_a_denial_confirmed_through_the_assistant_stores_the_note_nowhere_in_plaintext(
+    start: StartWorld, owner_engine: AsyncEngine
+) -> None:
+    """The request's row, the audit log, and the proposals, as the owner sees them in full."""
+    from sqlalchemy import text
+
+    world = start("marcus")
+    proposal_id, request_id = await deny_card(world)
+    note = "ZEBRA-NOTE-5512 she was out sick twice this month"
+    assert post(world, confirm_path(proposal_id), {"note": note}).status_code == 200
+
+    async with owner_engine.connect() as connection:
+        tenant = {"t": world.tenant_id}
+        dumps = [
+            (
+                await connection.execute(
+                    text("SELECT t::text FROM time_off_requests t WHERE id = :id"),
+                    {"id": request_id},
+                )
+            ).scalar_one(),
+            *(
+                await connection.execute(
+                    text("SELECT t::text FROM audit_events t WHERE tenant_id = :t"), tenant
+                )
+            ).scalars(),
+            *(
+                await connection.execute(
+                    text("SELECT t::text FROM ai_proposals t WHERE tenant_id = :t"), tenant
+                )
+            ).scalars(),
+        ]
+        sealed: bytes | None = (
+            await connection.execute(
+                text("SELECT note_ciphertext FROM time_off_requests WHERE id = :id"),
+                {"id": request_id},
+            )
+        ).scalar_one()
+    assert sealed is not None
+    everything = "\n".join(dumps).lower()
+    for needle in (note, "zebra", "sick twice"):
+        assert needle.lower() not in everything
+        assert needle.encode().hex() not in everything
+
+
+async def test_a_note_that_does_not_open_leaves_the_card_without_it_and_logs_the_request_id(
+    start: StartWorld, owner_engine: AsyncEngine, caplog: pytest.LogCaptureFixture
+) -> None:
+    import logging
+
+    from sqlalchemy import text
+
+    world = start("marcus")
+    proposal_id, request_id = await deny_card(world)
+    assert post(world, confirm_path(proposal_id), {"note": DENIAL_NOTE}).status_code == 200
+    async with owner_engine.begin() as connection:
+        await connection.execute(text("SET LOCAL session_replication_role = replica"))
+        await connection.execute(
+            text(
+                "UPDATE time_off_requests SET note_ciphertext ="
+                " set_byte(note_ciphertext, 0, get_byte(note_ciphertext, 0) # 255) WHERE id = :id"
+            ),
+            {"id": request_id},
+        )
+
+    with caplog.at_level(logging.WARNING):
+        response = world.browser.client.get(CURRENT)
+
+    assert response.status_code == 200, response.text
+    assert DENIAL_NOTE not in response.text
+    assert only(world)["status"] == "executed"
+    assert only(world)["deniedNote"] is None
+    lines = [r.getMessage() for r in caplog.records if "denial note" in r.getMessage()]
+    assert lines
+    assert all(str(request_id) in line for line in lines)
+    assert "Two of the team" not in caplog.text

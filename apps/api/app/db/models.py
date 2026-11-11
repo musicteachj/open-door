@@ -741,16 +741,21 @@ class TimeOffRequest(Base):
         # the status check.
         CheckConstraint(
             "(status NOT IN ('pending', 'recorded') OR (decided_by IS NULL AND decided_at IS NULL"
-            " AND decision_note IS NULL AND canceled_at IS NULL))"
+            " AND note_key_id IS NULL AND note_wrapped_key IS NULL AND note_ciphertext IS NULL"
+            " AND canceled_at IS NULL))"
             " AND (status NOT IN ('approved', 'denied') OR (decided_by IS NOT NULL"
             " AND decided_at IS NOT NULL AND canceled_at IS NULL))"
             " AND (status <> 'canceled' OR (canceled_at IS NOT NULL"
             " AND (decided_by IS NULL) = (decided_at IS NULL)))",
             name="decision_matches_status",
         ),
+        # A denial's sealed note: all three columns or none, and only on a denied request. The
+        # 300-character limit is the service's (`checked_note`): ciphertext can't hold a CHECK.
         CheckConstraint(
-            "decision_note IS NULL OR (char_length(decision_note) <= 300 AND status = 'denied')",
-            name="decision_note_is_a_short_denial_note",
+            "(note_key_id IS NULL AND note_wrapped_key IS NULL AND note_ciphertext IS NULL)"
+            " OR (note_key_id IS NOT NULL AND note_wrapped_key IS NOT NULL"
+            " AND note_ciphertext IS NOT NULL AND status = 'denied')",
+            name="sealed_note_is_whole_and_denied",
         ),
         CheckConstraint(
             "(proposal_id IS NOT NULL) = (created_via = 'assistant')",
@@ -806,9 +811,12 @@ class TimeOffRequest(Base):
     proposal_id: Mapped[uuid.UUID | None]
     decided_by: Mapped[uuid.UUID | None]
     decided_at: Mapped[datetime | None]
-    # A denial's note, up to 300 characters. Written by a person, shown on pages and cards, and
-    # never sent to a model.
-    decision_note: Mapped[str | None]
+    # A denial's note, up to 300 characters, written by a person, shown on pages and cards, and
+    # never sent to a model. Sealed under a data key of its own (app/modules/timeoff/notes.py):
+    # the key's ID, the wrapped key, and the ciphertext, all set or all null.
+    note_key_id: Mapped[str | None]
+    note_wrapped_key: Mapped[bytes | None] = mapped_column(LargeBinary)
+    note_ciphertext: Mapped[bytes | None] = mapped_column(LargeBinary)
     canceled_at: Mapped[datetime | None]
 
 

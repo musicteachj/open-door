@@ -2,7 +2,8 @@
 
 Pure: no framework imports, no logging. It never records the text it reads. Stage 6's web copy will
 implement the same rules, and both read `evals/assistant/personal-data-cases.json`, so they
-cannot drift.
+cannot drift. Digits of any script (Arabic-Indic, Devanagari, and so on) are read as their ASCII
+values before matching.
 """
 
 import re
@@ -37,13 +38,17 @@ _CARD_CANDIDATE = re.compile(
 def normalized(text: str) -> str:
     """The text as the check reads it, in the steps the web app's copy repeats (the `about` of the
     shared vectors): NFKC, drop format characters (Cf), space separators (Zs) to an ASCII space,
-    and dashes (Pd) to an ASCII hyphen. Digits are then matched as ASCII only."""
+    dashes (Pd) to an ASCII hyphen, and every decimal digit (Nd) of any script to its ASCII digit.
+    The patterns then match ASCII digits only."""
     out: list[str] = []
     for char in unicodedata.normalize("NFKC", text):
         category = unicodedata.category(char)
         if category == "Cf":
             continue
-        out.append(" " if category == "Zs" else "-" if category == "Pd" else char)
+        if category == "Nd":
+            out.append(str(unicodedata.decimal(char)))
+        else:
+            out.append(" " if category == "Zs" else "-" if category == "Pd" else char)
     return "".join(out)
 
 

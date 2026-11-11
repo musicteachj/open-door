@@ -176,7 +176,9 @@ def build_request(
         proposal_id=None,
         decided_by=decided_by,
         decided_at=decided_at,
-        decision_note=None,
+        note_key_id=None,
+        note_wrapped_key=None,
+        note_ciphertext=None,
         canceled_at=None,
     )
 

@@ -81,6 +81,19 @@ PERSONAL_DATA_TEXT: Final = (
 )
 STILL_ANSWERING_TEXT: Final = "I'm still answering your last question."
 
+# Shown instead of a conversation whose stored text does not open (a changed key, a damaged row),
+# and sent as the 409's detail when a question is sent to one. The owner approved the words on
+# 2026-11-10. Changing a word means approving it again, and setting its date and hash. Not model
+# text, and not a safety message: it carries no 911 or 988 wording.
+UNREADABLE_CONVERSATION_TEXT: Final = (
+    "This conversation can't be shown. Start a new conversation to keep asking."
+)
+UNREADABLE_CONVERSATION_TEXT_AUTHOR: Final = "James Littlefield (owner)"
+UNREADABLE_CONVERSATION_TEXT_APPROVED_ON: str = "2026-11-10"
+UNREADABLE_CONVERSATION_TEXT_SHA256: str = (
+    "3557a4a7b37470a007ccbc5df317b5f5821927d380aa166d148f66f343333eb3"
+)
+
 ERROR_TEXTS: Final[dict[str, str]] = {
     "refusal": (
         "I can't help with that one. If you need an answer, the HR team can help. "

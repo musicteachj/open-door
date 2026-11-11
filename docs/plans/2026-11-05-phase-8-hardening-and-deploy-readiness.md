@@ -1199,6 +1199,89 @@ medium` loop ran six rounds and stopped at the sixth, which had nothing high or 
   is outside mypy (its module name clashes with the proxy check's); a root path ending in a file
   extension that doesn't exist gets the page, not a 404.
 
+### Stage 3 (`feat/phase-8-data`, 2026-11-10)
+
+Built in three batches: A (Tasks 16 to 18) and B (Tasks 19 to 21), each by implementers with a
+Sonnet review before the next, and C (this close). No paid AI calls; every recorded fixture still
+replays.
+
+What the code forced, or the reviews changed:
+- **The case resend (Task 16).** The read-only look only learns whether an earlier case exists (by
+  submission or by turn), opening nothing; a repeat skips the screening and is decided in the
+  locked session, which opens the stored words once and writes `case.resubmitted` (no words, no
+  `before` or `after`). If the earlier case is gone by the locked look (its sandbox ended), the
+  send is a 404, since it was never screened. The reply-by test needed no code change: the seed
+  already writes the year before through two years ahead, and only `hq_zone_and_holidays`'s
+  docstring said otherwise.
+- **The keyring in production (Task 17)** was already in place apart from the return type:
+  `build_key_provider` now returns the `KeyProvider` protocol, with the test-key check made on the
+  local provider before it is handed on.
+- **`make prod-local` (Task 18)** is a Python launcher, `scripts/prod-local/start.py`, not the
+  compose file the file map named, so it reuses `scripts/image/container.py` (`PROD_TAG`, and
+  `run_args` with an image and a network). It runs its own throwaway Postgres (the same
+  `pgvector` tag as `compose.yaml`, which a test keeps equal) on a private Docker network, never
+  published, with random passwords per run; a one-off container runs the migrations, the login
+  setup, and the handbook load with no keyring or API key; the API runs on `127.0.0.1:8300`. There
+  is no `/api/v1/health/ready`: `--check` waits on `/api/v1/health`, which answers 200 only once
+  the database does. The Batch A review's mediums were cleanup gaps: a stop signal during startup
+  now unwinds like Ctrl-C, and every failure path removes the database and the network. An
+  invalid setting names its field and never its value.
+- **The sealed denial note (Task 19, migration 0018).** The place is (`time_off_requests`,
+  `decision_note`, sandbox, request), and the helpers are in `app/modules/timeoff/notes.py`
+  (`seal_note`, `open_note`, `open_note_or_none`, `SealedNote.from_columns`). `decide` and the
+  proposal confirm take the key provider and seal in the decision's own `UPDATE`. **The data step
+  runs inside the migration**, between `NO FORCE` and `FORCE ROW LEVEL SECURITY` on the table (the
+  Batch B review found that a managed database's owner, not a superuser, would otherwise see no
+  rows and drop every note unseen; a `psql` probe with a non-superuser owner proved the fix: 0 rows
+  forced, 2 not). It loads the keyring only when a note exists, refuses the test key outside
+  `APP_ENV=test` (round 1), drops the immutability trigger while it rewrites decided rows, and
+  imports the app's modules inside its functions. Its data-step functions are tested on a
+  temporary table, never by downgrading the shared database. A note that won't open is left off
+  the page with a warning naming the request. **For Phase 9:** upgrading a database that already
+  holds notes needs the keyring in the migration's environment (Task 39 records it).
+- **An unreadable conversation (Task 20).** One helper, `open_conversation` in
+  `app/ai/conversations.py`, opens the key, every turn, every feedback reason, and the history, and
+  is the rule for both the page's read and a question's admission (round 1), so the page never
+  calls a conversation unreadable while it still takes questions. A feedback reason that won't
+  open is left out on its own (round 2), since it is optional. `GET /budget` opens only the history
+  and, when it won't open, answers as for an empty history, quietly (the page polls it; round 3);
+  `BudgetOut` has no length field, and the page offers a new conversation from the conversation
+  read. A 409 `conversation-unreadable` makes the web app read the conversation again, so the
+  notice shows the owner's line and the old turns go (round 3). The line is a fixed text (author,
+  2026-11-10, hash), approved with the stage's plan. Vitest has no axe helper (axe runs in the
+  browser tests only), so the web tests for this state have none.
+- **Every decimal digit (Task 21).** The web works out a digit's value from its position in its
+  run of `\p{Nd}` code points; across every `Nd` code point it agrees with Python's
+  `unicodedata.decimal`, and the browser knows about 90 newer ones (the API is the authority). Two
+  old shared cases asserted that Arabic-Indic digits pass, and are gone. `_typos.toml` accepts
+  "Nd".
+- **The proxy check on CI (found while landing #113).** Stage 2 put the browser suite and the
+  proxy check in one CI job against one database, and the suite clears its turns from the day's AI
+  ledger only locally, so on CI the check's API, at the real $3 daily cap, sometimes refused its
+  own questions with a 429 (#112 and #113 failed this way; #108, #109, and #111 passed). The check
+  now starts its API with a $1,000 daily budget, as the browser tests' launcher does, and the
+  shutdown run reports a refused stream by its status. Proved by filling the local ledger past $3:
+  the old check failed with the 429, the new one passed.
+- **Reviews.** `/security-review` found nothing high or medium (its low: dropping `decision_note`
+  leaves old plain text in dead rows, the write-ahead log, and backups until they turn over, which
+  needs disk or backup access). The `/code-review medium` loop ran four rounds and stopped at the
+  fourth, which had nothing high or medium. Round 1 (fixed): the migration's test-key refusal, one
+  open-or-skip helper for notes, one readability rule. Round 2 (fixed): a Ctrl-C before the API
+  container existed could hang `make prod-local` (the stop now retries until `docker run` exits,
+  as `serve.py` does); a damaged feedback reason no longer hides the conversation. Round 3 (fixed):
+  the web app's words after a mid-session 409, the budget read's cost and log line; also unused
+  loggers, a stale setup container, and `RequestOut.of`'s note made a required argument.
+- Lows recorded, not fixed: a question's admission opens every turn and feedback reason (two
+  queries and a few dozen AES opens, the price of one rule); the budget read can size a question
+  with the full history while the conversation read calls it unreadable (a damaged turn with a
+  readable history); every repeat writes a `case.resubmitted` row, uncapped; a list unwraps one
+  key per noted row (cheap locally, a round trip each under Phase 9's KMS), and a note that won't
+  open logs on every read; `seal_note` wraps its key before the decision's `UPDATE` can lose a
+  race; a feedback `POST` on an unreadable conversation can still 500 (the page shows no turns to
+  give feedback on); a blank notice if the fixed texts fail to load; a second `make prod-local`
+  removes a running one's containers; the clones copy the note columns as bytes (the seed's
+  requests never hold a note, so nothing is lost).
+
 ## Backlog
 
 (Low findings from the stages' reviews, with their reasons.)

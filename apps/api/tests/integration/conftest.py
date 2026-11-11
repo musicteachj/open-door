@@ -213,6 +213,39 @@ class AssistantRows:
 # Stands in for the key provider in rows the tests write by hand. The real store gets its provider
 # from the app.
 TEST_KEYS = LocalKeyProvider([(TEST_KEY_ID, TEST_KEY)])
+
+
+def sealed_note_columns(tenant_id: UUID, request_id: UUID, note: str | None) -> dict[str, Any]:
+    """The three sealed-note columns of a time-off request, for a note written by hand (all None
+    for no note). Sealed with `TEST_KEYS`, as the app seals in the test environment."""
+    from app.modules.timeoff.notes import seal_note
+
+    if note is None:
+        return {"note_key_id": None, "note_wrapped_key": None, "note_ciphertext": None}
+    sealed = seal_note(TEST_KEYS, tenant_id, request_id, note)
+    return {
+        "note_key_id": sealed.key_id,
+        "note_wrapped_key": sealed.wrapped_key,
+        "note_ciphertext": sealed.ciphertext,
+    }
+
+
+def opened_note(row: Any) -> str | None:
+    """A stored request's denial note, opened with `TEST_KEYS` (None if it has none)."""
+    from app.modules.timeoff.notes import open_note
+
+    if row.note_ciphertext is None:
+        return None
+    return open_note(
+        TEST_KEYS,
+        row.tenant_id,
+        row.id,
+        key_id=row.note_key_id,
+        wrapped_key=row.note_wrapped_key,
+        ciphertext=row.note_ciphertext,
+    )
+
+
 # A value the tests store when they only need some bytes in a ciphertext column.
 OPAQUE = b"opaque ciphertext"
 

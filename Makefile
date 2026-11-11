@@ -17,7 +17,7 @@ PIP_AUDIT := pip-audit@2.10.1
 PRE_COMMIT := pre-commit@4.7.0
 
 .DEFAULT_GOAL := help
-.PHONY: help setup keyring db db-stop migrate bootstrap-db ingest embed eval-retrieval eval-offline eval-live scoreboard migrations-roundtrip dev dev-api dev-web openapi check check-api check-web e2e e2e-image proxy-check image image-check captures check-docs check-workflows audit
+.PHONY: help setup keyring db db-stop migrate bootstrap-db ingest embed eval-retrieval eval-offline eval-live scoreboard migrations-roundtrip dev dev-api dev-web openapi check check-api check-web e2e e2e-image proxy-check image image-check prod-local prod-local-check captures check-docs check-workflows audit
 
 help: ## List the available commands
 	@grep -E '^[a-zA-Z_-]+:.*## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*## "}; {printf "  %-22s %s\n", $$1, $$2}'
@@ -201,6 +201,20 @@ image: ## Build the production image (open-door:prod) and the browser-test image
 
 image-check: ## Build both images and inspect them: non-root, no secrets or tests, tzdata, no emSign root, no gallery, headers (needs `make db` and Docker; SKIP_BUILD=1 skips the build)
 	cd $(API) && IMAGE_CHECK_NO_BUILD=$(filter 1,$(SKIP_BUILD)) uv run python ../../scripts/image/check.py
+
+# The production image with production settings, on its own throwaway Postgres (never the development
+# database): the deploy's one-off setup runs first, then the API on http://localhost:8300 with the
+# real model transport, so it needs ANTHROPIC_API_KEY in apps/api/.env and the local keyring (`make
+# keyring`). Every question asked through it is a paid call. SKIP_BUILD=1 reuses the image.
+BUILD_PROD_IMAGE = $(if $(filter 1,$(SKIP_BUILD)),@echo "using the open-door:prod image already built",docker build -t open-door:prod .)
+
+prod-local: ## Run the production image on its own empty database at localhost:8300 (PAID: questions call the model; needs ANTHROPIC_API_KEY, Docker)
+	$(BUILD_PROD_IMAGE)
+	cd $(API) && uv run python ../../scripts/prod-local/start.py
+
+prod-local-check: ## Start the production image on its own database, fetch the pages, stop; asks the model nothing (needs ANTHROPIC_API_KEY to start, Docker)
+	$(BUILD_PROD_IMAGE)
+	cd $(API) && uv run python ../../scripts/prod-local/start.py --check
 
 # Local only: `make check` and CI never run it. The specimen pages load React and Babel from
 # unpkg.com, so it needs a network. The screens start real sandboxes, so it needs Postgres up with
