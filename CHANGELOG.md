@@ -141,6 +141,11 @@ version (`0.x.y` while the app is being built, `1.0.0` when it is complete).
   Unicode decimal digit to its ASCII value before matching, so a Social Security or card number in
   Arabic-Indic, Devanagari, or other digits is refused like one in ASCII. The shared cases gain
   them, and lose two that asserted the old behavior.
+- **The proxy check no longer fails on CI after the browser suite** (Phase 8, stage 3, fixing
+  stage 2). Since stage 2 the two run in one CI job against one database, and on CI the suite's
+  scripted turns stay in the day's AI ledger, which could pass the real $3 daily cap and make the
+  check's own questions 429s ("the silent stream did not start within 10 s"). The check's API now
+  gets a daily budget it can't use up, as the browser tests' does, and a refused stream says so.
 - **The reply-by date over New Year's** (Phase 8, stage 3): a test proves a sandbox seeded in late
   December holds next year's Denver holidays, and a docstring that said otherwise is corrected.
 

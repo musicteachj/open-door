@@ -1255,6 +1255,13 @@ What the code forced, or the reviews changed:
   `unicodedata.decimal`, and the browser knows about 90 newer ones (the API is the authority). Two
   old shared cases asserted that Arabic-Indic digits pass, and are gone. `_typos.toml` accepts
   "Nd".
+- **The proxy check on CI (found while landing #113).** Stage 2 put the browser suite and the
+  proxy check in one CI job against one database, and the suite clears its turns from the day's AI
+  ledger only locally, so on CI the check's API, at the real $3 daily cap, sometimes refused its
+  own questions with a 429 (#112 and #113 failed this way; #108, #109, and #111 passed). The check
+  now starts its API with a $1,000 daily budget, as the browser tests' launcher does, and the
+  shutdown run reports a refused stream by its status. Proved by filling the local ledger past $3:
+  the old check failed with the 429, the new one passed.
 - **Reviews.** `/security-review` found nothing high or medium (its low: dropping `decision_note`
   leaves old plain text in dead rows, the write-ahead log, and backups until they turn over, which
   needs disk or backup access). The `/code-review medium` loop ran four rounds and stopped at the

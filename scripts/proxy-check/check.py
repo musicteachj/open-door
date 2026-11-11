@@ -63,6 +63,11 @@ BUFFERING_LISTEN_SECONDS = 5.0
 HERE = Path(__file__).resolve().parent
 API_DIR = HERE.parents[1] / "apps" / "api"
 API_CONTAINER = "open-door-proxy-check-api"
+# The check is about the stream, not the budget, so its API gets a day's AI budget it can't use up,
+# as the browser tests' does. On CI the browser suite runs first, against the same throwaway
+# database, and its scripted turns stay in the day's ledger (the suite clears them only locally),
+# which can pass the real $3 cap and turn the check's own questions into 429 refusals.
+DAILY_BUDGET_USD = "1000"
 
 # The scripted model's silent scenario: no events for 45 seconds, then an answer.
 SILENCE_QUESTION = "scripted silence: how much paid sick leave do I get?"
@@ -360,11 +365,18 @@ class Api:
 
     def start(self, **settings: str) -> None:
         """A fresh container. `settings` are `api_env` keywords, like `heartbeat_seconds`."""
-        env = container.api_env(origin=NGINX_ORIGIN, port=API_PORT, bind_host=self.host, **settings)
+        env = self.env(**settings)
         remove(API_CONTAINER)
         run(*container.run_args(API_CONTAINER, env, port=API_PORT, detach=True), env=env)
         self.started = True
         self._wait_until_healthy()
+
+    def env(self, **settings: str) -> dict[str, str]:
+        """The container's settings: `api_env`'s, with the check's daily budget unless given."""
+        settings.setdefault("daily_budget_usd", DAILY_BUDGET_USD)
+        return container.api_env(
+            origin=NGINX_ORIGIN, port=API_PORT, bind_host=self.host, **settings
+        )
 
     def _running(self) -> bool:
         state = run("docker", "inspect", "-f", "{{.State.Running}}", API_CONTAINER, check=False)
@@ -616,6 +628,11 @@ def shutdown_run(client: httpx.Client, session: Session, api: Api) -> None:
     reader = threading.Thread(target=read, daemon=True)
     reader.start()
     if not started.wait(timeout=10):
+        reader.join(timeout=1)
+        if result and result[0].status not in (0, 200):
+            raise CheckError(
+                f"The silent stream was refused: the API answered HTTP {result[0].status}."
+            )
         raise CheckError("The silent stream did not start within 10 s.")
     time.sleep(1)  # Into the silence.
     sent = time.monotonic()
