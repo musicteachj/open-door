@@ -7,7 +7,8 @@ WEB := apps/web
 
 # Linters and scanners run through uvx or Docker. Dependabot can't see these versions, so bump them
 # by hand. GITLEAKS matches the version the Security workflow downloads and the pre-commit hook's
-# `rev`; `make check-workflows` fails when the three differ (scripts/check_tool_versions.py).
+# `rev`, and ruff's hook matches ruff in apps/api/uv.lock; `make check-workflows` fails when they
+# differ (scripts/check_tool_versions.py).
 TYPOS := typos@1.50.3
 LYCHEE := lycheeverse/lychee:0.24.2
 ACTIONLINT := rhysd/actionlint:1.7.12
@@ -239,7 +240,7 @@ check-docs: ## Check spelling (American English), links between files, and lefto
 	@if git grep --untracked -n -I -w -E 'T[O]DO|TB[D]|FIXM[E]|XX[X]|[Ll]orem [i]psum' -- '*.md'; then echo "Finish or remove the placeholders above."; exit 1; fi
 	@if LC_ALL=C git grep --untracked -n -I -P '\xE2\x80\x94' -- . ':!docs/plans/2026-09-29-open-door-initial-plan.md' ':!docs/design/' ':!evals/**/fixtures/**' ':!evals/assistant/hand-grades.yaml' ':!*.lock' ':!**/package-lock.json'; then echo "Replace the em dashes above (CLAUDE.md, Writing)."; exit 1; fi
 
-check-workflows: ## Check the workflows for mistakes (actionlint) and security (zizmor), the gitleaks versions, and the CI path filters
+check-workflows: ## Check the workflows for mistakes (actionlint) and security (zizmor), the gitleaks and ruff versions, and the CI path filters
 	uv run --quiet --no-project --python 3.13 scripts/check_tool_versions.py
 	uv run --quiet --no-project --python 3.13 scripts/check_path_filters.py
 	docker run --rm -v "$(CURDIR):/repo:ro" -w /repo $(ACTIONLINT) -no-color

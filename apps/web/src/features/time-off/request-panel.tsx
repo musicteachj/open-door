@@ -76,17 +76,18 @@ function RequestPanel({
   // lands after the inputs changed again (or the form closed) is dropped.
   useEffect(() => {
     if (key === null) return
-    let current = true
+    // The check itself isn't canceled (it is a short read); only its answer is dropped.
+    const run = { stale: false }
     const asked = JSON.parse(key) as NonNullable<typeof body>
     askCheck({ data: asked })
       .then((answer) => {
-        if (current) setSettled({ key, answer })
+        if (!run.stale) setSettled({ key, answer })
       })
       .catch(() => {
-        if (current) setSettled({ key, answer: null })
+        if (!run.stale) setSettled({ key, answer: null })
       })
     return () => {
-      current = false
+      run.stale = true
     }
     // Only a change of inputs, or a round, asks again.
   }, [key, round, askCheck])

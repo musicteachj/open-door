@@ -6,8 +6,8 @@ name: open-door-proxy-check
 
 services:
   nginx:
-    # nginx:1.27-alpine, pinned by tag and digest. Read with `docker inspect` after `docker pull` on
-    # 2026-10-17. Dependabot's docker-compose updates propose new digests.
+    # nginx:1.29-alpine, pinned by tag and digest (Dependabot's update, #109, merged 2026-11-11).
+    # Updated by hand from now on: Dependabot no longer watches this test-only image.
     image: nginx:1.29-alpine@sha256:5616878291a2eed594aee8db4dade5878cf7edcb475e59193904b198d9b830de
     ports:
       - "127.0.0.1:8201:80"

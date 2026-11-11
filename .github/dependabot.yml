@@ -5,6 +5,11 @@
 # moves when the Vite template does.
 # The 7-day cooldown waits for a release to age before proposing it, so a compromised release has
 # time to be caught first. Security updates skip the wait.
+# Only what ships or builds the app is watched. The proxy check's nginx image
+# (scripts/proxy-check/compose.yaml) and the pre-commit hooks (.pre-commit-config.yaml) are updated
+# by hand, the owner's choice of 2026-11-11 for fewer pull requests: ruff's hook moves with ruff in
+# apps/api/uv.lock, and gitleaks' with the Makefile and the Security workflow
+# (`make check-workflows` fails if they differ).
 version: 2
 updates:
   - package-ecosystem: uv
@@ -17,6 +22,9 @@ updates:
     ignore:
       - dependency-name: '*'
         update-types: [version-update:semver-major]
+      # ruff moves by hand, in the lockfile and the pre-commit hook together: a bump of one alone
+      # fails `make check-workflows`. (Its security updates are by hand too; it is a dev-only linter.)
+      - dependency-name: ruff
     groups:
       python:
         patterns: ['*']
@@ -52,8 +60,8 @@ updates:
         patterns: ['*']
     labels: [dependencies, skip-changelog]
 
-  # The production image's base images (the Dockerfile) and, for the proxy check, the nginx image
-  # (scripts/proxy-check/compose.yaml). Both are pinned by digest, which Dependabot updates.
+  # The production image's base images (the Dockerfile), pinned by tag and digest, which Dependabot
+  # updates.
   - package-ecosystem: docker
     directory: /
     target-branch: dev
@@ -66,37 +74,5 @@ updates:
         update-types: [version-update:semver-major]
     groups:
       docker:
-        patterns: ['*']
-    labels: [dependencies, skip-changelog]
-
-  - package-ecosystem: docker-compose
-    directory: /scripts/proxy-check
-    target-branch: dev
-    schedule:
-      interval: monthly
-    cooldown:
-      default-days: 7
-    ignore:
-      - dependency-name: '*'
-        update-types: [version-update:semver-major]
-    groups:
-      docker-compose:
-        patterns: ['*']
-    labels: [dependencies, skip-changelog]
-
-  # The hooks in .pre-commit-config.yaml (ruff, gitleaks). gitleaks' `rev` must move with the
-  # Makefile and the Security workflow: `make check-workflows` fails if only one does.
-  - package-ecosystem: pre-commit
-    directory: /
-    target-branch: dev
-    schedule:
-      interval: monthly
-    cooldown:
-      default-days: 7
-    ignore:
-      - dependency-name: '*'
-        update-types: [version-update:semver-major]
-    groups:
-      pre-commit:
         patterns: ['*']
     labels: [dependencies, skip-changelog]

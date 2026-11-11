@@ -33,15 +33,29 @@ filters = load("check_path_filters")
 # --- check_tool_versions ------------------------------------------------------------------------
 
 
-def write_versions_tree(root: Path, *, workflow: str, makefile: str, hook: str) -> None:
+def write_versions_tree(
+    root: Path,
+    *,
+    workflow: str,
+    makefile: str,
+    hook: str,
+    ruff_hook: str = "0.17.3",
+    ruff_lock: str = "0.17.3",
+) -> None:
     (root / ".github/workflows").mkdir(parents=True)
     (root / ".github/workflows/security.yml").write_text(
         f"jobs:\n  s:\n    steps:\n      - env:\n          GITLEAKS_VERSION: {workflow}\n"
     )
     (root / "Makefile").write_text(f"GITLEAKS := ghcr.io/gitleaks/gitleaks:v{makefile}\n")
     (root / ".pre-commit-config.yaml").write_text(
-        "repos:\n  - repo: https://github.com/gitleaks/gitleaks\n"
+        "repos:\n  - repo: https://github.com/astral-sh/ruff-pre-commit\n"
+        f"    rev: v{ruff_hook}\n    hooks:\n      - id: ruff-check\n"
+        "  - repo: https://github.com/gitleaks/gitleaks\n"
         f"    rev: v{hook}\n    hooks:\n      - id: gitleaks\n"
+    )
+    (root / "apps/api").mkdir(parents=True)
+    (root / "apps/api/uv.lock").write_text(
+        f'[[package]]\nname = "ruff"\nversion = "{ruff_lock}"\nsource = {{ registry = "x" }}\n'
     )
 
 
@@ -64,8 +78,21 @@ def test_one_different_version_fails_and_names_every_file(
     assert "8.31.0" in output
 
 
+def test_a_ruff_hook_that_differs_from_the_lockfile_fails(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    write_versions_tree(
+        tmp_path, workflow="8.30.1", makefile="8.30.1", hook="8.30.1", ruff_hook="0.18.0"
+    )
+    assert versions.main(tmp_path) == 1
+    output = capsys.readouterr().out
+    assert "ruff versions differ" in output
+    assert "apps/api/uv.lock has 0.17.3" in output
+    assert ".pre-commit-config.yaml has 0.18.0" in output
+
+
 def test_a_file_that_names_no_version_fails() -> None:
-    problems = versions.problems_in({"Makefile": None, "a.yml": "8.30.1"})
+    problems = versions.problems_in({"Makefile": None, "a.yml": "8.30.1"}, "gitleaks")
     assert problems == ["Makefile: no gitleaks version found"]
 
 
@@ -76,11 +103,11 @@ def test_each_pattern_reads_its_file() -> None:
         ".pre-commit-config.yaml": "  - repo: https://github.com/gitleaks/gitleaks\n"
         "    rev: v8.30.1\n",
     }
-    for file, _name, pattern in versions.SOURCES:
+    for file, _name, pattern in versions.GITLEAKS_SOURCES:
         assert versions.version_in(texts[file], pattern) == "8.30.1"
 
 
-def test_the_real_repository_has_one_gitleaks_version() -> None:
+def test_the_real_repository_has_one_version_of_each_tool() -> None:
     assert versions.main(REPO) == 0
 
 

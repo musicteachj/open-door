@@ -137,7 +137,7 @@ root folder.
 
 | | Threat | Control | Proof |
 |---|---|---|---|
-| T | A compromised action or base image runs in CI or ships | Every action pinned by commit, every Docker base image by digest (Stage 2); Dependabot opens updates as PRs, now for the Docker images and pre-commit hooks too; the image's CA store has no emSign root | `.github/workflows/`, `.github/dependabot.yml`, `Dockerfile`, `make image-check` |
+| T | A compromised action or base image runs in CI or ships | Every action pinned by commit, every Docker base image by digest (Stage 2); Dependabot opens updates as PRs, now for the production image's base images too (the proxy check's nginx and the pre-commit hooks are updated by hand, with `make check-workflows` keeping the hooks' versions equal to the other copies); the image's CA store has no emSign root | `.github/workflows/`, `.github/dependabot.yml`, `Dockerfile`, `make image-check` |
 | T | A vulnerable dependency ships | `pip-audit` (over the app's locked dependencies only, **Stage 2**) and `npm audit` in CI (`security.yml`), `make audit` locally | `.github/workflows/security.yml` |
 | I | A secret is committed | gitleaks in pre-commit and on every commit in CI, one version in all three places (**Stage 2**) | `.github/workflows/security.yml`, `.pre-commit-config.yaml`, `scripts/check_tool_versions.py` |
 | E | CI spends money on the model | CI replays recorded fixtures; no paid call on push or PR; a live eval is a local, capped run | `make eval-offline` in CI |
