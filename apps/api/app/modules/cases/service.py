@@ -198,10 +198,12 @@ async def open_case(
     ones, and holds none while the model is waited on.
 
     In order: the policy; the words checked (empty, too long, a Social Security or card number),
-    before anything is screened, stored, or sent; then, in a read-only session, the same submission
-    (or turn), the turn, and the waiting limit, so a refused request is never screened; then the
-    words are screened with no session, connection, or lock held; then, in a second session under
-    the person's lock, the same three checks again and the insert. The case, its `opened` event,
+    before anything is screened, stored, or sent; then, in a read-only session, whether the same
+    submission (or turn) already made a case (its words are not opened here), and if not the turn
+    and the waiting limit, so a refused request is never screened; a repeat skips the screening.
+    Then the words are screened with no session, connection, or lock held; then, in a second
+    session under the person's lock, the same three checks again and the insert (or, for a repeat,
+    its stored words opened once and `case.resubmitted` written). The case, its `opened` event,
     and `case.opened` commit together when that session ends. No HR flag is needed: a person reads
     and adds their own cases and turns without it, HR included.
 
@@ -223,24 +225,31 @@ async def open_case(
     context = TenantContext(actor.tenant_id, actor.person_id)
     # The read-only look. No lock: it only decides whether to spend on the screening.
     async with tenant_session(engine, context) as db:
-        repeated, _ = await _look(db, keys, actor, new)
-    if repeated is not None:
-        return repeated
-    screening = await _screen(guard, actor, new.text)
+        repeats = await _earlier(db, actor, new) is not None
+        if not repeats:
+            await _refuse_if_not_allowed(db, actor, new)
+    # A repeat is not screened again, and its words are not opened here: the locked session below
+    # decides it, opening the stored words once.
+    screening = None if repeats else await _screen(guard, actor, new.text)
     async with tenant_session(engine, context) as db:
         return await _insert_case(db, keys, actor, new, screening)
 
 
 async def _insert_case(
-    db: AsyncSession, keys: KeyProvider, actor: Actor, new: OpenCase, screening: str
+    db: AsyncSession, keys: KeyProvider, actor: Actor, new: OpenCase, screening: str | None
 ) -> CaseOpened:
     """The second session of `open_case`: under the person's lock, look again (another send may
-    have won while the words were screened), then write the case, its event, and its audit row."""
+    have won while the words were screened), then write the case, its event, and its audit row.
+    `screening` is None when the first look found an earlier case, which is then decided here."""
     tenant_id = actor.tenant_id
     await queries.lock_person(db, tenant_id, actor.person_id)
-    repeated, conversation_id = await _look(db, keys, actor, new)
-    if repeated is not None:
-        return repeated
+    earlier = await _earlier(db, actor, new)
+    if earlier is not None:
+        return await _repeat(db, keys, actor, earlier, new)
+    if screening is None:
+        # The earlier case vanished (a sandbox ended) between the two looks.
+        raise _not_found()
+    conversation_id = await _refuse_if_not_allowed(db, actor, new)
 
     # The database stamps `created_at` with the transaction's `now()`, so the reply-by date is
     # worked out from that same instant.
@@ -306,17 +315,20 @@ async def _insert_case(
     )
 
 
-async def _look(
-    db: AsyncSession, keys: KeyProvider, actor: Actor, new: OpenCase
-) -> tuple[CaseOpened | None, UUID | None]:
-    """The case this send repeats, if any; otherwise the checks that refuse it (an unknown, foreign,
-    or unflagged turn; the waiting limit) and the turn's conversation. Reads only."""
+async def _earlier(db: AsyncSession, actor: Actor, new: OpenCase) -> Case | None:
+    """The case this send repeats, by submission ID or by turn, if any. Reads only, and opens no
+    words."""
     tenant_id = actor.tenant_id
     earlier = await queries.case_by_submission(db, tenant_id, actor.person_id, new.submission_id)
     if earlier is None and new.turn_id is not None:
         earlier = await queries.case_by_turn(db, tenant_id, actor.person_id, new.turn_id)
-    if earlier is not None:
-        return _repeat(keys, earlier, new), None
+    return earlier
+
+
+async def _refuse_if_not_allowed(db: AsyncSession, actor: Actor, new: OpenCase) -> UUID | None:
+    """The checks that refuse a new case (an unknown, foreign, or unflagged turn; the waiting
+    limit). Returns the turn's conversation, if the case comes from a turn. Reads only."""
+    tenant_id = actor.tenant_id
     conversation_id: UUID | None = None
     if new.turn_id is not None:
         conversation_id = await queries.own_flagged_turn_conversation(
@@ -326,17 +338,29 @@ async def _look(
             raise _turn_not_found()
     if await queries.count_waiting(db, tenant_id, actor.person_id) >= texts.MAX_WAITING_CASES:
         raise ProblemError(409, "case-waiting-limit", texts.WAITING_LIMIT_TEXT)
-    return None, conversation_id
+    return conversation_id
 
 
-def _repeat(keys: KeyProvider, earlier: Case, new: OpenCase) -> CaseOpened:
+async def _repeat(
+    db: AsyncSession, keys: KeyProvider, actor: Actor, earlier: Case, new: OpenCase
+) -> CaseOpened:
     """The case a repeated submission (or a second tab for the same turn) already made. The same
-    words get the same case and schedule nothing; different words are a conflict, which the person
-    sees as "already sent", not as anyone's words."""
+    words get the same case and schedule nothing, and the repeat is audited (no words in it);
+    different words are a conflict, which the person sees as "already sent", not as anyone's
+    words. The stored words are opened here, once."""
     words = _open_words(keys, earlier)
     # The same send names the same turn (or none), as well as the same words.
     if words != new.text or earlier.turn_id != new.turn_id:
         raise ProblemError(409, "case-submission-conflict", texts.SUBMISSION_CONFLICT_TEXT)
+    await record_event(
+        db,
+        tenant_id=actor.tenant_id,
+        actor_id=actor.person_id,
+        action="case.resubmitted",
+        target_type="case",
+        target_id=earlier.id,
+        via="ui",
+    )
     return CaseOpened(
         case=_status_view(earlier),
         created=False,

@@ -28,6 +28,7 @@ from app.ai.fixed_texts import (
     PERSONAL_DATA_TEXT,
     STILL_ANSWERING_TEXT,
     UNAVAILABLE_TEXT,
+    UNREADABLE_CONVERSATION_TEXT,
 )
 from app.db.models import AiConversation, AiSpend
 from app.db.tenancy import TenantContext, set_is_hr, tenant_session
@@ -204,8 +205,10 @@ def test_a_new_conversation_is_pinned_to_the_current_versions_and_is_the_current
         "longHistory",
         "historyTooLong",
         "outdated",
+        "unreadable",
     }
     assert created["outdated"] is False
+    assert created["unreadable"] is False
 
 
 async def test_the_new_conversation_row_carries_the_current_pins(
@@ -1508,7 +1511,7 @@ async def test_the_budget_route_sizes_the_estimate_with_the_conversations_histor
     assert seen[-1]["history"] != []
 
 
-def test_the_texts_route_returns_the_two_fixed_texts_the_composer_needs(browser: Browser) -> None:
+def test_the_texts_route_returns_the_fixed_texts_the_composer_needs(browser: Browser) -> None:
     sign_in(browser)
 
     response = browser.client.get(f"{BASE}/texts")
@@ -1517,6 +1520,7 @@ def test_the_texts_route_returns_the_two_fixed_texts_the_composer_needs(browser:
     assert response.json() == {
         "personalData": PERSONAL_DATA_TEXT,
         "stillAnswering": STILL_ANSWERING_TEXT,
+        "unreadableConversation": UNREADABLE_CONVERSATION_TEXT,
     }
     assert response.headers["cache-control"] == "no-store"
 

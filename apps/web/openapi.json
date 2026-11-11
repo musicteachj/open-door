@@ -2933,12 +2933,17 @@
           "stillAnswering": {
             "type": "string",
             "title": "Stillanswering"
+          },
+          "unreadableConversation": {
+            "type": "string",
+            "title": "Unreadableconversation"
           }
         },
         "type": "object",
         "required": [
           "personalData",
-          "stillAnswering"
+          "stillAnswering",
+          "unreadableConversation"
         ],
         "title": "AssistantTextsOut",
         "description": "The fixed refusals the composer shows before a request is sent, so the web app holds no\ncopy of the words."
@@ -4277,6 +4282,10 @@
           "outdated": {
             "type": "boolean",
             "title": "Outdated"
+          },
+          "unreadable": {
+            "type": "boolean",
+            "title": "Unreadable"
           }
         },
         "type": "object",
@@ -4288,7 +4297,8 @@
           "budget",
           "longHistory",
           "historyTooLong",
-          "outdated"
+          "outdated",
+          "unreadable"
         ],
         "title": "ConversationOut"
       },

@@ -166,6 +166,10 @@ class ConversationOut(CamelModel):
     history_too_long: bool
     # Pinned to a prompt or tool set that is no longer current: it can't continue.
     outdated: bool
+    # The stored text does not open (a key that no longer unwraps, a damaged row): no turns are
+    # sent, `history_too_long` is true so the page offers a new conversation, and the page shows
+    # the fixed "can't be shown" line.
+    unreadable: bool
 
 
 class AssistantTextsOut(CamelModel):
@@ -174,6 +178,8 @@ class AssistantTextsOut(CamelModel):
 
     personal_data: str
     still_answering: str
+    # What the page shows in place of a conversation whose stored text does not open.
+    unreadable_conversation: str
 
 
 class FeedbackIn(CamelModel):

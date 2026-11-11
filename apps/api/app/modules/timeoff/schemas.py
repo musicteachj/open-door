@@ -259,10 +259,13 @@ class RequestOut(CamelModel):
         cls,
         row: queries.RequestRow,
         *,
+        note: str | None,
         available_after_minutes: int | None = None,
         coverage: tuple[CoverageEntry, ...] | None = None,
         can_cancel: bool,
     ) -> "RequestOut":
+        """The row as the API returns it. `note` is the denial's note, already opened by a caller
+        that has checked who may read it (the row holds it sealed)."""
         return cls(
             id=row.id,
             person=PersonOut(id=row.person_id, name=row.person_name, title=row.person_title),
@@ -281,7 +284,7 @@ class RequestOut(CamelModel):
                 else DeciderOut(id=row.decided_by_id, name=row.decided_by_name)
             ),
             decided_at=row.decided_at,
-            decision_note=row.decision_note,
+            decision_note=note,
             canceled_at=row.canceled_at,
             available_after_minutes=available_after_minutes,
             available_after_label=(

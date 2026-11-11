@@ -26,6 +26,7 @@ from app.db.models import (
 )
 from app.domain.timeoff.model import Opening, Request, Schedule
 from app.domain.timeoff.model import Person as EnginePerson
+from app.modules.timeoff.notes import SealedNote
 
 
 async def lock_person(db: AsyncSession, tenant_id: UUID, person_id: UUID) -> None:
@@ -239,7 +240,9 @@ class RequestRow:
     decided_by_id: UUID | None
     decided_by_name: str | None
     decided_at: datetime | None
-    decision_note: str | None
+    # The denial's note, still sealed: opened only where a reader may see it (`notes.open_note`),
+    # and only for a row that has one.
+    sealed_note: SealedNote | None
     canceled_at: datetime | None
 
 
@@ -288,7 +291,9 @@ async def load_request_rows(
             TimeOffRequest.decided_by.label("decided_by_id"),
             _name(decider.given_name, decider.family_name).label("decided_by_name"),
             TimeOffRequest.decided_at,
-            TimeOffRequest.decision_note,
+            TimeOffRequest.note_key_id,
+            TimeOffRequest.note_wrapped_key,
+            TimeOffRequest.note_ciphertext,
             TimeOffRequest.canceled_at,
         )
         .join(
@@ -343,7 +348,9 @@ async def load_request_rows(
             decided_by_id=row.decided_by_id,
             decided_by_name=row.decided_by_name,
             decided_at=row.decided_at,
-            decision_note=row.decision_note,
+            sealed_note=SealedNote.from_columns(
+                row.note_key_id, row.note_wrapped_key, row.note_ciphertext
+            ),
             canceled_at=row.canceled_at,
         )
         for row in await db.execute(query)

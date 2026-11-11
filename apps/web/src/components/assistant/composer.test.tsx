@@ -432,6 +432,18 @@ describe('Composer', () => {
       expect(onNewConversation).toHaveBeenCalledTimes(1)
     })
 
+    it('shows its own words, and none of the long-conversation ones when they have not arrived', () => {
+      const { unmount } = render(
+        <Harness longConversation noticeText="Its own words." onNewConversation={() => {}} />,
+      )
+      expect(screen.getByText('Its own words.')).toBeInTheDocument()
+      expect(screen.queryByText(/getting long/)).not.toBeInTheDocument()
+      unmount()
+      render(<Harness longConversation noticeText="" onNewConversation={() => {}} />)
+      expect(screen.queryByText(/getting long/)).not.toBeInTheDocument()
+      expect(screen.getByRole('button', { name: 'Start a new conversation' })).toBeInTheDocument()
+    })
+
     it('has no button without a handler', () => {
       render(<Harness longConversation />)
       expect(

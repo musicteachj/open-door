@@ -252,6 +252,47 @@ describe('the home and the conversation', () => {
     expect(screen.getAllByRole('button', { name: 'Start a new conversation' })).toHaveLength(2)
   })
 
+  it('shows the approved line and the new-conversation button, and no turns, for an unreadable conversation', async () => {
+    signedInWith(
+      conversationOut({ unreadable: true, historyTooLong: true, longHistory: true, turns: [] }),
+    )
+    renderApp({ at: '/ask' })
+    // The words come from the texts route, not from a copy in the page.
+    expect(await screen.findByText(TEXTS.unreadableConversation)).toBeInTheDocument()
+    expect(screen.getAllByRole('button', { name: 'Start a new conversation' })).toHaveLength(2)
+    expect(screen.queryByText(/This conversation is getting long/)).not.toBeInTheDocument()
+    // Not the home's greeting: this is the conversation's page, with nothing in the thread.
+    expect(screen.queryByRole('heading', { level: 1 })).not.toBeInTheDocument()
+  })
+
+  it('starts a new conversation from the unreadable one', async () => {
+    const api = signedInWith(conversationOut({ unreadable: true, historyTooLong: true }))
+    const { user } = renderApp({ at: '/ask' })
+    await screen.findByText(TEXTS.unreadableConversation)
+    await user.click(screen.getAllByRole('button', { name: 'Start a new conversation' })[0])
+    await waitFor(() => expect(api.requests.created).toBe(1))
+    await waitFor(() =>
+      expect(screen.queryByText(TEXTS.unreadableConversation)).not.toBeInTheDocument(),
+    )
+  })
+
+  it('reads the conversation again when a question meets an unreadable one (409), and shows its line, not the long-conversation words', async () => {
+    const api = signedInWith(conversationOut({ turns: [cited()] }))
+    onTurn(() => {
+      api.setCurrent(
+        conversationOut({ unreadable: true, historyTooLong: true, longHistory: true, turns: [] }),
+      )
+      return problemResponse(409, 'conversation-unreadable', TEXTS.unreadableConversation)
+    })
+    const { user } = renderApp({ at: '/ask' })
+    await screen.findByText(/You get 40 hours/)
+    await user.type(await composer(), 'Another question{Enter}')
+    expect(await screen.findByText(TEXTS.unreadableConversation)).toBeInTheDocument()
+    await waitFor(() => expect(screen.queryByText(/You get 40 hours/)).not.toBeInTheDocument())
+    expect(screen.queryByText(/This conversation is getting long/)).not.toBeInTheDocument()
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  })
+
   it('says nothing on load for an outdated conversation: its words do not fit, and the send explains', async () => {
     signedInWith(conversationOut({ turns: [cited()], outdated: true }))
     renderApp({ at: '/ask' })

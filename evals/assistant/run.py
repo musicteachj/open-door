@@ -963,7 +963,8 @@ async def request_snapshot(app_engine: AsyncEngine) -> dict[str, tuple[Any, ...]
                 TimeOffRequest.status,
                 TimeOffRequest.decided_by,
                 TimeOffRequest.decided_at,
-                TimeOffRequest.decision_note,
+                TimeOffRequest.note_key_id,
+                TimeOffRequest.note_ciphertext,
                 TimeOffRequest.canceled_at,
             )
         )

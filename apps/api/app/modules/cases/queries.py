@@ -76,8 +76,10 @@ async def hq_zone_and_holidays(
 ) -> tuple[ZoneInfo, frozenset[date]]:
     """Denver HQ's zone and its closed days from the sent day on, across the year's end.
 
-    From the sandbox's own holiday table when the Denver location is there. A sandbox without it
-    gets the company calendar for the sent year and the next, which is what the seed stores.
+    From the sandbox's own holiday table when the Denver location is there. The seed writes every
+    location's holidays from the year before the anchor to two years after it, so a sandbox
+    seeded in late December already holds next year's New Year's Day. A sandbox without the
+    Denver location gets the company calendar for the sent year and the next.
     """
     row = await _hq_location(db, tenant_id)
     if row is None:

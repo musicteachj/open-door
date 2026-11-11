@@ -684,7 +684,7 @@ async def test_a_cited_answer_and_a_decline_that_never_searched_are_not_not_foun
 # --- A ciphertext that does not open ----------------------------------------------------------
 
 
-async def test_a_ciphertext_moved_between_messages_is_a_500_with_no_turn_row_written(
+async def test_a_ciphertext_moved_between_messages_makes_the_conversation_unreadable(
     open_browser: OpenBrowser, app_engine: AsyncEngine, owner_engine: AsyncEngine
 ) -> None:
     browser = open_browser(raise_server_exceptions=False)
@@ -723,11 +723,14 @@ async def test_a_ciphertext_moved_between_messages_is_a_500_with_no_turn_row_wri
     response = ask(browser, conversation_id)
     reading = browser.client.get(f"{BASE}/conversations/current")
 
+    # Not a 500 any more: the question is a 409 and the read says the conversation is unreadable.
+    assert response.status_code == 409
+    assert response.headers["content-type"] == "application/problem+json"
+    assert response.json()["type"] == "conversation-unreadable"
+    assert reading.status_code == 200
+    assert (reading.json()["unreadable"], reading.json()["turns"]) == (True, [])
     for refused in (response, reading):
-        assert refused.status_code == 500
-        assert refused.headers["content-type"] == "application/problem+json"
-        assert refused.json()["detail"] == "Something went wrong."
-        # Only the generic problem surfaces: no word of ciphertexts, keys, or the text.
+        # No word of ciphertexts, keys, or the text.
         assert "decrypt" not in refused.text.lower()
         assert "message 0" not in refused.text
     # Admission failed before the turn's row was added: only the earlier turn is there.

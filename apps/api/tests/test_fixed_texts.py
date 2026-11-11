@@ -189,6 +189,22 @@ def test_the_daily_budget_text_is_approved() -> None:
     )
 
 
+def test_the_unreadable_conversation_text_is_approved() -> None:
+    message = (
+        "The unreadable-conversation text isn't approved: the owner edits it, then sets "
+        "UNREADABLE_CONVERSATION_TEXT_APPROVED_ON and UNREADABLE_CONVERSATION_TEXT_SHA256."
+    )
+    assert fixed_texts.UNREADABLE_CONVERSATION_TEXT == (
+        "This conversation can't be shown. Start a new conversation to keep asking."
+    )
+    assert fixed_texts.UNREADABLE_CONVERSATION_TEXT_AUTHOR == "James Littlefield (owner)"
+    assert fixed_texts.UNREADABLE_CONVERSATION_TEXT_APPROVED_ON == "2026-11-10"
+    date.fromisoformat(fixed_texts.UNREADABLE_CONVERSATION_TEXT_APPROVED_ON)
+    digest = hashlib.sha256(fixed_texts.UNREADABLE_CONVERSATION_TEXT.encode()).hexdigest()
+    assert digest == fixed_texts.UNREADABLE_CONVERSATION_TEXT_SHA256, message
+    assert "\u2014" not in fixed_texts.UNREADABLE_CONVERSATION_TEXT
+
+
 def test_the_composers_two_refusals_keep_their_words() -> None:
     """The web app shows these from `GET /assistant/texts`, and the API sends them as problems."""
     assert fixed_texts.PERSONAL_DATA_TEXT == (

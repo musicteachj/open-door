@@ -151,3 +151,27 @@ def test_ipv6_loopback_is_translated_and_other_hosts_and_linux_are_left_alone() 
         container.database_url_for_container(bare, platform="darwin")
         == "postgresql://host.docker.internal/db"
     )
+
+
+def test_the_image_defaults_to_the_test_image_and_can_be_the_production_one() -> None:
+    default = container.run_args("od", ENV, port=8100, platform="darwin", detach=False)
+    prod = container.run_args(
+        "od", ENV, port=8100, platform="darwin", detach=False, image=container.PROD_TAG
+    )
+
+    assert default[-1] == container.TEST_TAG == "open-door:test"
+    assert prod[-1] == container.PROD_TAG == "open-door:prod"
+    assert prod[:-1] == default[:-1]
+
+
+@pytest.mark.parametrize("platform", ["darwin", "linux"])
+def test_on_a_named_network_the_port_is_published_on_loopback_on_every_platform(
+    platform: str,
+) -> None:
+    args = container.run_args(
+        "od", ENV, port=8300, platform=platform, detach=True, network="net", image="img"
+    )
+
+    assert pairs(args, "--network") == ["net"]
+    assert pairs(args, "--publish") == ["127.0.0.1:8300:8300"]
+    assert "host" not in args

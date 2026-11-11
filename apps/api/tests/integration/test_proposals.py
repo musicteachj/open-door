@@ -63,7 +63,14 @@ from app.modules.timeoff import queries, service
 from app.modules.timeoff.schemas import DrawOut
 from app.modules.timeoff.service import Preview, Refused
 from app.modules.timeoff.texts import refusal_text
-from tests.integration.conftest import MakeTenant, audit_events, conversation_key, turn_row
+from tests.integration.conftest import (
+    TEST_KEYS,
+    MakeTenant,
+    audit_events,
+    conversation_key,
+    opened_note,
+    turn_row,
+)
 from tests.integration.test_timeoff_service import (
     NOW,
     Org,
@@ -269,7 +276,7 @@ async def confirm_as(
     not raised, so the transaction commits."""
     async with acting(engine, tenant_id, person_id) as (db, actor):
         try:
-            return await confirm(db, actor, proposal_id, note, NOW)
+            return await confirm(db, actor, proposal_id, note, NOW, TEST_KEYS)
         except Conflict as conflict:
             if not conflict.wrote:
                 raise
@@ -591,7 +598,9 @@ async def test_a_decision_card_is_refused_for_the_same_reason_the_confirm_would_
 
     async with acting(app_engine, org.tenant.id, actor_id) as (db, actor):
         card = await decide_card(db, actor, request_id, "approve", NOW)
-        decided = await service.decide(db, actor, request_id, "approve", None, NOW, via="ui")
+        decided = await service.decide(
+            db, actor, request_id, "approve", None, NOW, keys=TEST_KEYS, via="ui"
+        )
 
     assert isinstance(card, Refused)
     assert isinstance(decided, Refused)
@@ -1224,7 +1233,7 @@ async def test_confirming_a_decision_decides_as_the_manager_and_keeps_the_note_o
     )
 
     request = await get_request(app_engine, org, request_id)
-    assert (request.status, request.decided_by, request.decision_note) == (
+    assert (request.status, request.decided_by, opened_note(request)) == (
         "denied",
         org.manager,
         note,
@@ -1258,7 +1267,7 @@ async def test_confirming_an_approval_approves(
     executed(await confirm_as(app_engine, org.tenant.id, org.manager, proposal_id))
 
     request = await get_request(app_engine, org, request_id)
-    assert (request.status, request.decided_by, request.decision_note) == (
+    assert (request.status, request.decided_by, opened_note(request)) == (
         "approved",
         org.manager,
         None,
@@ -1384,7 +1393,7 @@ async def test_a_blank_note_on_a_denial_is_no_note(
 
     executed(await confirm_as(app_engine, org.tenant.id, org.manager, proposal_id, "   "))
 
-    assert (await get_request(app_engine, org, request_id)).decision_note is None
+    assert (await get_request(app_engine, org, request_id)).note_ciphertext is None
 
 
 async def test_someone_elses_proposal_and_a_missing_one_are_both_not_found(
@@ -1494,7 +1503,7 @@ async def test_the_expiry_is_judged_by_the_database_clock_not_the_callers(
     # says it has fifteen minutes. The service does use the caller's clock, for "today", so it
     # refuses the booking as `out-of-range` (its days are in that "past"): failed, not expired.
     async with acting(app_engine, org.tenant.id, org.report) as (db, actor):
-        out = await confirm(db, actor, proposal_id, None, NOW + timedelta(days=365))
+        out = await confirm(db, actor, proposal_id, None, NOW + timedelta(days=365), TEST_KEYS)
 
     assert out.status == "failed"
     assert out.failure is not None
@@ -2077,7 +2086,7 @@ async def test_a_second_confirm_waits_at_the_proposal_row_before_the_persons_loc
     # must wait. It waits on the first transaction (the proposal's row), never at the person's
     # advisory lock: the row comes first, everywhere, so two confirms can't deadlock.
     async with acting(app_engine, org.tenant.id, org.report) as (db, actor):
-        first = await confirm(db, actor, proposal_id, None, NOW)
+        first = await confirm(db, actor, proposal_id, None, NOW, TEST_KEYS)
         second = asyncio.create_task(confirm_as(app_engine, org.tenant.id, org.report, proposal_id))
         await until_a_row_lock_is_waited_for(owner_engine)
         assert await count_waiting(owner_engine, advisory=True) == 0
@@ -2148,7 +2157,7 @@ async def test_a_request_already_made_for_the_proposal_is_a_conflict_and_the_tra
 
     async with acting(app_engine, org.tenant.id, org.report) as (db, actor):
         with pytest.raises(Conflict) as conflict:
-            await confirm(db, actor, proposal_id, None, NOW)
+            await confirm(db, actor, proposal_id, None, NOW, TEST_KEYS)
         # The transaction is still usable, and the failed insert left nothing behind.
         assert (await db.execute(text("SELECT 1"))).scalar_one() == 1
 
@@ -2189,7 +2198,7 @@ async def test_a_snapshot_that_is_out_of_date_is_a_conflict_with_the_current_sta
     monkeypatch.setattr(proposals, "_lock_proposal", stale)
     async with acting(app_engine, org.tenant.id, org.manager) as (db, actor):
         with pytest.raises(Conflict) as conflict:
-            await confirm(db, actor, proposal_id, None, NOW)
+            await confirm(db, actor, proposal_id, None, NOW, TEST_KEYS)
 
     assert (conflict.value.status, conflict.value.wrote) == ("executed", False)
     # Only the first confirm's request change and event exist.

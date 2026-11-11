@@ -608,6 +608,11 @@ function failSend(error: unknown, deps: SendDeps) {
     // poller picks it up.
     deps.invalidateConversation()
     set({ ...cleared, sendError: deps.texts.stillAnswering })
+  } else if (error.status === 409 && type === 'conversation-unreadable') {
+    // Read the conversation again: it comes back `unreadable`, with no turns, and the notice says
+    // why in the owner's words. No line under the box too, which would say it twice.
+    deps.invalidateConversation()
+    set({ ...cleared, offerNewConversation: true })
   } else if (
     error.status === 409 &&
     (type === 'conversation-outdated' || type === 'history-too-long')

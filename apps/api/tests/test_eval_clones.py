@@ -263,7 +263,9 @@ def test_a_clone_has_a_copy_of_every_time_off_request_of_its_template() -> None:
                 "status",
                 "created_at",
                 "decided_at",
-                "decision_note",
+                "note_key_id",
+                "note_wrapped_key",
+                "note_ciphertext",
                 "canceled_at",
             ):
                 assert getattr(copy, field) == getattr(original, field), field

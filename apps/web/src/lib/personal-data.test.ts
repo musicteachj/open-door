@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 // The shared vectors live outside apps/web: the API's test reads the same file, so the two checks
 // cannot drift. Never copy it.
 import cases from '../../../../evals/assistant/personal-data-cases.json'
-import { kindOfPersonalData, normalized } from './personal-data'
+import { digitValue, kindOfPersonalData, normalized } from './personal-data'
 
 describe('the shared vectors', () => {
   it('are present', () => {
@@ -65,5 +65,26 @@ describe('kindOfPersonalData', () => {
 describe('normalized', () => {
   it('drops format characters, maps spaces and dashes to ASCII, and applies NFKC', () => {
     expect(normalized('1​2 3–4５')).toBe('12 3-45')
+  })
+})
+
+describe('digitValue', () => {
+  it('reads the first, a middle, and the last digit of a run', () => {
+    expect(digitValue('\u0660')).toBe(0)
+    expect(digitValue('\u0665')).toBe(5)
+    expect(digitValue('\u0669')).toBe(9)
+    expect(digitValue('\u0966')).toBe(0)
+    expect(digitValue('\u096f')).toBe(9)
+    expect(digitValue('7')).toBe(7)
+  })
+
+  it('reads an astral digit, including one in the later sets of a multi-set run', () => {
+    expect(digitValue('\u{1D7CE}')).toBe(0) // mathematical bold zero
+    expect(digitValue('\u{1D7D8}')).toBe(0) // double-struck zero, the second set
+    expect(digitValue('\u{1D7FF}')).toBe(9) // monospace nine, the last
+  })
+
+  it('lets normalized turn astral digits into ASCII', () => {
+    expect(normalized('\u{1D7D8}\u{1D7D9}')).toBe('01')
   })
 })

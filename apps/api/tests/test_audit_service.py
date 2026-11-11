@@ -85,6 +85,7 @@ def test_the_case_actions_exist() -> None:
 
     assert {
         "case.opened",
+        "case.resubmitted",
         "case.summary.written",
         "case.summary.failed",
         "case.summary.retried",

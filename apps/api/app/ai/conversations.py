@@ -790,3 +790,72 @@ async def add_feedback(
         if constraint_name(error) == FEEDBACK_ONCE_CONSTRAINT:
             raise FeedbackGiven from error
         raise
+
+
+class ConversationUnreadable(Exception):  # noqa: N818  (it names a state, like DecryptionFailed)
+    """A stored value of the conversation does not open. Carries IDs only, never any text."""
+
+    def __init__(self, conversation_id: UUID, turn_id: UUID | None) -> None:
+        super().__init__(f"conversation {conversation_id}")
+        self.conversation_id = conversation_id
+        self.turn_id = turn_id
+
+
+@dataclass(frozen=True)
+class OpenedConversation:
+    """Everything sealed that a conversation shows or sends to the model, opened."""
+
+    cipher: ConversationCipher
+    turns: list[AiTurn]
+    feedback: dict[UUID, AiFeedback]
+    # Each turn's text and its feedback reason (None when there is none), by turn ID.
+    texts: dict[UUID, tuple[TurnText, str | None]]
+    history: list[dict[str, Any]]
+
+
+async def open_conversation(
+    db: AsyncSession, keys: KeyProvider, conversation: AiConversation
+) -> OpenedConversation:
+    """Open the conversation's key, every turn, every feedback reason, and the model's history.
+
+    The one rule for whether a conversation is readable: the page's read and a question's
+    admission both call it (the budget read opens only the history), so the page never calls a
+    conversation unreadable while it still takes questions, or the reverse. A key, turn, or history
+    value that does not open raises `ConversationUnreadable` after one warning line naming the
+    conversation (and the turn, if one was being opened), never text. A feedback reason is
+    optional, so one that does not open is left out, with its own warning, and the conversation
+    stays readable.
+    """
+    turn_id: UUID | None = None
+    try:
+        cipher = conversation_cipher(keys, conversation)
+        turns = await conversation_turns(db, conversation.id)
+        feedback = await turn_feedback(db, conversation.id)
+        texts: dict[UUID, tuple[TurnText, str | None]] = {}
+        for turn in turns:
+            turn_id = turn.id
+            texts[turn.id] = (open_turn(cipher, turn), _reason_or_none(cipher, feedback, turn.id))
+        turn_id = None
+        history = await model_history(db, conversation.id, cipher)
+    except DecryptionFailed:
+        logger.warning(
+            "A conversation could not be opened (conversation %s%s)",
+            conversation.id,
+            f", turn {turn_id}" if turn_id is not None else "",
+        )
+        raise ConversationUnreadable(conversation.id, turn_id) from None
+    return OpenedConversation(cipher, turns, feedback, texts, history)
+
+
+def _reason_or_none(
+    cipher: ConversationCipher, feedback: dict[UUID, AiFeedback], turn_id: UUID
+) -> str | None:
+    """The turn's feedback reason, or None if it has none or it does not open (logged by ID)."""
+    given = feedback.get(turn_id)
+    if given is None:
+        return None
+    try:
+        return open_reason(cipher, given)
+    except DecryptionFailed:
+        logger.warning("A feedback reason could not be opened (feedback %s)", given.id)
+        return None

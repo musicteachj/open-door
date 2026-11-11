@@ -10,6 +10,7 @@ import { useAnswerViewer, useWriteToHrLink } from '@/features/cases/use-write-to
 import { BudgetStop } from './budget-stop'
 import { forgetOpener, rememberOpener, returnFocusToOpener } from './source-opener'
 import { useSourceUrl } from './source-url'
+import { useAssistantTexts } from './use-conversation'
 import { useChatStore, type ChatStatus, type LiveTurn, type SettlingTurn } from './store'
 import { OpenSourceContext } from './open-source'
 import { LiveTurnView, SourceMarker, StoredTurn, type TurnContext } from './turn-view'
@@ -178,7 +179,12 @@ export function ConversationView({
   // length flags, and a send the API refused because this one can't go on (`offerNewConversation`:
   // too long, or from an older assistant, whose 409 text is the send error). An outdated
   // conversation says nothing on load, since "getting long" would be the wrong words.
+  // One that can't be opened says so in the owner's words (from the API, which holds the only copy),
+  // with the same button.
+  const texts = useAssistantTexts()
+  const unreadable = conversation?.unreadable ?? false
   const longConversation =
+    unreadable ||
     (conversation?.longHistory ?? false) ||
     (conversation?.historyTooLong ?? false) ||
     offerNewConversation
@@ -230,6 +236,7 @@ export function ConversationView({
               variant="docked"
               placeholder={conversationCopy.followUpPlaceholder}
               longConversation={longConversation}
+              noticeText={unreadable ? (texts.data?.unreadableConversation ?? '') : undefined}
               onNewConversation={composer.startNewConversation}
             />
             <RetentionLine className="sm:hidden" />

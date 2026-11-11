@@ -34,6 +34,7 @@ export interface ActionCountOut {
 export interface AssistantTextsOut {
   personalData: string
   stillAnswering: string
+  unreadableConversation: string
 }
 
 export interface AudienceOut {
@@ -750,6 +751,7 @@ export interface ConversationOut {
   longHistory: boolean
   historyTooLong: boolean
   outdated: boolean
+  unreadable: boolean
 }
 
 export interface CountsOut {

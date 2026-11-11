@@ -43,22 +43,21 @@ from app.ai.context import ActorView, actor_view
 from app.ai.conversations import (
     CURRENT_PINS,
     ConversationCipher,
+    ConversationUnreadable,
     FeedbackGiven,
+    OpenedConversation,
     TurnNotCompleted,
     TurnNotFound,
     TurnRunning,
     add_feedback,
     conversation_cipher,
     conversation_is_outdated,
-    conversation_turns,
     create_conversation,
     current_conversation,
     has_running_turn,
     model_history,
-    open_reason,
-    open_turn,
+    open_conversation,
     section_names,
-    turn_feedback,
 )
 from app.ai.embeddings import Embedder, for_sandbox
 from app.ai.fixed_texts import (
@@ -67,6 +66,7 @@ from app.ai.fixed_texts import (
     ERROR_TEXTS,
     PERSONAL_DATA_TEXT,
     STILL_ANSWERING_TEXT,
+    UNREADABLE_CONVERSATION_TEXT,
     hr_contact,
 )
 from app.ai.guard import verdict_is_flagged
@@ -104,7 +104,7 @@ from app.api.deps import (
 )
 from app.api.problems import problem_responses
 from app.core.config import Settings
-from app.core.encryption import KeyProvider
+from app.core.encryption import DecryptionFailed, KeyProvider
 from app.core.problems import ProblemError, problem_response
 from app.db.models import AiConversation, HandbookVersion
 from app.db.tenancy import TenantContext, set_is_hr, tenant_session
@@ -284,9 +284,64 @@ async def conversation_out(
     now: datetime,
     keys: KeyProvider,
 ) -> ConversationOut:
-    cipher = conversation_cipher(keys, conversation)
-    turns = await conversation_turns(db, conversation.id)
-    feedback = await turn_feedback(db, conversation.id)
+    """The conversation as the page shows it. If any of its stored text does not open (the key, a
+    turn, a feedback reason, or the history), it is returned as `unreadable` with no turns and
+    `history_too_long`, so the page offers a new conversation: a read never fails with a 500 for
+    it. One warning line names the conversation (and the turn, if one was being opened), never any
+    text."""
+    try:
+        opened = await open_conversation(db, keys, conversation)
+    except ConversationUnreadable:
+        return await _unreadable_conversation_out(db, signed_in, conversation, caps, now)
+    return await _readable_conversation_out(
+        db, signed_in, conversation, caps, now, keys, contents=opened
+    )
+
+
+async def _unreadable_conversation_out(
+    db: AsyncSession,
+    signed_in: SignedIn,
+    conversation: AiConversation,
+    caps: Caps,
+    now: datetime,
+) -> ConversationOut:
+    """`conversation_out` for a conversation that did not open: no turns, and a new one offered."""
+    # The budget is sized for a conversation that is too long to continue: the smallest next
+    # question, and no history to add (the stored history can't be read).
+    budget = await budget_out(
+        db,
+        signed_in,
+        caps,
+        now,
+        model=conversation.model,
+        guard_model=conversation.guard_model,
+        effort=conversation.effort,
+        history=[],
+    )
+    return ConversationOut(
+        id=conversation.id,
+        created_at=conversation.created_at,
+        turns=[],
+        hr_contacts=[],
+        budget=budget,
+        long_history=True,
+        history_too_long=True,
+        outdated=conversation_is_outdated(conversation),
+        unreadable=True,
+    )
+
+
+async def _readable_conversation_out(
+    db: AsyncSession,
+    signed_in: SignedIn,
+    conversation: AiConversation,
+    caps: Caps,
+    now: datetime,
+    keys: KeyProvider,
+    contents: OpenedConversation,
+) -> ConversationOut:
+    """`conversation_out` for a conversation that opened."""
+    turns, feedback = contents.turns, contents.feedback
     # The database's clock decides what is abandoned, as for the POST.
     database_now = (await db.execute(select(func.now()))).scalar_one()
     shows = [shown(t, database_now) for t in turns]
@@ -297,7 +352,7 @@ async def conversation_out(
     stored = await conversation_proposals(db, conversation.id)
     # A denial's note, for the person who wrote it: the card's "Zara will see your note" after a
     # reload. It goes to the page only, never to the model.
-    notes = await denial_notes(db, signed_in.actor, stored)
+    notes = await denial_notes(db, signed_in.actor, stored, keys)
     for row in stored:
         by_turn.setdefault(row.turn_id, []).append(
             proposal_out(
@@ -317,7 +372,7 @@ async def conversation_out(
         if any(verdict_is_flagged(t.guard_verdict) for t in turns)
         else {}
     )
-    history = await model_history(db, conversation.id, cipher)
+    history = contents.history
     tokens = history_tokens(history)
     budget = await budget_out(
         db,
@@ -337,10 +392,10 @@ async def conversation_out(
         turns=[
             turn_out(
                 t,
-                open_turn(cipher, t),
+                contents.texts[t.id][0],
                 s,
                 feedback.get(t.id),
-                None if t.id not in feedback else open_reason(cipher, feedback[t.id]),
+                contents.texts[t.id][1],
                 contacts,
                 names,
                 by_turn.get(t.id, ()),
@@ -361,6 +416,7 @@ async def conversation_out(
         long_history=tokens > HISTORY_OFFER_TOKENS,
         history_too_long=tokens > HISTORY_REFUSE_TOKENS,
         outdated=conversation_is_outdated(conversation),
+        unreadable=False,
     )
 
 
@@ -404,11 +460,16 @@ async def get_assistant_budget(
     # The pins and history the next question would have: the conversation's own, or today's pins
     # and an empty history for a person who has none yet.
     pins = CURRENT_PINS if conversation is None else conversation
-    history = (
-        []
-        if conversation is None
-        else await model_history(db, conversation.id, conversation_cipher(keys, conversation))
-    )
+    history: list[dict[str, Any]] = []
+    if conversation is not None:
+        # Only the history counts toward the budget, so only it is opened. An unreadable
+        # conversation can't continue, and its read says so (`unreadable`, `historyTooLong`) and
+        # logs it; the budget is only about the caps, so it is sized as for the smallest question
+        # with no history, quietly (the page polls this), not a 500.
+        with contextlib.suppress(DecryptionFailed):
+            history = await model_history(
+                db, conversation.id, conversation_cipher(keys, conversation)
+            )
     return await budget_out(
         db,
         signed_in,
@@ -432,7 +493,11 @@ async def get_assistant_budget(
 async def get_assistant_texts() -> AssistantTextsOut:
     """Needs a session like every assistant route, but reads nothing of the tenant's, so it takes
     no transaction: only the short session lookup."""
-    return AssistantTextsOut(personal_data=PERSONAL_DATA_TEXT, still_answering=STILL_ANSWERING_TEXT)
+    return AssistantTextsOut(
+        personal_data=PERSONAL_DATA_TEXT,
+        still_answering=STILL_ANSWERING_TEXT,
+        unreadable_conversation=UNREADABLE_CONVERSATION_TEXT,
+    )
 
 
 @router.post(
@@ -541,13 +606,14 @@ async def confirm_proposal(
     signed_in: SignedInDep,
     request: Request,
     now: Now,
+    keys: Annotated[KeyProvider, Depends(get_keys)],
     body: ConfirmIn | None = None,
 ) -> ProposalOut | JSONResponse:
     """Nothing but the denial's note comes from the client. A proposal the engine refuses at
     confirm time is a 200 with status `failed` and the reason: the confirm itself worked."""
     note = None if body is None else body.note
     return await _act_on_proposal(
-        request, lambda: confirm(signed_in.db, signed_in.actor, proposal_id, note, now)
+        request, lambda: confirm(signed_in.db, signed_in.actor, proposal_id, note, now, keys)
     )
 
 
@@ -626,9 +692,12 @@ async def admit_question(
             raise personal_data_refusal()
 
         # Read only now, so a refused question does not load it.
-        # (A ciphertext that does not open raises `DecryptionFailed`: a 500 with no turn written.)
-        cipher = conversation_cipher(keys, conversation)
-        history = await model_history(db, conversation.id, cipher)
+        # A ciphertext that does not open is a 409 `conversation-unreadable` with no turn written.
+        try:
+            opened = await open_conversation(db, keys, conversation)
+        except ConversationUnreadable:
+            raise unreadable_refusal() from None
+        cipher, history = opened.cipher, opened.history
         # Judged after the question, with the other 409s. Too long to send again: the page offers
         # a new conversation (the GET's `historyTooLong` says so too), and tells it apart from an
         # outdated one.
@@ -680,6 +749,12 @@ def history_too_long_refusal() -> ProblemError:
         status.HTTP_409_CONFLICT,
         "history-too-long",
         "This conversation has grown too long to continue. Start a new one.",
+    )
+
+
+def unreadable_refusal() -> ProblemError:
+    return ProblemError(
+        status.HTTP_409_CONFLICT, "conversation-unreadable", UNREADABLE_CONVERSATION_TEXT
     )
 
 

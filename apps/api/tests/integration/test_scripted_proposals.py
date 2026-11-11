@@ -29,6 +29,7 @@ from app.ai.turn import (
 from app.db.models import AiProposal
 from app.db.tenancy import tenant_session
 from app.modules.sandbox.seed import SeedCompany
+from tests.integration.conftest import TEST_KEYS
 from tests.integration.test_console_rows_written import only_row
 from tests.integration.test_timeoff_service import acting
 from tests.integration.test_turn import (
@@ -55,7 +56,7 @@ async def stored(env: Env) -> list[AiProposal]:
 async def confirm_latest(env: Env) -> None:
     (*_, row) = await stored(env)
     async with acting(env.engine, env.ctx.tenant_id, env.ctx.person_id) as (db, actor):  # type: ignore[arg-type]
-        await confirm(db, actor, row.id, None, NOW)
+        await confirm(db, actor, row.id, None, NOW, TEST_KEYS)
 
 
 async def test_book_next_friday_makes_a_pto_card_for_the_friday_of_next_week(
