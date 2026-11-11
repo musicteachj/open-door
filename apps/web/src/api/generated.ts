@@ -1250,9 +1250,7 @@ export type GetDirectoryFacetsParams = {
 }
 
 export type SearchHandbookParams = {
-  /**
-   * @maxLength 100
-   */
+  /** @maxLength 100 */
   q: string
 }
 
@@ -1262,13 +1260,9 @@ export type GetTimeOffBalancesParams = {
 
 export type ListTimeOffRequestsParams = {
   scope?: ListTimeOffRequestsScope
-  /**
-   * First day of the window. For `decided` it is the first day a decision was made, by the caller's calendar (default: 90 days ago). For the other scopes it is the first day the leave covers (default: 30 days ago). Ignored for `waiting`.
-   */
+  /** First day of the window. For `decided` it is the first day a decision was made, by the caller's calendar (default: 90 days ago). For the other scopes it is the first day the leave covers (default: 30 days ago). Ignored for `waiting`. */
   from?: string | null
-  /**
-   * Last day of the window, inclusive. For `decided` it is the last day a decision was made (default: today). For the other scopes it is the last day the leave covers (default: 120 days ahead). Ignored for `waiting`.
-   */
+  /** Last day of the window, inclusive. For `decided` it is the last day a decision was made (default: today). For the other scopes it is the last day the leave covers (default: 120 days ahead). Ignored for `waiting`. */
   to?: string | null
 }
 
@@ -1284,9 +1278,7 @@ export const ListTimeOffRequestsScope = {
 
 export type GetTimeOffCalendarParams = {
   to: string
-  /**
-   * First day of the holidays to list. Without it, the earliest day sick time may start, which is as far back as the form's date picker reaches.
-   */
+  /** First day of the holidays to list. Without it, the earliest day sick time may start, which is as far back as the form's date picker reaches. */
   from?: string | null
 }
 

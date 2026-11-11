@@ -6,7 +6,7 @@
 # GITLEAKS_VERSION: `make check-workflows` fails when they differ.
 repos:
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.16.9
+    rev: v0.17.3
     hooks:
       - id: ruff-check
         args: [--fix]

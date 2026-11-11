@@ -31,7 +31,15 @@ type Box = { x: number; y: number; width: number; height: number }
 
 async function boxOf(locator: Locator): Promise<Box> {
   await expect(locator.first()).toBeVisible()
-  const box = await locator.first().boundingBox()
+  // A turn that has just ended swaps its live view for the saved one, so the element can be
+  // replaced between the check above and the read: read again until it has a box.
+  let box: Box | null = null
+  await expect
+    .poll(async () => {
+      box = await locator.first().boundingBox()
+      return box
+    })
+    .not.toBeNull()
   if (box === null) throw new Error('no box for a visible element')
   return box
 }

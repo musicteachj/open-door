@@ -12,6 +12,22 @@ version (`0.x.y` while the app is being built, `1.0.0` when it is complete).
 
 ### Changed
 
+- **November's dependency updates, and fewer Dependabot pull requests** (tooling, Phase 8,
+  between stages 3 and 4). Nine web
+  packages move to their latest patch or minor release (React Query, lucide icons, React Router,
+  Tailwind, Vite's React plugin, orval, oxlint, and Vitest; Dependabot's #112), and ruff to 0.17.3
+  in both the commit hook and the API's lockfile (#110), which changes nothing in the code's lint
+  or format. oxlint 1.91's new check flagged two effects that reassigned a local variable from a
+  callback; they now keep that state in a small object (a "stale" flag, and the retry timer with a
+  countdown), with the same behavior.
+  Dependabot no longer watches the proxy check's nginx image or the pre-commit hooks (the owner's
+  choice, for fewer pull requests); `make check-workflows` now also fails when the ruff hook and
+  the lockfile disagree. A stale version comment on one CI step is corrected. orval 8.46 writes the
+  generated API client's doc comments on one line, so the client is regenerated (comments only).
+  With the updates, one browser layout test measured an error alert while its turn was swapping
+  from the live view to the saved one, and failed 2 runs in 5; its measuring helper now reads the
+  box again until the element is in place (10 of 10).
+
 - **The API no longer holds the owner's database URL** (Phase 8, stage 1). `Settings` loses
   `MIGRATION_DATABASE_URL` and `CLEANUP_DATABASE_URL`; Alembic, the owner-only scripts, the eval
   harness, and the proxy check read them from `OwnerSettings` and `CleanupSettings`

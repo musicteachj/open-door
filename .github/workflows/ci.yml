@@ -66,6 +66,9 @@ jobs:
               - 'CLAUDE.md'
               - 'docs/specs/2026-10-31-phase-7-ai-ops-reviewer-model.md'
               - '.github/workflows/ci.yml'
+              # Read by the test of scripts/check_tool_versions.py, through the script.
+              - '.github/workflows/security.yml'
+              - '.pre-commit-config.yaml'
             web:
               - 'apps/web/**'
               # The files outside apps/web that the unit tests (Vitest) read: the design tokens and
@@ -283,7 +286,7 @@ jobs:
       # artifacts. It does not here: the images are loaded into the runner (load: true), never
       # pushed, and the job has read-only permissions and no secrets. The three ignores below are
       # for that reason, so a poisoned cache could at worst fail this job's own run.
-      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.2 # zizmor: ignore[cache-poisoning]
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3 # zizmor: ignore[cache-poisoning]
         with:
           enable-cache: true
           cache-dependency-glob: apps/api/uv.lock
@@ -364,8 +367,9 @@ jobs:
         with:
           persist-credentials: false
       - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
-      # Also runs scripts/check_tool_versions.py (one gitleaks version in three files) and
-      # scripts/check_path_filters.py (every file a test reads is inside its job's filter).
+      # Also runs scripts/check_tool_versions.py (one gitleaks version in three files, one ruff
+      # version in two) and scripts/check_path_filters.py (every file a test reads is inside its
+      # job's filter).
       - name: Workflow mistakes (actionlint, zizmor), tool versions, and path filters
         # The token lets zizmor confirm that each pinned commit really belongs to its action.
         env:

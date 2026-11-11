@@ -53,14 +53,13 @@ function ProposalCard({ proposal, question, turnRunning }: ProposalCardProps) {
     // If the browser's clock runs ahead of the server's, the read at this moment can still say
     // pending. Each read is followed by another 2 seconds later, up to 3 more times. A read that
     // shows the card ended turns `pending` off, which clears the timer.
-    let retries = 0
-    let timer: ReturnType<typeof setTimeout>
-    const read = () => {
+    const timer: { id?: ReturnType<typeof setTimeout> } = {}
+    const read = (retriesLeft: number) => {
       void invalidateConversation(queryClient)
-      if (retries++ < EXPIRY_RETRIES) timer = setTimeout(read, EXPIRY_RETRY_MS)
+      if (retriesLeft > 0) timer.id = setTimeout(() => read(retriesLeft - 1), EXPIRY_RETRY_MS)
     }
-    timer = setTimeout(read, Math.min(wait, LONGEST_TIMER_MS))
-    return () => clearTimeout(timer)
+    timer.id = setTimeout(() => read(EXPIRY_RETRIES), Math.min(wait, LONGEST_TIMER_MS))
+    return () => clearTimeout(timer.id)
   }, [pending, expiresAt, queryClient])
 
   // The server has no such card for this person: say so on the card, in its own failure line.
