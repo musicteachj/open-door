@@ -1,3 +1,5 @@
+import type { Ref } from 'react'
+import { TurnstileSlot } from '@/components/landing/turnstile-slot'
 import {
   AlertDialog,
   AlertDialogActions,
@@ -17,6 +19,8 @@ type TourStartDialogProps = {
   starting?: boolean
   /** Something else is changing who the visitor is (a persona switch): "Start the tour" waits. */
   blocked?: boolean
+  /** The empty place under the buttons for Cloudflare's check, which only shows when it asks. */
+  slotRef?: Ref<HTMLDivElement>
 }
 
 /**
@@ -31,6 +35,7 @@ function TourStartDialog({
   onStart,
   starting = false,
   blocked = false,
+  slotRef,
 }: TourStartDialogProps) {
   return (
     <AlertDialog open={open} onOpenChange={onOpenChange}>
@@ -45,6 +50,7 @@ function TourStartDialog({
             Start the tour
           </AlertDialogConfirm>
         </AlertDialogActions>
+        <TurnstileSlot ref={slotRef} />
       </AlertDialogContent>
     </AlertDialog>
   )

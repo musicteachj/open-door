@@ -10,6 +10,9 @@ and the same instant (a reservation's two rows are written in one transaction, s
 `created_at` is equal). The daily rows go first and the tenant second, in one transaction, so a
 failure leaves both in place and never a tenant with no ledger link.
 
+Runs that start sandboxes from one address also delete the `sandbox_starts` rows made since they
+began (`delete_starts_since`).
+
 Only the eval sweeps such leftovers at its next start (its sandbox has a fixed ID). The proxy
 check makes fresh random sandboxes, so a failed cleanup there leaves its sandbox until it expires
 (the cleanup login removes expired ones) and its daily rows until
@@ -77,3 +80,16 @@ async def remove_sandboxes(
             await connection.execute(
                 text("DELETE FROM tenants WHERE id = :tenant_id"), {"tenant_id": tenant_id}
             )
+
+
+async def delete_starts_since(connection: AsyncConnection, since: datetime) -> int:
+    """Delete the sandbox-start counts (`sandbox_starts`) created at or after `since`, and say how
+    many. A check or a browser run that starts sandboxes from one address would otherwise leave
+    counts that refuse a later `make dev` with the default limits for up to 24 hours.
+
+    Owner only. The table has FORCE ROW LEVEL SECURITY and no policy for the owner, so this works
+    because the local owner is a superuser, which row-level security never applies to."""
+    result = await connection.execute(
+        text("DELETE FROM sandbox_starts WHERE created_at >= :since"), {"since": since}
+    )
+    return result.rowcount

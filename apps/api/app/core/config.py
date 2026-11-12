@@ -39,6 +39,33 @@ LOOPBACK_HOSTS = ("localhost", "127.0.0.1")
 
 type Network = ipaddress.IPv4Network | ipaddress.IPv6Network
 
+# Cloudflare's documented Turnstile test keys. Their secrets answer without any network call (see
+# app/modules/sandbox/turnstile.py), so they are fit for development and tests only.
+# Source: Turnstile "Testing", https://developers.cloudflare.com/turnstile/troubleshooting/testing/,
+# read from developers.cloudflare.com on 2026-11-11.
+TURNSTILE_TEST_SITE_KEYS = (
+    "1x00000000000000000000AA",
+    "2x00000000000000000000AB",
+    "1x00000000000000000000BB",
+    "2x00000000000000000000BB",
+    "3x00000000000000000000FF",
+)
+TURNSTILE_PASS_SITE_KEY = "1x00000000000000000000AA"  # noqa: S105
+# The three test secrets: the first passes the dummy token, the second always fails, the third
+# answers `timeout-or-duplicate`. Public values.
+TURNSTILE_PASS_SECRET = "1x0000000000000000000000000000000AA"  # noqa: S105
+TURNSTILE_ALWAYS_FAIL_SECRET = "2x0000000000000000000000000000000AA"  # noqa: S105
+TURNSTILE_ALREADY_SPENT_SECRET = "3x0000000000000000000000000000000AA"  # noqa: S105
+TURNSTILE_TEST_SECRETS = (
+    TURNSTILE_PASS_SECRET,
+    TURNSTILE_ALWAYS_FAIL_SECRET,
+    TURNSTILE_ALREADY_SPENT_SECRET,
+)
+# The address-hash key used when none is set outside production. It is public in the repository, so
+# production refuses it with no exception.
+DEVELOPMENT_IP_HASH_KEY = "development-only-sandbox-ip-hash-key-not-secret"
+MIN_IP_HASH_KEY_BYTES = 32
+
 
 def require_asyncpg_scheme(value: PostgresDsn, name: str) -> PostgresDsn:
     """The one check every database URL setting shares (also used by owner_settings)."""
@@ -107,8 +134,19 @@ class Settings(BaseSettings):
     # Vite serves the web app: then the API serves nothing outside /api/ and sends no CSP.
     web_dist_dir: Path | None = None
     # Cloudflare Turnstile's public site key, written into the page's meta tag. It is public by
-    # design. The secret key and the production rules for both arrive with the sign-in gate.
+    # design. Outside production a blank key and secret become Cloudflare's always-pass test keys;
+    # the API refuses to start in production without both, or with test keys unless the origin
+    # is a loopback one (require_entry_settings_fit_for_production, checked at startup, not here).
     turnstile_site_key: str = ""
+    turnstile_secret_key: SecretStr | None = Field(default=None, repr=False)
+    # The key of the HMAC that hides a visitor's address in `sandbox_starts` (ADR 0021). At least 32
+    # bytes. Outside production a fixed development value is the default; production refuses it.
+    sandbox_ip_hash_key: SecretStr = Field(default=SecretStr(DEVELOPMENT_IP_HASH_KEY), repr=False)
+    # How many sandboxes one address may start in an hour and in a rolling 24 hours, and how many
+    # all addresses together may start in a UTC day.
+    sandbox_starts_per_hour: int = Field(default=5, ge=1)
+    sandbox_starts_per_day: int = Field(default=20, ge=1)
+    sandbox_starts_daily_total: int = Field(default=500, ge=1)
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR"] = "INFO"
     # `make embed` and the API with AI_TRANSPORT=anthropic use it (the API embeds each handbook
     # question). Without it the search is full-text only. An empty value counts as unset.
@@ -170,7 +208,13 @@ class Settings(BaseSettings):
                 return {k: v for k, v in data.items() if k != "encryption_keyring_file"}
         return data
 
-    @field_validator("voyage_api_key", "anthropic_api_key", "encryption_keyring", mode="before")
+    @field_validator(
+        "voyage_api_key",
+        "anthropic_api_key",
+        "encryption_keyring",
+        "turnstile_secret_key",
+        mode="before",
+    )
     @classmethod
     def empty_key_is_none(cls, value: object) -> object:
         # An empty value written in .env itself means no key. (An empty one in the environment never
@@ -255,6 +299,44 @@ class Settings(BaseSettings):
                 raise ValueError(msg)
         return value
 
+    @field_validator("sandbox_ip_hash_key", mode="before")
+    @classmethod
+    def blank_ip_hash_key_is_the_default(cls, value: object) -> object:
+        # `SANDBOX_IP_HASH_KEY=` in .env means "not set": the development value, which production
+        # then refuses.
+        if isinstance(value, str) and not value.strip():
+            return DEVELOPMENT_IP_HASH_KEY
+        return value
+
+    @field_validator("sandbox_ip_hash_key")
+    @classmethod
+    def require_a_long_ip_hash_key(cls, value: SecretStr) -> SecretStr:
+        if len(value.get_secret_value().encode()) < MIN_IP_HASH_KEY_BYTES:
+            msg = f"SANDBOX_IP_HASH_KEY must be at least {MIN_IP_HASH_KEY_BYTES} bytes"
+            raise ValueError(msg)
+        return value
+
+    @model_validator(mode="after")
+    def default_the_turnstile_keys_outside_production(self) -> Self:
+        # Outside production a missing key pair means Cloudflare's always-pass test keys, so
+        # development, the tests, and the browser tests need no Cloudflare account.
+        if self.app_env == "production":
+            return self
+        site_blank = not self.turnstile_site_key
+        secret_blank = self.turnstile_secret_key is None
+        # The pair is defaulted only when both are blank. One real key beside a test key would
+        # mix them, and every start would fail as "couldn't confirm".
+        if site_blank and not secret_blank:
+            msg = "TURNSTILE_SITE_KEY is missing: set both Turnstile keys or neither"
+            raise ValueError(msg)
+        if secret_blank and not site_blank:
+            msg = "TURNSTILE_SECRET_KEY is missing: set both Turnstile keys or neither"
+            raise ValueError(msg)
+        if site_blank and secret_blank:
+            self.turnstile_site_key = TURNSTILE_PASS_SITE_KEY
+            self.turnstile_secret_key = SecretStr(TURNSTILE_PASS_SECRET)
+        return self
+
     @model_validator(mode="after")
     def refuse_a_test_origin_in_production(self) -> Self:
         if self.app_env != "production":
@@ -262,18 +344,62 @@ class Settings(BaseSettings):
         if self.app_origin == DEFAULT_APP_ORIGIN:
             msg = "APP_ORIGIN must be set in production: it is still the development default"
             raise ValueError(msg)
-        match = ORIGIN_PATTERN.fullmatch(self.app_origin)
-        assert match is not None  # noqa: S101  # require_bare_origin already checked it.
-        scheme, port = match.groups()
-        host = self.app_origin.removeprefix(f"{scheme}://").split(":")[0]
-        loopback_with_port = host in LOOPBACK_HOSTS and port is not None
-        if scheme != "https" and not loopback_with_port:
+        if not self.app_origin.startswith("https://") and not is_loopback_origin(self.app_origin):
             msg = (
                 "APP_ORIGIN must use https in production (only http://localhost:<port> and "
                 "http://127.0.0.1:<port> may use http)"
             )
             raise ValueError(msg)
         return self
+
+
+def is_loopback_origin(origin: str) -> bool:
+    """True for http(s)://localhost:<port> and http(s)://127.0.0.1:<port>. The port is required and
+    the host match is exact, so https://localhost and http://localhost.example.com are not loopback.
+    The one test behind every loopback exemption (plain http, the Turnstile test keys, the
+    forwarded-address list)."""
+    match = ORIGIN_PATTERN.fullmatch(origin)
+    if match is None or match.group(2) is None:
+        return False
+    return origin.removeprefix(f"{match.group(1)}://").split(":")[0] in LOOPBACK_HOSTS
+
+
+def require_entry_settings_fit_for_production(settings: Settings) -> None:
+    """Refuse to start the API in production without what serving visitors needs: the Turnstile
+    keys (real ones, unless the origin is a loopback one), a real address-hash key, and the load
+    balancer's addresses. Raises ValueError, naming the setting and never its value.
+
+    The API calls this at startup. It is not a rule on `Settings`, because alembic, the setup
+    scripts, and the cleanup job build `Settings` in production too and never serve a visitor, so
+    they need none of these (like `app.ai.transport.require_a_transport_fit_for`).
+    """
+    if settings.app_env != "production":
+        return
+    if settings.sandbox_ip_hash_key.get_secret_value() == DEVELOPMENT_IP_HASH_KEY:
+        msg = "SANDBOX_IP_HASH_KEY must be set in production: it is still the development value"
+        raise ValueError(msg)
+    if not settings.turnstile_site_key:
+        msg = "TURNSTILE_SITE_KEY must be set in production"
+        raise ValueError(msg)
+    if settings.turnstile_secret_key is None:
+        msg = "TURNSTILE_SECRET_KEY must be set in production"
+        raise ValueError(msg)
+    if is_loopback_origin(settings.app_origin):
+        return
+    if settings.turnstile_site_key in TURNSTILE_TEST_SITE_KEYS:
+        msg = "TURNSTILE_SITE_KEY is a Cloudflare test key: not allowed in production"
+        raise ValueError(msg)
+    if settings.turnstile_secret_key.get_secret_value() in TURNSTILE_TEST_SECRETS:
+        msg = "TURNSTILE_SECRET_KEY is a Cloudflare test key: not allowed in production"
+        raise ValueError(msg)
+    if not settings.forwarded_allow_ips:
+        # Behind a load balancer every visitor would arrive from the balancer's address, so the
+        # per-address limit on starting sandboxes would become one limit for the site.
+        msg = (
+            "FORWARDED_ALLOW_IPS must be set in production (the load balancer's addresses): "
+            "without it every visitor shares one client address"
+        )
+        raise ValueError(msg)
 
 
 @lru_cache

@@ -1,9 +1,11 @@
+import { useRef } from 'react'
 import type { BudgetBannerOut } from '@/api/generated'
 import { BudgetBanner } from '@/components/assistant/budget-banner'
 import { InlineError } from '@/components/feedback/inline-error'
+import { TurnstileSlot } from '@/components/landing/turnstile-slot'
 import { ShellBanner } from '@/features/shell/shell-banner'
 import type { PageLink } from '@/lib/page-link'
-import { SANDBOX_START_FAILED } from '@/lib/sandbox-copy'
+import { sandboxStartError } from '@/lib/sandbox-copy'
 import { useStartNewSandbox } from './use-start-new-sandbox'
 
 /**
@@ -18,16 +20,23 @@ export function BudgetStop({
   writeToHr?: PageLink | null
 }) {
   const sandbox = useStartNewSandbox()
+  const slot = useRef<HTMLDivElement>(null)
+  const startNewSandbox = () => sandbox.startNewSandbox(slot.current)
+  const failure = sandbox.failed ? sandboxStartError(sandbox.error) : null
   return (
     <ShellBanner>
       <BudgetBanner
         kind={banner.kind}
         message={banner.message}
-        onStartNewSandbox={sandbox.startNewSandbox}
+        onStartNewSandbox={startNewSandbox}
         writeToHr={writeToHr}
       />
-      {sandbox.failed && (
-        <InlineError message={SANDBOX_START_FAILED} onRetry={sandbox.startNewSandbox} />
+      <TurnstileSlot ref={slot} />
+      {failure && (
+        <InlineError
+          message={failure.message}
+          onRetry={failure.canRetry ? startNewSandbox : undefined}
+        />
       )}
     </ShellBanner>
   )

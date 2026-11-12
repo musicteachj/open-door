@@ -38,11 +38,14 @@ RUN uv sync --locked --no-dev
 FROM python:3.13-slim@sha256:e48f59cdba69a3cbd9ed2cf0f348d90d45a8d350d98134cf1070bc106ee9ed90
 
 # The layout matters: scripts/ingest_handbook.py finds handbook/ three directories above itself.
+# APP_ENV is production unless a run says otherwise (the test runs pass APP_ENV=test), so a deploy
+# that forgets it refuses the development defaults (test keys, the development hash key) at start.
 ENV PATH="/app/apps/api/.venv/bin:$PATH" \
     PYTHONPATH=/app/apps/api \
     PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
-    WEB_DIST_DIR=/app/web-dist
+    WEB_DIST_DIR=/app/web-dist \
+    APP_ENV=production
 
 # The emSign roots (their intermediate keys were compromised, GHSA-6q48-6c7w-9gw2) must not be in the
 # OS store, which the Anthropic SDK reads through truststore (httpx uses certifi, which dropped

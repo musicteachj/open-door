@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { Outlet, useLocation } from 'react-router'
 import { Logo } from '@/components/core/logo'
 import { Banner } from '@/components/feedback/banner'
+import { TurnstileSlot } from '@/components/landing/turnstile-slot'
 import { InlineError } from '@/components/feedback/inline-error'
 import { NavItem } from '@/components/navigation/nav-item'
 import { PersonaMenu } from '@/components/navigation/persona-menu'
@@ -36,7 +37,7 @@ import { TourRunner } from '@/features/tour/tour-runner'
 import { useTourStore } from '@/features/tour/store'
 import { TOUR } from '@/features/tour/script'
 import { useStartTour } from '@/features/tour/use-start-tour'
-import { SANDBOX_START_FAILED } from '@/lib/sandbox-copy'
+import { sandboxStartError } from '@/lib/sandbox-copy'
 
 // The signed-in frame, from docs/design/screens/02-app-shell and 03-assistant-home: a sidebar, a
 // white content sheet (the page's one <main>), and a right rail. Below 760 px the sidebar becomes
@@ -67,6 +68,11 @@ function Frame({ me }: { me: NonNullable<ReturnType<typeof useMe>['data']> }) {
   const setStartDialogOpen = useTourStore((s) => s.setStartDialogOpen)
   const startTour = useStartTour()
   const startFailed = startTour.failed
+  const startFailure = startFailed ? sandboxStartError(startTour.error) : null
+  // The empty places for Cloudflare's check: under the start dialog's buttons, and under the menu
+  // (where a failed start's Retry is, after the dialog has closed).
+  const dialogSlot = useRef<HTMLDivElement>(null)
+  const menuSlot = useRef<HTMLDivElement>(null)
   // One identity error at a time, as on the landing page: using the menu again forgets a failed
   // tour start, and the menu's own failure (`actions.failure`) is replaced by its next action.
   const { dismissError } = startTour
@@ -210,13 +216,18 @@ function Frame({ me }: { me: NonNullable<ReturnType<typeof useMe>['data']> }) {
             />
           }
         />
-        {startFailed && (
+        <TurnstileSlot ref={menuSlot} />
+        {startFailure && (
           <InlineError
-            message={SANDBOX_START_FAILED}
-            onRetry={() => {
-              actions.clearFailure()
-              startTour.start()
-            }}
+            message={startFailure.message}
+            onRetry={
+              startFailure.canRetry
+                ? () => {
+                    actions.clearFailure()
+                    startTour.start(menuSlot.current)
+                  }
+                : undefined
+            }
           />
         )}
         {actions.failure && (
@@ -292,9 +303,10 @@ function Frame({ me }: { me: NonNullable<ReturnType<typeof useMe>['data']> }) {
         onOpenChange={setStartDialogOpen}
         starting={startTour.starting}
         blocked={startTour.blocked}
+        slotRef={dialogSlot}
         onStart={() => {
           actions.clearFailure()
-          startTour.start()
+          startTour.start(dialogSlot.current)
         }}
       />
       <TourRunner me={me} actions={actions} onChoosePersona={() => setMenuOpen(true)} />

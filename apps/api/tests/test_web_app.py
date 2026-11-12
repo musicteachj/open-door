@@ -47,9 +47,19 @@ def client_for(dist_dir: Path | None, **overrides: object) -> TestClient:
         "encryption_keyring": TEST_KEYRING,
         "web_dist_dir": dist_dir,
         "turnstile_site_key": SITE_KEY,
+        # Outside production the two keys are set together or not at all.
+        "turnstile_secret_key": "1x0000000000000000000000000000000AA",
     }
+    blank_site_key = overrides.get("turnstile_site_key") == ""
+    if blank_site_key:
+        fields["turnstile_secret_key"] = None
     fields.update(overrides)
-    return TestClient(create_app(Settings(**fields)))  # type: ignore[arg-type]
+    settings = Settings(**fields)  # type: ignore[arg-type]
+    if blank_site_key:
+        # Outside production Settings turns a blank key into the test key; the page server
+        # itself still writes whatever it is given.
+        settings = settings.model_copy(update={"turnstile_site_key": ""})
+    return TestClient(create_app(settings))
 
 
 def test_an_asset_is_served_immutable_with_its_type(dist: Path) -> None:

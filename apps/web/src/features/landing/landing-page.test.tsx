@@ -9,6 +9,7 @@ import { installFakeApi } from '@/test/fake-api'
 import { meFor } from '@/test/fixtures'
 import { server } from '@/test/msw'
 import { renderApp } from '@/test/render-app'
+import { DUMMY_TURNSTILE_TOKEN, turnstileFake } from '@/test/turnstile'
 
 const SANDBOXES = () => `${window.location.origin}/api/v1/sandboxes`
 const card = (firstName: string) =>
@@ -132,7 +133,7 @@ describe('the landing page', () => {
       'Starting the tour as Priya Raman.',
     )
     for (const persona of cards()) expect(persona).toBeDisabled()
-    expect(posted).toEqual({ persona: 'priya' })
+    expect(posted).toEqual({ persona: 'priya', turnstileToken: DUMMY_TURNSTILE_TOKEN })
     held.resolve()
     const mark = await screen.findByRole('dialog', { name: /Ask a policy question/ })
     expect(within(mark).getByText('Step 1 of 10')).toBeInTheDocument()
@@ -323,5 +324,94 @@ describe('the landing page', () => {
     renderApp({ at: '/' })
     expect(await card('Priya')).toBeEnabled()
     await act(async () => {})
+  })
+
+  describe('the sandbox start check and its refusals', () => {
+    const refuse = (status: number, type: string, detail: string) =>
+      server.use(
+        http.post(
+          SANDBOXES(),
+          () =>
+            HttpResponse.json(
+              { type, title: 'Refused', status, instance: '/api/v1/sandboxes', detail },
+              { status, headers: { 'Content-Type': 'application/problem+json' } },
+            ),
+          { once: true },
+        ),
+      )
+
+    it('renders the check in the empty place under the card that was pressed', async () => {
+      installFakeApi()
+      const { user } = renderApp({ at: '/' })
+      await user.click(await card('Mateo'))
+      await waitFor(() => expect(turnstileFake.containers).toHaveLength(1))
+      const slot = turnstileFake.containers[0]!
+      expect(slot).toHaveAttribute('data-slot', 'turnstile-slot')
+      expect(slot).toBeEmptyDOMElement()
+      // Directly under the card: in the same list item, after the card's button.
+      expect(slot.parentElement!.firstElementChild).toHaveAttribute('data-slot', 'persona-card')
+      expect(slot.parentElement!.firstElementChild).toHaveTextContent(/^MAMateo Alvarez/)
+    })
+
+    it('renders the check under the tour button for the tour', async () => {
+      installFakeApi()
+      const { user } = renderApp({ at: '/' })
+      await user.click(await screen.findByRole('button', { name: 'Take the 2-minute tour' }))
+      await waitFor(() => expect(turnstileFake.containers).toHaveLength(1))
+      expect(turnstileFake.containers[0]!.parentElement!.firstElementChild).toHaveTextContent(
+        /tour/i,
+      )
+    })
+
+    it('sends an empty token when the check cannot run, so the API says why', async () => {
+      installFakeApi()
+      turnstileFake.fail = true
+      const posted: unknown[] = []
+      server.use(
+        http.post(SANDBOXES(), async ({ request }) => {
+          posted.push(await request.json())
+          return new HttpResponse(null, { status: 500 })
+        }),
+      )
+      const { user } = renderApp({ at: '/' })
+      await user.click(await card('Priya'))
+      await waitFor(() => expect(posted).toEqual([{ persona: 'priya', turnstileToken: '' }]))
+    })
+
+    it.each([
+      ['turnstile-failed', 403, "We couldn't confirm you're a person. Please try again.", true],
+      [
+        'turnstile-unavailable',
+        503,
+        "We couldn't reach the check that keeps this demo safe. Please try again in a minute.",
+        true,
+      ],
+      [
+        'sandbox-start-limit',
+        429,
+        "You've started several sandboxes in a short time. Please try again in 12 minutes, or keep using the one you have.",
+        false,
+      ],
+      [
+        'sandbox-day-limit',
+        429,
+        'Open Door has started as many sandboxes as it can today. Please come back tomorrow, or watch the recorded walkthrough.',
+        false,
+      ],
+    ])(
+      'shows the API text for %s, and Retry only when it can help',
+      async (type, status, text, retry) => {
+        installFakeApi()
+        refuse(status, type, text)
+        const { user } = renderApp({ at: '/' })
+        await user.click(await card('Priya'))
+        const alert = await screen.findByRole('alert')
+        expect(within(alert).getByText(text)).toBeInTheDocument()
+        expect(screen.queryByText("We couldn't start a sandbox.")).not.toBeInTheDocument()
+        expect(within(alert).queryAllByRole('button', { name: 'Retry' })).toHaveLength(
+          retry ? 1 : 0,
+        )
+      },
+    )
   })
 })

@@ -605,6 +605,26 @@ class AiSpendDaily(Base):
     created_at: Mapped[datetime] = mapped_column(server_default=func.now())
 
 
+class SandboxStart(Base):
+    """One sandbox started, as a keyed hash of the visitor's address and a time (ADR 0021).
+
+    The API counts these to limit starts per address and per UTC day. No raw address, no tenant.
+    A trigger stamps created_at with the database's clock, so a client can't backdate a start.
+    Insert-only for the API; row-level security lets it count every address.
+    """
+
+    __tablename__ = "sandbox_starts"
+    __table_args__ = (
+        CheckConstraint("octet_length(ip_hash) = 32", name="ip_hash_is_32_bytes"),
+        Index(None, "ip_hash", "created_at"),
+        Index(None, "created_at"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, server_default=func.gen_random_uuid())
+    ip_hash: Mapped[bytes] = mapped_column(LargeBinary)
+    created_at: Mapped[datetime] = mapped_column(server_default=func.now())
+
+
 class AiProposal(Base):
     """Something the assistant wants done, waiting for the person it was made for to confirm.
 

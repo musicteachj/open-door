@@ -83,6 +83,11 @@ def api_env(
         # The entrypoint listens on PORT: the container publishes (macOS) or shares the host's
         # network (Linux) on this one number, so the port outside is the port inside.
         "PORT": str(port),
+        # The browser tests and the proxy check start many sandboxes from one address. APP_ENV=test
+        # defaults the Turnstile keys to Cloudflare's test keys, so no key is passed here.
+        "SANDBOX_STARTS_PER_HOUR": "1000000",
+        "SANDBOX_STARTS_PER_DAY": "1000000",
+        "SANDBOX_STARTS_DAILY_TOTAL": "1000000",
     }
     if platform != "darwin":
         env["HOST"] = bind_host or "127.0.0.1"

@@ -1,16 +1,19 @@
 import { Info } from 'lucide-react'
+import { useRef } from 'react'
 import { Navigate } from 'react-router'
+import type { PersonaKey } from '@/api/generated'
 import { useMe } from '@/app/useMe'
 import { useStartSandbox } from '@/app/useStartSandbox'
 import { Logo } from '@/components/core/logo'
 import { InlineError } from '@/components/feedback/inline-error'
 import { PersonaCard } from '@/components/landing/persona-card'
+import { TurnstileSlot } from '@/components/landing/turnstile-slot'
 import { TourStartButton } from '@/components/tour/tour-start-button'
 import { useStartTour } from '@/features/tour/use-start-tour'
 import { PERSONAS } from '@/features/personas/personas'
 import { isSignedOutError } from '@/lib/api-fetch'
 import { AI_DISCLOSURE } from '@/lib/disclosure'
-import { SANDBOX_START_FAILED } from '@/lib/sandbox-copy'
+import { sandboxStartError } from '@/lib/sandbox-copy'
 
 // From docs/design/screens/01-landing/notes.md. Nothing here is the signed-in person's: the
 // landing page is outside the session guard, so it is not remounted by a reset.
@@ -27,6 +30,9 @@ export function LandingPage() {
   const me = useMe()
   const start = useStartSandbox()
   const tour = useStartTour()
+  // The empty place under each control that starts a sandbox, where Cloudflare's check may show.
+  const cardSlots = useRef<Partial<Record<PersonaKey, HTMLDivElement | null>>>({})
+  const tourSlot = useRef<HTMLDivElement>(null)
 
   // A signed-in visitor has nothing to choose. Cached data whose latest fetch was a 401 (or the CSRF
   // refusal, which is the same to the app) is not a
@@ -38,8 +44,15 @@ export function LandingPage() {
   // Either start forgets the other's failure, so only one error is ever shown.
   const startTour = () => {
     start.reset()
-    tour.start()
+    tour.start(tourSlot.current)
   }
+  const startPersona = (persona: PersonaKey) => {
+    tour.dismissError()
+    start.mutate({ data: { persona } }, cardSlots.current[persona] ?? null)
+  }
+  const failedPersona = start.variables?.data?.persona
+  const startFailure = start.isError ? sandboxStartError(start.error) : null
+  const tourFailure = tour.failed ? sandboxStartError(tour.error) : null
   const startingKey = start.isPending ? start.variables?.data?.persona : undefined
   // While the tour's sandbox starts, all four cards are unavailable; while a card's does, the tour
   // button is.
@@ -59,9 +72,9 @@ export function LandingPage() {
           <h2 className="mt-16 mb-5 text-h2">Choose who to be</h2>
           <ul className="m-0 grid list-none grid-cols-[repeat(auto-fill,minmax(15rem,1fr))] gap-4 p-0">
             {PERSONAS.map((persona) => (
-              <li key={persona.key} className="flex">
+              <li key={persona.key} className="flex flex-col">
                 <PersonaCard
-                  className="h-full"
+                  className="flex-1"
                   name={persona.name}
                   role={persona.title}
                   location={persona.location}
@@ -71,26 +84,44 @@ export function LandingPage() {
                   disabled={
                     cardsDisabled || (startingKey !== undefined && startingKey !== persona.key)
                   }
-                  onSelect={() => {
-                    tour.dismissError()
-                    start.mutate({ data: { persona: persona.key } })
+                  onSelect={() => startPersona(persona.key)}
+                />
+                <TurnstileSlot
+                  ref={(element) => {
+                    cardSlots.current[persona.key] = element
                   }}
                 />
               </li>
             ))}
           </ul>
           {/* One error at a time: starting either way forgets the other's failure. */}
-          {start.isError && (
+          {startFailure && (
             <InlineError
-              message={SANDBOX_START_FAILED}
-              onRetry={() => start.mutate(start.variables)}
+              message={startFailure.message}
+              onRetry={
+                startFailure.canRetry && failedPersona
+                  ? () => startPersona(failedPersona)
+                  : undefined
+              }
             />
           )}
-          {tour.failed && <InlineError message={SANDBOX_START_FAILED} onRetry={startTour} />}
+          {tourFailure && (
+            <InlineError
+              message={tourFailure.message}
+              onRetry={tourFailure.canRetry ? startTour : undefined}
+            />
+          )}
 
           <div className="mt-6 flex flex-wrap items-center justify-between gap-x-6 gap-y-4">
             <p className="m-0 text-small text-ink-muted">{SANDBOX_NOTE}</p>
-            <TourStartButton starting={tour.starting} disabled={tour.blocked} onStart={startTour} />
+            <div>
+              <TourStartButton
+                starting={tour.starting}
+                disabled={tour.blocked}
+                onStart={startTour}
+              />
+              <TurnstileSlot ref={tourSlot} />
+            </div>
           </div>
         </main>
       </div>

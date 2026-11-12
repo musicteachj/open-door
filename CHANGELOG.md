@@ -167,6 +167,63 @@ version (`0.x.y` while the app is being built, `1.0.0` when it is complete).
 
 ### Added
 
+- **The cleanup job, `make cleanup`** (Phase 8, stage 4, Task 26). `python -m app.jobs.cleanup`
+  runs as the cleanup login only (it reads `CLEANUP_DATABASE_URL`, never the API's settings) and
+  deletes, each step in its own transaction with a 60 second statement timeout: expired sandboxes
+  (in batches of 50; their rows cascade), `ai_spend_daily` rows whose UTC day is more than 30 days
+  back, `sandbox_starts` rows older than 24 hours, and handbook versions that are not the newest
+  published one, were created before it was published (so a version still being loaded survives),
+  and are not pinned. The login can't see live sandboxes, so each candidate version is deleted
+  under a savepoint and a foreign-key refusal means "in use, skip". It logs one JSON line of counts
+  and exits 0; any error is logged by class only and exits 1. A second run deletes nothing.
+  Migration 0019 (part two) gives the login SELECT and DELETE on those three tables, bounded by
+  policies (`ai_spend_daily` now has row-level security, with `true` rules for the API so the
+  budget code is unchanged), and adds a trigger that refuses to delete the newest published
+  handbook version.
+- **The web app's Turnstile check and the start refusals** (Phase 8, stage 4, Task 25). Pressing a
+  persona card, the tour button, the tour's start dialog, or the budget banner's "Start a new
+  sandbox" loads Cloudflare's script (only then, once) and gets a fresh token, rendered in an empty
+  place directly under that control that shows Cloudflare's checkbox only if it asks. A check that
+  cannot run sends an empty token, so the API answers with its own text. The four refusals (too
+  many from this address, the day's limit, failed check, unreachable check) show the API's text in
+  the existing inline error, with Retry only for the two check failures. Browser tests serve the
+  script from a local fake, so none reaches Cloudflare.
+- **A person check before a sandbox starts: Cloudflare Turnstile** (Phase 8, stage 4). `POST
+  /api/v1/sandboxes` now needs a `turnstileToken`, and checks it before anything else, before the
+  visitor's current sandbox is touched. The token passes only if Cloudflare says it succeeded for
+  this app's host and the `start-sandbox` action. A failed check is a 403 (`turnstile-failed`);
+  when Cloudflare can't be reached (a timeout, an error, an unreadable answer) it is a 503
+  (`turnstile-unavailable`), so nobody starts a sandbox while the check is down. The refusal texts
+  are fixed, owner-approved ones in `app/modules/sandbox/texts.py`, with a hash test like the
+  assistant's. Cloudflare's documented test keys are answered inside the API and never sent to
+  Cloudflare, so development, CI, the browser tests, and `make prod-local` stay off the network.
+  New settings `TURNSTILE_SECRET_KEY` (and `TURNSTILE_SITE_KEY`): outside production they default
+  to the always-pass test keys; in production the API refuses to start without both, or with the
+  test keys unless `APP_ORIGIN` is a loopback address (checked at startup, not in `Settings`, so
+  Alembic and the setup scripts need neither key).
+- **Limits on starting sandboxes** (Phase 8, stage 4). Each start is counted in a new table,
+  `sandbox_starts` (migration 0019), under a keyed hash (HMAC-SHA256) of the visitor's address, so
+  the address itself is never stored. An IPv6 address counts as its whole /64 network, and an
+  IPv4-mapped IPv6 address as its IPv4 address. One address may start 5 sandboxes an hour and 20 in
+  24 hours (`SANDBOX_STARTS_PER_HOUR`, `SANDBOX_STARTS_PER_DAY`), and all addresses together 500 a
+  UTC day (`SANDBOX_STARTS_DAILY_TOTAL`). A refusal is a 429 with `Retry-After` and a fixed text
+  (`sandbox-start-limit`, `sandbox-day-limit`). The count, and the record of the start, run in a
+  short transaction of its own under one advisory lock (4406), so two starts at the limit can't
+  both pass. It runs before the visitor's current session ends, so a refused visitor (or one who
+  meets a pile-up) keeps the sandbox they have; the lock is released before the sandbox is
+  seeded, and a start whose seed fails still counts. A pile-up on the lock answers 503 "busy" after 5 seconds. When two limits bind, or a
+  count is over its limit, `Retry-After` is the longest wait. Turnstile's "your secret or request
+  is wrong" answers count as unavailable (503) and are logged as errors, not treated as a bot.
+  `SANDBOX_IP_HASH_KEY` (at least 32 bytes) has a development default that the API refuses to start with in production.
+  The API also refuses to start in production without `FORWARDED_ALLOW_IPS` (the load balancer's
+  addresses) unless `APP_ORIGIN` is a loopback one, so visitors don't all share the balancer's
+  address. These startup checks (`require_entry_settings_fit_for_production`) are not rules on
+  `Settings`: the setup tasks never serve a visitor and carry none of these settings.
+  `make prod-local` makes a fresh key each run for the API only.
+  The browser tests (`make e2e`, `make e2e-image`) and the proxy check now delete the
+  `sandbox_starts` rows they made when they end, as they do the ledger rows, so a later `make dev`
+  isn't refused by their counts.
+
 - **`make prod-local`** (Phase 8, stage 3): the production image with production settings on its
   own empty, throwaway Postgres (a private Docker network, never published, random passwords per
   run), at `http://localhost:8300`. A one-off container runs the migrations, the login setup, and

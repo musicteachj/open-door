@@ -23,6 +23,7 @@ import {
   type ScreenRow,
   type TimeOffState,
 } from './manifest'
+import { fakeTurnstile } from '../fixtures'
 import { holdRequests, problem, setSandboxLeft, startAs } from '../helpers'
 import {
   addDaysTo,
@@ -1486,6 +1487,8 @@ async function photographScreen(browser: Browser, row: ScreenRow): Promise<strin
     baseURL: 'http://localhost:4173',
     viewport: row.viewport ?? { width: 1440, height: 900 },
   })
+  // A start in a captured screen must not reach Cloudflare.
+  await fakeTurnstile(context)
   try {
     const page = await context.newPage()
     // A step that can't be done, such as a click on a state the date makes unreachable (a card for

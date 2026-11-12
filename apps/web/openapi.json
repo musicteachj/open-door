@@ -68,18 +68,11 @@
           "content": {
             "application/json": {
               "schema": {
-                "anyOf": [
-                  {
-                    "$ref": "#/components/schemas/NewSandboxRequest"
-                  },
-                  {
-                    "type": "null"
-                  }
-                ],
-                "title": "Body"
+                "$ref": "#/components/schemas/NewSandboxRequest"
               }
             }
-          }
+          },
+          "required": true
         },
         "responses": {
           "201": {
@@ -104,6 +97,16 @@
           },
           "422": {
             "description": "Unprocessable Content",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too Many Requests",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -5573,9 +5576,17 @@
           "persona": {
             "$ref": "#/components/schemas/PersonaKey",
             "default": "priya"
+          },
+          "turnstileToken": {
+            "type": "string",
+            "maxLength": 2048,
+            "title": "Turnstiletoken"
           }
         },
         "type": "object",
+        "required": [
+          "turnstileToken"
+        ],
         "title": "NewSandboxRequest"
       },
       "NotFoundTileOut": {

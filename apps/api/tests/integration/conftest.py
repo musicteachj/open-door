@@ -81,6 +81,7 @@ from app.db.tenancy import TenantContext, set_is_hr, tenant_session
 from app.main import create_app
 from app.modules.identity.cookies import CSRF_COOKIE, CSRF_HEADER, SESSION_COOKIE
 from app.modules.sandbox.seed import SeedCompany, build_company, insert_company
+from app.modules.sandbox.turnstile import DUMMY_TOKEN
 from tests.conftest import TEST_KEYRING
 
 
@@ -94,6 +95,11 @@ def database_settings() -> Settings:
             "app_env": "test",
             "encryption_keyring": TEST_KEYRING,
             "encryption_keyring_file": None,
+            # Tests start hundreds of sandboxes from one address. Only the limit tests use small
+            # values, through `open_browser_with`.
+            "sandbox_starts_per_hour": 1_000_000,
+            "sandbox_starts_per_day": 1_000_000,
+            "sandbox_starts_daily_total": 1_000_000,
         }
     )
 
@@ -563,9 +569,32 @@ def created_tenant_ids(owner_url: str, owner_is_superuser: None) -> Iterator[lis
     security, so it can delete any tenant. Each tenant's rows go with it (ON DELETE CASCADE).
     """
     tenant_ids: list[UUID] = []
+    began = asyncio.run(database_clock(owner_url))
     yield tenant_ids
     if tenant_ids:
         asyncio.run(delete_tenants(owner_url, tenant_ids))
+    # Every sandbox start leaves a count row with no tenant, so they go with the session too.
+    asyncio.run(delete_starts_since(owner_url, began))
+
+
+async def database_clock(url: str) -> datetime:
+    engine = create_engine(url)
+    try:
+        async with engine.connect() as connection:
+            return (await connection.execute(text("SELECT now()"))).scalar_one()
+    finally:
+        await engine.dispose()
+
+
+async def delete_starts_since(url: str, since: datetime) -> None:
+    engine = create_engine(url, statement_timeout="0")
+    try:
+        async with engine.begin() as connection:
+            await connection.execute(
+                text("DELETE FROM sandbox_starts WHERE created_at >= :since"), {"since": since}
+            )
+    finally:
+        await engine.dispose()
 
 
 async def delete_tenants(url: str, tenant_ids: list[UUID]) -> None:
@@ -752,7 +781,15 @@ class Browser:
             self.client.sends_csrf = True
 
     def create_sandbox(self, body: object = None, **kwargs: Any) -> httpx.Response:
-        """POST /sandboxes. A sandbox it creates is deleted when the test session ends."""
+        """POST /sandboxes. A sandbox it creates is deleted when the test session ends.
+
+        The body carries Cloudflare's dummy token, which the test keys accept, unless the test
+        gives its own `turnstileToken`. `body=None` sends the default persona with that token.
+        """
+        if body is None:
+            body = {}
+        if isinstance(body, dict):
+            body = {"turnstileToken": DUMMY_TOKEN, **body}
         response = self.client.post("/api/v1/sandboxes", json=body, **kwargs)
         if response.status_code == 201:
             self._created_tenant_ids.append(UUID(response.json()["tenant"]["id"]))

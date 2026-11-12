@@ -85,6 +85,10 @@ def test_the_api_env_carries_only_the_apis_own_settings() -> None:
     assert env["AI_HEARTBEAT_SECONDS"] == "1"
     assert env["AI_DAILY_BUDGET_USD"] == "1000"
     assert "FORWARDED_ALLOW_IPS" not in env
+    # The browser tests start many sandboxes from one address.
+    assert int(env["SANDBOX_STARTS_PER_HOUR"]) >= 1_000_000
+    assert int(env["SANDBOX_STARTS_PER_DAY"]) >= 1_000_000
+    assert int(env["SANDBOX_STARTS_DAILY_TOTAL"]) >= 1_000_000
     assert set(env) <= {
         "APP_ENV",
         "APP_ORIGIN",
@@ -95,6 +99,9 @@ def test_the_api_env_carries_only_the_apis_own_settings() -> None:
         "HOST",
         "AI_HEARTBEAT_SECONDS",
         "AI_DAILY_BUDGET_USD",
+        "SANDBOX_STARTS_PER_HOUR",
+        "SANDBOX_STARTS_PER_DAY",
+        "SANDBOX_STARTS_DAILY_TOTAL",
     }
 
 

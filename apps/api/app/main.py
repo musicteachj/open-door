@@ -17,7 +17,7 @@ from app.api.v1.health import ReadinessCache
 from app.api.v1.router import api_router
 from app.core.body_limit import BodyLimitMiddleware
 from app.core.cache_control import NoStoreMiddleware
-from app.core.config import Settings, get_settings
+from app.core.config import Settings, get_settings, require_entry_settings_fit_for_production
 from app.core.encryption import KeyProvider, load_key_provider
 from app.core.logging import configure_logging
 from app.core.problems import install_problem_handlers
@@ -26,6 +26,7 @@ from app.core.security_headers import SecurityHeadersMiddleware
 from app.db.engine import create_engine
 from app.modules.assistant.sse import CLOSE_TIMEOUT_SECONDS, StreamTracker
 from app.modules.identity.same_origin import SameOriginMiddleware
+from app.modules.sandbox.turnstile import CloudflareVerifier, build_verifier
 from app.web_app import install_web_app
 
 # How long the shutdown waits for open turn streams to save their turns before it closes the
@@ -86,6 +87,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         settings = get_settings()
     configure_logging(settings.log_level)
     require_a_transport_fit_for(settings)
+    require_entry_settings_fit_for_production(settings)
     if settings.ai_transport == "replay":
         msg = (
             "AI_TRANSPORT=replay is for the eval harness only: it keeps per-item state and has no"
@@ -107,6 +109,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         app.state.summarizer = _build_summarizer(settings, transport)
         streams = StreamTracker()
         app.state.streams = streams
+        # Built here, with the client it closes, so each lifespan run gets its own.
+        verifier = build_verifier(settings)
+        app.state.turnstile = verifier
         try:
             yield
         finally:
@@ -124,7 +129,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 if isinstance(transport, anthropic_transport.AnthropicTransport):
                     await transport.client.close()
             finally:
-                await app.state.engine.dispose()
+                try:
+                    if isinstance(verifier, CloudflareVerifier):
+                        await verifier.aclose()
+                finally:
+                    await app.state.engine.dispose()
 
     # Production serves no interactive docs or schema; `app.openapi()` still builds the schema for
     # `make openapi`.

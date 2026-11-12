@@ -67,7 +67,35 @@ def test_the_api_runs_with_production_settings_on_a_loopback_origin() -> None:
     assert env["ENCRYPTION_KEYRING"] == KEYRING
     assert env["ANTHROPIC_API_KEY"] == ANTHROPIC
     assert "VOYAGE_API_KEY" not in env
-    assert "TURNSTILE_SECRET_KEY" not in env
+
+
+def test_the_api_gets_test_turnstile_keys_and_a_fresh_address_hash_key() -> None:
+    from app.core.config import (
+        DEVELOPMENT_IP_HASH_KEY,
+        Settings,
+        require_entry_settings_fit_for_production,
+    )
+
+    first, second = api_env(), api_env()
+    # Cloudflare's public always-pass test keys: production accepts them on a loopback origin only,
+    # and the API answers them itself.
+    assert first["TURNSTILE_SITE_KEY"] == "1x00000000000000000000AA"
+    assert first["TURNSTILE_SECRET_KEY"] == "1x0000000000000000000000000000000AA"  # noqa: S105
+    assert len(first["SANDBOX_IP_HASH_KEY"]) >= 32
+    assert first["SANDBOX_IP_HASH_KEY"] != DEVELOPMENT_IP_HASH_KEY
+    assert first["SANDBOX_IP_HASH_KEY"] != second["SANDBOX_IP_HASH_KEY"]
+    # And the API's startup check for production accepts all of it.
+    require_entry_settings_fit_for_production(
+        Settings(
+            _env_file=None,
+            database_url=first["DATABASE_URL"],
+            app_env="production",
+            app_origin=first["APP_ORIGIN"],
+            turnstile_site_key=first["TURNSTILE_SITE_KEY"],
+            turnstile_secret_key=first["TURNSTILE_SECRET_KEY"],
+            sandbox_ip_hash_key=first["SANDBOX_IP_HASH_KEY"],
+        )
+    )
 
 
 def test_the_voyage_key_goes_in_only_when_there_is_one() -> None:
@@ -155,6 +183,8 @@ def test_the_setup_runs_the_deploy_steps_in_order_with_no_keyring_and_no_api_key
     assert env["APP_ENV"] == "production"
     assert {"DATABASE_URL", "MIGRATION_DATABASE_URL", "CLEANUP_DATABASE_URL"} <= set(env)
     assert not {"ENCRYPTION_KEYRING", "ANTHROPIC_API_KEY", "VOYAGE_API_KEY"} & set(env)
+    # Only the serving API checks the sandbox-entry settings; the setup tasks carry none.
+    assert not {"TURNSTILE_SITE_KEY", "TURNSTILE_SECRET_KEY", "SANDBOX_IP_HASH_KEY"} & set(env)
     assert "--rm" in args
     assert pairs(args, "--entrypoint") == ["sh"]
     script = args[args.index("-c") + 1]

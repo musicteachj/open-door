@@ -254,6 +254,7 @@ make eval-retrieval  score handbook search against the labeled questions (needs 
 make eval-offline  replay the recorded assistant evals (needs `make db`; no network)
 make eval-live  paid; smoke by default, `SET=full` or `SET=effort`, and `YES=1` to run
 make scoreboard  rebuild the README's scoreboard and apps/web/src/generated/scoreboard.json from the boards
+make cleanup    delete expired sandboxes, old spend rows and start counts, and unused handbook versions, as the cleanup login
 make dev        Postgres, migrations, API (:8000) and web app (:5173) together
 make check      everything CI runs; needs `make db` first (and Docker: it builds the images)
 make e2e        the browser tests (Playwright, Chromium) against the real API on :8100 and the Vite preview

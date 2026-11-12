@@ -206,4 +206,47 @@ async def test_the_only_permissive_policy_for_the_api_is_the_tenant_rule(
         "session_insert",
         "session_select",
     ]
+    # The start counter has no tenant: the API must count every address, so its two rules are
+    # `true`, one for reading and one for adding. Nothing else may apply to it.
+    assert sorted(found.pop("sandbox_starts")) == [
+        ("app_counts_every_start", "r", "true", ""),
+        ("app_records_a_start", "a", "", "true"),
+    ]
+    # The ledger has no tenant either: the budget sums every sandbox, so the API's rules are `true`.
+    assert sorted(found.pop("ai_spend_daily")) == [
+        ("app_reads_the_ledger", "r", "true", ""),
+        ("app_writes_the_ledger", "a", "", "true"),
+    ]
     assert found == expected
+
+
+async def test_the_start_counter_has_row_level_security_enabled_and_forced(
+    app_engine: AsyncEngine,
+) -> None:
+    async with app_engine.connect() as connection:
+        flags = (
+            await connection.execute(
+                text(
+                    "SELECT relrowsecurity, relforcerowsecurity FROM pg_class"
+                    " WHERE relname = 'sandbox_starts'"
+                )
+            )
+        ).one()
+    assert tuple(flags) == (True, True)
+
+
+async def test_the_spend_ledger_has_row_level_security_enabled_but_not_forced(
+    app_engine: AsyncEngine,
+) -> None:
+    """Enabled, so the API's and the cleanup login's rules apply; not forced, so the owner's spend
+    scripts still see every row on a managed database whose owner is not a superuser."""
+    async with app_engine.connect() as connection:
+        flags = (
+            await connection.execute(
+                text(
+                    "SELECT relrowsecurity, relforcerowsecurity FROM pg_class"
+                    " WHERE relname = 'ai_spend_daily'"
+                )
+            )
+        ).one()
+    assert tuple(flags) == (True, False)

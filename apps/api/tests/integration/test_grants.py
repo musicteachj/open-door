@@ -66,8 +66,16 @@ EXPECTED_TABLE_GRANTS = {
     # The console's rows (Phase 7) are insert-only, and the cleanup login needs no grant.
     ("od_app", "ai_console_turns", "SELECT"),
     ("od_app", "ai_console_turns", "INSERT"),
-    ("od_cleanup", "tenants", "SELECT"),
-    ("od_cleanup", "tenants", "DELETE"),
+    # The start counter (Phase 8): the API adds a row per sandbox started and counts them.
+    ("od_app", "sandbox_starts", "SELECT"),
+    ("od_app", "sandbox_starts", "INSERT"),
+    # The cleanup job (Phase 8) deletes expired sandboxes, and also old ledger rows, old start
+    # counts, and unused handbook versions. Policies and a trigger bound each (migration 0019).
+    *(
+        ("od_cleanup", table, privilege)
+        for table in ("tenants", "ai_spend_daily", "sandbox_starts", "handbook_versions")
+        for privilege in ("SELECT", "DELETE")
+    ),
 }
 # The tables with column grants. A turn's columns change when it ends: its identity (id, tenant_id,
 # person_id, conversation_id), its question_ciphertext, and started_at are never updatable. A
