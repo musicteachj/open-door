@@ -473,6 +473,20 @@ describe('CaseForm: a refusal from the server', () => {
     expect(screen.getByText('Add your words before sending.')).toBeInTheDocument()
   })
 
+  it('shows the server’s own words for a too-long refusal, keeps Send, and clears on an edit', async () => {
+    const message = '4,000 of 4,000 characters. Shorten it to send.'
+    const { user, rerender } = setup({ initialCategory: 'pay' })
+    rerender({ initialCategory: 'pay', refusal: { kind: 'too-long', message } })
+    // The counter's own line says the same words at the limit, so look at the error id.
+    expect(words()).toHaveAttribute('aria-invalid', 'true')
+    expect(words()).toHaveFocus()
+    expect(screen.getAllByText(message).length).toBeGreaterThan(0)
+    expect(screen.getByRole('button', { name: 'Send to HR' })).toBeVisible()
+    expect(screen.queryByRole('button', { name: 'Try again' })).not.toBeInTheDocument()
+    await user.type(words(), ' x')
+    expect(words()).not.toHaveAttribute('aria-invalid', 'true')
+  })
+
   it('clears the line when the person edits the words', async () => {
     const { user, rerender } = setup({ initialCategory: 'pay' })
     rerender({ initialCategory: 'pay', refusal: 'personal-data' })

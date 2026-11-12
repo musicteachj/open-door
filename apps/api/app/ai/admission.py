@@ -18,7 +18,7 @@ offer comes earlier than a real token count would put it, and that is the safe s
 
 import json
 import math
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from typing import Any, Literal
@@ -117,6 +117,43 @@ def scope_without_room(
         return "sandbox"
     if daily_short:
         return "daily"
+    return None
+
+
+def room_scopes(
+    state: BudgetState, needed_usd: Decimal, needed_empty_usd: Callable[[], Decimal]
+) -> tuple[bool, bool]:
+    """Which caps stop the next question, the sandbox's and the day's, by the one rule the banner
+    (`budget_out`) and the question's 429 (`refusal_scope`) share.
+
+    When the sandbox has room with the conversation's history, the day is judged with the history,
+    as before: a day short only because of a long conversation still reads as the day's limit,
+    since the approved conversation text names the sandbox's budget. When the sandbox is short with
+    the history, what an empty conversation needs (`needed_empty_usd`, sized only then) decides:
+    still short, it is the sandbox's cap (the day as with the history); otherwise the sandbox is
+    not at its cap, and the day is judged by what the empty conversation needs."""
+    sandbox_short, daily_short = short_scopes(state, needed_usd)
+    if not sandbox_short:
+        return False, daily_short
+    sandbox_short_empty, daily_short_empty = short_scopes(state, needed_empty_usd())
+    if sandbox_short_empty:
+        return True, daily_short
+    return False, daily_short_empty
+
+
+def refusal_scope(
+    state: BudgetState, needed_usd: Decimal, needed_empty_usd: Callable[[], Decimal]
+) -> Literal["sandbox", "daily", "conversation"] | None:
+    """`scope_without_room` under `room_scopes`' rule, with a fourth answer: "conversation" when the
+    sandbox is short only because of the conversation's history and a new conversation would fit
+    both caps. The sandbox is named first, as `scope_without_room` does."""
+    sandbox_short, daily_short = room_scopes(state, needed_usd, needed_empty_usd)
+    if sandbox_short:
+        return "sandbox"
+    if daily_short:
+        return "daily"
+    if short_scopes(state, needed_usd)[0]:
+        return "conversation"
     return None
 
 

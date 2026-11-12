@@ -441,6 +441,7 @@ export interface CaseTextsOut {
   bullets: string[]
   replyBy: string
   waitingLimit: string
+  cannotSend: string
   hrContacts: HrContactOut[]
 }
 

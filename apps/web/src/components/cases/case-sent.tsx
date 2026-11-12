@@ -44,10 +44,21 @@ type CaseSentProps = CaseSentBase &
          */
         focusOnMount?: boolean
       }
+    | {
+        /** A refusal no retry can fix: the form or the message can't become a case from here. */
+        state: 'cannot-send'
+        /** The API's line (`cannotSend` from `GET /cases/texts`). */
+        cannotSendLine: string
+        /** The HR contacts, shown under the line on the page, as for the limit line. */
+        contacts?: HrContactOut[]
+        /** The line takes focus when it appears, as the form it replaces has just gone. */
+        focusOnMount?: boolean
+      }
   )
 
 /**
- * The quiet result after a case is sent, and the five-waiting limit (CaseSent.jsx). One line with
+ * The quiet result after a case is sent, the five-waiting limit, and the "can't be sent from
+ * here" line (CaseSent.jsx). One line with
  * a lock, no apricot, no check, no celebration. A reload renders the same line. The sent line is a
  * status with `tabindex="-1"` and takes focus, so "View in My cases" is the next tab stop.
  *
@@ -70,9 +81,11 @@ function CaseSent(props: CaseSentProps) {
   const text =
     props.state === 'limit'
       ? props.limitLine
-      : variant === 'panel'
-        ? `${props.sentLine.lead} ${props.sentLine.pointer}`
-        : props.sentLine.lead
+      : props.state === 'cannot-send'
+        ? props.cannotSendLine
+        : variant === 'panel'
+          ? `${props.sentLine.lead} ${props.sentLine.pointer}`
+          : props.sentLine.lead
   return (
     <CaseSurface variant={variant} data-slot="case-sent" className={className}>
       <output
@@ -96,7 +109,7 @@ function CaseSent(props: CaseSentProps) {
           )}
         </div>
       </output>
-      {props.state === 'limit' && variant === 'page' && props.contacts && (
+      {props.state !== 'sent' && variant === 'page' && props.contacts && (
         <HrContacts contacts={props.contacts} className="mt-4" />
       )}
     </CaseSurface>

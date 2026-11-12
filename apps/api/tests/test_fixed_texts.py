@@ -160,7 +160,7 @@ def test_the_budget_texts_are_the_approved_words() -> None:
 
 def test_each_budget_text_gives_911_and_988() -> None:
     # A budget stop happens before the safety check, so the message was never screened.
-    for text in (BUDGET_SANDBOX_TEXT, BUDGET_DAILY_TEXT):
+    for text in (BUDGET_SANDBOX_TEXT, BUDGET_DAILY_TEXT, fixed_texts.BUDGET_CONVERSATION_TEXT):
         assert "call 911" in text
         assert "call or text 988" in text
 
@@ -203,6 +203,44 @@ def test_the_unreadable_conversation_text_is_approved() -> None:
     digest = hashlib.sha256(fixed_texts.UNREADABLE_CONVERSATION_TEXT.encode()).hexdigest()
     assert digest == fixed_texts.UNREADABLE_CONVERSATION_TEXT_SHA256, message
     assert "\u2014" not in fixed_texts.UNREADABLE_CONVERSATION_TEXT
+
+
+def test_the_conversation_budget_text_is_approved() -> None:
+    message = (
+        "The conversation-budget text isn't approved: the owner edits it, then sets "
+        "BUDGET_CONVERSATION_TEXT_APPROVED_ON and BUDGET_CONVERSATION_TEXT_SHA256."
+    )
+    assert fixed_texts.BUDGET_CONVERSATION_TEXT == (
+        "This conversation is too long for what's left of this sandbox's AI budget. Start a new "
+        "conversation to keep asking. If you or someone else is in danger, call 911, or call or "
+        "text 988 to reach the 988 Suicide & Crisis Lifeline."
+    )
+    assert fixed_texts.BUDGET_CONVERSATION_TEXT_AUTHOR == "James Littlefield (owner)"
+    assert fixed_texts.BUDGET_CONVERSATION_TEXT_APPROVED_ON == "2026-11-12"
+    date.fromisoformat(fixed_texts.BUDGET_CONVERSATION_TEXT_APPROVED_ON)
+    digest = hashlib.sha256(fixed_texts.BUDGET_CONVERSATION_TEXT.encode()).hexdigest()
+    assert digest == fixed_texts.BUDGET_CONVERSATION_TEXT_SHA256, message
+    assert "\u2014" not in fixed_texts.BUDGET_CONVERSATION_TEXT
+    # It is a refusal in its own right, not one of the stream's error codes.
+    assert fixed_texts.BUDGET_CONVERSATION_TEXT not in fixed_texts.ERROR_TEXTS.values()
+
+
+def test_the_cannot_send_case_text_is_approved() -> None:
+    message = (
+        "The case cannot-send text isn't approved: the owner edits it, then sets "
+        "CANNOT_SEND_TEXT_APPROVED_ON and CANNOT_SEND_TEXT_SHA256."
+    )
+    assert case_texts.CANNOT_SEND_TEXT == (
+        "This can't be sent as a case from here. You can see your cases in My cases, or contact "
+        "the HR team directly."
+    )
+    assert case_texts.CANNOT_SEND_TEXT_AUTHOR == "James Littlefield (owner)"
+    assert case_texts.CANNOT_SEND_TEXT_APPROVED_ON == "2026-11-12"
+    date.fromisoformat(case_texts.CANNOT_SEND_TEXT_APPROVED_ON)
+    digest = hashlib.sha256(case_texts.CANNOT_SEND_TEXT.encode()).hexdigest()
+    assert digest == case_texts.CANNOT_SEND_TEXT_SHA256, message
+    assert "\u2014" not in case_texts.CANNOT_SEND_TEXT
+    assert promises_found(case_texts.CANNOT_SEND_TEXT) == []
 
 
 def test_the_composers_two_refusals_keep_their_words() -> None:

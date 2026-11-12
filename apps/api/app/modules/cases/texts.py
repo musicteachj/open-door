@@ -138,3 +138,15 @@ INVALID_CATEGORY_TEXT: Final = "Choose what the case is about."
 INVALID_FILTER_TEXT: Final = "That filter isn't available."
 INVALID_CURSOR_TEXT: Final = "That page of the list isn't available."
 SUMMARY_RETRY_REFUSED_TEXT: Final = "A summary can't be tried again for this case right now."
+
+# Shown in place of the form when a case can't be sent from where the person is, and a retry
+# can't change that (a form the server refuses outright, or a message that can't start a case).
+# The owner approved the words on 2026-11-12. Changing a word means approving it again, and
+# setting its date and hash. Not model text.
+CANNOT_SEND_TEXT: Final = (
+    "This can't be sent as a case from here. You can see your cases in My cases, or contact the"
+    " HR team directly."
+)
+CANNOT_SEND_TEXT_AUTHOR: Final = "James Littlefield (owner)"
+CANNOT_SEND_TEXT_APPROVED_ON: str = "2026-11-12"
+CANNOT_SEND_TEXT_SHA256: Final = "935a689a5bd0c5abd8ce6cb5c41c9d815f5d0cf4e8c90e4ada342f11be5b0c53"
