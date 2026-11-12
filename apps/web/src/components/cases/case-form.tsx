@@ -20,6 +20,9 @@ import { TOUR_TARGETS, tourTarget } from '@/lib/tour-targets'
 /** A reply under this many characters that raised the panel gets the "Add what happened" hint. */
 const SHORT_REPLY_CHARACTERS = 40
 
+/** What the server refused the words for. `too-long` carries the server's own words for the box. */
+type CaseRefusal = 'empty' | 'personal-data' | { kind: 'too-long'; message: string } | null
+
 type CaseSubmission = { submissionId: string; category: Category; text: string }
 
 type CaseFormProps = {
@@ -38,7 +41,7 @@ type CaseFormProps = {
    * server repeats every check). It shows as the form's own error on the words, and the words
    * take focus. The caller clears it (null) when the next send starts.
    */
-  refusal?: 'empty' | 'personal-data' | null
+  refusal?: CaseRefusal
   /** The person pressed Send to HR and everything passed. Each press of a form sends the same `submissionId`. */
   onSend: (input: CaseSubmission) => void
   /** "Not now". The caller closes the form and returns focus to the button that opened it. */
@@ -109,9 +112,16 @@ function CaseForm({
     previousFailed.current = sendFailed
   }, [sendFailed])
 
+  // The server's own too-long words, shown while its `limit` problem stands.
+  const [tooLongMessage, setTooLongMessage] = useState<string | null>(null)
   useEffect(() => {
     if (refusal === null) return
-    setProblems([refusal])
+    if (typeof refusal === 'object') {
+      setTooLongMessage(refusal.message)
+      setProblems(['limit'])
+    } else {
+      setProblems([refusal])
+    }
     wordsRef.current?.focus()
   }, [refusal])
 
@@ -123,7 +133,9 @@ function CaseForm({
     ? caseCopy.noWords
     : problems.includes('personal-data')
       ? caseCopy.personalData
-      : null
+      : problems.includes('limit')
+        ? tooLongMessage
+        : null
   const categoryError = problems.includes('category')
   const limitError = problems.includes('limit')
   const wordsInvalid = wordsError !== null || limitError
@@ -138,6 +150,7 @@ function CaseForm({
   function submit() {
     if (sending) return
     const found = validateCase({ category, text })
+    setTooLongMessage(null)
     setProblems(found)
     if (found.length > 0) {
       // A role added to the counter's existing text is often not read, so it is said apart.
@@ -161,6 +174,7 @@ function CaseForm({
     // With nothing changed there is no render to move the caret in, so a stale one is not kept.
     caretAfterCut.current = edit.value === text ? null : edit.caret
     setText(edit.value)
+    setTooLongMessage(null)
     setProblems((found) => found.filter((problem) => !WORDS_PROBLEMS.includes(problem)))
   }
 
@@ -275,4 +289,4 @@ function CaseForm({
 }
 
 export { CaseForm, SHORT_REPLY_CHARACTERS }
-export type { CaseFormProps, CaseSubmission }
+export type { CaseFormProps, CaseRefusal, CaseSubmission }

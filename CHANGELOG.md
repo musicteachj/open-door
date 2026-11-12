@@ -12,6 +12,34 @@ version (`0.x.y` while the app is being built, `1.0.0` when it is complete).
 
 ### Changed
 
+- **A stopped sensitive answer's HR panel is announced** (Phase 8, stage 5, task 30). When the
+  person pressed Stop, the stream's escalation never reached the browser, so the HR panel arrived
+  only with the saved copy and a saved panel never announced. The chat store now remembers a turn
+  whose live copy had no panel when it settles, and the saved panel announces itself once, politely,
+  then forgets it. A reload, a refetch, a later render, and a panel that already announced live stay
+  silent.
+- **Two new owner-approved texts** (Phase 8, stage 5, task 30; approved 2026-11-12, each with
+  author, date, and a pinned hash). "This conversation is too long for what's left of this sandbox's
+  AI budget. Start a new conversation to keep asking." (with the 911 and 988 wording) is the 429
+  `budget-conversation` text. "This can't be sent as a case from here. You can see your cases in My
+  cases, or contact the HR team directly." comes from `GET /cases/texts` as `cannotSend`.
+- **The case form tells apart refusals a retry can fix** (Phase 8, stage 5, task 30). The server's
+  too-long refusal shows its own words under the words box, with the form open. An invalid form, a
+  message that can't start a case, or a case that isn't found closes the form and shows the
+  approved "can't be sent from here" line, with no "Try again", in the chat panel and on My cases.
+  Server errors and network failures keep "Try again". The gallery has the new state.
+
+- **Every turn ends with one closing event** (Phase 8, stage 5, task 28). A crisis turn and a
+  "can't answer right now" turn used to end with their escalation and no closing event, and a late
+  "can't answer" offer was sent after an `error`. Now every turn the stream reads to its end sends
+  exactly one `turn.completed` or `error`, and it is always last: the late escalation (the HR
+  contact for a sensitive message, or the "can't answer" text for one the safety check never read)
+  comes right before it, and a crisis or unavailable turn closes with a `turn.completed` that names
+  no model and counts no tokens. A failed end-of-turn write still ends with the plain `internal`
+  error. The chat page no longer guesses that a crisis or unavailable turn is finished from its
+  escalation: a stream that ends with no closing event is `stopped` for every kind (the panel still
+  shows). The model reads none of this, so the recorded evals replay unchanged.
+
 - **November's dependency updates, and fewer Dependabot pull requests** (tooling, Phase 8,
   between stages 3 and 4). Nine web
   packages move to their latest patch or minor release (React Query, lucide icons, React Router,
@@ -142,6 +170,32 @@ version (`0.x.y` while the app is being built, `1.0.0` when it is complete).
   page, with a warning naming only the request.
 
 ### Fixed
+
+- **A conversation that is too long for the remaining budget no longer says the sandbox is spent**
+  (Phase 8, stage 5, task 30). When the history made the next question cost more than what was
+  left but a new conversation would fit, the question was refused as `budget-sandbox`, and the
+  banner and the disabled box told the person to start a new sandbox. Now the 429 is
+  `budget-conversation` with the approved "start a new conversation" text under the box and the
+  notice's "Start a new conversation" button (without the long-conversation words, which would
+  give another reason). The banner and the 429 share one rule: when the sandbox is short with the
+  history, what a new conversation needs decides both caps, so the sandbox shows as spent only
+  when an empty conversation would not fit either.
+
+- **The crisis panel survives a failed end-of-turn write** (Phase 8, stage 5, task 29). A crisis
+  turn's verdict was written only at the very end of the turn. If that write failed or timed out,
+  the turn stayed `running`, then read back as failed (`abandoned`) with no verdict, and the 988
+  and EAP text vanished when the page reloaded. The verdict is now stored in a short transaction
+  of its own, bounded at 2 seconds and run alongside the HR contact lookup, before the crisis text
+  goes out; if that write fails or times out the text is sent anyway. A turn whose stored verdict
+  is crisis shows the crisis panel whatever its status (running, abandoned, or failed another
+  way). An abandoned turn with no verdict, or an ordinary or sensitive one, still shows none, and
+  the recovered turn's console row stays redacted, and the panel still offers a confidential
+  case. No migration: the app login could already update that column on a running turn. The two
+  database steps before the crisis text (this write and the HR contact lookup) now stop waiting at
+  their bound even when the database stops answering: `asyncio.timeout` waited for a canceled
+  query's cleanup, which a silent database (a failover, a dropped network path) held for minutes.
+  The HR lookup is canceled at its bound; the verdict write is left running, so a write that is
+  only slow still lands.
 
 - **Audit events store SQL `NULL` for "nothing"** (Phase 8, stage 1, migration 0017). `before` and
   `after` used to hold the JSON value `null`, which `IS NULL` never found; the migration converts

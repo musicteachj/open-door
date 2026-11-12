@@ -110,6 +110,7 @@ export function ConversationView({
   const { banner, send } = composer
   const phase = useChatStore((s) => s.status)
   const offerNewConversation = useChatStore((s) => s.offerNewConversation)
+  const offerWithoutNoticeWords = useChatStore((s) => s.offerWithoutNoticeWords)
   const { end, dock } = useFollowThread(live, phase)
 
   // The shell hides its own sandbox pills while this page shows its own in the header.
@@ -147,6 +148,9 @@ export function ConversationView({
   // newest opener.
   // The opener is only worth keeping while this page is up.
   useEffect(() => forgetOpener, [])
+  // A turn that settled while this page was up but whose saved copy it never drew (the person
+  // left first) must not announce its panel when the page comes back: the arrival is long past.
+  useEffect(() => () => useChatStore.setState({ panelsToAnnounce: [] }), [])
   const wasOpen = useRef(openKey !== null)
   useEffect(() => {
     if (wasOpen.current && openKey === null) returnFocusToOpener()
@@ -236,7 +240,13 @@ export function ConversationView({
               variant="docked"
               placeholder={conversationCopy.followUpPlaceholder}
               longConversation={longConversation}
-              noticeText={unreadable ? (texts.data?.unreadableConversation ?? '') : undefined}
+              noticeText={
+                unreadable
+                  ? (texts.data?.unreadableConversation ?? '')
+                  : offerWithoutNoticeWords
+                    ? ''
+                    : undefined
+              }
               onNewConversation={composer.startNewConversation}
             />
             <RetentionLine className="sm:hidden" />

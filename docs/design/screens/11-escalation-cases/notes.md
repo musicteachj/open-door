@@ -154,6 +154,12 @@ section, and the screenshot is not redrawn.
   spec's copy.
 - **The panel offers a case only when `offerCase` is true.** The "Can't answer right now" panel,
   a budget stop, and the not-found answer's contacts show the "Write to HR" link instead.
+- **Refusals a retry cannot fix (Phase 8, 2026-11-12).** The server's too-long refusal shows its own
+  words under the words box (the form stays open and the button says "Send to HR"). An invalid
+  form, or a message that can't start a case, closes the form and shows the owner-approved line
+  "This can't be sent as a case from here. You can see your cases in My cases, or contact the HR
+  team directly." in place of the limit line, with no "Try again". Server errors and network
+  failures still show the send-failure message and "Try again".
 
 ## Acceptance criteria
 

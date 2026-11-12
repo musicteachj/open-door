@@ -19,6 +19,7 @@ import contextlib
 from collections.abc import AsyncIterator, Awaitable, Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from functools import partial
 from typing import Annotated, Any
 from uuid import UUID
 
@@ -33,10 +34,10 @@ from app.ai.admission import (
     HISTORY_REFUSE_TOKENS,
     SMALLEST_QUESTION,
     history_tokens,
+    refusal_scope,
     room_needed_usd,
-    scope_without_room,
+    room_scopes,
     seconds_until_next_utc_day,
-    short_scopes,
 )
 from app.ai.budget import Caps, budget_state
 from app.ai.context import ActorView, actor_view
@@ -61,6 +62,7 @@ from app.ai.conversations import (
 )
 from app.ai.embeddings import Embedder, for_sandbox
 from app.ai.fixed_texts import (
+    BUDGET_CONVERSATION_TEXT,
     BUDGET_DAILY_TEXT,
     BUDGET_SANDBOX_TEXT,
     ERROR_TEXTS,
@@ -227,7 +229,7 @@ async def load_asker_context(db: AsyncSession, signed_in: SignedIn | Caller) -> 
 def budget_banner(*, sandbox_reached: bool, daily_reached: bool) -> BudgetBannerOut | None:
     """The fixed text for the cap that stops the person. The day's wins when both are reached:
     a new sandbox would not help then, and the sandbox text's only offer is a new one. The POST's
-    429 (`scope_without_room`) names the sandbox first, but no 429 shows beside this banner: with
+    429 (`refusal_scope`) names the sandbox first, but no 429 shows beside this banner: with
     either cap reached the composer is disabled, and a new sandbox doesn't lift the daily cap."""
     if daily_reached:
         return BudgetBannerOut(kind="daily", message=BUDGET_DAILY_TEXT)
@@ -257,17 +259,23 @@ async def budget_out(
     # a size estimate, and the question itself is refused (404) when a turn needs the version.
     pinned = await pinned_version(db)
     label = "" if pinned is None else pinned[1]
-    needed = room_needed_usd(
+    needed_for = partial(
+        room_needed_usd,
         model=model,
         guard_model=guard_model,
         effort=effort,
-        history=history,
         question=SMALLEST_QUESTION,
         actor_view=view,
         handbook_label=label or "",
         now=now,
     )
-    sandbox_short, daily_short = short_scopes(state, needed)
+    needed = needed_for(history=history)
+    # The question's own rule (`refusal_scope`), so the banner and the 429 never disagree: a
+    # sandbox short only because of this conversation's history is not at its cap, and the page
+    # offers a new conversation (from the 429), not the sandbox text.
+    sandbox_short, daily_short = room_scopes(
+        state, needed, (lambda: needed_for(history=[])) if history else (lambda: needed)
+    )
     return BudgetOut(
         sandbox_reached=sandbox_short,
         daily_reached=daily_short,
@@ -711,17 +719,25 @@ async def admit_question(
         # 5. Budgets, before the turn's row is added: a refusal leaves no `running` turn behind.
         asker = await load_asker_context(db, caller)
         caps = Caps.from_settings(settings)
-        needed = room_needed_usd(
+        needed_for = partial(
+            room_needed_usd,
             model=conversation.model,
             guard_model=conversation.guard_model,
             effort=conversation.effort,
-            history=history,
             question=question,
             actor_view=asker.actor_view,
             handbook_label=asker.handbook_label,
             now=now,
         )
-        scope = scope_without_room(await budget_state(db, caps), needed)
+        needed = needed_for(history=history)
+        scope = refusal_scope(
+            await budget_state(db, caps),
+            needed,
+            # The same question in a new conversation, to tell a sandbox that is spent from a
+            # conversation that is too long for what is left (sized only when the sandbox is
+            # short, and the same estimate when there is no history), as `budget_out` does.
+            (lambda: needed_for(history=[])) if history else (lambda: needed),
+        )
         if scope is not None:
             code = f"budget-{scope}"
             # Only the day's limit resets (at the next UTC midnight). A sandbox's own never does,
@@ -730,9 +746,8 @@ async def admit_question(
             retry_after = (
                 {"Retry-After": str(seconds_until_next_utc_day(now))} if scope == "daily" else None
             )
-            raise ProblemError(
-                status.HTTP_429_TOO_MANY_REQUESTS, code, ERROR_TEXTS[code], headers=retry_after
-            )
+            detail = BUDGET_CONVERSATION_TEXT if scope == "conversation" else ERROR_TEXTS[code]
+            raise ProblemError(status.HTTP_429_TOO_MANY_REQUESTS, code, detail, headers=retry_after)
     return Admitted(conversation, question, asker, caps, cipher)
 
 

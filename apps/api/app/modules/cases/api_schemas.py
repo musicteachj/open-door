@@ -79,6 +79,8 @@ class CaseTextsOut(CamelModel):
     reply_by: date
     # The line shown in place of the case button when five cases are waiting.
     waiting_limit: str
+    # Shown in place of the form when a case can't be sent from here and a retry can't help.
+    cannot_send: str
     # The HR team, for My cases: its limit line and a crisis panel have no conversation above them.
     hr_contacts: list[HrContactOut]
 

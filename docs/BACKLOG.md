@@ -289,11 +289,6 @@ phase makes it, since its full run covers them all.
   - an abandoned turn's console row shows no cost, tokens, or timings, though the dead turn's
     safety check and model charges are already in the spend ledger, so the cost tile's sandbox
     spend and the rows' costs drift apart with no row to explain it (the v0.7.0 release review).
-- **A case refusal that can't succeed still offers "Try again".** `use-open-case.ts` maps the
-  waiting limit, a repeated submission, personal data, and empty words; any other refusal (a 404
-  `case-turn-not-found`, a 422 `case-words-too-long` or `case-invalid`) shows "Your case wasn't
-  sent. Please try again.", and every retry fails the same way. Give those a line that points to
-  My cases or the HR contacts instead. (v0.6.0 release review.)
 - **A repeated send of the same words reads the case twice and isn't audited.** `_repeat` in the
   case service unwraps the key and decrypts the stored words to compare them, once outside and once
   under the lock, and a second submission from another tab with the same words is folded into the
@@ -412,33 +407,12 @@ phase makes it, since its full run covers them all.
   malformed stored search source would fail the conversation `GET` (only the API writes them).
   For the accessibility audit and the hardening pass. (Phase 4 stage 6 reviews.)
 
-- **Keep the crisis panel when a crisis turn's end-of-turn write fails.** The crisis text goes out
-  live, but if `finish_turn` then times out, the stream adds an `internal` error, the row stays
-  `running`, and a reload shows it as abandoned with no escalation, so the 988 and EAP text is gone
-  from the page. It needs the database to fail at that moment. Store the crisis verdict before the
-  escalation goes out, or have the display show a crisis panel for an abandoned turn whose guard
-  said crisis. Do it with the `statement_timeout` item below. (Phase 4 phase review.)
 - **One exit for the canary check, and a cheaper fold.** `turn.py` checks the canary at about seven
   places (held text, status notes, the take-back, the restore, closing events), each keeping its
   own tail, so every new event path has needed its own patch. Holding and checking every outgoing
   string at the one exit in `events()` would cover future paths with one rule. Its `_keep_from`
   also NFKC-normalizes one character at a time, twice per text delta, on up to 512 characters;
   measure it in the load test. (Phase 4 phase review.)
-- **End crisis and "can't answer right now" turns with a closing event.** They end with no
-  `turn.completed` and no `error` (a Stage 6 decision), so the web store infers the end from the
-  escalation's kind, and a connection lost right after a crisis panel reads as finished, not
-  stopped. One terminal event for every turn would remove the special case. It changes the stream
-  protocol, so do it with the hardening pass. (Phase 4 phase review.)
-- **Announce the HR panel that appears after a stopped sensitive answer.** Since the Phase 4 phase
-  review, a sensitive question the person stops gets the HR contact panel, but only once the saved
-  turn replaces the live one (the stream is already closed when they press Stop), and a saved
-  panel doesn't announce itself, so a screen-reader user isn't told it appeared. Announce a panel
-  that a settling turn adds. For the accessibility audit. (Phase 4 phase review.)
-- **Say "start a new conversation" when only the conversation is too big for the budget.** The
-  room a question needs is sized with the conversation's whole history, so near the 80,000-token
-  limit (or in an outdated conversation) the banner and the 429 say the sandbox has reached its
-  limit and suggest a new sandbox, when a new conversation would fit. The right message is new
-  fixed text, so it needs the owner's wording and approval first. (v0.4.0 release review.)
 - **Don't re-parse the whole answer on every streamed word.** Each `text.delta` re-runs the
   marker placement and react-markdown over the full text, and the thread follows the end each
   time, so the work grows with the square of the answer's length. Batch deltas per animation frame

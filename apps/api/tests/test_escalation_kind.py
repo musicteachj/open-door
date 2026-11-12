@@ -5,6 +5,7 @@ from app.modules.assistant.display import escalation_kind, is_not_found
 
 SENSITIVE = {"category": "sensitive", "kind": "harassment_discrimination"}
 ROUTINE = {"category": "policy", "kind": None}
+CRISIS = {"category": "crisis", "kind": "self_harm"}
 
 
 def test_a_stopped_sensitive_turn_shows_the_hr_panel() -> None:
@@ -50,3 +51,25 @@ def test_an_ordinary_turn_with_a_topic_can_still_be_not_found() -> None:
         citations=[],
         tool_calls=[{"name": "search_handbook"}],
     )
+
+
+def test_a_crisis_verdict_shows_the_crisis_panel_whatever_the_shown_status() -> None:
+    # Running (the end-of-turn write has not landed), abandoned, failed another way, or stopped.
+    assert escalation_kind("running", None, CRISIS) == "crisis"
+    assert escalation_kind("failed", "abandoned", CRISIS) == "crisis"
+    assert escalation_kind("failed", "internal", CRISIS) == "crisis"
+    assert escalation_kind("stopped", None, CRISIS) == "crisis"
+    assert escalation_kind("crisis", None, CRISIS) == "crisis"
+
+
+def test_a_crisis_kind_under_another_category_is_the_crisis_panel_too() -> None:
+    # The guard's own rule: a crisis kind is the crisis route under any category.
+    verdict = {"category": "sensitive", "kind": "self_harm"}
+    assert escalation_kind("failed", "abandoned", verdict) == "crisis"
+
+
+def test_an_abandoned_turn_with_no_crisis_verdict_still_shows_none() -> None:
+    assert escalation_kind("running", None, None) is None
+    assert escalation_kind("failed", "abandoned", None) is None
+    assert escalation_kind("failed", "abandoned", ROUTINE) is None
+    assert escalation_kind("running", None, SENSITIVE) is None

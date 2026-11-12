@@ -269,6 +269,7 @@ async def test_texts_carry_todays_reply_by_date(browser: Browser, app_engine: As
     assert len(body["bullets"]) == 5
     # The waiting-limit line is the API's, so the web app holds no copy that could drift.
     assert body["waitingLimit"] == texts.WAITING_LIMIT_TEXT
+    assert body["cannotSend"] == texts.CANNOT_SEND_TEXT
     assert any(expected.strftime("%A, %B") in bullet for bullet in body["bullets"])
     # The HR team's contacts come with them, for My cases, which has no panel to carry them.
     names = [contact["name"] for contact in body["hrContacts"]]

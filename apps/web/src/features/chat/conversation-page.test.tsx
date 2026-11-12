@@ -1,4 +1,5 @@
 import { act, screen, waitFor, within } from '@testing-library/react'
+import { conversationCopy } from '@/components/assistant/labels'
 import userEvent from '@testing-library/user-event'
 import { http, HttpResponse } from 'msw'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -542,6 +543,49 @@ describe('a panel’s arrival is announced only when it came down the stream', (
     expect(announceMock).toHaveBeenCalledExactlyOnceWith(SENSITIVE_HEADER, 'polite')
   })
 
+  it('announces a sensitive panel once when Stop closed the stream before it came, and not again', async () => {
+    const api = signedInWith(null)
+    const stream = openStream()
+    onTurn(() => stream.response())
+    const { user } = renderApp({ at: '/ask' })
+    await user.type(await composer(), 'Help{Enter}')
+    stream.push('turn.started', { turnId: 't-1' })
+    stream.push('text.delta', { text: 'I’m sorry' })
+    // The saved copy has the panel the stream never delivered.
+    api.setCurrent(
+      conversationOut({
+        turns: [
+          turnOut({
+            id: 't-1',
+            question: 'Help',
+            status: 'stopped',
+            answerText: 'I’m sorry',
+            escalation: SENSITIVE,
+            guard: { category: 'sensitive' },
+          }),
+        ],
+      }),
+    )
+    await user.click(await screen.findByRole('button', { name: 'Stop' }))
+    await screen.findByRole('region', { name: SENSITIVE_HEADER })
+    await waitFor(() => expect(useChatStore.getState().turn).toBeNull())
+    expect(announceMock).toHaveBeenCalledExactlyOnceWith(SENSITIVE_HEADER, 'polite')
+    // Used up: a later render, or a remount, stays silent.
+    await waitFor(() => expect(useChatStore.getState().panelsToAnnounce).toEqual([]))
+    useChatStore.getState().setDraft('Another thought')
+    await user.click(await composer())
+    expect(announceMock).toHaveBeenCalledTimes(1)
+  })
+
+  it('forgets the turns waiting to announce when the conversation page goes', async () => {
+    signedInWith(conversationOut({ turns: [turnOut({ id: 't-1', answerText: 'Hello.' })] }))
+    const { router } = renderApp({ at: '/ask' })
+    await screen.findByText('Hello.')
+    useChatStore.setState({ panelsToAnnounce: ['t-gone'] })
+    await act(() => router.navigate('/handbook'))
+    await waitFor(() => expect(useChatStore.getState().panelsToAnnounce).toEqual([]))
+  })
+
   it('announces nothing for a panel loaded from the server', async () => {
     signedInWith(
       conversationOut({
@@ -558,6 +602,7 @@ describe('a panel’s arrival is announced only when it came down the stream', (
     renderApp({ at: '/ask' })
     await screen.findByRole('region', { name: SENSITIVE_HEADER })
     expect(announceMock).not.toHaveBeenCalled()
+    expect(useChatStore.getState().panelsToAnnounce).toEqual([])
   })
 
   it.each([
@@ -1234,6 +1279,25 @@ describe('the composer', () => {
     expect(await composer()).toHaveValue('More')
     await user.click(screen.getByRole('button', { name: 'Ask' }))
     await waitFor(() => expect(posted).toHaveLength(2))
+  })
+
+  it('offers a new conversation, with the API’s words and no budget banner, when only the conversation’s size is refused', async () => {
+    signedInWith(conversationOut({ turns: [cited()] }))
+    onTurn(() =>
+      problemResponse(429, 'budget-conversation', 'This conversation is too long for the budget.'),
+    )
+    const { user } = renderApp({ at: '/ask' })
+    await user.type(await composer(), 'More{Enter}')
+    expect(await screen.findByText('This conversation is too long for the budget.')).toBeVisible()
+    expect(
+      screen.getAllByRole('button', { name: 'Start a new conversation' }).length,
+    ).toBeGreaterThan(0)
+    // The conversation read has no banner (the sandbox is not at its cap), and the box stays usable.
+    expect(screen.queryByText(/sandbox budget/i)).not.toBeInTheDocument()
+    expect(await composer()).toHaveValue('More')
+    expect(await composer()).toBeEnabled()
+    // The notice gives no second reason: only its button, no long-conversation words.
+    expect(screen.queryByText(conversationCopy.longConversation)).not.toBeInTheDocument()
   })
 })
 

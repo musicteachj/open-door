@@ -1,4 +1,4 @@
-import { memo, useContext, type ReactNode } from 'react'
+import { memo, useContext, useEffect, type ReactNode } from 'react'
 import type { CitationOut, EscalationOut, HrContactOut, TurnOut } from '@/api/generated'
 import { CitationMarker } from '@/components/assistant/citation-marker'
 import { ApiError } from '@/lib/api-fetch'
@@ -19,7 +19,7 @@ import { WorkTrace } from '@/components/assistant/work-trace'
 import { OpenSourceContext } from './open-source'
 import { withSourceKeys } from './source-key'
 import { ProposalCards } from './proposal-cards'
-import type { LiveTurn } from './store'
+import { useChatStore, type LiveTurn } from './store'
 import { useAssistantTexts, useFeedback } from './use-conversation'
 
 // One question and its answer, as the conversation page draws it: the stored turns from the
@@ -128,21 +128,27 @@ function TurnFeedback({ turn }: { turn: TurnOut }) {
 /**
  * Whether a saved turn may offer a case: it has ended, whatever became of its answer (it can fail
  * or be stopped), except after an internal error, when the server may not have stored its verdict.
+ * A crisis panel is offered whatever became of the turn: the server shows it only from a verdict
+ * it stored before the crisis text went out, so a turn whose end-of-turn write failed (still
+ * `running`, or failed as `internal` once abandoned) still has it.
  */
 function caseOffered(turn: TurnOut): boolean {
+  if (turn.escalation?.kind === 'crisis') return true
   if (turn.status === 'running') return false
   return !(turn.status === 'failed' && turn.error?.code === 'internal')
 }
 
 /**
- * A stored turn's HR panel, with its case offer. A saved panel never announces. The offer needs a
- * turn that is not still running and did not fail with an internal error (a turn that failed in
- * another way is still offered).
+ * A stored turn's HR panel, with its case offer. A saved panel announces only when `announce` says
+ * its arrival is new to the person (the live copy had no panel). The offer needs a turn that is not
+ * still running and did not fail with an internal error (a turn that failed in another way is
+ * still offered).
  */
 function storedPanel(
   turn: TurnOut,
   escalation: EscalationOut,
   writeToHr: PageLink | null,
+  announce: boolean,
   onTryAgain?: () => void,
 ) {
   return (
@@ -152,6 +158,7 @@ function storedPanel(
       message={escalation.message}
       contacts={escalation.hrContact}
       onTryAgain={onTryAgain}
+      announceOnMount={announce}
       writeToHr={writeToHr}
       turnId={turn.id}
       question={turn.question}
@@ -187,6 +194,15 @@ export const StoredTurn = memo(function StoredTurn({
 }) {
   const citations = withSourceKeys(turn.citations)
   const escalation = turn.escalation
+  // A stop closed the stream before this turn's panel came down it, so the panel is new to the
+  // person now. The selector returns a boolean, so only this turn redraws when it changes.
+  const announce = useChatStore((state) => state.panelsToAnnounce.includes(turn.id))
+  const consumeAnnouncement = useChatStore((state) => state.consumeAnnouncement)
+  // Once the panel (a child, so its mount effect ran first) has announced, forget the turn, so a
+  // later render, a refetch, or a remount stays silent. Whether or not the turn has a panel.
+  useEffect(() => {
+    if (announce) consumeAnnouncement(turn.id)
+  }, [announce, consumeAnnouncement, turn.id])
   // The HR contacts card of a not-found answer, whatever else the turn made, so no branch below
   // can leave it out.
   const notFoundContacts = turn.notFound ? (
@@ -200,7 +216,7 @@ export const StoredTurn = memo(function StoredTurn({
   // Under a budget stop the server refuses every question, so there is nothing to ask again.
   const again = context.budgetStop ? undefined : () => context.onAskAgain(turn.question)
   // A sensitive turn shows its HR panel whatever became of the answer (it can fail, or be cut
-  // off): sensitive topics go to a person. Keyed by the turn, and a saved panel never announces.
+  // off): sensitive topics go to a person. Keyed by the turn; a saved panel announces only if the live copy never showed it.
   // A "can't answer right now" panel can try again; a crisis one has nothing to retry.
   const panel =
     escalation === null
@@ -209,6 +225,7 @@ export const StoredTurn = memo(function StoredTurn({
           turn,
           escalation,
           context.writeToHr,
+          announce,
           escalation.kind === 'unavailable' ? again : undefined,
         )
 

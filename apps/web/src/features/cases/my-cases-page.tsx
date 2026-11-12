@@ -47,6 +47,9 @@ function MyCases({ me }: { me: SignedInMe }) {
   useLayoutEffect(() => {
     readAt.current = mine.dataUpdatedAt
   })
+  // A refusal no retry can fix replaces the form with a line, until the form is opened again: the
+  // open button stays beside it (or, with no cases yet, the empty list and its button).
+  const [cannotSend, setCannotSend] = useState(false)
   const send = useSendCase({
     onSent: (result) => {
       setSent(result)
@@ -58,11 +61,16 @@ function MyCases({ me }: { me: SignedInMe }) {
     },
     // The list read again shows the case.
     onAlreadySent: disclosure.dismiss,
+    onCannotSend: () => {
+      setCannotSend(true)
+      disclosure.dismiss()
+    },
   })
 
   // A new form starts clean: an earlier refusal or failure is not brought back.
   const openForm = () => {
     send.reset()
+    setCannotSend(false)
     disclosure.open()
   }
 
@@ -75,6 +83,8 @@ function MyCases({ me }: { me: SignedInMe }) {
     (limitReached || cases.filter(isWaiting).length >= WAITING_CASE_LIMIT)
 
   let top = null
+  // Set where the "can't be sent" line fills the place, so the list (and its button) shows under it.
+  let listUnderTop = false
   if (sent) {
     top = (
       <>
@@ -117,13 +127,31 @@ function MyCases({ me }: { me: SignedInMe }) {
         focusOnMount={limitAfter !== null}
       />
     )
+  } else if (cannotSend && texts.data) {
+    listUnderTop = true
+    top = (
+      <>
+        <CaseSent
+          variant="page"
+          state="cannot-send"
+          cannotSendLine={texts.data.cannotSend}
+          link={null}
+          contacts={contacts}
+          focusOnMount
+        />
+        {cases.length > 0 && (
+          <OpenCaseButton ref={buttonRef} onClick={openForm} className="self-start max-sm:w-full" />
+        )}
+      </>
+    )
   } else if (cases.length > 0) {
     top = <OpenCaseButton ref={buttonRef} onClick={openForm} className="self-start max-sm:w-full" />
   }
 
   // With nothing sent yet the list says so, with the button, unless a form, a sent line, or the
-  // limit line already fills that place.
-  const showList = cases.length > 0 || (top === null && !loading)
+  // limit line already fills that place. Under the "can't be sent" line it shows too, so its button
+  // can open the form again.
+  const showList = cases.length > 0 || ((top === null || listUnderTop) && !loading)
 
   return (
     <div className="flex min-w-0 flex-col px-14 pt-10 pb-12 max-[1100px]:px-12 max-[760px]:px-5 max-[760px]:pb-8">

@@ -26,6 +26,7 @@ an answer, a tool result, or the canary: only IDs, exception types, and timings.
 """
 
 import asyncio
+import contextlib
 import json
 import logging
 import re
@@ -36,6 +37,7 @@ from collections.abc import (
     AsyncIterator,
     Awaitable,
     Callable,
+    Coroutine,
     Iterator,
     Sequence,
 )
@@ -76,6 +78,7 @@ from app.ai.conversations import (
     model_history,
     search_sources,
     start_turn,
+    store_crisis_verdict,
     write_console_row,
 )
 from app.ai.embeddings import Embedder
@@ -167,6 +170,8 @@ MAX_TOOL_RUNS_PER_TURN = 20
 ONE_CARD_TEXT = "Only one card can be made per answer; this call was not run."
 # The crisis text never waits on the HR lookup longer than this.
 HR_CONTACT_TIMEOUT = timedelta(seconds=2)
+# Nor does it wait on the write that stores the crisis verdict ahead of the end-of-turn writes.
+CRISIS_VERDICT_TIMEOUT = timedelta(seconds=2)
 # Closing the model's stream, and settling a call, are shielded from cancellation (the first so the
 # upstream request stops and no more billed tokens are generated); this bounds the wait.
 SHIELDED_STEP_TIMEOUT = timedelta(seconds=5)
@@ -194,6 +199,49 @@ class ConversationNotFound(Exception):  # noqa: N818
 class ConversationOutdated(Exception):  # noqa: N818
     """The conversation was pinned to a prompt or tool set that is no longer current. The route
     answers 409 `conversation-outdated` and offers a new conversation."""
+
+
+# Steps `_bounded` stopped waiting for, kept until they end so they are not collected mid-run.
+_DETACHED: set[asyncio.Future[Any]] = set()
+
+
+def _forget(task: asyncio.Future[Any]) -> None:
+    _DETACHED.discard(task)
+    # Retrieved, so asyncio does not warn that nobody did. A canceled step raises here instead. A
+    # step that failed after the caller stopped waiting is logged by its error's type alone.
+    with contextlib.suppress(asyncio.CancelledError):
+        error = task.exception()
+        if error is not None:
+            logger.warning("A database step given up on later failed (%s)", error_name(error))
+
+
+def _detach(task: asyncio.Future[Any], *, cancel: bool) -> None:
+    if cancel:
+        task.cancel()
+    _DETACHED.add(task)
+    task.add_done_callback(_forget)
+
+
+async def _bounded[T](step: Coroutine[Any, Any, T], limit: timedelta, *, cancel: bool = True) -> T:
+    """Run a database step, waiting no longer than `limit`; raises `TimeoutError` past it.
+
+    `asyncio.timeout` cancels the step at the limit but then waits for the step's cleanup inside
+    the block, and a database that stops answering (a failover, a silent network path) can hold
+    that cleanup for minutes: asyncpg opens a connection to cancel the query, and the pool closes
+    the old one gracefully. Here the caller stops waiting at the limit, and the step is left to
+    end on its own: canceled first (the default), or, with `cancel=False`, still running, so a
+    write that is merely slow can land later (the database's statement timeout still ends it). A
+    caller canceled while waiting does the same."""
+    task = asyncio.ensure_future(step)
+    try:
+        done, _ = await asyncio.wait({task}, timeout=limit.total_seconds())
+    except asyncio.CancelledError:
+        _detach(task, cancel=cancel)
+        raise
+    if task not in done:
+        _detach(task, cancel=cancel)
+        raise TimeoutError
+    return task.result()
 
 
 # --- Events -----------------------------------------------------------------------------------
@@ -1074,15 +1122,42 @@ class TurnRun:
             self.inflight = None
 
     async def _contacts(self) -> tuple[HrContact, ...]:
-        try:
-            async with (
-                asyncio.timeout(HR_CONTACT_TIMEOUT.total_seconds()),
-                tenant_session(self.deps.engine, self.deps.tenant_ctx) as db,
-            ):
+        async def read() -> tuple[HrContact, ...]:
+            async with tenant_session(self.deps.engine, self.deps.tenant_ctx) as db:
                 return tuple(await hr_contact(db))
+
+        try:
+            return await _bounded(read(), HR_CONTACT_TIMEOUT)
         except Exception as error:  # A timeout too: the fixed text goes out without the names.
             logger.warning("Reading the HR contact failed (%s)", error_name(error))
             return ()
+
+    async def _store_crisis_verdict(self) -> None:
+        """Write the crisis verdict on the still-running turn, in a short transaction of its own,
+        so the crisis panel survives an end-of-turn write that fails or hangs (the row would read
+        back as abandoned, with no verdict). Bounded, and it never raises: the crisis text goes
+        out whatever happens here, and `finish_turn` still writes the verdict at the end."""
+        verdict = self.guard_verdict
+        if verdict is None:
+            return
+
+        async def write() -> None:
+            async with tenant_session(self.deps.engine, self.deps.tenant_ctx) as db:
+                stored = await store_crisis_verdict(db, self.turn_id, verdict, self.conversation.id)
+            if not stored:
+                # No running row matched: the turn finished first (a write that was only slow), or
+                # the reload's crisis panel rests on `finish_turn` alone.
+                logger.warning(
+                    "Storing the crisis verdict changed no row (turn %s; it may have finished)",
+                    self.turn_id,
+                )
+
+        try:
+            # Not canceled at the bound: a write that is only slow can still land, harmlessly, as
+            # it changes only a row that is still `running`, to the value `finish_turn` writes.
+            await _bounded(write(), CRISIS_VERDICT_TIMEOUT, cancel=False)
+        except Exception as error:  # A timeout too. Only the type is logged, never the verdict.
+            logger.error("Storing the crisis verdict failed (%s)", error_name(error))
 
     # -- the guard --
 
@@ -1135,7 +1210,10 @@ class TurnRun:
         await self._settle(reservation, guard_cost(outcome, self.conversation.guard_model))
         if outcome.route == "crisis":
             offer = offers_case("crisis", self.guard_verdict)
-            return None, [Escalation("crisis", CRISIS_TEXT, await self._contacts(), offer)]
+            # The verdict is stored alongside the HR lookup, so the text waits for the longer of
+            # two bounded steps, not their sum.
+            _, contacts = await asyncio.gather(self._store_crisis_verdict(), self._contacts())
+            return None, [Escalation("crisis", CRISIS_TEXT, contacts, offer)]
         if outcome.route == "unavailable":
             return None, [Escalation("unavailable", UNAVAILABLE_TEXT, await self._contacts())]
         return outcome, []
@@ -1599,9 +1677,11 @@ class TurnRun:
 
     async def events(self) -> AsyncGenerator[TurnEvent]:
         """Stream the turn: started, the guard's escalation or the loop's events, then the closing
-        events once the end-of-turn writes are done. Iterate it right away: a turn nobody reads
-        stays `running` until the abandoned-turn rule fails it. A consumer that stops iterating
-        (`aclose()`), or a canceled task, ends the turn as `stopped`."""
+        events once the end-of-turn writes are done: a late escalation if there is one, then the
+        one closing event (`turn.completed` or `error`), always last. Iterate it right away: a turn
+        nobody reads stays `running` until the abandoned-turn rule fails it. A consumer that stops
+        iterating (`aclose()`), or a canceled task, ends the turn as `stopped` and gets nothing
+        after the stop."""
         try:
             yield TurnStarted(self.turn_id)
             loop = self._loop()
@@ -1627,7 +1707,7 @@ class TurnRun:
     # -- the end --
 
     def _late_escalation(self) -> Literal["sensitive", "unavailable"] | None:
-        """The escalation that goes out with the turn's last events, after the answer or the error.
+        """The escalation that goes out with the turn's last events, just before the closing event.
 
         Crisis and "guard unavailable" escalations went out as soon as they were known. A message
         the guard never read gets the "can't answer right now" text (911, 988, HR); a sensitive
@@ -1644,37 +1724,43 @@ class TurnRun:
         return "sensitive" if self.sensitive else None
 
     async def closing_events(self) -> list[TurnEvent]:
-        events = self._closing_events()
+        """The turn's last events: the late escalation, if any, then the one closing event. Every
+        turn read to its end gets exactly one closing event (`turn.completed` or `error`) and it
+        is last, so a consumer knows the stream is over without guessing from what came before."""
+        closing = self._closing_event()
+        events: list[TurnEvent] = []
         kind = self._late_escalation()
-        if kind is not None and events:
-            escalation = Escalation(
-                kind,
-                SENSITIVE_TEXT if kind == "sensitive" else UNAVAILABLE_TEXT,
-                await self._contacts(),
-                offers_case(kind, self.guard_verdict),
+        if kind is not None:
+            events.append(
+                Escalation(
+                    kind,
+                    SENSITIVE_TEXT if kind == "sensitive" else UNAVAILABLE_TEXT,
+                    await self._contacts(),
+                    offers_case(kind, self.guard_verdict),
+                )
             )
-            # After an error; before the completion, so the HR contact follows the answer.
-            if isinstance(events[0], TurnCompleted):
-                events.insert(0, escalation)
-            else:
-                events.append(escalation)
+        events.append(closing)
         return [self._seen(event) for event in events]
 
-    def _closing_events(self) -> list[TurnEvent]:
+    def _closing_event(self) -> TurnCompleted | Error:
         if self.finish_failed:
-            return [Error("internal", ERROR_TEXTS["internal"])]
+            return Error("internal", ERROR_TEXTS["internal"])
         if self.error is not None:
-            return [self.error]
-        if self.status == "completed":
-            return [
-                TurnCompleted(
-                    self.turn_id,
-                    self.last_served_by,
-                    TurnUsage(*self._tokens()),
-                    incomplete=self.incomplete,
-                )
-            ]
-        return []
+            return self.error
+        if self.status in ("completed", "crisis", "guard_unavailable"):
+            # A crisis or an unavailable guard never ran the model: `last_served_by` is empty and
+            # the usage is zero.
+            return TurnCompleted(
+                self.turn_id,
+                self.last_served_by,
+                TurnUsage(*self._tokens()),
+                incomplete=self.incomplete,
+            )
+        # The consumer is still reading, so this is not a stop. No path may end silently.
+        logger.error(
+            "Turn %s reached its end with status %s and no error", self.turn_id, self.status
+        )
+        return Error("internal", ERROR_TEXTS["internal"])
 
     def _tokens(self) -> tuple[int, int]:
         usage = total_usage(self.iterations)

@@ -1398,6 +1398,99 @@ What the code forced, or the reviews changed:
   background `pytest`. The same file passed in about 100 seconds on `dev` and on this branch; long
   local runs now go under `caffeinate`.
 
+### Stage 5 (`feat/phase-8-stream`, 2026-11-12)
+
+Built in two batches: A (Tasks 28 to 30, by two implementers one after the other, with an Opus 5.5
+security reviewer on the crisis path) and B (this close). No paid AI calls; every recorded fixture
+still replays (the eval runner reads escalations and error codes, not the closing event). No
+migration: the app's login could already update `guard_verdict` on a `running` turn, and the
+finished-turn trigger refuses only a finished row. The owner approved the two texts with the
+stage's plan (2026-11-12): the conversation-size refusal is the spec's draft plus the same 911 and
+988 sentence the two budget texts carry, since it too refuses a question the safety check never
+read; the case line is the spec's draft.
+
+What the code forced, or the reviews changed:
+- **One closing event (Task 28).** `closing_events` puts the late escalation before the one
+  closing event, and `_closing_event` sends `turn.completed` for completed, crisis, and
+  unavailable turns (no model named, zero tokens for the last two), the turn's error, or `internal`
+  after a failed finish. Any other status reached while the consumer still reads sends `internal`
+  with a log line; the full suite never reaches it. The route's OpenAPI description never stated
+  the event order, so the schema didn't change. The tests are in a new
+  `tests/integration/test_turn_endings.py`, not `tests/test_turn_endings.py`, since a turn needs
+  the database.
+- **The crisis panel (Task 29).** `store_crisis_verdict` writes the verdict only on a `running` row
+  of the turn's conversation, the value `finish_turn` writes later. The display shows the crisis
+  panel for any turn whose stored verdict routes to crisis (`escalation_for_verdict`, the guard's
+  own rule), not only an abandoned one: a reload in the first 10 minutes reads the row as
+  `running`, and the text must not vanish then either. The web offers a case on any crisis panel
+  (`caseOffered`), since the panel now comes only from a stored verdict. `_previous_answer` still
+  gives the next guard the crisis text only for a `crisis` row; extending it to an abandoned crisis
+  turn changes what the model reads, so it waits for Stage 6.
+- **The Opus 5.5 reviewer's medium (fixed).** `asyncio.timeout` cancels a step at its bound but
+  waits for the step's cleanup inside the block, and a database that stops answering holds that
+  cleanup (asyncpg opens a connection to cancel the query; the pool closes the old one gracefully).
+  A TCP proxy frozen at the crisis route gave no crisis text within 120 seconds, with the HR lookup
+  alone too, so it predated the stage. `_bounded` in `turn.py` waits with `asyncio.wait`, then
+  cancels the step and keeps it in a set until it ends; both steps before the crisis text use it,
+  and the same probe gave the text in 2.04 seconds. Tests: a step whose cancellation hangs, and a
+  real `pg_sleep` cut off mid-statement (the query is canceled on the server and the pool stays
+  healthy). The reviewer also showed the "longer of the two waits, not the sum" test passed for a
+  sequential version; it now times the escalation's arrival. Mutation proofs: the old
+  `asyncio.timeout` and a sequential version each fail their test.
+- **The announcement and the texts (Task 30).** The store keeps `panelsToAnnounce`: `settle` adds a
+  turn whose live copy had no panel, and `StoredTurn` passes `announceOnMount` to its panel, then
+  consumes the id in an effect (the panel's own mount effect runs first). The conversation-size
+  refusal is a 429 `budget-conversation` from `refusal_scope` in `app/ai/admission.py` (the day's
+  limit still wins), and `budget_out` counts the sandbox as reached only when an empty conversation
+  would not fit either, so a big conversation no longer shows the "start a new sandbox" banner.
+  The text is not in `ERROR_TEXTS`, which is the stream's codes. The case line reaches the web as
+  `cannotSend` from `GET /cases/texts`; the validation 422, `case-invalid`, `case-turn-not-found`,
+  and `case-not-found` show it the way the waiting-limit line shows, and `case-words-too-long`
+  shows the server's words with the form open. The too-long refusal has no gallery frame: it moves
+  focus to the words box, which the gallery's "takes no focus" test refuses.
+- **The close's reviews.** `/security-review` found nothing high or medium. The `/code-review
+  medium` loop ran five rounds and stopped at the fifth, which had nothing high or medium:
+  - Round 1 (fixed): on My cases, a person with no cases who got a "can't be sent" line had no way
+    to open the form again (the open button now stays beside the line, or the empty list with its
+    button under it); a step given up on that failed later is logged by its error's type; the
+    empty-conversation estimate is made only when the sandbox is short; three comments that
+    overclaimed.
+  - Round 2 (fixed): the banner and the 429 could disagree when the sandbox and the day were both
+    short only because of the history; the verdict write was canceled at its bound though the
+    comment said it could land later (it is now left running, `_bounded(cancel=False)`, so a write
+    that is only slow still lands, and a test proves it does even when the finish then fails);
+    turns waiting to announce are forgotten when the conversation page goes. The pool-health test
+    now cuts off the HR lookup, the step that is still canceled.
+  - Round 3 (fixed): one rule, `room_scopes` in `app/ai/admission.py`, decides both caps for the
+    banner and the 429 (a test checks they agree on every combination); the waiting-limit line
+    wins over the "can't be sent" line on My cases; two simplifications.
+  - Round 4 (fixed): after a `budget-conversation` refusal the notice above the box said the
+    conversation was "getting long" and "may miss details", another reason than the refusal's;
+    the notice now shows only its button (`offerWithoutNoticeWords`), and the approved words stay
+    under the box. A verdict write that changes no row is logged; the two routes size the empty
+    conversation the same way.
+  - Round 5 lows fixed: the no-row log is a warning that says the turn may have finished first; a
+    422 that isn't the API's problem (a proxy's page) keeps "Try again"; only a turn that didn't
+    complete can wait to announce.
+  - Not changed, with reasons: a budget stop at a later model call in the same turn still sends
+    `budget-sandbox` (its text feeds the next question's safety check, so changing it is Stage 6's
+    prompt work); a dropped crisis stream reads as stopped, as the spec decides (the crisis view
+    shows only the question and the panel); the display keeps `status == "crisis"` for older rows
+    that have no stored verdict; the API's own validation 422 still closes the form and drops the
+    typed words (only a client and server out of step reach it, since the form's own checks come
+    first).
+- Lows recorded, not fixed: a stop while a database step runs leaves that connection's socket
+  unclosed (a `ResourceWarning`; the backend runs to the 10-second statement timeout; it predates
+  the stage, and the unavailable route does the same); `_settle`'s and `finish`'s bounds use the
+  same cancel-and-wait mechanism and probably share the silent-database gap (not proven; the
+  crisis text has already gone out by then); the API now accepts a case from a crisis turn that is
+  still running (the person's own flagged turn; the web doesn't offer it); after a failed
+  end-of-turn write the person's next question waits for the 10-minute abandoned rule; on My
+  cases a can't-send line and the waiting-limit line are shown one at a time (the limit wins);
+  steps left running past their bound have no cap during a database outage, each holding a pooled
+  connection until the statement timeout; the readiness probe and the engine's checks still use
+  `asyncio.timeout`, with the same wait on a canceled query's cleanup (outside this stage's scope).
+
 ## Backlog
 
 (Low findings from the stages' reviews, with their reasons.)

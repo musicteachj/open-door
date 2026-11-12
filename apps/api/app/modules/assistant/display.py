@@ -50,7 +50,19 @@ def escalation_kind(
     before the guard ran has none (its error text already gives 911 and 988, and there is no
     verdict). A sensitive turn that hits the budget later, at the model call, does get the
     sensitive escalation, as its stream did, and so does one the person stopped or whose stream was
-    cut: sensitive topics go to a person on every ending (invariant 6)."""
+    cut: sensitive topics go to a person on every ending (invariant 6).
+
+    A turn whose stored verdict routes to crisis shows the crisis panel whatever its shown status:
+    the stream stores that verdict before it sends the crisis text, so a reload (the row still
+    `running`, or failed as `abandoned` or `internal` because the end-of-turn write never landed)
+    never loses the 988 and EAP text a person was shown. This comes first, ahead of the
+    abandoned-turn rule below, which is only for turns that never sent an escalation."""
+    if (
+        guard_verdict is not None
+        and escalation_for_verdict(guard_verdict.get("category"), guard_verdict.get("kind"))
+        == "crisis"
+    ):
+        return "crisis"
     if status == "crisis":
         return "crisis"
     if status == "guard_unavailable":

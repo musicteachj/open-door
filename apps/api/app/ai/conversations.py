@@ -14,7 +14,7 @@ one row that changes is a turn, which is added as `running` and finished once (`
 import base64
 import json
 import logging
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import asdict, dataclass, field
 from datetime import date, datetime, timedelta
 from decimal import Decimal
@@ -576,6 +576,31 @@ async def finish_turn(
         raise LookupError("no such turn")
 
 
+async def store_crisis_verdict(
+    db: AsyncSession, turn_id: UUID, verdict: Mapping[str, object], conversation_id: UUID
+) -> bool:
+    """Store a crisis turn's verdict on its still-`running` row, ahead of `finish_turn`.
+
+    The crisis panel and its 988 and EAP text come from the stored verdict (see
+    `display.escalation_kind`). `finish_turn` writes it only at the very end, and that write can
+    fail or time out, leaving the row `running` with no verdict: the panel would vanish on reload.
+    This is the same column `finish_turn` writes later (the same value, so the later write changes
+    nothing), limited to the turn's conversation and to a turn that is still running. Returns
+    whether a row was changed.
+    """
+    result = await db.execute(
+        update(AiTurn)
+        .where(
+            AiTurn.id == turn_id,
+            AiTurn.conversation_id == conversation_id,
+            AiTurn.status == "running",
+        )
+        .values(guard_verdict=dict(verdict))
+        .execution_options(synchronize_session=False)
+    )
+    return cast("CursorResult[Any]", result).rowcount == 1
+
+
 async def write_console_row(db: AsyncSession, tenant_id: UUID, row: dict[str, Any]) -> bool:
     """Add a console row (`console_rows.build_console_row`) in the caller's transaction, in a
     savepoint of its own. Returns whether it was written.
@@ -604,9 +629,10 @@ async def recover_abandoned(
 
     Returns the IDs of the turns it marked. The caller cancels their proposals in the same
     transaction (`proposals.recover_abandoned_turns` does both), after this update. Each turn also
-    gets a redacted console row, in a savepoint, dated by when it was asked: it never stored a
-    verdict, so nothing proves it was an ordinary turn. A failed row never fails the person's new
-    question.
+    gets a redacted console row, in a savepoint, dated by when it was asked: its end-of-turn write
+    never happened, so nothing proves it was an ordinary turn (a crisis turn does keep its verdict,
+    stored early by `store_crisis_verdict`, and the page still shows its crisis panel). A failed
+    row never fails the person's new question.
     """
     result = await db.execute(
         update(AiTurn)

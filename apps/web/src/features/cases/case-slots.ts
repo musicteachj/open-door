@@ -4,16 +4,19 @@ import { registerReset } from '@/lib/identity'
 
 /**
  * Where a turn's case offer is: the form open, the case sent (with what the server answered, so
- * a crisis screening's text can show right after), or the waiting limit reached. Keyed by turn ID,
- * because the live turn and its saved copy are different components for the same turn, and the
- * form must survive that swap. Only the shape of the offer is kept here: the words a person types
- * stay in the form's own state, and nothing here is server data (no case text, never the cache).
+ * a crisis screening's text can show right after), the waiting limit reached, or a refusal that
+ * cannot succeed on retry. Keyed by turn ID, because the live turn and its saved copy are
+ * different components for the same turn, and the form must survive that swap. Only the shape of
+ * the offer is kept here: the words a person types stay in the form's own state, and nothing here
+ * is server data (no case text, never the cache).
  */
 export type CaseSlot = (
   | { phase: 'open' }
   | { phase: 'sent'; sent: CaseSentOut }
   /** `readAt`: when the case list was last read as the refusal came (`dataUpdatedAt`). */
   | { phase: 'limit'; readAt: number }
+  /** The server refused in a way no retry can fix: the form is closed and the line says so. */
+  | { phase: 'cannot-send' }
 ) & {
   /**
    * What the slot shows has already acted once on arrival (taken focus, announced the crisis

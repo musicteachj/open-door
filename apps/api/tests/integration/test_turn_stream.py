@@ -19,6 +19,7 @@ from sqlalchemy.ext.asyncio import AsyncEngine
 from app.ai.admission import HISTORY_REFUSE_TOKENS
 from app.ai.conversations import Pins, create_conversation
 from app.ai.fixed_texts import (
+    BUDGET_CONVERSATION_TEXT,
     BUDGET_DAILY_TEXT,
     BUDGET_SANDBOX_TEXT,
     PERSONAL_DATA_TEXT,
@@ -319,6 +320,67 @@ async def test_a_sandbox_without_room_is_429_budget_sandbox_and_starts_no_turn(
     async with tenant_session(app_engine, TenantContext(tenant_id, person_id)) as db:
         spent = await db.scalars(select(AiSpend.amount_usd))
         assert sum(spent, Decimal(0)) == Decimal("0.90")
+
+
+async def seed_big_history(
+    app_engine: AsyncEngine, tenant_id: UUID, person_id: UUID, conversation_id: str, spent: str
+) -> None:
+    """A stopped earlier turn with a history under the 80,000-token refusal but costly to resend
+    (about $0.58 for the next turn, against about $0.21 for an empty conversation), and `spent`
+    of the sandbox's $1.00 already used."""
+    async with tenant_session(app_engine, TenantContext(tenant_id, person_id)) as db:
+        conversation = await db.get(AiConversation, UUID(conversation_id))
+        assert conversation is not None
+        earlier = await begin_turn(db, conversation, "earlier")
+        db.add(
+            message_row(
+                conversation,
+                earlier.id,
+                position=0,
+                role="user",
+                content=[{"type": "text", "text": "y" * 140_000}],
+            )
+        )
+        await db.flush()
+        await db.execute(
+            update(AiTurn)
+            .where(AiTurn.id == earlier.id)
+            .values(status="stopped", ended_at=text("now()"))
+        )
+    await add_spend(app_engine, tenant_id, person_id, earlier.id, spent)
+
+
+async def test_a_conversation_too_big_for_what_is_left_is_429_budget_conversation(
+    browser: Browser, app_engine: AsyncEngine
+) -> None:
+    tenant_id, person_id = sign_in(browser)
+    conversation_id = new_conversation(browser)["id"]
+    # $0.30 left: a new conversation's first turn fits, this one with its history does not.
+    await seed_big_history(app_engine, tenant_id, person_id, conversation_id, "0.70")
+
+    response = ask(browser, conversation_id)
+
+    assert response.status_code == 429
+    assert response.headers["content-type"] == "application/problem+json"
+    assert response.json()["type"] == "budget-conversation"
+    assert response.json()["detail"] == BUDGET_CONVERSATION_TEXT
+    assert "retry-after" not in response.headers
+    rows = await turn_rows(app_engine, tenant_id, person_id)
+    assert [r.status for r in rows] == ["stopped"]
+
+
+async def test_a_sandbox_that_cannot_fit_even_an_empty_conversation_stays_budget_sandbox(
+    browser: Browser, app_engine: AsyncEngine
+) -> None:
+    tenant_id, person_id = sign_in(browser)
+    conversation_id = new_conversation(browser)["id"]
+    await seed_big_history(app_engine, tenant_id, person_id, conversation_id, "0.90")
+
+    response = ask(browser, conversation_id)
+
+    assert response.status_code == 429
+    assert response.json()["type"] == "budget-sandbox"
+    assert response.json()["detail"] == BUDGET_SANDBOX_TEXT
 
 
 async def test_a_day_without_room_is_429_budget_daily(open_browser_with: OpenBrowserWith) -> None:

@@ -165,6 +165,7 @@ async def get_case_texts(signed_in: SignedInDep) -> CaseTextsOut:
         bullets=list(texts.form_texts(reply_by)),
         reply_by=reply_by,
         waiting_limit=texts.WAITING_LIMIT_TEXT,
+        cannot_send=texts.CANNOT_SEND_TEXT,
         hr_contacts=hr_contact_out(await hr_contact(signed_in.db)),
     )
 

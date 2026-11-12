@@ -12,7 +12,9 @@ from app.ai.admission import (
     SMALLEST_QUESTION,
     WIDEST_CHARACTER,
     history_tokens,
+    refusal_scope,
     room_needed_usd,
+    room_scopes,
     scope_without_room,
     seconds_until_next_utc_day,
     short_scopes,
@@ -235,3 +237,51 @@ def test_retry_after_counts_whole_seconds_to_the_next_utc_midnight(
     now: datetime, seconds: int
 ) -> None:
     assert seconds_until_next_utc_day(now) == seconds
+
+
+def test_a_sandbox_short_only_because_of_the_history_is_the_conversations_problem() -> None:
+    state = BudgetState(Decimal("0.30"), Decimal("5"))
+    big = Decimal("0.55")
+    empty = Decimal("0.21")
+
+    assert refusal_scope(state, big, lambda: empty) == "conversation"
+    # Not even an empty conversation fits: the sandbox's own limit, as before.
+    assert (
+        refusal_scope(BudgetState(Decimal("0.10"), Decimal("5")), big, lambda: empty) == "sandbox"
+    )
+    # Room for the turn with its history: nothing refuses.
+    assert refusal_scope(BudgetState(Decimal("0.60"), Decimal("5")), big, lambda: empty) is None
+
+
+def test_the_day_wins_over_the_conversations_size() -> None:
+    state = BudgetState(Decimal("0.30"), Decimal("0.10"))
+
+    assert refusal_scope(state, Decimal("0.55"), lambda: Decimal("0.21")) == "daily"
+    # The day alone is short for the turn: still the day.
+    assert (
+        refusal_scope(
+            BudgetState(Decimal("5"), Decimal("0.10")), Decimal("0.55"), lambda: Decimal("0.21")
+        )
+        == "daily"
+    )
+
+
+def test_the_banner_and_the_refusal_share_one_rule() -> None:
+    """`room_scopes` (the banner) and `refusal_scope` (the 429) agree on every combination."""
+    cases = [
+        (BudgetState(Decimal(s), Decimal(d)), Decimal("0.55"), Decimal("0.21"))
+        for s in ("0.10", "0.30", "0.60")
+        for d in ("0.10", "0.30", "0.60")
+    ]
+    for state, big, empty in cases:
+
+        def sized(value: Decimal = empty) -> Decimal:
+            return value
+
+        sandbox_short, daily_short = room_scopes(state, big, sized)
+        scope = refusal_scope(state, big, sized)
+        expected = "sandbox" if sandbox_short else "daily" if daily_short else None
+        if scope == "conversation":
+            assert (sandbox_short, daily_short) == (False, False), state
+        else:
+            assert scope == expected, state

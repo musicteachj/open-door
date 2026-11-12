@@ -3676,6 +3676,10 @@
             "type": "string",
             "title": "Waitinglimit"
           },
+          "cannotSend": {
+            "type": "string",
+            "title": "Cannotsend"
+          },
           "hrContacts": {
             "items": {
               "$ref": "#/components/schemas/HrContactOut"
@@ -3689,6 +3693,7 @@
           "bullets",
           "replyBy",
           "waitingLimit",
+          "cannotSend",
           "hrContacts"
         ],
         "title": "CaseTextsOut",

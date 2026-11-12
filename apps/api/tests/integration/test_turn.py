@@ -506,7 +506,8 @@ async def test_a_crisis_ends_the_turn_with_fixed_text_and_never_calls_the_model(
         ("crisis", CRISIS_TEXT, True)
     ]
     assert [c.name for c in escalation[0].hr_contact] == ["Dana Whitfield"]
-    assert not of_type(events, TurnCompleted)
+    # The turn closes with a completion that names no model and counts no tokens.
+    assert [type(e) for e in events[-2:]] == [Escalation, TurnCompleted]
     assert not of_type(events, Error)
     assert env.transport.requests == []
     assert await env.messages() == []
@@ -1771,10 +1772,10 @@ async def test_a_sensitive_turn_that_fails_still_routes_to_hr(
     env = await make_env(app_engine, seeded_sandbox, caps=limits)
     events = await env.ask(question)
 
-    assert [type(e) for e in events[-2:]] == [Error, Escalation]
-    assert isinstance(events[-2], Error)
-    assert events[-2].code == code
-    escalation = events[-1]
+    assert [type(e) for e in events[-2:]] == [Escalation, Error]
+    assert isinstance(events[-1], Error)
+    assert events[-1].code == code
+    escalation = events[-2]
     assert isinstance(escalation, Escalation)
     assert (escalation.kind, escalation.message) == ("sensitive", SENSITIVE_TEXT)
     # Whatever the ending, a sensitive verdict offers a case.
@@ -2101,9 +2102,9 @@ BUDGET_AUDIT = {"kind": "unavailable", "reason": "budget"}
 
 
 def assert_unscreened_escalation(events: list[TurnEvent]) -> None:
-    """A message the guard never read still gets 911, 988, and the HR contact, after the error."""
-    assert isinstance(events[-2], Error)
-    escalation = events[-1]
+    """A message the guard never read still gets 911, 988, and the HR contact, before the error."""
+    assert isinstance(events[-1], Error)
+    escalation = events[-2]
     assert isinstance(escalation, Escalation)
     assert (escalation.kind, escalation.message) == ("unavailable", UNAVAILABLE_TEXT)
     assert [c.name for c in escalation.hr_contact] == ["Dana Whitfield"]
@@ -2147,7 +2148,7 @@ async def test_a_database_error_reserving_for_the_guard_ends_internal_with_the_e
     env = await make_env(app_engine, seeded_sandbox)
     events = await env.ask()
 
-    assert events[-2] == Error("internal", ERROR_TEXTS["internal"])
+    assert events[-1] == Error("internal", ERROR_TEXTS["internal"])
     assert_unscreened_escalation(events)
     assert env.transport.requests == []
     turn = await env.last_turn()
@@ -2845,7 +2846,7 @@ async def test_an_unscreened_internal_failure_gives_the_next_guard_the_outage_te
     monkeypatch.setattr("app.ai.turn.reserve", flaky)
     env = await make_env(app_engine, seeded_sandbox)
     first = await env.ask("I want to hurt myself")
-    assert first[-2] == Error("internal", ERROR_TEXTS["internal"])
+    assert first[-1] == Error("internal", ERROR_TEXTS["internal"])
     assert (await env.last_turn()).error_code == "guard-error"
 
     await env.ask("yes, tonight")

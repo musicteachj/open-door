@@ -858,6 +858,59 @@ async def test_a_long_history_is_offered_a_new_conversation_and_a_longer_one_is_
     assert (current["longHistory"], current["historyTooLong"]) == (long, too_long)
 
 
+async def test_a_big_history_with_room_for_a_new_conversation_is_not_the_sandboxs_cap(
+    browser: Browser, app_engine: AsyncEngine
+) -> None:
+    tenant_id, person_id = sign_in(browser)
+    cid = UUID(new_conversation(browser)["id"])
+    turn_id = await seed_turn(app_engine, tenant_id, person_id, cid, outcome=completed())
+    await add_history(app_engine, tenant_id, person_id, cid, turn_id, 140_000)
+    # $0.30 left: under the next turn with this history (about $0.58), over a new conversation's
+    # first turn (about $0.21).
+    await add_spend(app_engine, tenant_id, person_id, turn_id, "0.70")
+
+    budget = browser.client.get(f"{BASE}/conversations/current").json()["budget"]
+
+    assert budget["sandboxReached"] is False
+    assert budget["banner"] is None
+    assert budget["sandboxRemainingCents"] == 30
+
+
+async def test_a_big_history_that_leaves_both_caps_short_offers_a_new_conversation_not_the_day(
+    open_browser_with: OpenBrowserWith, app_engine: AsyncEngine, owner_engine: AsyncEngine
+) -> None:
+    """The banner follows the question's own rule (`refusal_scope`): when the sandbox is short
+    with the history, what an empty conversation needs decides both caps, so a day that is short
+    only because of this conversation shows no daily banner (the question's 429 offers a new
+    conversation instead)."""
+    async with owner_engine.connect() as connection:
+        spent_today: Decimal = (
+            await connection.execute(
+                text(
+                    "SELECT coalesce(sum(amount_usd), 0) FROM ai_spend_daily"
+                    " WHERE day = (now() AT TIME ZONE 'UTC')::date"
+                )
+            )
+        ).scalar_one()
+    # $0.30 left in the day, whatever other runs spent today.
+    browser = open_browser_with(ai_daily_budget_usd=Decimal(spent_today) + Decimal("0.30"))
+    tenant_id, person_id = sign_in(browser)
+    cid = UUID(new_conversation(browser)["id"])
+    turn_id = await seed_turn(app_engine, tenant_id, person_id, cid, outcome=completed())
+    await add_history(app_engine, tenant_id, person_id, cid, turn_id, 140_000)
+    # $0.30 left in the sandbox too: both under the next turn with this history (about $0.58),
+    # both over a new conversation's first turn (about $0.21).
+    await add_spend(app_engine, tenant_id, person_id, turn_id, "0.70")
+
+    budget = browser.client.get(f"{BASE}/conversations/current").json()["budget"]
+
+    assert (budget["sandboxReached"], budget["dailyReached"], budget["banner"]) == (
+        False,
+        False,
+        None,
+    )
+
+
 # --- Feedback -------------------------------------------------------------------------------
 
 

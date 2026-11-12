@@ -117,6 +117,13 @@ export type ChatState = {
    * one as their copy does.
    */
   settling: readonly SettlingTurn[]
+  /**
+   * Turns whose escalation panel is about to appear for the first time from the saved copy, because
+   * the live copy had none (a stop closed the stream before the escalation came). The saved panel
+   * announces itself once for these, then `consumeAnnouncement` forgets the turn, so a later
+   * render, a refetch, or a reload stays silent.
+   */
+  panelsToAnnounce: readonly string[]
   /** The conversation the last send went to, so a quick second question does not create another. */
   conversationId: string | null
   /** Why the last send did not go, shown under the box. The draft is kept. */
@@ -130,6 +137,12 @@ export type ChatState = {
   warning: string | null
   /** The send was refused because the conversation can't continue: offer a new one. */
   offerNewConversation: boolean
+  /**
+   * The offer comes from a refusal whose own words, under the box, say why (the conversation is
+   * too long for what is left of the budget): the notice shows only its button, not the
+   * long-conversation words, which would give another reason.
+   */
+  offerWithoutNoticeWords: boolean
   setDraft: (draft: string) => void
   /**
    * Asks a question. Does nothing for a blank one. While an answer is coming it sends nothing and
@@ -150,6 +163,8 @@ export type ChatState = {
   stop: (deps: Pick<SendDeps, 'invalidateConversation'>) => void
   /** The refetched conversation holds the finished turn: drop the live copy. */
   settle: (turnId: string) => void
+  /** The saved panel for this turn has announced itself (or has none to announce): forget it. */
+  consumeAnnouncement: (turnId: string) => void
   /** A new conversation was created: forget the old one's live turn and errors. */
   beginConversation: (conversationId: string) => void
 }
@@ -169,11 +184,13 @@ const EMPTY = {
   status: 'idle',
   turn: null,
   settling: [],
+  panelsToAnnounce: [],
   conversationId: null,
   sendError: null,
   waitingToSend: false,
   warning: null,
   offerNewConversation: false,
+  offerWithoutNoticeWords: false,
 } as const
 
 /** Error codes that mean no more questions can be asked: the conversation's banner says why. */
@@ -383,6 +400,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       sendError: null,
       warning: null,
       offerNewConversation: false,
+      offerWithoutNoticeWords: false,
     }))
 
     const live = () => mine === generation && !controller.signal.aborted
@@ -520,17 +538,34 @@ export const useChatStore = create<ChatState>((set, get) => ({
   },
 
   settle(turnId) {
-    const { turn, status, settling } = get()
+    const { turn, status, settling, panelsToAnnounce } = get()
+    // A panel that never came down the stream is new to the person when the saved copy brings it.
+    // Only a turn that didn't complete can gain one: a completed turn's escalation came before its
+    // `turn.completed`.
+    const withAnnouncement = (live: LiveTurn) =>
+      live.escalation === null && live.turnId !== null && !live.completed
+        ? [...panelsToAnnounce, live.turnId]
+        : panelsToAnnounce
     // A turn waiting behind a newer one goes as soon as its saved copy is there.
-    if (settling.some((entry) => entry.turn.turnId === turnId)) {
-      set({ settling: settling.filter((entry) => entry.turn.turnId !== turnId) })
+    const waiting = settling.find((entry) => entry.turn.turnId === turnId)
+    if (waiting !== undefined) {
+      set({
+        settling: settling.filter((entry) => entry !== waiting),
+        panelsToAnnounce: withAnnouncement(waiting.turn),
+      })
       return
     }
     // Any turn that has finished (completed, stopped, errored, or ended by its escalation) goes
     // to the server's copy. One still coming does not.
     if (turn === null || turn.turnId !== turnId) return
     if (isRunning({ status })) return
-    set({ status: 'idle', turn: null })
+    set({ status: 'idle', turn: null, panelsToAnnounce: withAnnouncement(turn) })
+  },
+
+  consumeAnnouncement(turnId) {
+    const { panelsToAnnounce } = get()
+    if (!panelsToAnnounce.includes(turnId)) return
+    set({ panelsToAnnounce: panelsToAnnounce.filter((id) => id !== turnId) })
   },
 
   beginConversation(conversationId) {
@@ -543,17 +578,22 @@ export const useChatStore = create<ChatState>((set, get) => ({
       status: 'idle',
       turn: null,
       settling: [],
+      panelsToAnnounce: [],
       sendError: null,
       warning: null,
       offerNewConversation: false,
+      offerWithoutNoticeWords: false,
     })
   },
 }))
 
 /**
- * The stream is over and no closing event came. A crisis or "can't answer" turn ends that way by
- * design (its escalation is the last event), so it is finished like a completed turn. Anything
- * else means the connection dropped, which the server saves as stopped.
+ * The stream is over and no closing event came. Every turn the server reads to its end sends one
+ * (`turn.completed` or `error`, crisis and "can't answer" turns included), so this means the
+ * connection dropped. The live turn shows as stopped for every kind; the server's copy may say
+ * otherwise (a crisis or "can't answer" turn keeps its own status), and replaces it when the
+ * conversation is read again. The escalation panel still shows: the live turn draws a crisis or
+ * unavailable escalation in any phase.
  */
 function endWithoutClosingEvent(
   deps: Pick<SendDeps, 'invalidateConversation'>,
@@ -579,11 +619,9 @@ function endWithoutClosingEvent(
     return
   }
   // (An `error` event has already put the turn in `error`, which returned above.)
-  const endedByEscalation =
-    turn.escalation?.kind === 'crisis' || turn.escalation?.kind === 'unavailable'
   useChatStore.setState({
-    status: endedByEscalation ? 'idle' : 'stopped',
-    turn: { ...turn, steps: allDone(turn.steps), completed: endedByEscalation },
+    status: 'stopped',
+    turn: { ...turn, steps: allDone(turn.steps), completed: false },
     sendError: null,
   })
   deps.invalidateConversation()
@@ -618,6 +656,18 @@ function failSend(error: unknown, deps: SendDeps) {
     (type === 'conversation-outdated' || type === 'history-too-long')
   ) {
     set({ ...cleared, sendError: problemText(error), offerNewConversation: true })
+  } else if (error.status === 429 && type === 'budget-conversation') {
+    // Only this conversation's size is the problem: a new one would fit in what is left. Nothing
+    // on the page said so before the send (the banner shows only a spent sandbox), so the
+    // problem's words and the notice's button come from this refusal, as for a conversation that
+    // can't continue. The read refreshes the budget.
+    deps.invalidateConversation()
+    set({
+      ...cleared,
+      sendError: problemText(error),
+      offerNewConversation: true,
+      offerWithoutNoticeWords: true,
+    })
   } else if (error.status === 422 && type === 'personal-data') {
     set({ ...cleared, warning: deps.texts.personalData })
   } else if (error.status === 429 && type !== undefined && BUDGET_CODES.has(type)) {
