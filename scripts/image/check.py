@@ -110,6 +110,8 @@ def problems_in_config(
         problems.append(
             f"the health check does not call {HEALTH_PATH} on the HOST and PORT it listens on"
         )
+    if "APP_ENV=production" not in env:
+        problems.append("the image does not set APP_ENV=production")
     problems.extend(
         f"the image sets {entry.split('=')[0]}"
         for entry in env

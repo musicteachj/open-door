@@ -1,9 +1,24 @@
 import '@testing-library/jest-dom/vitest'
 import { cleanup, configure } from '@testing-library/react'
-import { afterAll, afterEach, beforeAll } from 'vitest'
+import { afterAll, afterEach, beforeAll, vi } from 'vitest'
 import { useTourStore } from '@/features/tour/store'
 import { resetAnnouncer } from '@/lib/announce'
 import { server } from './msw'
+import { turnstileFake } from './turnstile'
+
+// No test reaches Cloudflare: starting a sandbox gets its token from this fake. The real module is
+// tested on its own (src/lib/turnstile.test.ts), which unmocks it.
+vi.mock('@/lib/turnstile', async () => {
+  const { DUMMY_TURNSTILE_TOKEN, turnstileFake } = await import('./turnstile')
+  return {
+    getTurnstileToken: async (container: HTMLElement) => {
+      turnstileFake.containers.push(container)
+      if (turnstileFake.hold) await turnstileFake.hold
+      if (turnstileFake.fail) throw new Error('The check failed.')
+      return DUMMY_TURNSTILE_TOKEN
+    },
+  }
+})
 
 // How long `findBy…` and `waitFor` wait before failing: 3 seconds, not Testing Library's 1. The
 // whole suite runs its files in parallel, and on a busy CI runner a search that answers in 300 ms
@@ -42,6 +57,7 @@ afterEach(() => {
   useTourStore.setState(useTourStore.getInitialState())
   sessionStorage.clear()
   server.resetHandlers()
+  turnstileFake.reset()
 })
 
 afterAll(() => {

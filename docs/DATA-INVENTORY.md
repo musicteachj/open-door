@@ -13,10 +13,14 @@ sandbox.
 
 **Everything in a sandbox lives for 24 hours.** `tenants.expires_at` is set to 24 hours after
 creation. Every other row belongs to a tenant and is deleted with it, through the foreign keys'
-`ON DELETE CASCADE`, except the handbook tables and `ai_spend_daily`, which have no tenant (see
-their sections below). A session is refused as soon as it expires, even before its row is deleted.
-The scheduled cleanup job that deletes expired sandboxes arrives in Phase 8. Until then, the
-`od_cleanup` role can delete only expired sandboxes, and tests prove it.
+`ON DELETE CASCADE`, except the handbook tables, `ai_spend_daily`, and `sandbox_starts`, which have
+no tenant (see their sections below). A session is refused as soon as it expires, even before its row is deleted.
+The cleanup job (`make cleanup`, Phase 8) runs as the `od_cleanup` login and enforces every
+retention below: expired sandboxes (24 hours), `ai_spend_daily` rows older than 30 days,
+`sandbox_starts` rows older than a day, and handbook versions no sandbox uses. Each is also a
+row-level policy on that login (or, for handbook versions, a foreign key and a trigger), so the job
+can't delete more than its rules allow, and tests prove it. It writes one log line of counts and no
+row contents. The deployment schedules it (Phase 9).
 
 **The 24-hour delete is a demo choice, not a model for real employee data.** A real deployment
 would keep audit records for at least 4 years, outside the tenant cascade. California requires
@@ -284,10 +288,33 @@ the sandbox's spend and no rows, never a figure per turn.
 `ai_spend_daily` holds amounts only, so it is visible to every sandbox's API session.
 
 **How long.** The first five are deleted with the sandbox, 24 hours after it is created.
-`ai_spend_daily` has no sandbox to be deleted with: its rows older than 30 days are deleted by
-Phase 8's cleanup job. The API can add rows but not change or delete them, except that a turn's
+`ai_spend_daily` has no sandbox to be deleted with: its rows whose UTC day is more than 30 days
+back are deleted by the cleanup job (`make cleanup`). The API can add rows but not change or delete them, except that a turn's
 outcome and trace columns can be updated while it is `running`. Once it ends, a trigger refuses any
 further change.
+
+### `sandbox_starts`: how many sandboxes each address has started
+
+Global: no sandbox, no person, no text. Phase 8, stage 4. One row is added each time a sandbox is
+started, so the API can limit starts (ADR 0021): 5 an hour and 20 a day per address, and 500 a UTC
+day in all.
+
+| Column | Holds | Why |
+|---|---|---|
+| `id` | A random UUID | Identity. |
+| `ip_hash` | 32 bytes: HMAC-SHA256, under the secret `SANDBOX_IP_HASH_KEY`, of the visitor's address. An IPv6 address is first reduced to its /64 network, and an IPv4-mapped IPv6 address counts as its IPv4 address. A start with no readable address is hashed as one shared "unknown" value. | To count one address's starts without storing the address. Without the key the value can't be turned back into an address, though someone holding the key could test a guessed address against it. |
+| `created_at` | When the start happened (UTC), always the database's clock (a trigger sets it, so a client can't backdate a start) | The one-hour, 24-hour, and UTC-day windows. |
+
+**Who sees them.** Every API session can read and add rows: the API must count every address, so its
+row-level security policies for the API's login allow all rows. No route returns them. The raw
+address is never stored in the database or written to the audit log. (It is sent to Cloudflare,
+below.) It does appear in the application log: uvicorn's access log line for each request carries
+the client address, and so does each security event (see the security log, above). Logs are kept
+as long as where they are stored keeps them, which is set at deployment (Phase 9).
+
+**How long.** The API can add rows but not change or delete them. The cleanup job (`make cleanup`)
+deletes rows older than a day, and the cleanup login can see and delete only those. Changing `SANDBOX_IP_HASH_KEY` makes the counter forget earlier
+starts, which is harmless.
 
 ### Time off: `time_off_openings`, `time_off_requests`, `ai_proposals`
 
@@ -491,7 +518,11 @@ personal data and no sandbox data.
 | `handbook_chunks` | The runs of passages that retrieval searches: their text, a full-text search vector, and a 1024-number embedding | Hybrid (keyword and meaning) search over the handbook. |
 
 The API's login can only read these tables. Ingestion writes them as the database owner. They are
-kept while any sandbox uses their version. Phase 8 deletes versions no sandbox uses.
+kept while any sandbox uses their version. The cleanup job deletes a version that is not the
+newest published one, was created before the newest was published (so one still being loaded
+survives), and that no sandbox is pinned to. The database refuses to delete a pinned version (a
+foreign key) or the newest published one (a trigger), and the job skips a refused one. Sections
+and chunks go with their version.
 
 ## Outside the database
 
@@ -551,6 +582,27 @@ A request with no session cookie at all, such as a first visit, isn't a refusal 
 it logs nothing here (only a DEBUG line with the method and path). A raw token, a cookie value, or a
 private detail is never logged. How long logs are kept is set
 where they are stored, when Open Door is deployed (Phase 9).
+
+### Cloudflare (Turnstile, the check before a sandbox starts)
+
+Cloudflare Turnstile checks that a person, not a script, is starting a sandbox (ADR 0021). It is
+managed and interaction-only: most visitors see nothing.
+
+- **What Cloudflare receives from the browser:** when a visitor presses a start button, the page
+  loads Turnstile's script and widget from `challenges.cloudflare.com`. The browser's request
+  carries the visitor's IP address and the usual request headers, and the widget reads browser
+  signals to decide whether to show a challenge. The script is not loaded on page load, only after
+  that press.
+- **What the API sends to Cloudflare:** the widget's one-use token, the visitor's address (the
+  `remoteip` field, as the client address the server sees), a random idempotency key, and Open
+  Door's secret key, to `challenges.cloudflare.com/turnstile/v0/siteverify`. No name, session, or
+  sandbox ID is sent. Cloudflare answers whether the token is valid, for which hostname, and for
+  which action; the API accepts only `start-sandbox` on its own host.
+- **When Cloudflare can't be reached, nobody starts a sandbox** (the check fails closed).
+- **Tests and local runs call nothing:** Cloudflare's documented test keys are answered inside the
+  API (development, CI, the browser tests, and `make prod-local`).
+- **Cloudflare's own retention and use of this data** are under its terms. This inventory will
+  quote them, with their source and the date read, when the production keys are set up (Phase 9).
 
 ### Voyage (embeddings)
 

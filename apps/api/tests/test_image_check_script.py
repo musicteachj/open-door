@@ -69,7 +69,10 @@ def test_the_config_must_match_the_deploy() -> None:
         "host = os.environ.get('HOST'); port = os.environ.get('PORT'); "
         f"urlopen(f'...{{host}}:{{port}}{check.HEALTH_PATH}')",
     ]
-    assert check.problems_in_config(["/app/entrypoint.sh"], health, ["PATH=/bin"]) == []
+    good_env = ["PATH=/bin", "APP_ENV=production"]
+    assert check.problems_in_config(["/app/entrypoint.sh"], health, good_env) == []
+    # Without APP_ENV a deploy that forgot it would start with the development defaults.
+    assert check.problems_in_config(["/app/entrypoint.sh"], health, ["PATH=/bin"])
     assert check.problems_in_config(["sh"], health, [])
     assert check.problems_in_config(["/app/entrypoint.sh"], None, [])
     assert check.problems_in_config(["/app/entrypoint.sh"], ["CMD", "true"], [])

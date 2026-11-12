@@ -39,6 +39,10 @@ def production(
         app_origin="http://localhost:8300",
         ai_transport="anthropic",
         anthropic_api_key=SecretStr("dummy-key-for-a-startup-test"),
+        # The API's startup check wants these in production (a loopback origin needs no proxy list).
+        turnstile_site_key="0x4AAAAAAAreal",
+        turnstile_secret_key=SecretStr("0x4AAAAAAAreal-secret"),
+        sandbox_ip_hash_key=SecretStr("k" * 40),
         encryption_keyring=None if keyring is None else SecretStr(keyring),
         encryption_keyring_file=None if keyring_file is None else SecretStr(keyring_file),
     )

@@ -18,11 +18,21 @@ from app.api.deps import get_app_settings, get_embedder, get_keys, get_streams, 
 from app.core.config import Settings
 from app.core.encryption import LocalKeyProvider
 from app.main import create_app
+from app.modules.sandbox.turnstile import CloudflareVerifier
 from tests.conftest import TEST_KEYRING, UNREACHABLE_DATABASE_URL
 from tests.test_deps import request_for
 
 KEY = SecretStr("sk-ant-test-not-real")
 VOYAGE = SecretStr("pa-test-not-real")
+
+
+# What the API's startup check needs in production (require_entry_settings_fit_for_production).
+PRODUCTION_ENTRY: dict[str, Any] = {
+    "turnstile_site_key": "0x4AAAAAAAreal",
+    "turnstile_secret_key": "0x4AAAAAAAreal-secret",
+    "sandbox_ip_hash_key": "k" * 40,
+    "forwarded_allow_ips": "10.0.0.0/8",
+}
 
 
 def settings_with(**overrides: Any) -> Settings:
@@ -72,6 +82,18 @@ def test_anthropic_without_a_voyage_key_searches_by_full_text_only() -> None:
 def test_production_refuses_the_scripted_transport_at_boot() -> None:
     with pytest.raises(ValueError, match="AI_TRANSPORT must be anthropic"):
         create_app(settings_with(app_env="production", app_origin="https://opendoor.example.com"))
+
+
+def test_production_refuses_to_start_without_the_entry_settings() -> None:
+    settings = settings_with(
+        app_env="production",
+        app_origin="https://opendoor.example.com",
+        ai_transport="anthropic",
+        anthropic_api_key=KEY,
+        encryption_keyring=REAL_KEYRING,
+    )
+    with pytest.raises(ValueError, match="SANDBOX_IP_HASH_KEY"):
+        create_app(settings)
 
 
 def test_replay_is_refused_for_the_app_at_boot() -> None:
@@ -276,6 +298,7 @@ def test_the_test_key_is_refused_outside_the_test_environment() -> None:
         with pytest.raises(ValueError, match="test key"):
             create_app(
                 settings_with(
+                    **(PRODUCTION_ENTRY if env == "production" else {}),
                     app_env=env,
                     app_origin="https://opendoor.example.com",
                     ai_transport="anthropic",
@@ -342,6 +365,7 @@ def production_settings() -> Settings:
         ai_transport="anthropic",
         anthropic_api_key=KEY,
         encryption_keyring=REAL_KEYRING,
+        **PRODUCTION_ENTRY,
     )
 
 
@@ -362,3 +386,14 @@ def test_the_schema_export_is_the_same_with_the_docs_hidden() -> None:
     development = create_app(settings_with(app_env="development", encryption_keyring=REAL_KEYRING))
 
     assert production == development.openapi()
+
+
+def test_the_turnstile_client_lives_with_the_app_and_is_closed_at_shutdown() -> None:
+    # Real-looking keys, so the verifier is the Cloudflare one rather than the test-key one.
+    app = create_app(settings_with(**PRODUCTION_ENTRY))
+    with TestClient(app):
+        verifier = app.state.turnstile
+        assert isinstance(verifier, CloudflareVerifier)
+        client = verifier._client
+        assert not client.is_closed
+    assert client.is_closed

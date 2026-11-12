@@ -18,7 +18,7 @@ PIP_AUDIT := pip-audit@2.10.1
 PRE_COMMIT := pre-commit@4.7.0
 
 .DEFAULT_GOAL := help
-.PHONY: help setup keyring db db-stop migrate bootstrap-db ingest embed eval-retrieval eval-offline eval-live scoreboard migrations-roundtrip dev dev-api dev-web openapi check check-api check-web e2e e2e-image proxy-check image image-check prod-local prod-local-check captures check-docs check-workflows audit
+.PHONY: help setup keyring db db-stop migrate bootstrap-db ingest embed eval-retrieval eval-offline eval-live scoreboard migrations-roundtrip cleanup dev dev-api dev-web openapi check check-api check-web e2e e2e-image proxy-check image image-check prod-local prod-local-check captures check-docs check-workflows audit
 
 help: ## List the available commands
 	@grep -E '^[a-zA-Z_-]+:.*## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*## "}; {printf "  %-22s %s\n", $$1, $$2}'
@@ -115,6 +115,10 @@ migrations-roundtrip: ## Undo every migration, apply them again, recreate the lo
 	cd $(API) && uv run alembic upgrade head
 	cd $(API) && uv run python scripts/bootstrap_db_users.py
 	cd $(API) && uv run python scripts/ingest_handbook.py ingest
+
+# Runs as the cleanup login (CLEANUP_DATABASE_URL), never the API's. Safe to run twice.
+cleanup: ## Delete expired sandboxes, old spend rows and start counts, and unused handbook versions
+	cd $(API) && uv run python -m app.jobs.cleanup
 
 dev: db ## Run `make db`, then the API (:8000) and the web app (:5173) together
 	$(MAKE) -j2 dev-api dev-web

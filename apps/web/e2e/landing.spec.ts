@@ -193,7 +193,11 @@ test('a failed start re-enables the cards and shows the inline error with a work
   await expect(page).toHaveURL('/ask')
   await expect(greetingHeading(page, 'Mateo')).toBeVisible()
   expect(attempts).toBe(2)
-  expect(JSON.parse(bodies[1]!)).toEqual({ persona: 'mateo' })
+  // Both attempts carry a token, the second a fresh one from the retry's own check.
+  expect(JSON.parse(bodies[1]!)).toEqual({
+    persona: 'mateo',
+    turnstileToken: 'XXXX.DUMMY.TOKEN.XXXX',
+  })
 })
 
 test('the AI disclosure and the fictional-company notice are always visible', async ({ page }) => {

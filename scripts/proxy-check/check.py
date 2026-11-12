@@ -29,9 +29,9 @@ checks. Two of them are controls that show an assertion can fail:
    (`docker wait`: code 0, or 143 if uvicorn's re-raised SIGTERM ends it), and the turn must be
    saved as `stopped`.
 
-Everything it starts is stopped at the end, even on failure, and the sandbox and daily-ledger rows
-its turns added are deleted. The judgment (`problems_in_*`) is plain functions on recorded
-timelines, tested offline in `apps/api/tests/test_proxy_check_script.py`.
+Everything it starts is stopped at the end, even on failure, and the sandbox, daily-ledger, and
+sandbox-start rows it added are deleted. The judgment (`problems_in_*`) is plain functions on
+recorded timelines, tested offline in `apps/api/tests/test_proxy_check_script.py`.
 """
 
 import asyncio
@@ -323,7 +323,8 @@ class Session:
 def start_sandbox(client: httpx.Client) -> Session:
     response = client.post(
         f"{NGINX_ORIGIN}/api/v1/sandboxes",
-        json={},
+        # Cloudflare's dummy token, which the test image's test Turnstile key accepts.
+        json={"turnstileToken": "XXXX.DUMMY.TOKEN.XXXX"},
         headers={"Origin": NGINX_ORIGIN, "Sec-Fetch-Site": "same-origin"},
     )
     response.raise_for_status()
@@ -537,14 +538,21 @@ async def clean_up_database(url: str, tenant_ids: list[str], started_at: Any) ->
 
     from sqlalchemy.ext.asyncio import create_async_engine
 
-    from app.db.spend_cleanup import remove_sandboxes, spend_rows_of
+    from app.db.spend_cleanup import delete_starts_since, remove_sandboxes, spend_rows_of
 
     ids = [UUID(tenant_id) for tenant_id in tenant_ids]
     engine = create_async_engine(url)
     try:
         async with engine.connect() as connection:
             rows = await spend_rows_of(connection, ids, not_before=started_at) if ids else []
-        await remove_sandboxes(engine, ids, rows, not_before=started_at)
+        try:
+            await remove_sandboxes(engine, ids, rows, not_before=started_at)
+        finally:
+            # The run's sandbox start also left a count row (no tenant, so nothing cascades), and it
+            # goes even if removing the sandboxes failed. Owner only: the table has no owner
+            # policy, and the local owner is a superuser.
+            async with engine.begin() as connection:
+                await delete_starts_since(connection, started_at)
     finally:
         await engine.dispose()
 

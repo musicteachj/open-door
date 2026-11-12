@@ -24,6 +24,7 @@ import { installFakeConsole } from '@/test/fake-console'
 import { server } from '@/test/msw'
 import { personaSwitcher } from '@/test/persona-menu'
 import { renderApp } from '@/test/render-app'
+import { DUMMY_TURNSTILE_TOKEN } from '@/test/turnstile'
 import { useTourStore } from './store'
 
 // The guided tour's runner (screen 15) inside the real shell, against the fake API.
@@ -1224,7 +1225,7 @@ describe('starting from the persona menu', () => {
       }),
     )
     await mark(/Ask a policy question/)
-    expect(posted).toEqual([{ persona: 'priya' }])
+    expect(posted).toEqual([{ persona: 'priya', turnstileToken: DUMMY_TURNSTILE_TOKEN }])
     expect(personaSwitcher()).toHaveAccessibleName(/^Priya Raman/)
     expect(useTourStore.getState()).toMatchObject({ started: true, active: true, step: 0 })
     await act(async () => {})

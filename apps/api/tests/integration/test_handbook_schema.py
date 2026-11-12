@@ -46,10 +46,12 @@ async def test_the_api_login_can_read_the_handbook(app_engine: AsyncEngine, tabl
         await connection.execute(text(f"SELECT count(*) FROM {table}"))  # noqa: S608
 
 
-@pytest.mark.parametrize("table", HANDBOOK_TABLES)
+@pytest.mark.parametrize("table", [t for t in HANDBOOK_TABLES if t != "handbook_versions"])
 async def test_the_cleanup_login_cannot_touch_the_handbook(
     cleanup_engine: AsyncEngine, table: str
 ) -> None:
+    # Only the versions table is granted to it (migration 0019, so the cleanup job can delete an
+    # unused version); sections and chunks go by cascade, which runs as the table owner.
     async with cleanup_engine.connect() as connection:
         with pytest.raises(DBAPIError, match="permission denied"):
             await connection.execute(text(f"SELECT count(*) FROM {table}"))  # noqa: S608
@@ -123,6 +125,16 @@ async def test_a_version_a_tenant_uses_cannot_be_deleted(owner_engine: AsyncEngi
                 "INSERT INTO tenants (id, expires_at, anchor_date) VALUES (:id, :expires, :anchor)"
             ),
             {"id": uuid4(), "expires": now + timedelta(hours=24), "anchor": now.date()},
+        )
+        # A trigger (0019) refuses the newest published version before the foreign key is
+        # checked, so publish a newer one: this version is then only in use, not the newest.
+        newer_id = await insert_version(connection, "test-newer")
+        await connection.execute(
+            text(
+                "UPDATE handbook_versions SET published_at = now() + interval '2 days'"
+                " WHERE id = :id"
+            ),
+            {"id": newer_id},
         )
         with pytest.raises(IntegrityError, match="handbook_version_id"):
             await connection.execute(

@@ -15,6 +15,7 @@ from app.ai.scripted import ScriptedTransport
 from app.ai.turn import TurnRun
 from app.core.config import Settings
 from app.modules.assistant.sse import TurnResponse
+from app.modules.sandbox.turnstile import DUMMY_TOKEN
 from tests.integration.test_turn_stream_connection import (
     SICK,
     SILENT,
@@ -42,7 +43,9 @@ async def test_more_concurrent_questions_than_the_pool_holds_do_not_stall_the_ap
             base_url="https://testserver",
             headers={"Sec-Fetch-Site": "same-origin"},
         ) as other:
-            created = await other.post("/api/v1/sandboxes", json={"persona": "mateo"})
+            created = await other.post(
+                "/api/v1/sandboxes", json={"persona": "mateo", "turnstileToken": DUMMY_TOKEN}
+            )
             assert created.status_code == 201
             created_tenant_ids.append(UUID(created.json()["tenant"]["id"]))
 

@@ -10,9 +10,11 @@ export function useStartNewSandbox() {
   const { data: me } = useMe()
   const start = useStartSandbox()
   return {
-    startNewSandbox: () => {
-      if (me && !start.isPending) start.mutate({ data: { persona: me.personaKey } })
+    /** `slot` is the empty `TurnstileSlot` under the button. */
+    startNewSandbox: (slot: HTMLElement | null) => {
+      if (me && !start.isPending) start.mutate({ data: { persona: me.personaKey } }, slot)
     },
     failed: start.isError,
+    error: start.error,
   }
 }

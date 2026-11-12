@@ -1282,6 +1282,122 @@ What the code forced, or the reviews changed:
   removes a running one's containers; the clones copy the note columns as bytes (the seed's
   requests never hold a note, so nothing is lost).
 
+### Stage 4 (`feat/phase-8-entry`, 2026-11-11)
+
+Built in three batches: A (Tasks 23 and 24, with an Opus 5.5 security reviewer on the limits), B
+(Tasks 25 and 26, two implementers in parallel), and C (this close). No paid AI calls, no call to
+Cloudflare from any test; every recorded fixture still replays. The owner approved the four start
+refusal texts with the stage's plan (2026-11-11), with one change from the spec's drafts:
+`{minutes} minutes` became `{wait}` ("12 minutes", or "about 3 hours" past an hour), since the
+20-a-day limit can mean a wait of hours. The day's-limit text names the recorded walkthrough, whose
+page and link arrive in Stage 9. The landing's Cloudflare line was approved with screen 16 and is
+built in Stage 9 (Task 44).
+
+What the code forced, or the reviews changed:
+- **Cloudflare's test keys are answered inside the API (Task 23).** Cloudflare's testing page (read
+  2026-11-11) says a test secret accepts only the dummy token and always answers hostname
+  `example.com` with no action, so the hostname and action checks could never pass with test keys.
+  `TestKeyVerifier` mirrors the three documented test secrets without the network; production
+  refuses test keys unless the origin is loopback, so only `make prod-local` and the test runs use
+  it. Outside production a blank site key and secret default to the always-pass test keys, so the
+  page's meta tag carries the test site key in development, and the web app falls back to it when
+  the tag is empty (Vite dev and preview); a production page with an empty key would make dummy
+  tokens the real secret refuses. Cloudflare's "your secret or request is wrong" codes
+  (`invalid-input-secret`, `missing-input-secret`, `bad-request`) are a 503 and an error log, not
+  "you're a bot" (the review's low). One `httpx` client lives for the app's life.
+- **The order of a start (Task 24).** Turnstile, then `reserve_start` counts and records the start
+  under advisory lock 4406 in a short transaction of its own, then the old session ends, then the
+  seed in its own transaction. Counting before the old session ends means a refused visitor (the
+  limits, or a 503 after the lock's 5-second `lock_timeout`) keeps the sandbox they have, as the
+  text promises. The plan had the row written in the seed's transaction; the Opus reviewer measured
+  the lock serializing every seed (8 at once took 0.96 s) and holding pool connections while
+  waiting (its medium), so the lock is released before the seed, a start whose seed fails still
+  counts, and a pile-up answers the existing 503 `database-busy`. (An earlier version counted
+  lock-free first; the review found the real count could still refuse after the old session ended,
+  so the lock-free count was removed.)
+- **The limits.** Per address: 5 in the last hour and 20 in the last 24 hours; in all, 500 per UTC
+  day (matching "come back tomorrow" and the AI daily budget). The day's total is checked first.
+  `Retry-After` is the longest wait of the limits that bind, from the (count - limit + 1)th oldest
+  start in each window (the review's low: the first version could tell a visitor 50 minutes when
+  the day's limit held them for 22 hours). An address that won't parse, or a request with no client,
+  counts in one shared bucket. Production requires `FORWARDED_ALLOW_IPS` unless the origin is
+  loopback (the review's low), since an empty one counts every visitor as the load balancer.
+- **The review's other medium, recorded as an accepted risk:** one actor with many /64s or 25 IPv4
+  addresses can use up the 500-a-day total; the threat model lists it, and Stage 7 tunes the
+  numbers.
+- **For Phase 9 (Task 39 records it):** production's setup steps (migration 0018's data step, the
+  login bootstrap, the handbook load) need none of `TURNSTILE_SITE_KEY`, `TURNSTILE_SECRET_KEY`,
+  `SANDBOX_IP_HASH_KEY`, and `FORWARDED_ALLOW_IPS`. Only the API process does: it refuses to start
+  in production without them (`require_entry_settings_fit_for_production`, called from
+  `create_app`). `make prod-local` passes them to the API container only.
+- **The web app's check (Task 25).** `useStartSandbox` now takes the slot element with each start
+  (`mutate(variables, slot)`) and covers the token wait in `isPending`. A `TurnstileSlot` sits under
+  every start control, including the account menu, so a Retry after the tour dialog has closed has
+  a place. Unit tests mock `@/lib/turnstile`; every browser context routes Cloudflare's script to a
+  local fake (`fakeTurnstile` in `e2e/fixtures.ts`). The capture report's rows need a design PNG,
+  so the refusals and the checkbox's place are gallery states (`start-refusal-retry`,
+  `start-refusal-limit`, `turnstile-slot-place`), which copy the texts as examples. The real
+  Cloudflare iframe never runs under the CSP in tests; Stage 9's live check covers it.
+- **The cleanup job (Task 26).** Expired sandboxes go in batches of 50, each its own transaction;
+  every step starts with `SET LOCAL statement_timeout = '60s'`, since the engine's 10-second
+  connection setting would win over the login's 60. The cleanup login can't see live sandboxes, so
+  it can't know which handbook versions are pinned: each candidate is deleted under a savepoint,
+  and a foreign-key refusal (in use) or the new trigger's `OD006` (the newest published version)
+  skips it. `ai_spend_daily` gained row-level security, with `true` rules for the API's login, so
+  the cleanup login's age rule is the database's, as on `tenants` and `sandbox_starts`. A handbook
+  test that expected the foreign key's refusal on a published version now publishes a newer one
+  first, since the trigger refuses the newest. `make cleanup` on a backdated sandbox logged
+  `tenants: 1`, and a second run deleted nothing.
+- **The close's reviews.** `/security-review` found nothing high or medium. On the owner's OK
+  ("go with your recommendations") two of its lows were fixed: `ai_spend_daily`'s row-level
+  security is enabled but not forced, so the owner's spend scripts (`clear_browser_test_spend.py`,
+  `app/db/spend_cleanup.py`) still see every row on a managed database whose owner isn't a
+  superuser (the downgrade keeps `NO FORCE`, since `DISABLE` leaves a force flag in place); and the
+  image sets `APP_ENV=production` itself, so a deploy that forgets it refuses the development
+  defaults (the test runs pass `APP_ENV=test`; `make image-check` asserts it). Its third low, that
+  the cleanup login's `DELETE` on `handbook_versions` has no row rule (a leaked cleanup password
+  could delete an unused or still-loading version of the public handbook), is recorded. The
+  `/code-review medium` loop ran four rounds and stopped at the fourth, which had nothing high or
+  medium:
+  - Round 1 (fixed): a start refused by the locked count, or by its lock timeout, had already
+    ended the visitor's session, so `reserve_start` now runs before the old session ends and the
+    lock-free count is gone; getting a token had no timeout (now 10 seconds for the script and 2
+    minutes for the widget, room for a person to solve a checkbox); the token wait was invisible
+    to the shared "an identity change is in flight" gate, so it now runs inside the mutation
+    (`useMutation` with the generated create-sandbox key); `Retry-After` could raise on an empty
+    window. Also: a half-set Turnstile key pair outside production is refused, a script that loads
+    without its API is removed, and the slot is required.
+  - Round 2 (fixed): the browser runs and the proxy check left their start counts, which locked
+    out a later `make dev`; they are now deleted with the AI ledger's rows (`delete_starts_since`
+    in `app/db/spend_cleanup.py`; skipped on CI, whose database is thrown away, like the ledger's).
+    The production checks on the entry settings moved from `Settings` to the API's start
+    (`require_entry_settings_fit_for_production`, beside the transport check), so the setup tasks
+    need none of the keys. Also: one loopback helper (`is_loopback_origin`, port required), the
+    slot kept out of the mutation's variables, and the test secrets defined once.
+  - Round 3 (fixed): the slot's margin applied as soon as Cloudflare inserted its hidden
+    container, so the page jumped on every start (the slot now has no margin); a script that
+    finished after its timeout is reused, not loaded twice; the proxy check deletes its start
+    counts even when removing its sandboxes fails.
+  - Lows recorded, not fixed: a check that can't run in the browser (a blocked or slow script)
+    sends an empty token, so the visitor reads "couldn't confirm you're a person" with a Retry that
+    may not help; a start refused for a missing handbook (503) still counts and has ended the old
+    session; a bogus token costs a siteverify call before any limit applies (the Opus review's low);
+    a retry within the late script's window can still load a second copy; the real widget never
+    runs under the CSP in tests (Stage 9's live check); a page from before this change gets a 422
+    without a token; nothing ties the three limits together (an hourly limit above the daily one is
+    accepted); `make dev` gets the production limits, so a developer is refused after 5 starts an
+    hour (raise them in `.env`); the test overrides of the limits and the start-count cleanups are
+    written per runner; the integration teardown repeats the shared delete and relies on a
+    superuser owner; `useStartSandbox`'s `mutateAsync` has no caller; the proxy check's cleanup can
+    report its second error over the first.
+- **`make migrations-roundtrip` fails on a local database the image's browser runs have used**
+  (found here, from Stage 3): those runs seal denial notes under the test keyring, and 0018's
+  downgrade can't open them with the real one. Deleting the leftover test sandboxes first (as the
+  owner) lets it pass; CI's database is fresh, so it never meets them.
+- **Two full API runs seemed to hang** at about 2 percent: macOS throttled the idle, niced
+  background `pytest`. The same file passed in about 100 seconds on `dev` and on this branch; long
+  local runs now go under `caffeinate`.
+
 ## Backlog
 
 (Low findings from the stages' reviews, with their reasons.)

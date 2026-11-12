@@ -73,7 +73,15 @@ export default defineConfig({
           // get the daily banner. The ledger is shared by every run on the same database, so
           // e2e/ledger-cleanup.ts deletes the rows a run made when it ends (the API's own tests would
           // fail past the real $3 cap otherwise).
-          env: { APP_ORIGIN: WEB_ORIGIN, AI_TRANSPORT: 'scripted', AI_DAILY_BUDGET_USD: '1000' },
+          env: {
+            APP_ORIGIN: WEB_ORIGIN,
+            AI_TRANSPORT: 'scripted',
+            AI_DAILY_BUDGET_USD: '1000',
+            // The browser tests start hundreds of sandboxes from one address.
+            SANDBOX_STARTS_PER_HOUR: '1000000',
+            SANDBOX_STARTS_PER_DAY: '1000000',
+            SANDBOX_STARTS_DAILY_TOTAL: '1000000',
+          },
           reuseExistingServer: false,
           stdout: 'ignore',
           stderr: 'ignore',

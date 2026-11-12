@@ -993,6 +993,8 @@ export interface Me {
 
 export interface NewSandboxRequest {
   persona?: PersonaKey
+  /** @maxLength 2048 */
+  turnstileToken: string
 }
 
 export interface OpenCaseBody {
@@ -1542,7 +1544,7 @@ export const getCreateSandboxUrl = () => {
  * @summary Start a new sandbox company and sign in to it as one of its personas
  */
 export const createSandbox = async (
-  newSandboxRequestNull?: NewSandboxRequest | null,
+  newSandboxRequest: NewSandboxRequest,
   options?: Parameters<typeof apiFetch>[1],
 ): Promise<SandboxCreated> => {
   const getHeaders = (
@@ -1568,7 +1570,7 @@ export const createSandbox = async (
     ...options,
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
-    body: JSON.stringify(newSandboxRequestNull),
+    body: JSON.stringify(newSandboxRequest),
   })
 }
 
@@ -1611,9 +1613,9 @@ export const getCreateSandboxMutationOptions = <
 }
 
 export type CreateSandboxMutationResult = NonNullable<Awaited<ReturnType<typeof createSandbox>>>
-export type CreateSandboxMutationBody = NewSandboxRequest | null | undefined
+export type CreateSandboxMutationBody = NewSandboxRequest
 export type CreateSandboxMutationError = ErrorType<Problem>
-export type CreateSandboxMutationVariables = { data?: NewSandboxRequest | null }
+export type CreateSandboxMutationVariables = { data: NewSandboxRequest }
 
 /**
  * @summary Start a new sandbox company and sign in to it as one of its personas

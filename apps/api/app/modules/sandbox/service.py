@@ -5,12 +5,13 @@ from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from uuid import UUID, uuid4
 
-from sqlalchemy import insert
+from sqlalchemy import insert, text
 from sqlalchemy.exc import DBAPIError
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 from app.core.encryption import KeyProvider
 from app.db.errors import has_sqlstate
+from app.db.locks import SANDBOX_STARTS_NS, lock_global
 from app.db.models import Tenant
 from app.db.tenancy import NO_TENANT, TenantContext, tenant_session
 from app.modules.audit.service import record_event
@@ -19,6 +20,11 @@ from app.modules.identity.sessions import end_session_family, find_session, star
 from app.modules.identity.tokens import SessionTokens
 from app.modules.people.queries import get_me
 from app.modules.people.schemas import Me, PersonaKey
+from app.modules.sandbox.limits import (
+    StartLimits,
+    check_start_limits,
+    record_start,
+)
 from app.modules.sandbox.seed import build_company, insert_company
 
 logger = logging.getLogger(__name__)
@@ -63,20 +69,57 @@ async def _end_replaced_session(engine: AsyncEngine, token_hash: bytes) -> None:
             )
 
 
-async def create_sandbox(
-    engine: AsyncEngine, persona: PersonaKey, replacing: bytes | None, keys: KeyProvider
-) -> NewSandbox:
-    """Create and seed a sandbox, and start a session in it as `persona`, in one transaction.
+# How long a start waits for the one lock that serializes the count. The reservation is a few
+# milliseconds of work, so a longer wait means a pile-up: it fails with Postgres's
+# lock_not_available (55P03), which the API answers as 503 "busy", instead of holding a connection
+# until the 10 s statement timeout. It goes into the SQL text, so it is a constant, never input.
+RESERVE_LOCK_TIMEOUT = "5s"
 
-    `replacing` is the token hash of a session the visitor already had. It ends first, in its own
-    transaction scoped to its own sandbox, where `session.ended` is audited, so each sandbox
-    creation leaves the browser with exactly one session. If creating the new sandbox then fails,
-    the visitor has no session.
+
+async def reserve_start(engine: AsyncEngine, ip_hash: bytes, limits: StartLimits) -> None:
+    """Count this start against the limits and record it, in a short transaction of its own.
+
+    Under the one advisory lock for all starts it counts, then adds the row and commits, so two
+    starts at the limit can't both pass. A refusal (or a lock timeout) raises before anything else
+    has happened, so the caller leaves the visitor's current session alone. The lock is released
+    at that commit, long before the seed runs, so starts don't queue behind each other's
+    145-person seeds or hold connections while they wait. Needs no tenant: the table counts every
+    address.
+    """
+    async with tenant_session(engine, NO_TENANT) as db:
+        await db.execute(text(f"SET LOCAL lock_timeout = '{RESERVE_LOCK_TIMEOUT}'"))
+        await lock_global(db, SANDBOX_STARTS_NS)
+        await check_start_limits(db, ip_hash, limits)
+        await record_start(db, ip_hash)
+
+
+async def create_sandbox(
+    engine: AsyncEngine,
+    persona: PersonaKey,
+    replacing: bytes | None,
+    keys: KeyProvider,
+    ip_hash: bytes,
+    limits: StartLimits,
+) -> NewSandbox:
+    """Reserve a start, then create and seed a sandbox and start a session in it as `persona`.
+
+    The start is counted and recorded first, in its own short transaction (`reserve_start`),
+    before the visitor's current session is touched: a start refused by the limits, or by a
+    pile-up on the lock, leaves the sandbox they have. The seed then runs in a transaction of its
+    own, so the advisory lock is not held across it. A seed that fails after the start was
+    recorded still counts: deliberately conservative, since the seed is the expensive work the
+    limits exist to bound, and a failed attempt cost it too.
+
+    `replacing` is the token hash of a session the visitor already had. Once the start is
+    reserved it ends, in its own transaction scoped to its own sandbox, where `session.ended` is
+    audited, so each sandbox creation leaves the browser with exactly one session. If creating
+    the new sandbox then fails, the visitor has no session.
 
     The database pins the new tenant to the newest published handbook version (a trigger,
     migration 0005), so there is no version logic here. If none is published, the insert fails, the
     transaction rolls back, and this raises `HandbookNotLoadedError`.
     """
+    await reserve_start(engine, ip_hash, limits)
     if replacing is not None:
         await _end_replaced_session(engine, replacing)
     tenant_id = uuid4()

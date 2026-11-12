@@ -6,7 +6,11 @@ from typing import Any
 import pytest
 from pydantic import ValidationError
 
-from app.core.config import Settings
+from app.core.config import (
+    Settings,
+    is_loopback_origin,
+    require_entry_settings_fit_for_production,
+)
 from app.core.owner_settings import (
     CleanupSettings,
     DatabaseUrlError,
@@ -40,6 +44,12 @@ def clean_environment(monkeypatch: pytest.MonkeyPatch) -> None:
         "AI_HEARTBEAT_SECONDS",
         "ENCRYPTION_KEYRING",
         "ENCRYPTION_KEYRING_FILE",
+        "TURNSTILE_SITE_KEY",
+        "TURNSTILE_SECRET_KEY",
+        "SANDBOX_IP_HASH_KEY",
+        "SANDBOX_STARTS_PER_HOUR",
+        "SANDBOX_STARTS_PER_DAY",
+        "SANDBOX_STARTS_DAILY_TOTAL",
     ):
         monkeypatch.delenv(name, raising=False)
 
@@ -521,7 +531,16 @@ def test_owner_and_cleanup_settings_read_the_environment(monkeypatch: pytest.Mon
     assert str(CleanupSettings(_env_file=None).cleanup_database_url) == CLEANUP_URL
 
 
+REAL_TURNSTILE_KEYS: dict[str, Any] = {
+    "turnstile_site_key": "0x4AAAAAAAreal",
+    "turnstile_secret_key": "0x4AAAAAAAreal-secret",
+    "sandbox_ip_hash_key": "x" * 40,
+    "forwarded_allow_ips": "10.0.0.0/8",
+}
 PRODUCTION: dict[str, Any] = {"app_env": "production"}
+# What the API needs at startup in production (require_entry_settings_fit_for_production), and
+# Settings alone does not.
+PRODUCTION_ENTRY: dict[str, Any] = {"app_env": "production", **REAL_TURNSTILE_KEYS}
 
 
 def test_production_refuses_the_default_origin() -> None:
@@ -568,6 +587,52 @@ def test_production_refuses_http_unless_the_origin_is_loopback_with_a_port(origi
 def test_production_accepts_https_and_a_loopback_origin_with_a_port(origin: str) -> None:
     settings = Settings(_env_file=None, database_url=APP_URL, app_origin=origin, **PRODUCTION)
     assert settings.app_origin == origin
+
+
+def test_production_behind_https_requires_a_trusted_proxy_list_at_startup() -> None:
+    # With no list every visitor behind the load balancer shares its address, so the per-address
+    # start limit would become site-wide. Settings accepts it: the setup scripts never serve.
+    keys = {**PRODUCTION_ENTRY, "forwarded_allow_ips": ""}
+    settings = Settings(_env_file=None, database_url=APP_URL, app_origin=HTTPS_ORIGIN, **keys)
+    with pytest.raises(ValueError, match="FORWARDED_ALLOW_IPS"):
+        require_entry_settings_fit_for_production(settings)
+
+
+@pytest.mark.parametrize("origin", ["http://localhost:8300", "http://127.0.0.1:8300"])
+def test_production_on_a_loopback_origin_needs_no_trusted_proxy_list(origin: str) -> None:
+    keys = {**PRODUCTION_ENTRY, "forwarded_allow_ips": ""}
+    settings = Settings(_env_file=None, database_url=APP_URL, app_origin=origin, **keys)
+    assert settings.forwarded_allow_ips == ()
+    require_entry_settings_fit_for_production(settings)
+
+
+@pytest.mark.parametrize(
+    ("origin", "loopback"),
+    [
+        ("http://localhost:8100", True),
+        ("http://127.0.0.1:8100", True),
+        ("https://localhost:8443", True),
+        ("https://localhost", False),
+        ("http://127.0.0.1", False),
+        ("http://localhost.example.com:8100", False),
+        ("http://127.0.0.2:8100", False),
+        ("https://opendoor.example.com", False),
+        ("not an origin", False),
+    ],
+)
+def test_is_loopback_origin_requires_an_exact_host_and_a_port(origin: str, loopback: bool) -> None:
+    assert is_loopback_origin(origin) is loopback
+
+
+def test_a_portless_loopback_host_is_not_exempt_from_the_startup_checks() -> None:
+    settings = Settings(
+        _env_file=None,
+        database_url=APP_URL,
+        app_origin="https://localhost",
+        **{**PRODUCTION_ENTRY, "forwarded_allow_ips": ""},
+    )
+    with pytest.raises(ValueError, match="FORWARDED_ALLOW_IPS"):
+        require_entry_settings_fit_for_production(settings)
 
 
 @pytest.mark.parametrize("env", ["development", "test"])
@@ -657,3 +722,169 @@ def test_the_url_helpers_return_the_url_and_never_echo_a_bad_one(
         optional_cleanup_database_url()  # A set but malformed URL is an error, not "unset".
     assert "hunter2" not in str(owner_error.value)
     assert "hunter3" not in str(cleanup_error.value)
+
+
+PRODUCTION_ORIGIN = {"app_origin": HTTPS_ORIGIN}
+LOOPBACK_ORIGIN = {"app_origin": "http://localhost:8100"}
+
+
+def production_with(origin: dict[str, Any], **changes: Any) -> dict[str, Any]:
+    return {**PRODUCTION_ENTRY, **origin, **changes}
+
+
+PASS_SITE = "1x00000000000000000000AA"  # noqa: S105
+PASS_SECRET = "1x0000000000000000000000000000000AA"  # noqa: S105
+
+
+@pytest.mark.parametrize("env", ["development", "test"])
+def test_outside_production_blank_turnstile_keys_default_to_the_pass_test_keys(env: str) -> None:
+    settings = Settings(_env_file=None, database_url=APP_URL, app_env=env)
+    assert settings.turnstile_site_key == PASS_SITE
+    assert settings.turnstile_secret_key is not None
+    assert settings.turnstile_secret_key.get_secret_value() == PASS_SECRET
+
+
+def test_a_blank_site_key_and_secret_in_development_also_get_the_defaults() -> None:
+    blank = " "
+    settings = Settings(
+        _env_file=None, database_url=APP_URL, turnstile_site_key="", turnstile_secret_key=blank
+    )
+    assert settings.turnstile_site_key == PASS_SITE
+    assert settings.turnstile_secret_key is not None
+
+
+@pytest.mark.parametrize(
+    ("fields", "missing"),
+    [
+        ({"turnstile_site_key": "0x4AAAAAAAreal"}, "TURNSTILE_SECRET_KEY"),
+        ({"turnstile_secret_key": "0x4AAAAAAAreal-secret"}, "TURNSTILE_SITE_KEY"),
+    ],
+)
+def test_outside_production_one_turnstile_key_without_the_other_is_refused(
+    fields: dict[str, Any], missing: str
+) -> None:
+    with pytest.raises(ValidationError, match=missing):
+        Settings(_env_file=None, database_url=APP_URL, **fields)
+
+
+def test_the_secret_never_prints() -> None:
+    settings = Settings(_env_file=None, database_url=APP_URL, sandbox_ip_hash_key="y" * 40)
+    assert PASS_SECRET not in repr(settings)
+    assert "y" * 40 not in repr(settings)
+
+
+def test_settings_accept_production_without_the_entry_keys() -> None:
+    # Alembic, bootstrap_db_users.py, and ingest_handbook.py build Settings in production and
+    # serve nobody, so they carry none of the Turnstile, hash, or proxy settings.
+    settings = Settings(_env_file=None, database_url=APP_URL, app_origin=HTTPS_ORIGIN, **PRODUCTION)
+    assert settings.app_env == "production"
+    with pytest.raises(ValueError, match="SANDBOX_IP_HASH_KEY"):
+        require_entry_settings_fit_for_production(settings)
+
+
+def test_the_startup_check_accepts_a_fit_production() -> None:
+    settings = Settings(
+        _env_file=None, database_url=APP_URL, app_origin=HTTPS_ORIGIN, **PRODUCTION_ENTRY
+    )
+    require_entry_settings_fit_for_production(settings)
+
+
+def test_the_startup_check_does_nothing_outside_production() -> None:
+    for env in ("development", "test"):
+        settings = Settings(_env_file=None, database_url=APP_URL, app_env=env)
+        require_entry_settings_fit_for_production(settings)
+
+
+@pytest.mark.parametrize("missing", ["turnstile_site_key", "turnstile_secret_key"])
+def test_production_requires_both_turnstile_keys_at_startup(missing: str) -> None:
+    fields = {**PRODUCTION_ENTRY, **PRODUCTION_ORIGIN}
+    del fields[missing]
+    settings = Settings(_env_file=None, database_url=APP_URL, **fields)
+    with pytest.raises(ValueError, match=missing.upper()):
+        require_entry_settings_fit_for_production(settings)
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("turnstile_site_key", "1x00000000000000000000AA"),
+        ("turnstile_site_key", "2x00000000000000000000AB"),
+        ("turnstile_site_key", "3x00000000000000000000FF"),
+        ("turnstile_secret_key", "1x0000000000000000000000000000000AA"),
+        ("turnstile_secret_key", "2x0000000000000000000000000000000AA"),
+        ("turnstile_secret_key", "3x0000000000000000000000000000000AA"),
+    ],
+)
+def test_production_refuses_a_test_key_at_startup_unless_the_origin_is_loopback(
+    field: str, value: str
+) -> None:
+    refused = Settings(
+        _env_file=None,
+        database_url=APP_URL,
+        **production_with(PRODUCTION_ORIGIN, **{field: value}),
+    )
+    with pytest.raises(ValueError, match=field.upper()) as error:
+        require_entry_settings_fit_for_production(refused)
+    assert field.upper() in str(error.value)
+    assert value not in str(error.value)
+    allowed = Settings(
+        _env_file=None, database_url=APP_URL, **production_with(LOOPBACK_ORIGIN, **{field: value})
+    )
+    require_entry_settings_fit_for_production(allowed)
+
+
+def test_production_refuses_the_development_hash_key_even_on_loopback() -> None:
+    from app.core.config import DEVELOPMENT_IP_HASH_KEY
+
+    settings = Settings(
+        _env_file=None,
+        database_url=APP_URL,
+        **production_with(LOOPBACK_ORIGIN, sandbox_ip_hash_key=DEVELOPMENT_IP_HASH_KEY),
+    )
+    with pytest.raises(ValueError, match="SANDBOX_IP_HASH_KEY") as error:
+        require_entry_settings_fit_for_production(settings)
+    assert DEVELOPMENT_IP_HASH_KEY not in str(error.value)
+
+
+def test_production_refuses_an_unset_hash_key_at_startup() -> None:
+    fields = {**PRODUCTION_ENTRY, **PRODUCTION_ORIGIN}
+    del fields["sandbox_ip_hash_key"]
+    settings = Settings(_env_file=None, database_url=APP_URL, **fields)
+    with pytest.raises(ValueError, match="SANDBOX_IP_HASH_KEY"):
+        require_entry_settings_fit_for_production(settings)
+
+
+def test_a_blank_hash_key_is_the_development_value_and_production_refuses_it() -> None:
+    from app.core.config import DEVELOPMENT_IP_HASH_KEY
+
+    blank = Settings(_env_file=None, database_url=APP_URL, sandbox_ip_hash_key=" ")
+    assert blank.sandbox_ip_hash_key.get_secret_value() == DEVELOPMENT_IP_HASH_KEY
+    settings = Settings(
+        _env_file=None,
+        database_url=APP_URL,
+        **production_with(PRODUCTION_ORIGIN, sandbox_ip_hash_key=""),
+    )
+    with pytest.raises(ValueError, match="SANDBOX_IP_HASH_KEY"):
+        require_entry_settings_fit_for_production(settings)
+
+
+def test_the_hash_key_must_be_at_least_32_bytes() -> None:
+    with pytest.raises(ValidationError, match="at least 32 bytes"):
+        Settings(_env_file=None, database_url=APP_URL, sandbox_ip_hash_key="short")
+    Settings(_env_file=None, database_url=APP_URL, sandbox_ip_hash_key="z" * 32)
+
+
+def test_the_development_hash_key_is_long_enough_and_the_limits_default() -> None:
+    settings = Settings(_env_file=None, database_url=APP_URL)
+    assert len(settings.sandbox_ip_hash_key.get_secret_value().encode()) >= 32
+    assert settings.sandbox_starts_per_hour == 5
+    assert settings.sandbox_starts_per_day == 20
+    assert settings.sandbox_starts_daily_total == 500
+
+
+@pytest.mark.parametrize(
+    "field", ["sandbox_starts_per_hour", "sandbox_starts_per_day", "sandbox_starts_daily_total"]
+)
+def test_the_limits_must_be_positive(field: str) -> None:
+    with pytest.raises(ValidationError, match=field):
+        Settings(_env_file=None, database_url=APP_URL, **{field: 0})  # type: ignore[arg-type]

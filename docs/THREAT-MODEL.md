@@ -80,7 +80,7 @@ root folder.
 | T | A huge body exhausts a task's memory | **Phase 8, Stage 1:** a 64 KiB body cap in the ASGI layer, by `Content-Length` and by counting a streamed body; schema ceilings at twice the real limits | `tests/test_body_limit.py` |
 | I | The page loads script or style from somewhere else, or is framed | **Phase 8, Stage 2:** the API serves the built app with a strict CSP and a fresh nonce on every page (`app/web_app.py`), no inline script, `frame-ancestors 'none'`; HSTS, `nosniff`, `Referrer-Policy: same-origin`, a closed `Permissions-Policy`, and COOP on every response, a 500 included (`app/core/security_headers.py`; ADR 0020) | `tests/test_web_app.py`, `tests/test_security_headers.py`; CI runs the browser suite against the image, and any CSP violation fails the test (`apps/web/e2e/fixtures.ts`, proved by `e2e/csp-guard.spec.ts`) |
 | I | API docs reveal every route in production | **Phase 8, Stage 1:** `/docs`, `/redoc`, `/openapi.json` are 404 in production; **Stage 2:** the image runs uvicorn with `--no-server-header` | `tests/test_app_state.py`, `make image-check` |
-| D | A script starts sandboxes in a loop | **Phase 8, Stage 4:** Cloudflare Turnstile on `POST /sandboxes`, per-address and daily limits in Postgres, `Retry-After` (ADR 0021) | Stage 4's limit and Turnstile tests |
+| D | A script starts sandboxes in a loop | **Phase 8, Stage 4:** Cloudflare Turnstile on `POST /sandboxes`, checked first; then 5 an hour and 20 a day per address and 500 a UTC day in all, counted in Postgres (`sandbox_starts`, migration 0019) and recorded under one advisory lock in a short transaction of its own, so two starts can't both slip under; 429 with `Retry-After` (ADR 0021, `app/modules/sandbox/limits.py`) | `tests/integration/test_sandbox_limits.py`, `test_sandbox_start.py`, `tests/test_turnstile.py` |
 | D | A script spends the AI budget | Insert-only budget ledger, per-sandbox and per-day caps checked before every call (ADR 0011, `app/ai/budget.py`, `app/ai/admission.py`); a 429 with **Phase 8, Stage 1** `Retry-After` for the daily cap | `tests/integration/test_budget.py`, `tests/test_admission.py`, `tests/integration/test_turn_stream.py` |
 | E | Another tab keeps showing HR's private view after this tab signed out | **Phase 8, Stage 1:** a `BroadcastChannel` message makes every tab refetch `/me` at once | `apps/web/src/lib/session-channel.test.ts`, `apps/web/e2e/session.spec.ts` |
 
@@ -88,8 +88,8 @@ root folder.
 
 | | Threat | Control | Proof |
 |---|---|---|---|
-| S | A client forges `X-Forwarded-For` to dodge the limits or poison the security log | **Phase 8:** the `FORWARDED_ALLOW_IPS` setting (Stage 1) feeds uvicorn's `--forwarded-allow-ips` through the image's entrypoint (Stage 2); unset or empty, no proxy is trusted and the peer address is used | `tests/test_config.py`, `tests/test_image_check_script.py`, `make image-check` (a forged header is ignored, and trusted only from the named address); the limit tests rotate the header (Stage 4) |
-| I | A raw client address is stored | Only the existing security log sees an address; the limits store a keyed hash (Stage 4, ADR 0021) | Stage 4's tests |
+| S | A client forges `X-Forwarded-For` to dodge the limits or poison the security log | **Phase 8:** the `FORWARDED_ALLOW_IPS` setting (Stage 1) feeds uvicorn's `--forwarded-allow-ips` through the image's entrypoint (Stage 2); unset or empty, no proxy is trusted and the peer address is used | `tests/test_config.py`, `tests/test_image_check_script.py`, `make image-check` (a forged header is ignored, and trusted only from the named address); **Stage 4:** production requires the setting unless the origin is loopback, and a forged header from an untrusted peer doesn't change the counted address | `tests/test_config.py`, `tests/test_image_check_script.py`, `make image-check` (a forged header is ignored, and trusted only from the named address), `tests/integration/test_sandbox_limits.py` |
+| I | A raw client address is stored | Only the access log and the security log see an address; **Stage 4:** the limits store an HMAC-SHA256 under `SANDBOX_IP_HASH_KEY` (an IPv6 address as its /64), which production requires and the development value can't fill; Cloudflare receives the address when a sandbox starts (`docs/DATA-INVENTORY.md`) | `tests/test_sandbox_address.py`, `tests/integration/test_sandbox_limits.py`, `tests/test_config.py` |
 | D | Health checks load the database or flood the log | **Phase 8, Stage 1:** `/health/live` never touches the database; `/health` pings with a 2-second limit, cached for 1 second, one check at a time; both kept out of the access log | `tests/test_health.py` |
 
 ### 3. API and Postgres
@@ -109,13 +109,13 @@ root folder.
 | R | An action leaves no trace | Every write and every private read records an audit event in the same transaction; audit rows can't be updated by the app | `tests/integration/test_audit_log.py` |
 | D | A slow query or an idle transaction holds a connection | **Phase 8, Stage 1:** `statement_timeout` 10 s, `idle_in_transaction_session_timeout` 30 s, the confirm's `lock_timeout` 5 s | `tests/integration/test_timeouts.py` |
 | E | Sign-out leaves a persona switch's new session alive | **Phase 8, Stage 1:** each session carries a `family_id` that a switch copies, and sign-out deletes the family | `tests/integration/test_sessions_rls.py`, `test_api_sessions.py` |
-| E | The cleanup login deletes more than expired data | **Phase 8, Stage 4:** grants and policies limited to expired rows (migration 0019) | Stage 4's cleanup tests, `tests/integration/test_cleanup.py` |
+| E | The cleanup login deletes more than expired data | **Phase 8, Stage 4:** `SELECT, DELETE` only on `tenants`, `ai_spend_daily`, `sandbox_starts`, and `handbook_versions`, with policies that show it only expired sandboxes, spend rows over 30 days old, and start counts over a day old; a trigger refuses deleting the newest published handbook version, and a pinned one is refused by its foreign key (migration 0019) | `tests/integration/test_cleanup_job.py`, `test_cleanup.py`, `test_grants.py` |
 
 ### 4. API and the vendors
 
 | | Threat | Control | Proof |
 |---|---|---|---|
-| S | A forged Turnstile token passes | **Phase 8, Stage 4:** server-side `siteverify`, refusing a failed, spent, or unreachable check | Stage 4's Turnstile tests |
+| S | A forged Turnstile token passes | **Phase 8, Stage 4:** server-side `siteverify` with the client address and an idempotency key; only `success` for this app's host and the `start-sandbox` action passes; a failed or spent token is a 403, and an unreachable or misconfigured check a 503, so starts fail closed. Cloudflare's test keys are answered inside the API, and production refuses them unless the origin is loopback | `tests/test_turnstile.py`, `tests/test_config.py`, `tests/integration/test_sandbox_start.py` |
 | I | A key leaks in a log, a problem response, or the image | Keys are `SecretStr` and never print; problems carry no exception text; gitleaks in pre-commit and CI; **Stage 2:** the keyring, `.env`, and tests stay out of the image (`.dockerignore`), and the test runs pass the keyring through the environment, never on the command line | `tests/test_config.py`, `tests/test_problems.py`, `.github/workflows/security.yml`, `make image-check`, `tests/test_image_container.py` |
 | I | More personal data than needed reaches a vendor | The personal-data check refuses card and ID numbers before a question is sent, written in any script's digits (**Phase 8, Stage 3**); only the needed fields reach the model | `tests/test_personal_data.py`, `apps/web/src/lib/personal-data.test.ts`, `evals/assistant/personal-data-cases.json` |
 | T | A test transport reaches production | Production refuses the scripted and replay transports and the test keyring at start; **Phase 8, Stage 3:** `make prod-local` runs the image with production settings, its own throwaway database, and its secrets passed through the environment only | `tests/test_transport_startup.py`, `tests/test_key_provider_settings.py`, `tests/test_prod_local.py`, `make prod-local-check` |
@@ -187,6 +187,12 @@ Each is accepted on purpose, with the reason.
   they forge still can't outlive its sandbox). The API must be able to set the context, so SQL
   can't close this. The login's password is a secret held only by the API process (the API no
   longer holds the owner's or the cleanup login's), and Phase 9 keeps it in the secrets store.
+- **One actor with many addresses can use up the day's sandbox starts.** The 500-a-day total
+  bounds what new sandboxes can cost, and each start still needs a solved Turnstile check, but an
+  IPv6 block wider than a /64 is many buckets, and 25 IPv4 addresses at 20 a day reach 500. New
+  visitors then see "come back tomorrow" until midnight UTC; existing sandboxes keep working.
+  Stage 7's load test tunes the numbers, and Phase 9 can alert when the total is reached (found by
+  Stage 4's security review).
 - **A deleted sandbox lives in database backups until they expire.** Phase 9's deploy keeps the
   backup window short and says how long.
 

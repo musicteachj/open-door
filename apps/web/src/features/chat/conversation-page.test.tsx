@@ -20,6 +20,7 @@ import {
 } from '@/test/fake-assistant'
 import { renderApp } from '@/test/render-app'
 import { server } from '@/test/msw'
+import { DUMMY_TURNSTILE_TOKEN } from '@/test/turnstile'
 import { useChatStore } from './store'
 
 // The conversation page at /ask, against the fake API: what the first question does to the home, what
@@ -1054,8 +1055,32 @@ describe('the budget', () => {
     )
     const { user } = renderApp({ at: '/ask' })
     await user.click(await screen.findByRole('button', { name: 'Start a new sandbox' }))
-    await waitFor(() => expect(created).toEqual([{ persona: 'priya' }]))
+    await waitFor(() =>
+      expect(created).toEqual([{ persona: 'priya', turnstileToken: DUMMY_TURNSTILE_TOKEN }]),
+    )
     expect(await screen.findByText("We couldn't start a sandbox.")).toBeInTheDocument()
+  })
+
+  it('shows a start refusal from the banner as the API wrote it, with no Retry for a limit', async () => {
+    signedInWith(conversationOut({ turns: [cited()], budget: sandboxBanner }))
+    server.use(
+      http.post(`${window.location.origin}/api/v1/sandboxes`, () =>
+        HttpResponse.json(
+          {
+            type: 'sandbox-day-limit',
+            title: 'Too many',
+            status: 429,
+            instance: '/api/v1/sandboxes',
+            detail: 'Come back tomorrow.',
+          },
+          { status: 429, headers: { 'Content-Type': 'application/problem+json' } },
+        ),
+      ),
+    )
+    const { user } = renderApp({ at: '/ask' })
+    await user.click(await screen.findByRole('button', { name: 'Start a new sandbox' }))
+    expect(await screen.findByText('Come back tomorrow.')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Retry' })).not.toBeInTheDocument()
   })
 
   it('takes the banner from a send the API refused with a budget problem, and says it once', async () => {

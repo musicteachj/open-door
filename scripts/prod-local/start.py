@@ -67,15 +67,22 @@ class LaunchError(Exception):
 
 @dataclass(frozen=True)
 class Passwords:
-    """The three database passwords, made fresh for every run."""
+    """The three database passwords, and the key that hides visitors' addresses, made fresh for
+    every run. (Production requires SANDBOX_IP_HASH_KEY and refuses the development value.)"""
 
     owner: str
     app: str
     cleanup: str
+    sandbox_ip_hash_key: str
 
     @classmethod
     def new(cls) -> "Passwords":
-        return cls(*(secrets.token_urlsafe(24) for _ in range(3)))
+        return cls(
+            owner=secrets.token_urlsafe(24),
+            app=secrets.token_urlsafe(24),
+            cleanup=secrets.token_urlsafe(24),
+            sandbox_ip_hash_key=secrets.token_urlsafe(48),
+        )
 
 
 @dataclass(frozen=True)
@@ -127,9 +134,26 @@ def db_env(passwords: Passwords) -> dict[str, str]:
     }
 
 
+def entry_env(passwords: Passwords) -> dict[str, str]:
+    """What production needs for starting sandboxes: this run's address-hash key, and Cloudflare's
+    always-pass Turnstile test keys. Production refuses test keys unless the origin is loopback,
+    which this run's is, and the API answers them locally, never calling Cloudflare."""
+    from app.core.config import (  # imported here: needs apps/api on the path.
+        TURNSTILE_PASS_SECRET,
+        TURNSTILE_PASS_SITE_KEY,
+    )
+
+    return {
+        "SANDBOX_IP_HASH_KEY": passwords.sandbox_ip_hash_key,
+        "TURNSTILE_SITE_KEY": TURNSTILE_PASS_SITE_KEY,
+        "TURNSTILE_SECRET_KEY": TURNSTILE_PASS_SECRET,
+    }
+
+
 def setup_env(passwords: Passwords, origin: str) -> dict[str, str]:
     """What the one-off setup needs: the three URLs (alembic and the scripts read the owner's and
-    the logins') and the production settings that validate the origin. No keyring, no API keys."""
+    the logins') and the production settings that validate the origin. No keyring, no API keys, and
+    none of the sandbox-entry settings (`entry_env`): only the serving API checks those."""
     return {
         "APP_ENV": "production",
         "APP_ORIGIN": origin,
@@ -161,6 +185,7 @@ def api_env(
         "DATABASE_URL": _database_url(APP_LOGIN, passwords.app),
         "ENCRYPTION_KEYRING": keyring,
         "ANTHROPIC_API_KEY": anthropic_api_key,
+        **entry_env(passwords),
     }
     if voyage_api_key:
         env["VOYAGE_API_KEY"] = voyage_api_key

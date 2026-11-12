@@ -134,6 +134,15 @@ export const COMPONENT_ROWS: ComponentRow[] = [
   row('landing', 'persona-card-default'),
   row('landing', 'persona-card-starting'),
   row('landing', 'persona-card-disabled'),
+  row('landing', 'start-refusal-retry', {
+    note: 'Not designed: the existing inline error with Retry, for a failed or unreachable check. The text is the API\'s own',
+  }),
+  row('landing', 'start-refusal-limit', {
+    note: 'Not designed: the existing inline error without Retry, for the two limits. The text is the API\'s own',
+  }),
+  row('landing', 'turnstile-slot-place', {
+    note: 'Not designed: Cloudflare\'s check (a dashed stand-in) directly under the control that started the sandbox. It shows only when Cloudflare asks',
+  }),
 
   row('forms', 'search-field-empty'),
   row('forms', 'search-field-typed'),
