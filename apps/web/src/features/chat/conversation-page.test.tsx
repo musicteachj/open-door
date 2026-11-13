@@ -254,6 +254,53 @@ describe('the home and the conversation', () => {
     expect(screen.getAllByRole('button', { name: 'Start a new conversation' })).toHaveLength(2)
   })
 
+  it('keeps the new-conversation button after a reload when the last turn stopped for the conversation’s size', async () => {
+    signedInWith(
+      conversationOut({
+        turns: [
+          turnOut({
+            id: 't-1',
+            status: 'failed',
+            answerText: '',
+            error: { code: 'budget-conversation', message: 'This conversation is too long.' },
+          }),
+        ],
+      }),
+    )
+    renderApp({ at: '/ask' })
+    expect(await screen.findByText('This conversation is too long.')).toBeInTheDocument()
+    // The header's button and the notice's, and the notice gives no second reason.
+    expect(screen.getAllByRole('button', { name: 'Start a new conversation' })).toHaveLength(2)
+    expect(screen.queryByText(/This conversation is getting long/)).not.toBeInTheDocument()
+    // Retrying here could only be refused for the same reason.
+    expect(screen.queryByRole('button', { name: 'Retry' })).not.toBeInTheDocument()
+  })
+
+  it('offers no new conversation for a size stop once the sandbox itself is spent', async () => {
+    signedInWith(
+      conversationOut({
+        budget: {
+          sandboxReached: true,
+          dailyReached: false,
+          sandboxRemainingCents: 0,
+          banner: { kind: 'sandbox', message: 'The sandbox budget is used.' },
+        },
+        turns: [
+          turnOut({
+            id: 't-1',
+            status: 'failed',
+            answerText: '',
+            error: { code: 'budget-conversation', message: 'This conversation is too long.' },
+          }),
+        ],
+      }),
+    )
+    renderApp({ at: '/ask' })
+    expect(await screen.findByText('This conversation is too long.')).toBeInTheDocument()
+    // Only the header's button: the banner says why a new conversation won't help.
+    expect(screen.getAllByRole('button', { name: 'Start a new conversation' })).toHaveLength(1)
+  })
+
   it('shows the approved line and the new-conversation button, and no turns, for an unreadable conversation', async () => {
     signedInWith(
       conversationOut({ unreadable: true, historyTooLong: true, longHistory: true, turns: [] }),

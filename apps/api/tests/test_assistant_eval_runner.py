@@ -145,7 +145,7 @@ def test_smoke_runs_the_smoke_lists_and_full_runs_every_item() -> None:
     assert [i.id for i in smoke_rt] == [i.id for i in redteam if i.id in smoke.redteam]
     assert [i.id for i in smoke_qa] == [i.id for i in qa if i.id in smoke.qa]
     assert [i.id for i in smoke_ac] == [i.id for i in actions if i.id in smoke.actions]
-    assert (len(smoke_rt), len(smoke_qa), len(smoke_ac)) == (13, 23, 6)
+    assert (len(smoke_rt), len(smoke_qa), len(smoke_ac)) == (14, 23, 6)
     assert (len(full_rt), len(full_qa), len(full_ac)) == (len(redteam), len(qa), len(actions))
     effort_rt, effort_qa, effort_ac = run.items_for_set(
         run.SETS["effort"], redteam, qa, actions, smoke
@@ -1073,7 +1073,7 @@ async def test_live_without_yes_prints_the_estimate_and_makes_no_call(
     out = capsys.readouterr().out
     assert code == 0
     assert "smoke" in out
-    assert "42 items" in out
+    assert "43 items" in out
     assert "1 trial" in out
     assert "$1.00" in out
     assert "$2.00" in out
@@ -1081,11 +1081,206 @@ async def test_live_without_yes_prints_the_estimate_and_makes_no_call(
     assert not os.listdir(tmp_path)
 
 
+THREE_GROUPS = "fair-religious,fair-pto-age,fair-final-pay-age"
+
+
+async def test_a_smoke_estimate_with_groups_grows_by_their_variants(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    code = await run.run_cli(
+        [
+            "--mode",
+            "live",
+            "--set",
+            "smoke",
+            "--groups",
+            THREE_GROUPS,
+            "--fixtures-dir",
+            str(tmp_path),
+        ],
+        env=raising_env(tmp_path),
+    )
+
+    out = capsys.readouterr().out
+    assert code == 0
+    assert "52 items" in out  # 43 smoke items and 4 + 3 + 2 variants
+    assert "1 trial" in out
+    assert "$1.50" in out
+    assert "$2.00" in out
+    assert "Nothing was called" in out
+    assert not os.listdir(tmp_path)
+
+
+async def test_groups_default_to_a_smoke_run_and_the_estimate_is_unchanged_without_them(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    code = await run.run_cli(
+        ["--mode", "live", "--groups", "fair-religious", "--fixtures-dir", str(tmp_path)],
+        env=raising_env(tmp_path),
+    )
+
+    out = capsys.readouterr().out
+    assert code == 0
+    assert "smoke set: 47 items" in out
+    assert "$1.22" in out  # 1.00 + 4 * 0.055
+
+
+@pytest.mark.parametrize("name", ["full", "effort", "escalation", "case-summary"])
+async def test_groups_are_refused_for_every_set_but_smoke(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], name: str
+) -> None:
+    code = await run.run_cli(
+        [
+            "--mode",
+            "live",
+            "--set",
+            name,
+            "--groups",
+            "fair-religious",
+            "--fixtures-dir",
+            str(tmp_path),
+        ],
+        env=raising_env(tmp_path),
+    )
+
+    err = capsys.readouterr().err
+    assert code == 2
+    assert "--groups" in err
+    assert "full set already runs every group" in err
+
+
+async def test_an_unknown_group_is_exit_2_naming_the_valid_ids(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    code = await run.run_cli(
+        ["--mode", "live", "--groups", "fair-religion", "--fixtures-dir", str(tmp_path)],
+        env=raising_env(tmp_path),
+    )
+
+    err = capsys.readouterr().err
+    assert code == 2
+    assert "'fair-religion'" in err
+    assert "fair-religious" in err
+    assert "fair-final-pay-age" in err
+
+
+def test_the_makefile_passes_groups_only_when_it_is_set() -> None:
+    text = (Path(__file__).parents[3] / "Makefile").read_text(encoding="utf-8")
+
+    assert "$(if $(GROUPS),--groups $(GROUPS))" in text
+    assert "GROUPS=<fairness group IDs" in text
+
+
+async def test_named_items_run_alone_for_one_trial_under_their_own_cap(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    code = await run.run_cli(
+        ["--mode", "live", "--items", "qa-49,rt-62", "--fixtures-dir", str(tmp_path)],
+        env=raising_env(tmp_path),
+    )
+
+    out = capsys.readouterr().out
+    assert code == 0
+    assert "smoke set: 2 items" in out
+    assert "1 trial" in out
+    assert "$0.20" in out  # 2 * 0.10
+    assert "$0.50" in out
+    assert "Nothing was called" in out
+    assert not os.listdir(tmp_path)
+
+
+def test_items_by_id_keeps_the_datasets_order_and_kinds() -> None:
+    redteam = datasets.load_redteam()
+    qa = datasets.load_qa()
+    actions = datasets.load_actions()
+
+    picked = run.items_by_id(("qa-49", "rt-62", "ac-01", "rt-01"), redteam, qa, actions)
+
+    assert [[item.id for item in kind] for kind in picked] == [
+        ["rt-01", "rt-62"],
+        ["qa-49"],
+        ["ac-01"],
+    ]
+
+
+async def test_named_items_whose_estimate_is_over_the_cap_are_refused_before_any_call(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    ids = ",".join(f"qa-{n:02d}" for n in range(1, 7))  # 6 items: $0.60 against $0.50
+
+    code = await run.run_cli(
+        ["--mode", "live", "--items", ids, "--fixtures-dir", str(tmp_path)],
+        env=raising_env(tmp_path),
+    )
+
+    err = capsys.readouterr().err
+    assert code == 2
+    assert "over the run's $0.50 cap" in err
+    assert not os.listdir(tmp_path)
+
+
+async def test_an_offline_replay_of_many_named_items_is_not_held_to_the_paid_cap(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    ids = ",".join(f"qa-{n:02d}" for n in range(1, 18))
+
+    await run.run_cli(
+        ["--mode", "offline", "--items", ids, "--fixtures-dir", str(tmp_path)],
+        env=raising_env(tmp_path),
+    )
+
+    assert "over the run's" not in capsys.readouterr().err
+
+
+async def test_an_unknown_item_is_exit_2_naming_it(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    code = await run.run_cli(
+        ["--mode", "live", "--items", "qa-49,qa-999", "--fixtures-dir", str(tmp_path)],
+        env=raising_env(tmp_path),
+    )
+
+    err = capsys.readouterr().err
+    assert code == 2
+    assert "'qa-999'" in err
+    assert "'qa-49'" not in err
+
+
+@pytest.mark.parametrize(
+    "extra",
+    [
+        ["--set", "full"],
+        ["--set", "effort"],
+        ["--groups", "fair-religious"],
+        ["--compare", "board.json"],
+        ["--items", ""],
+    ],
+)
+async def test_items_are_refused_outside_a_plain_smoke_run(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], extra: list[str]
+) -> None:
+    args = ["--mode", "live", "--fixtures-dir", str(tmp_path)]
+    if extra[0] != "--items":
+        args += ["--items", "qa-49"]
+    code = await run.run_cli([*args, *extra], env=raising_env(tmp_path))
+
+    err = capsys.readouterr().err
+    assert code == 2
+    assert "--items" in err
+
+
+def test_the_makefile_passes_items_only_when_it_is_set() -> None:
+    text = (Path(__file__).parents[3] / "Makefile").read_text(encoding="utf-8")
+
+    assert "$(if $(ITEMS),--items $(ITEMS))" in text
+    assert "ITEMS=<item IDs" in text
+
+
 @pytest.mark.parametrize(
     ("name", "items", "trials", "estimate", "cap", "effort"),
     [
-        ("smoke", 42, 1, "$1.00", "$2.00", "low"),
-        ("effort", 42, 1, "$1.85", "$2.00", "medium"),
+        ("smoke", 43, 1, "$1.00", "$2.00", "low"),
+        ("effort", 43, 1, "$1.85", "$2.00", "medium"),
     ],
 )
 async def test_each_live_set_estimates_its_own_cost_and_cap(
@@ -2469,3 +2664,16 @@ def test_each_trials_uncompared_variants_are_named_with_their_trial() -> None:
         "fair-03 (not compared, trial 2)",
     ]
     assert run.unpaired_names([(1, "fair-02")], trials=1) == ["fair-02 (not compared)"]
+
+
+@pytest.mark.parametrize("code", ["budget-sandbox", "budget-daily", "budget-conversation"])
+def test_every_budget_stop_counts_as_the_ledger_refusing(code: str) -> None:
+    from tests.assistant_eval import make_trace
+
+    trace = make_trace(person_id=uuid4(), turn_error_code=code)
+
+    assert run._refused_by_the_ledger(trace) is True
+    assert (
+        run._refused_by_the_ledger(make_trace(person_id=uuid4(), turn_error_code="spend-limit"))
+        is False
+    )

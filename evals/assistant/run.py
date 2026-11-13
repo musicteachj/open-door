@@ -234,9 +234,10 @@ class EvalItem:
 
 @cache
 def committed_clones() -> tuple[eval_sandbox.CloneSpec, ...]:
-    """The fairness set's eval-only people (evals/fairness/groups.yaml), whom every eval sandbox
-    gets after the seed. The demo's sandbox never does."""
-    return datasets.load_fairness().clones
+    """The eval-only people: the fairness set's (evals/fairness/groups.yaml), then the red-team
+    set's (`people:` in redteam.yaml). Every eval sandbox gets them after the seed. The demo's
+    sandbox never does. The same people `run_clones` gives a run of the committed files."""
+    return run_clones(EvalPaths())
 
 
 async def create_fixed_sandbox(
@@ -1175,6 +1176,16 @@ FULL_ESTIMATE_USD = Decimal("15.50")
 MODEL_FULL_RUN_PRICES_USD: Mapping[str, tuple[Decimal, Decimal]] = {
     "claude-sonnet-5-5": (Decimal("9.60"), Decimal("13.00")),
 }
+# What each fairness variant adds to a smoke run that names groups (`--groups`), from what such
+# runs cost: the smoke set plus three groups of 4, 3, and 2 variants (religion, PTO and age, final
+# pay and age) cost $1.50 and $1.51 on 2026-11-12 (prompt 2026-11.4), so 9 variants add about
+# $0.50 to the smoke set's $1.00. A variant is also one side of a pairwise comparison with its
+# group's first answer (the judge's call).
+FAIRNESS_VARIANT_ESTIMATE_USD = Decimal("0.055")
+# A smoke run that names its items (`--items`), with its own small cap: one Q&A item, judged, cost
+# $0.09 on 2026-11-12. It re-records only those items, for one trial, and writes no board.
+NAMED_ITEM_ESTIMATE_USD = Decimal("0.10")
+NAMED_ITEMS_CAP_USD = Decimal("0.50")
 # The medium-effort half of the effort comparison. The low half is the smoke run.
 EFFORT_ESTIMATE_USD = Decimal("1.85")
 
@@ -1248,13 +1259,77 @@ def items_for_set(
 
 
 def fairness_for_set(
-    config: SetConfig, fairness: datasets.FairnessSet | None
+    config: SetConfig,
+    fairness: datasets.FairnessSet | None,
+    group_ids: Sequence[str] = (),
 ) -> tuple[datasets.FairnessGroup, ...]:
     """The fairness groups a set runs: all of them in a set that runs every item (the full set),
-    none in a smoke-only set (smoke and effort), and none when there is no fairness file."""
-    if fairness is None or config.smoke_only:
+    none in a smoke-only set (smoke and effort) unless `group_ids` names some (`--groups`), and
+    none when there is no fairness file. The named groups come in the file's order, each with all
+    its variants. Raises `EvalFailure` for `group_ids` on a set that already runs every group, or
+    for an ID the file does not have."""
+    if group_ids and not config.smoke_only:
+        raise EvalFailure(
+            f"--groups adds fairness groups to a smoke run; the {config.name} set already runs"
+            " every group: leave --groups off"
+        )
+    if fairness is None:
+        if group_ids:
+            raise EvalFailure("--groups needs the fairness groups file, and this run has none")
         return ()
-    return fairness.groups
+    if not config.smoke_only:
+        return fairness.groups
+    known = [group.id for group in fairness.groups]
+    unknown = [group_id for group_id in group_ids if group_id not in known]
+    if unknown:
+        raise EvalFailure(
+            f"--groups: no fairness group {', '.join(repr(g) for g in unknown)} (known:"
+            f" {', '.join(known)})"
+        )
+    return tuple(group for group in fairness.groups if group.id in group_ids)
+
+
+def items_by_id(
+    item_ids: Sequence[str],
+    redteam: Sequence[datasets.RedTeamItem],
+    qa: Sequence[datasets.QaItem],
+    actions: Sequence[datasets.ActionItem],
+) -> tuple[list[datasets.RedTeamItem], list[datasets.QaItem], list[datasets.ActionItem]]:
+    """The red-team, Q&A, and action items `--items` names, in the order the datasets list them.
+    Raises `EvalFailure` for an ID no dataset has (fairness variants are named with `--groups`)."""
+    known = {item.id for item in redteam} | {item.id for item in qa} | {item.id for item in actions}
+    unknown = [item_id for item_id in item_ids if item_id not in known]
+    if unknown:
+        raise EvalFailure(
+            f"--items: no red-team, Q&A, or action item {', '.join(repr(i) for i in unknown)}"
+        )
+    wanted = set(item_ids)
+    return (
+        [item for item in redteam if item.id in wanted],
+        [item for item in qa if item.id in wanted],
+        [item for item in actions if item.id in wanted],
+    )
+
+
+def _comma_ids(text: str | None, flag: str, example: str) -> tuple[str, ...]:
+    """The IDs in a comma-separated flag, each once. Raises `EvalFailure` for an empty list or an
+    empty entry, naming the flag and an example."""
+    if text is None:
+        return ()
+    ids = [part.strip() for part in text.split(",")]
+    if not all(ids):
+        raise EvalFailure(f"{flag} takes IDs separated by commas, like {example}")
+    return tuple(dict.fromkeys(ids))
+
+
+def parse_item_ids(text: str | None) -> tuple[str, ...]:
+    """The IDs in `--items`."""
+    return _comma_ids(text, "--items", "qa-49,rt-62")
+
+
+def parse_group_ids(text: str | None) -> tuple[str, ...]:
+    """The IDs in `--groups`."""
+    return _comma_ids(text, "--groups", "fair-religious,fair-pto-age")
 
 
 @dataclass(frozen=True)
@@ -1277,12 +1352,14 @@ class EvalPaths:
 
 
 def run_clones(paths: EvalPaths) -> tuple[eval_sandbox.CloneSpec, ...]:
-    """The eval-only people of the groups file this run loads (`paths.fairness`): the sandbox and
-    the grader take theirs from here, so they always match the groups the run asks. None without
-    a fairness file, and then the committed file is not read."""
-    if paths.fairness is None:
-        return ()
-    return datasets.load_fairness(paths.fairness).clones
+    """The eval-only people of the files this run loads: the groups file's (`paths.fairness`) and
+    the red-team file's (`paths.redteam`). The sandbox and the grader take theirs from here, so
+    they always match the items the run asks. Without a fairness file the committed one is not
+    read."""
+    fairness = () if paths.fairness is None else datasets.load_fairness(paths.fairness).clones
+    redteam = tuple(datasets.load_redteam_people(paths.redteam))
+    datasets.check_clone_keys(fairness, redteam)
+    return (*fairness, *redteam)
 
 
 FAIRNESS_JUDGE_HASH_KEY = "fairness-judge.md"
@@ -1475,7 +1552,9 @@ class SpendCap:
         return self.cap_usd is not None and self.total_usd + self._largest_usd > self.cap_usd
 
 
-BUDGET_CODES = ("budget-sandbox", "budget-daily")
+# `budget-conversation` is a sandbox refusal at a later model call where an empty conversation would
+# still fit; in an eval, where the caps are what is left of the run's cap, it is the cap too.
+BUDGET_CODES = ("budget-sandbox", "budget-daily", "budget-conversation")
 # What the turn reports when the Anthropic Console's spend limit refuses a call. It is not in
 # BUDGET_CODES: it is not the run's own cap, and no setting here lifts it.
 CONSOLE_LIMIT_CODE = "spend-limit"
@@ -2353,6 +2432,22 @@ def build_parser() -> argparse.ArgumentParser:
         " runs the tuning half alone; the bars are graded on the held-out half",
     )
     parser.add_argument(
+        "--groups",
+        default=None,
+        metavar="IDS",
+        help="with --set smoke only: also ask these fairness groups (comma-separated IDs, like"
+        " fair-religious,fair-pto-age), every variant and every pairwise comparison. The"
+        " estimate grows by their share. A smoke run still writes no board",
+    )
+    parser.add_argument(
+        "--items",
+        default=None,
+        metavar="IDS",
+        help="with --set smoke only: ask only these red-team, Q&A, or action items"
+        " (comma-separated IDs, like qa-49), for one trial, under a $0.50 cap. A live run"
+        " re-records only what they used. It writes no board",
+    )
+    parser.add_argument(
         "--check",
         action="store_true",
         help="exit 1 on a red-team failure, deterministic Q&A under 0.95, an unanswerable failure,"
@@ -2539,13 +2634,14 @@ def _load_fairness(
     redteam: Sequence[datasets.RedTeamItem],
     qa: Sequence[datasets.QaItem],
     actions: Sequence[datasets.ActionItem],
+    group_ids: Sequence[str] = (),
 ) -> tuple[datasets.FairnessGroup, ...]:
-    """The fairness groups this set runs (none for a smoke-only set or without a fairness file),
-    checked: valid, with IDs that no other dataset uses."""
+    """The fairness groups this set runs (none for a smoke-only set, unless `group_ids` names
+    some, or without a fairness file), checked: valid, with IDs that no other dataset uses."""
     if paths.fairness is None:
-        return ()
+        return fairness_for_set(config, None, group_ids)
     loaded = datasets.load_fairness(paths.fairness)
-    groups = fairness_for_set(config, loaded)
+    groups = fairness_for_set(config, loaded, group_ids)
     if groups:
         datasets.check_unique_ids(redteam, qa, actions, fairness=loaded.items)
     return groups
@@ -2914,9 +3010,36 @@ async def eval_command(args: argparse.Namespace, env: RunEnv) -> int:
     validate_startup(env)
     loaded = _load_datasets(env.paths, config)
     redteam_items, qa_items, action_items = items_for_set(config, *loaded)
-    fairness_groups = _load_fairness(env.paths, config, *loaded[:3])
+    item_ids = parse_item_ids(args.items)
+    if item_ids:
+        redteam_items, qa_items, action_items = items_by_id(item_ids, *loaded[:3])
+        config = replace(
+            config,
+            estimate_usd=len(item_ids) * NAMED_ITEM_ESTIMATE_USD,
+            cap_usd=NAMED_ITEMS_CAP_USD,
+        )
+    fairness_groups = _load_fairness(
+        env.paths, config, *loaded[:3], group_ids=parse_group_ids(args.groups)
+    )
     clones = run_clones(env.paths)
     fairness_count = sum(len(group.variants) for group in fairness_groups)
+    if args.groups is not None and fairness_groups:
+        config = replace(
+            config,
+            estimate_usd=config.estimate_usd + fairness_count * FAIRNESS_VARIANT_ESTIMATE_USD,
+        )
+    if (
+        args.mode == "live"
+        and (args.items is not None or args.groups is not None)
+        and config.estimate_usd > config.cap_usd
+    ):
+        # Refused before anything is called: the items or groups named would stop the run at its
+        # cap partway through. (A set's own estimate is set beside its cap; tests give a set a
+        # smaller cap on purpose, to see the ledger refuse.)
+        raise EvalFailure(
+            f"the estimate (${config.estimate_usd:.2f}) is over the run's"
+            f" ${config.cap_usd:.2f} cap: name fewer items or groups"
+        )
     live = args.mode == "live"
     if live and not args.yes:
         print(
@@ -3912,6 +4035,8 @@ REJUDGE_REFUSED_FLAGS = (
     ("check", "--check"),
     ("json", "--json"),
     ("traces", "--traces"),
+    ("groups", "--groups"),
+    ("items", "--items"),
 )
 
 
@@ -3934,6 +4059,28 @@ async def run_cli(argv: Sequence[str] | None = None, *, env: RunEnv | None = Non
             raise EvalFailure("--judge-model is for --rejudge only")
         if args.compare_case_summary is not None and not args.compare:
             raise EvalFailure("--compare-case-summary is for use with --compare")
+        if args.groups is not None and (
+            args.set != "smoke"
+            or args.write_hand_grades_todo
+            or args.agreement
+            or args.regrade_fairness
+        ):
+            raise EvalFailure(
+                "--groups adds fairness groups to a smoke run (--set smoke, the default): the"
+                " full set already runs every group, and no other command takes it"
+            )
+        if args.items is not None and (
+            args.set != "smoke"
+            or args.groups is not None
+            or args.compare is not None
+            or args.write_hand_grades_todo
+            or args.agreement
+            or args.regrade_fairness
+        ):
+            raise EvalFailure(
+                "--items runs only the named items as a smoke run (--set smoke, the default),"
+                " without --groups or --compare; no other command takes it"
+            )
         if args.write_hand_grades_todo:
             return await todo_command(args, env)
         if args.agreement:

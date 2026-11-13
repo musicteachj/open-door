@@ -54,7 +54,15 @@ import anyio
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 
-from app.ai.budget import BudgetExceeded, Caps, Reservation, reserve, settle
+from app.ai.budget import (
+    BudgetExceeded,
+    BudgetState,
+    Caps,
+    Reservation,
+    budget_state,
+    reserve,
+    settle,
+)
 from app.ai.case_outcomes import unreported_cases, with_case_sentences
 from app.ai.citations import CitationEvent, CitationMapper
 from app.ai.console_rows import (
@@ -98,6 +106,7 @@ from app.ai.guard import (
     notes_for_role,
     offers_case,
     screen,
+    verdict_routes_to_crisis,
 )
 from app.ai.pricing import (
     BUDGET_ERROR_CODES,
@@ -172,6 +181,9 @@ ONE_CARD_TEXT = "Only one card can be made per answer; this call was not run."
 HR_CONTACT_TIMEOUT = timedelta(seconds=2)
 # Nor does it wait on the write that stores the crisis verdict ahead of the end-of-turn writes.
 CRISIS_VERDICT_TIMEOUT = timedelta(seconds=2)
+# A budget stop at a model call reads the ledger once more to word its error; past this it gives
+# the plain budget code rather than keep the person waiting for the stop.
+BUDGET_LOOKUP_TIMEOUT = timedelta(seconds=2)
 # Closing the model's stream, and settling a call, are shielded from cancellation (the first so the
 # upstream request stops and no more billed tokens are generated); this bounds the wait.
 SHIELDED_STEP_TIMEOUT = timedelta(seconds=5)
@@ -184,6 +196,7 @@ ErrorCode = Literal[
     "model-unavailable",
     "budget-sandbox",
     "budget-daily",
+    "budget-conversation",
     "spend-limit",
     "too-many-calls",
     "internal",
@@ -587,15 +600,20 @@ def _holds_the_canary(event: TurnEvent) -> bool:
 def _previous_answer(previous: Sequence[Any] | None, cipher: ConversationCipher) -> str | None:
     """What the guard is shown of the turn just before this one. Usually its answer; where it had
     none because the person was sent a fixed text (crisis, the guard down, a budget stop), that
-    text, so a short reply such as "yes, tonight" is screened with its context."""
+    text, so a short reply such as "yes, tonight" is screened with its context.
+
+    A turn whose stored verdict routes to crisis was shown the crisis text whatever its status:
+    the stream stores the verdict before it sends the text, so a turn that was abandoned or failed
+    after that (its end-of-turn write never landed) still counts. The rule is the one the turn
+    display uses (`verdict_routes_to_crisis`)."""
     if previous is None:
         return None
-    turn_id, answer_ciphertext, status, error_code = previous
+    turn_id, answer_ciphertext, status, error_code, guard_verdict = previous
     if answer_ciphertext is not None:
         answer_text = cipher.open_text(answer_ciphertext, "ai_turns", "answer_ciphertext", turn_id)
         if answer_text:
             return answer_text
-    if status == "crisis":
+    if status == "crisis" or verdict_routes_to_crisis(guard_verdict):
         return CRISIS_TEXT
     if status == "guard_unavailable" or error_code == "guard-error":
         return UNAVAILABLE_TEXT
@@ -869,6 +887,7 @@ class TurnRun:
                         AiTurn.answer_ciphertext,
                         AiTurn.status,
                         AiTurn.error_code,
+                        AiTurn.guard_verdict,
                     )
                     .where(AiTurn.conversation_id == conversation.id, AiTurn.id != turn.id)
                     .order_by(AiTurn.started_at.desc(), AiTurn.id.desc())
@@ -1066,6 +1085,63 @@ class TurnRun:
             if timeout.expired():
                 raise _DeadlineExceeded from None
             raise
+
+    async def _budget_code_at_call(
+        self, scope: str, model: str, estimated_input_tokens: int, call_usd: Decimal
+    ) -> ErrorCode:
+        """The error code for a model call the ledger refused. The conversation's size is the only
+        problem when the sandbox is out of room for this call but has room for both the same call
+        without the stored history (the earlier turns; this turn's own question and tool results
+        stay in it) and a new conversation's first turn as the question's 429 sizes it
+        (`room_needed_usd` with no history): the person can start a new conversation, and its
+        first question won't be refused, so the code is `budget-conversation`. Where those would
+        fit the sandbox but not what is left of the day, the code is `budget-daily`, as the next
+        question's 429 would be. The scope rule is the 429's (`refusal_scope`). A conversation
+        with no earlier turns has nothing a new one would leave behind, so its stop is the
+        sandbox's, and so is any failure to find out."""
+        if scope != "sandbox" or not self.history:
+            return _budget_code(scope)
+        # Imported here: admission builds the same requests the loop does, so it imports this
+        # module.
+        from app.ai.admission import history_tokens, refusal_scope, room_needed_usd
+
+        history = self.history
+        conversation = self.conversation
+
+        def without_history() -> Decimal:
+            tokens = max(estimated_input_tokens - history_tokens(history), 0)
+            call = reservation_usd(model, estimated_input_tokens=tokens, max_tokens=MAX_TOKENS)
+            first_turn = room_needed_usd(
+                model=conversation.model,
+                guard_model=conversation.guard_model,
+                effort=conversation.effort,
+                history=[],
+                question=self.question,
+                actor_view=self.deps.actor_view,
+                handbook_label=self.deps.handbook_label,
+                now=self.now,
+            )
+            return max(call, first_turn)
+
+        async def read() -> BudgetState:
+            async with tenant_session(self.deps.engine, self.deps.tenant_ctx) as db:
+                return await budget_state(db, self.deps.caps)
+
+        try:
+            state = await _bounded(read(), BUDGET_LOOKUP_TIMEOUT)
+            if state.sandbox_remaining_usd >= call_usd:
+                # Not the sandbox's room: a single call over the ledger's per-row maximum, or room
+                # freed since. The plain code, as before.
+                return _budget_code(scope)
+            refusal = refusal_scope(state, call_usd, without_history)
+        except Exception as error:
+            logger.warning("Sizing the call without the history failed (%s)", error_name(error))
+            return _budget_code(scope)
+        if refusal == "conversation":
+            return "budget-conversation"
+        if refusal == "daily":
+            return "budget-daily"
+        return _budget_code(scope)
 
     async def _reserve(self, amount_usd: Decimal) -> Reservation:
         # A native `task.cancel()` inside `reserve` rolls its transaction back, or, if it lands just
@@ -1268,14 +1344,17 @@ class TurnRun:
                 estimate = first_call_input_tokens(request)
             else:
                 estimate = estimate_input_tokens(previous_usage, added_text)
+            call_reservation_usd = reservation_usd(
+                request.model, estimated_input_tokens=estimate, max_tokens=MAX_TOKENS
+            )
             try:
-                reservation = await self._reserve(
-                    reservation_usd(
-                        request.model, estimated_input_tokens=estimate, max_tokens=MAX_TOKENS
+                reservation = await self._reserve(call_reservation_usd)
+            except BudgetExceeded as error:
+                self.fail(
+                    await self._budget_code_at_call(
+                        error.scope, request.model, estimate, call_reservation_usd
                     )
                 )
-            except BudgetExceeded as error:
-                self.fail(_budget_code(error.scope))
                 return
             calls += 1
 

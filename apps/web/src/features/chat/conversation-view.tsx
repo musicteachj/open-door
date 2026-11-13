@@ -184,14 +184,20 @@ export function ConversationView({
   // too long, or from an older assistant, whose 409 text is the send error). An outdated
   // conversation says nothing on load, since "getting long" would be the wrong words.
   // One that can't be opened says so in the owner's words (from the API, which holds the only copy),
-  // with the same button.
+  // with the same button. A last turn the budget stopped because of the conversation's size
+  // (`budget-conversation`) keeps the button after a reload, with its own words standing for the
+  // notice's, as the live stop does.
   const texts = useAssistantTexts()
   const unreadable = conversation?.unreadable ?? false
+  // Not under a budget banner: a sandbox spent since then refuses a new conversation too.
+  const stoppedForSize =
+    banner === null && live === null && turns.at(-1)?.error?.code === 'budget-conversation'
   const longConversation =
     unreadable ||
     (conversation?.longHistory ?? false) ||
     (conversation?.historyTooLong ?? false) ||
-    offerNewConversation
+    offerNewConversation ||
+    stoppedForSize
 
   return (
     <OpenSourceContext value={openKey}>
@@ -243,7 +249,7 @@ export function ConversationView({
               noticeText={
                 unreadable
                   ? (texts.data?.unreadableConversation ?? '')
-                  : offerWithoutNoticeWords
+                  : offerWithoutNoticeWords || stoppedForSize
                     ? ''
                     : undefined
               }

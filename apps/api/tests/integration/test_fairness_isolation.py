@@ -142,7 +142,10 @@ async def results_in(
 async def test_no_recorded_tool_call_returns_anything_different_with_the_clones_in_the_sandbox(
     app_engine: AsyncEngine, owner_engine: AsyncEngine
 ) -> None:
-    calls = [c for c in recorded_calls() if c["tool"] in PROVED]
+    # An item asked by an eval-only person (the red-team set's) has no asker in the sandbox
+    # without the clones, so it can't be compared; its asker is the thing the clones add.
+    personas = {"priya", "marcus", "dana", "mateo"}
+    calls = [c for c in recorded_calls() if c["tool"] in PROVED and c["asker"] in personas]
 
     without = await results_in((), calls, app_engine, owner_engine)
     with_clones = await results_in(None, calls, app_engine, owner_engine)  # None: the committed set

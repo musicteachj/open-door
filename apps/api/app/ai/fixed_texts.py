@@ -98,7 +98,9 @@ UNREADABLE_CONVERSATION_TEXT_SHA256: str = (
 # fit in what is left of the sandbox's budget. The owner approved the words on 2026-11-12.
 # Changing a word means approving it again, and setting its date and hash. Not model text. A
 # budget stop comes before the safety check, so it carries the 911 and 988 wording like the other
-# budget texts. It is a refusal of the POST, not a stream error code, so it is not in ERROR_TEXTS.
+# budget texts. It is the detail of the POST's 429 and also the text of the stream's
+# `budget-conversation` error (a budget that ran out at a later model call while a new conversation
+# would still fit), so it is in ERROR_TEXTS under that code.
 BUDGET_CONVERSATION_TEXT: Final = (
     "This conversation is too long for what's left of this sandbox's AI budget. Start a new "
     "conversation to keep asking. If you or someone else is in danger, call 911, or call or text "
@@ -121,6 +123,7 @@ ERROR_TEXTS: Final[dict[str, str]] = {
     ),
     "budget-sandbox": BUDGET_SANDBOX_TEXT,
     "budget-daily": BUDGET_DAILY_TEXT,
+    "budget-conversation": BUDGET_CONVERSATION_TEXT,
     # Anthropic's Console spend limit, not the product's own cap. The owner chose to reuse the
     # approved daily text for it, so there are no new words to approve.
     "spend-limit": BUDGET_DAILY_TEXT,

@@ -16,7 +16,7 @@ from app.ai.fixed_texts import (
     UNAVAILABLE_TEXT,
     HrContact,
 )
-from app.ai.guard import escalation_for_verdict, offers_case
+from app.ai.guard import escalation_for_verdict, offers_case, verdict_routes_to_crisis
 from app.ai.proposals import ProposalOut
 from app.api.contacts import hr_contact_out
 from app.db.models import AiFeedback, AiTurn
@@ -57,11 +57,7 @@ def escalation_kind(
     `running`, or failed as `abandoned` or `internal` because the end-of-turn write never landed)
     never loses the 988 and EAP text a person was shown. This comes first, ahead of the
     abandoned-turn rule below, which is only for turns that never sent an escalation."""
-    if (
-        guard_verdict is not None
-        and escalation_for_verdict(guard_verdict.get("category"), guard_verdict.get("kind"))
-        == "crisis"
-    ):
+    if verdict_routes_to_crisis(guard_verdict):
         return "crisis"
     if status == "crisis":
         return "crisis"

@@ -108,7 +108,7 @@ Today is Thursday, October 15, 2026, and the seed counts back from that same day
 
 | Set | What it runs | Trials | Cost (about) | Hard cap | Effort |
 |---|---|---|---|---|---|
-| `smoke` | the 23 Q&A, 13 red-team, and 6 action items listed in `smoke.yaml` | 1 | $1.00 | $2.00 | low |
+| `smoke` | the 23 Q&A, 14 red-team, and 6 action items listed in `smoke.yaml` | 1 | $1.00 | $2.00 | low |
 | `full` | every item in `qa.yaml`, `redteam.yaml`, `actions.yaml`, and the fairness set | 3 | $15.50 | $18 | low |
 | `effort` | the smoke items at medium effort, compared with a low-effort smoke run | 1 | $1.85 | $2.00 | medium |
 
@@ -117,12 +117,34 @@ caps"). `MODEL=claude-sonnet-5-5 SET=full` has its own figures: about $9.60, cap
 2026-11-03 cost $11.18 for the assistant and $4.02 for the judge; Sonnet 5.5 is half Opus's price per
 token, and the judge, already Sonnet, doesn't change).
 
-**The datasets.** `redteam.yaml` (about 50 items in five groups: other people's private details,
-injection and impersonation, prompt extraction, crisis and sensitive routing, and time-off actions
-that are not the asker's to take), `qa.yaml` (about 65 questions in employees' own words, each with
+**Fairness groups in a smoke run.** A smoke run asks no fairness items. To try a prompt change on
+the groups it affects, name them: `make eval-live GROUPS=fair-religious,fair-pto-age,fair-final-pay-age YES=1`
+(`--groups` on the command line; smoke only, and refused for `full`, which runs every group). Each
+named group runs with all its variants and its pairwise comparisons, a group is recorded whole or not
+at all, and the printed estimate grows by about $0.055 a variant (those three groups: 9 variants,
+about $1.50, cap $2). An unknown ID is refused with the list of valid IDs. A smoke run, with groups
+or without, writes no board; add `FIXTURES_DIR=<scratch folder>` to keep the recordings out of the
+committed ones.
+
+**Named items in a smoke run.** `make eval-live ITEMS=qa-49 FRESH=1 YES=1` (`--items`; smoke only,
+not with `GROUPS`) asks only the named red-team, Q&A, or action items, for one trial, under a $0.50
+cap (about $0.10 an item; a list whose estimate is over the cap is refused before any call). It re-records only the requests those items used and writes no board, so
+the committed board stays the full run's. It exists for one case: CI replays only the full run's
+first trial, so an item that failed a `--check` rule in that trial, and passed in the others, keeps
+CI red although the board records it. Say so in the pull request when you use it, with the board's
+figure for the item. Phase 8, Stage 6 used it for `qa-49`, which named "the benefits team" instead of
+HR in the first trial of the full run of 2026-11-12 and named HR in the other two.
+
+**The datasets.** `redteam.yaml` (62 items in six groups: other people's private details,
+injection and impersonation, prompt extraction, crisis and sensitive routing, confidential cases,
+and time-off actions that are not the asker's to take), `qa.yaml` (about 65 questions in employees' own words, each with
 a reference answer; a few are balance questions whose figures come from a tool) and `actions.yaml`
 (about 35 requests to do something with time off, graded by program). All were written before any
 prompt tuning (the Q&A from the handbook), and they don't change to raise a score.
+
+`redteam.yaml` also has a `people:` list of eval-only employees an item can ask as (rt-62's asker has a
+directory name written like an instruction). They are built like the fairness clones, added after
+them, and kept out of `groups.yaml` so the fairness set doesn't change.
 
 **The action set** (`actions.yaml`). One turn each, in a new conversation, in the sandbox described
 below. The groups, and what a pass is:

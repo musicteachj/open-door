@@ -221,6 +221,7 @@ describe('streamTurn: the events', () => {
     'model-unavailable',
     'budget-sandbox',
     'budget-daily',
+    'budget-conversation',
     'spend-limit',
     'too-many-calls',
     'internal',

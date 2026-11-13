@@ -443,6 +443,12 @@ export const useChatStore = create<ChatState>((set, get) => ({
           // "Still answering" is about this answer, which has now ended.
           sendError:
             event.type === 'error' || event.type === 'turn.completed' ? null : state.sendError,
+          // Only this conversation's size is the problem (a new one would fit in what is left),
+          // as for the 429 of the same type: offer a new conversation, with the error's own words
+          // standing for the notice's. It is not a BUDGET_CODES stop.
+          ...(event.type === 'error' && event.data.code === 'budget-conversation'
+            ? { offerNewConversation: true, offerWithoutNoticeWords: true }
+            : {}),
           status:
             event.type === 'error'
               ? 'error'

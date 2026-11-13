@@ -213,8 +213,13 @@ export const StoredTurn = memo(function StoredTurn({
   const cards = (
     <ProposalCards proposals={turn.proposals} question={turn.question} turnId={turn.id} />
   )
-  // Under a budget stop the server refuses every question, so there is nothing to ask again.
-  const again = context.budgetStop ? undefined : () => context.onAskAgain(turn.question)
+  // Under a budget stop the server refuses every question, so there is nothing to ask again. A
+  // turn stopped for this conversation's size can't be asked again here either: the notice under
+  // the box offers a new conversation instead.
+  const again =
+    context.budgetStop || turn.error?.code === 'budget-conversation'
+      ? undefined
+      : () => context.onAskAgain(turn.question)
   // A sensitive turn shows its HR panel whatever became of the answer (it can fail, or be cut
   // off): sensitive topics go to a person. Keyed by the turn; a saved panel announces only if the live copy never showed it.
   // A "can't answer right now" panel can try again; a crisis one has nothing to retry.
