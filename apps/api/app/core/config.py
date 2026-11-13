@@ -161,6 +161,10 @@ class Settings(BaseSettings):
     # checks when it starts (app.ai.transport.require_a_transport_fit_for), not here: alembic and
     # the setup scripts build Settings too, and never call the model.
     ai_transport: Literal["anthropic", "scripted", "replay"] = "scripted"
+    # Test only: how long the scripted model waits, paced like the real one, for the load test
+    # (`make load`). `none` makes no wait. Production refuses anything but `none` (checked at
+    # startup by app.ai.transport.require_a_transport_fit_for). See app.ai.scripted.REALISTIC.
+    scripted_delay_profile: Literal["none", "realistic"] = "none"
     # What one sandbox may spend on the assistant, and what all sandboxes may spend per UTC day.
     ai_sandbox_budget_usd: Decimal = Field(default=Decimal("1.00"), gt=0)
     ai_daily_budget_usd: Decimal = Field(default=Decimal("3.00"), gt=0)

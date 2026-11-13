@@ -84,8 +84,9 @@ class ConsoleInputs:
     effort: str | None
     prompt_version: str | None
     toolset_version: str | None
-    # The main model's tokens and the safety check's, added.
+    # `pricing.total_usage` of the main model's iterations and the safety check's.
     usage: Usage
+    # The turn's own ledger spend (`ai_spend` rows by turn), not the turn's running tally.
     cost_usd: Decimal
     guard_ms: int | None
     first_text_ms: int | None
@@ -226,10 +227,16 @@ def build_console_row(inputs: ConsoleInputs, *, turn_id: UUID) -> dict[str, Any]
     }
 
 
-def build_abandoned_row(*, occurred_at: datetime, hq_timezone: ZoneInfo) -> dict[str, Any]:
+def build_abandoned_row(
+    *, occurred_at: datetime, hq_timezone: ZoneInfo, cost_usd: Decimal
+) -> dict[str, Any]:
     """The row for a turn the app marked abandoned: its process died before the turn stored a
     verdict, so nothing proves it was an ordinary one. Redacted, with no model labels and no
-    measurements, since none were taken. `occurred_at` is when the turn was asked.
+    timings, since none were taken. `occurred_at` is when the turn was asked.
+
+    The one measurement is `cost_usd`, the dead turn's own ledger spend (the reservations it made
+    before it died), so the console's total matches the ledger. Its tokens are unknown (the turn
+    never stored them), so they stay at the columns' defaults of 0.
 
     `abandoned` says a turn died, nothing about a person, so the console can count it as a turn and
     not as an escalation."""
@@ -238,4 +245,5 @@ def build_abandoned_row(*, occurred_at: datetime, hq_timezone: ZoneInfo) -> dict
         "abandoned": True,
         "occurred_on": _on_hq_calendar(occurred_at, hq_timezone),
         "served_by": [],
+        "cost_usd": max(Decimal(0), cost_usd),
     }

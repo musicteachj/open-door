@@ -1,8 +1,8 @@
 import { QueryClientProvider } from '@tanstack/react-query'
-import { render, screen, waitFor, within } from '@testing-library/react'
+import { act, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router'
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { CalendarOut, CheckOut, RequestOut } from '@/api/generated'
 import {
   CHECK_HOLIDAY,
@@ -72,6 +72,133 @@ async function pick(user: User, first: string, last?: string) {
 }
 
 const preview = () => document.querySelector('[data-slot="preview-live"]') as HTMLElement
+
+describe('the preview check pause', () => {
+  // The test double answers at once, so only the pause is in play. Testing Library drains its
+  // async steps with a timer and moves a fake clock only when a `jest` global is there, so the
+  // tests give it one that moves Vitest's.
+  function setupWithClock() {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+    vi.stubGlobal('jest', { advanceTimersByTime: (ms: number) => vi.advanceTimersByTime(ms) })
+    const made = setup()
+    const user = userEvent.setup({ delay: null })
+    return { ...made, user }
+  }
+  afterEach(() => {
+    vi.useRealTimers()
+    vi.unstubAllGlobals()
+  })
+
+  it('sends one check for three quick changes, 300 ms after the last', async () => {
+    const { fake, user } = setupWithClock()
+    await pick(user, 'Friday, October 30')
+    await user.click(screen.getByRole('radio', { name: 'Half day (4 hours)' }))
+    await user.click(screen.getByRole('radio', { name: 'Full day' }))
+    await user.click(screen.getByRole('radio', { name: 'Half day (4 hours)' }))
+    expect(fake.calls.checks).toHaveLength(0)
+
+    await act(() => vi.advanceTimersByTime(299))
+    expect(fake.calls.checks).toHaveLength(0)
+    await act(() => vi.advanceTimersByTime(1))
+    expect(fake.calls.checks).toHaveLength(1)
+    expect(fake.calls.checks[0]).toMatchObject({ partialMinutes: 240 })
+  })
+
+  it('sends no check while a range is half picked, and one after its second click', async () => {
+    const { fake, user } = setupWithClock()
+    await user.click(screen.getByRole('button', { name: /^Dates/ }))
+    await user.click(day('Wednesday, October 28'))
+    await act(() => vi.advanceTimersByTime(5_000))
+    expect(fake.calls.checks).toHaveLength(0)
+    expect(submit()).toBeDisabled()
+
+    await user.click(day('Friday, October 30'))
+    await act(() => vi.advanceTimersByTime(299))
+    expect(fake.calls.checks).toHaveLength(0)
+    await act(() => vi.advanceTimersByTime(1))
+    expect(fake.calls.checks).toEqual([
+      { type: 'pto', startDate: '2026-10-28', endDate: '2026-10-30', partialMinutes: null },
+    ])
+  })
+
+  it('checks a half-picked range that is closed with Done, as the one day it is', async () => {
+    const { fake, user } = setupWithClock()
+    await pick(user, 'Wednesday, October 28')
+    await act(() => vi.advanceTimersByTime(300))
+    expect(fake.calls.checks).toEqual([
+      { type: 'pto', startDate: '2026-10-28', endDate: '2026-10-28', partialMinutes: null },
+    ])
+  })
+
+  it('keeps Submit off while a change waits out the pause', async () => {
+    const { fake, user } = setupWithClock()
+    await pick(user, 'Friday, October 30')
+    await act(() => vi.advanceTimersByTime(300))
+    await act(() => vi.advanceTimersByTime(0))
+    expect(submit()).toBeEnabled()
+    expect(fake.calls.checks).toHaveLength(1)
+
+    await user.click(screen.getByRole('radio', { name: 'Half day (4 hours)' }))
+    expect(submit()).toBeDisabled()
+    expect(fake.calls.checks).toHaveLength(1)
+    await act(() => vi.advanceTimersByTime(300))
+    expect(fake.calls.checks).toHaveLength(2)
+  })
+
+  it('keeps Submit off while a range is half picked, though the first day was already checked', async () => {
+    const { fake, user } = setupWithClock()
+    await pick(user, 'Friday, October 30')
+    await act(() => vi.advanceTimersByTime(300))
+    await act(async () => {})
+    expect(submit()).toBeEnabled()
+
+    // The first click of a new range names the same day, so the old answer would still fit.
+    await user.click(screen.getByRole('button', { name: /^Dates/ }))
+    await user.click(day('Friday, October 30'))
+    expect(submit()).toBeDisabled()
+    await user.click(day('Saturday, October 31'))
+    await act(() => vi.advanceTimersByTime(300))
+    expect(fake.calls.checks).toHaveLength(2)
+  })
+
+  it('asks again when the inputs come back after a moment with nothing to ask', async () => {
+    const { fake, user } = setupWithClock()
+    fake.state.check = () => CHECK_SICK_HOURS
+    await user.click(screen.getByRole('radio', { name: 'Sick time' }))
+    await pick(user, 'Thursday, October 22')
+    await user.click(screen.getByRole('radio', { name: 'Some hours' }))
+    await act(() => vi.advanceTimersByTime(300))
+    expect(fake.calls.checks).toHaveLength(1)
+
+    // Clearing the hours leaves nothing to ask; typing the same hours again asks afresh.
+    const hours = screen.getByRole('textbox', { name: 'Hours' })
+    await user.clear(hours)
+    await act(() => vi.advanceTimersByTime(300))
+    await user.type(hours, '3')
+    // The answer for these hours from before is not taken as fresh.
+    expect(submit()).toBeDisabled()
+    await act(() => vi.advanceTimersByTime(300))
+    expect(fake.calls.checks).toHaveLength(2)
+    expect(fake.calls.checks[1]).toEqual(fake.calls.checks[0])
+  })
+
+  it('checks at once, with no pause, when Try again is pressed', async () => {
+    const { fake, user } = setupWithClock()
+    fake.state.check = async () => {
+      throw new Error('boom')
+    }
+    await pick(user, 'Friday, October 30')
+    await act(() => vi.advanceTimersByTime(300))
+    const retry = await screen.findByRole('button', { name: 'Try again' })
+    expect(fake.calls.checks).toHaveLength(1)
+
+    fake.state.check = () => CHECK_ONE_DAY
+    await user.click(retry)
+    // Flush the request without moving the clock: no pause was waited out.
+    await act(async () => {})
+    expect(fake.calls.checks).toHaveLength(2)
+  })
+})
 
 describe('RequestPanel', () => {
   it('opens with focus on its title and nothing to check yet', async () => {
@@ -314,6 +441,8 @@ describe('RequestPanel', () => {
       calendar: { halfDayMinutes: 300, halfDayLabel: '5 hours' },
     })
     await pick(user, 'Friday, October 30')
+    // Let the day's own check go out first (changes within the pause share one check).
+    await waitFor(() => expect(submit()).toBeEnabled())
     await user.click(screen.getByRole('radio', { name: 'Half day (5 hours)' }))
     await waitFor(() => expect(fake.calls.checks).toHaveLength(2))
     expect(fake.calls.checks[1]).toMatchObject({ partialMinutes: 300 })

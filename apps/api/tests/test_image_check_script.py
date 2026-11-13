@@ -163,9 +163,14 @@ def run_entrypoint(tmp_path: Path, **env: str) -> list[str]:
     return result.stdout.splitlines()
 
 
+# `--timeout-keep-alive 130`: uvicorn closes an idle keep-alive connection after 5 seconds by
+# default. The load balancer keeps its connections to the task open for its idle timeout (at least
+# 120 seconds, Phase 9), and a request it sends just as uvicorn closes one fails as a 502, so AWS's
+# rule is that the target's keep-alive outlasts the load balancer's idle timeout. The load test saw
+# the same race from its own client (3 dropped requests in about 8,000).
 COMMON = (
     "--factory app.main:create_app --host 0.0.0.0 --port 8000 --proxy-headers"
-    " --no-server-header --timeout-graceful-shutdown 15"
+    " --no-server-header --timeout-graceful-shutdown 15 --timeout-keep-alive 130"
 )
 
 

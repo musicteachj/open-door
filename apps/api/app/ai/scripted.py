@@ -779,10 +779,41 @@ def _cancel_words(data: Any) -> str:
     )
 
 
+@dataclass(frozen=True)
+class DelayProfile:
+    """How long the scripted model waits, so a load test sees the real model's pace (Phase 8,
+    stage 7). The guard waits `guard_seconds` before its result. Each model call waits
+    `first_text_seconds` before its first event (a status note or a tool call included). Each text
+    chunk waits its length over `characters_per_second` before it is yielded. A
+    `characters_per_second` of 0 means the text is not paced."""
+
+    guard_seconds: float
+    first_text_seconds: float
+    characters_per_second: float
+
+
+# The default: no waits at all (not even a zero-second sleep).
+NO_DELAYS: Final = DelayProfile(0, 0, 0)
+# Measured from the full eval run of 2026-11-12 (the current prompt), whose local, gitignored
+# traces file is evals/assistant/runs/20261112T223644Z-full-traces.json (570 guard calls, 1,246
+# model calls). The traces hold each call's whole duration, not its time to first text, so:
+# - guard_seconds is the guard's median duration, 1.06 s.
+# - first_text_seconds and the pace come from a median-based line (Theil-Sen) fitting each model
+#   call's duration against its output tokens. The slope is 7.77 ms a token (129 tokens a second)
+#   and the intercept, 1.36 s, stands for the time before the first text. (Calls with 60 output
+#   tokens or fewer have a median of 1.83 s, which agrees.)
+# - characters_per_second is 129 tokens a second times 2.55 shown characters per output token
+#   (the median over 129 single-call answers), 330.
+REALISTIC: Final = DelayProfile(
+    guard_seconds=1.06, first_text_seconds=1.36, characters_per_second=330
+)
+
+
 class ScriptedTransport:
     """`silence_seconds` and `slow_guard_seconds` are what the silence and slow-guard scenarios
     wait (the slow guard waits 2 seconds past the guard's limit); tests shorten them.
-    `delta_delay_seconds` paces the text, for watching it stream."""
+    `delta_delay_seconds` paces the text, for watching it stream. `delays` is the profile the load
+    test uses to wait like the real model (the default makes no wait at all)."""
 
     def __init__(
         self,
@@ -791,13 +822,17 @@ class ScriptedTransport:
         slow_guard_seconds: float = GUARD_TIMEOUT_SECONDS + 2,
         delta_delay_seconds: float = 0,
         scenarios: Sequence[Scenario] | None = None,
+        delays: DelayProfile = NO_DELAYS,
     ) -> None:
+        self.delays = delays
         self.silence_seconds = silence_seconds
         self.slow_guard_seconds = slow_guard_seconds
         self.delta_delay_seconds = delta_delay_seconds
         self._scenarios = tuple(scenarios) if scenarios is not None else load_scenarios()
 
     async def stream(self, request: ModelRequest) -> AsyncIterator[ModelEvent]:
+        if self.delays.first_text_seconds:
+            await asyncio.sleep(self.delays.first_text_seconds)
         messages = request.messages
         question = _question(messages)
         scenario = _first_match(question, self._scenarios, MODEL_BEHAVIORS)
@@ -948,6 +983,8 @@ class ScriptedTransport:
             for chunk in _chunks(text):
                 if self.delta_delay_seconds:
                     await asyncio.sleep(self.delta_delay_seconds)
+                if self.delays.characters_per_second:
+                    await asyncio.sleep(len(chunk) / self.delays.characters_per_second)
                 yield TextDelta(chunk)
             yield TextBlockEnd((citation,) if citation else ())
             block: dict[str, Any] = {"type": "text", "text": text}
@@ -962,6 +999,8 @@ class ScriptedTransport:
 
     async def classify(self, request: GuardRequest) -> GuardResult:
         text = _guard_text(request.messages)
+        if self.delays.guard_seconds:
+            await asyncio.sleep(self.delays.guard_seconds)
         if self._triggered(text, "slow_guard"):
             # It does not enforce the guard's time limit itself: the caller's timeout is what
             # is tested.

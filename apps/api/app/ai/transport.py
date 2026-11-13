@@ -359,3 +359,8 @@ def require_a_transport_fit_for(settings: Settings) -> None:
             f"AI_TRANSPORT must be anthropic when APP_ENV=production, not {settings.ai_transport}:"
             " the scripted and replay transports are for development, tests, and evals"
         )
+    if settings.app_env == "production" and settings.scripted_delay_profile != "none":
+        raise ValueError(
+            "SCRIPTED_DELAY_PROFILE must be none when APP_ENV=production, not"
+            f" {settings.scripted_delay_profile}: the delay profile is for the load test"
+        )

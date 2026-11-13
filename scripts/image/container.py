@@ -15,8 +15,11 @@ gateway for the proxy check, whose nginx runs in Docker. Never every interface.
 """
 
 import os
+import re
 import subprocess
 import sys
+import time
+from collections.abc import Sequence
 from urllib.parse import urlsplit, urlunsplit
 
 TEST_TAG = "open-door:test"
@@ -24,6 +27,24 @@ TEST_TAG = "open-door:test"
 PROD_TAG = "open-door:prod"
 # The fake keyring the tests use (app.core.encryption); the API accepts it only with APP_ENV=test.
 TEST_KEYRING = "test:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="
+
+
+# The database image (the same tag as compose.yaml's; a test keeps them equal) and the logins of a
+# throwaway database, shared by `make prod-local` and `make load`.
+POSTGRES_IMAGE = "pgvector/pgvector:0.8.7-pg17"
+DB_OWNER = "opendoor"
+DB_DATABASE = "opendoor"
+APP_LOGIN = "od_app_login"
+CLEANUP_LOGIN = "od_cleanup_login"
+# The one-off setup, as a deploy runs it: migrate, create the login users, load the handbook. Run
+# from the image's working directory (/app/apps/api).
+SETUP_SCRIPT = (
+    "alembic upgrade head"
+    " && python scripts/bootstrap_db_users.py"
+    " && python scripts/ingest_handbook.py ingest"
+)
+# The access log is JSON lines, so the request's quotes arrive escaped: `1.2.3.4:5 - \"GET / ...`.
+CLIENT_IN_ACCESS_LOG = re.compile(r'(\d+\.\d+\.\d+\.\d+):\d+ - \\?"(?:GET|HEAD|POST)')
 
 
 class ContainerError(Exception):
@@ -109,6 +130,7 @@ def run_args(
     detach: bool,
     image: str = TEST_TAG,
     network: str | None = None,
+    extra_args: Sequence[str] = (),
 ) -> list[str]:
     """`docker run` for the test image, as the deploy runs it: no `--init`, so uvicorn is PID 1
     and the shutdown the proxy check proves is the shipped one (uvicorn starts no child processes,
@@ -117,7 +139,8 @@ def run_args(
 
     With `network` (a user-defined docker network, as `make prod-local` uses to reach its own
     database) the container joins it and publishes the port on the host's loopback on every
-    platform, since it is on a bridge, not the host's network."""
+    platform, since it is on a bridge, not the host's network. `extra_args` go before the settings
+    (the load test's `--cpus` and `--memory`)."""
     args = ["docker", "run", "--name", name]
     args += ["--detach"] if detach else ["--rm"]
     if network is not None:
@@ -126,9 +149,8 @@ def run_args(
         args += ["--publish", f"127.0.0.1:{port}:{port}"]
     else:
         args += ["--network", "host"]
-    for key in env:
-        args += ["--env", key]
-    return [*args, image]
+    args += list(extra_args)
+    return [*args, *env_flags(env), image]
 
 
 def client_env(values: dict[str, str]) -> dict[str, str]:
@@ -174,3 +196,87 @@ def docker_bridge_gateway() -> str | None:
     )
     gateway = result.stdout.strip()
     return gateway if result.returncode == 0 and gateway else None
+
+
+def client_addresses_in(log: str) -> list[str]:
+    """The client addresses uvicorn's access log shows."""
+    return CLIENT_IN_ACCESS_LOG.findall(log)
+
+
+def env_flags(env: dict[str, str]) -> list[str]:
+    """`--env KEY` for each setting, no value: Docker reads it from the client's environment."""
+    args: list[str] = []
+    for key in env:
+        args += ["--env", key]
+    return args
+
+
+def database_run_args(
+    name: str,
+    network: str,
+    env: dict[str, str],
+    *,
+    cpus: str | None = None,
+    memory: str | None = None,
+) -> list[str]:
+    """A throwaway Postgres: detached, removed when stopped, no volume, not published to the host,
+    optionally limited. The pgvector image's own entrypoint, so the settings are its POSTGRES_*."""
+    limits: list[str] = []
+    if cpus is not None:
+        limits += ["--cpus", cpus]
+    if memory is not None:
+        limits += ["--memory", memory]
+    return [
+        "docker",
+        "run",
+        "--detach",
+        "--rm",
+        "--name",
+        name,
+        "--network",
+        network,
+        *limits,
+        *env_flags(env),
+        POSTGRES_IMAGE,
+    ]
+
+
+def setup_run_args(name: str, network: str, env: dict[str, str]) -> list[str]:
+    """The one-off setup container (migrations, the login users, the handbook) from the
+    production image, on the database's network."""
+    return [
+        "docker",
+        "run",
+        "--rm",
+        "--name",
+        name,
+        "--network",
+        network,
+        *env_flags(env),
+        "--entrypoint",
+        "sh",
+        PROD_TAG,
+        "-c",
+        SETUP_SCRIPT,
+    ]
+
+
+def database_url(user: str, password: str, host: str) -> str:
+    """A throwaway database's URL as the other containers on its network reach it."""
+    return f"postgresql+asyncpg://{user}:{password}@{host}:5432/{DB_DATABASE}"
+
+
+def postgres_ready(name: str, *, timeout_seconds: float) -> bool:
+    """Wait until the database container accepts connections (over TCP: on a fresh database,
+    Postgres first runs a socket-only setup server)."""
+    deadline = time.monotonic() + timeout_seconds
+    while time.monotonic() < deadline:
+        probe = run(
+            "docker", "exec", name, "pg_isready", "-h", "127.0.0.1", "-U", DB_OWNER, "-d",
+            DB_DATABASE,
+            check=False,
+        )  # fmt: skip
+        if probe.returncode == 0:
+            return True
+        time.sleep(1)
+    return False
