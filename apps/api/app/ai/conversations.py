@@ -42,7 +42,14 @@ from app.core.encryption import (
     wrap_aad,
 )
 from app.db.errors import constraint_name, has_sqlstate
-from app.db.models import AiConsoleTurn, AiConversation, AiFeedback, AiMessage, AiTurn
+from app.db.models import (
+    AiConsoleTurn,
+    AiConversation,
+    AiFeedback,
+    AiMessage,
+    AiSpend,
+    AiTurn,
+)
 from app.domain.cases import HQ_TIMEZONE
 from app.policy import Actor
 
@@ -601,6 +608,18 @@ async def store_crisis_verdict(
     return cast("CursorResult[Any]", result).rowcount == 1
 
 
+async def turn_spend_usd(db: AsyncSession, tenant_id: UUID, turn_id: UUID) -> Decimal:
+    """What the ledger holds for one turn: every `reserve` and `settle` row it wrote, added up.
+    Read in the transaction that writes the turn's console row, so the row has what the ledger held
+    then. The tenant comes first, as in the ledger's (tenant_id, turn_id) index."""
+    total = await db.scalar(
+        select(func.sum(AiSpend.amount_usd)).where(
+            AiSpend.tenant_id == tenant_id, AiSpend.turn_id == turn_id
+        )
+    )
+    return total if total is not None else Decimal(0)
+
+
 async def write_console_row(db: AsyncSession, tenant_id: UUID, row: dict[str, Any]) -> bool:
     """Add a console row (`console_rows.build_console_row`) in the caller's transaction, in a
     savepoint of its own. Returns whether it was written.
@@ -646,9 +665,20 @@ async def recover_abandoned(
         .execution_options(synchronize_session=False)
     )
     recovered = list(result.all())
-    for _, tenant_id, started_at in recovered:
-        # Dated by when the turn was asked, not by when it was recovered.
-        row = build_abandoned_row(occurred_at=started_at, hq_timezone=ZoneInfo(HQ_TIMEZONE))
+    for turn_id, tenant_id, started_at in recovered:
+        # Dated by when the turn was asked, not by when it was recovered. Its cost is what the
+        # dead turn left in the ledger, read in this transaction (a turn that was only slow and
+        # settles later leaves the row at its reservation, above the ledger). A failed read costs
+        # the row nothing but its figure (and never fails the new question).
+        try:
+            async with db.begin_nested():
+                spent_usd = await turn_spend_usd(db, tenant_id, turn_id)
+        except Exception as error:
+            logger.error("Reading an abandoned turn's spend failed (%s)", error_name(error))
+            spent_usd = Decimal(0)
+        row = build_abandoned_row(
+            occurred_at=started_at, hq_timezone=ZoneInfo(HQ_TIMEZONE), cost_usd=spent_usd
+        )
         await write_console_row(db, tenant_id, row)
     return [turn_id for turn_id, _, _ in recovered]
 

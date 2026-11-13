@@ -1586,6 +1586,102 @@ What the stage decided, or the runs changed:
     worry that the red-team person reaches other items' tool results was checked against the full
     run's traces: no other item's tool results hold it.
 
+### Stage 7 (`feat/phase-8-load`, 2026-11-13)
+
+Built in two batches: A (Tasks 36 to 38, with the load runs and the capacity report) and B (Tasks
+39 and 40, this close). No migration and no paid call: the load test used the scripted model, and
+the costs came from runs already paid for.
+
+What the stage decided, or the runs changed:
+- **The delay profile's figures come from the full run of 2026-11-12,** not 2026-11-03 as Task 36
+  says: it is the current prompt's run. Its traces hold whole-call durations only, so the time to
+  the first text and the pace are a median-based line (Theil-Sen) of each model call's duration
+  against its output tokens: 1.36 seconds before the first text and 7.77 ms a token, turned into
+  330 characters a second at the 2.55 characters a token measured on single-call answers. The
+  guard waits its median, 1.06 seconds. Production refuses any profile but `none`, on its own as
+  well as with the scripted transport.
+- **The script is `scripts/load/drive.py`, not `run.py`:** mypy reads `scripts/` and
+  `evals/retrieval/run.py` as one module name, as Stage 2's `serve.py` found. The shared pieces of
+  `make prod-local` (the throwaway database, its setup container, the access-log peer lookup) moved
+  into `scripts/image/container.py`, and the image check and `prod-local` use them from there.
+- **Where the load runs.** Each size gets its own throwaway Postgres (2 vCPU, 4 GB, on a private
+  network, never published), so the 500-a-day start total resets between sizes and the
+  development database's ledger and start counts are never touched. The API runs the production
+  image with `APP_ENV=test` (production refuses the scripted model), the real start limits, and a
+  $1,000 daily AI cap, because scripted turns still reserve at Opus 5.5's rates (about $0.16 to
+  $0.30 a call) and settle to $0, so the real $3 cap would refuse concurrent turns from
+  reservations alone. One extra run kept the real caps on purpose: 7 of its 225 questions were
+  refused with `budget-daily`.
+- **What the visitors do.** The guided tour's steps through the real routes. The web app reads
+  `GET /assistant/budget` only when a page has no conversation (not on a timer, as the plan said),
+  so the visitors do the same, and re-read the conversation after each stream as the page does.
+- **The results** (`docs/CAPACITY.md`): no error in any of the six size runs; the turn at about
+  4.4 seconds p50 and 5.6 seconds p95 everywhere; 0.5 vCPU saturated at 50 visitors (CPU at its
+  limit, the time to `turn.started` at 371 ms p95), 1 vCPU used 58% at 50; memory at most 142 MB;
+  at most 11 of the pool's 15 connections.
+- **The five performance items** were judged against bars set in the stage's plan (500 ms p95 for
+  a page read, 300 ms added to the time to `turn.started`, at 25 visitors on the recommended size,
+  or saturating first). The owner agreed with the verdicts after the report: none matters, so each
+  went to the backlog with its numbers. The tour's conversations are at most three questions, so on
+  the owner's word the script gained `--long-conversation N`: one visitor asking until the
+  history limit (it stops at question 48 with `history-too-long`) while the tours repeat. The time
+  to `turn.started` grew from 23 ms to 46 ms over the conversation.
+- **The load test found one real problem.** The long run's 125 tours had 3 requests in about 8,000
+  fail with the connection closed (`RemoteProtocolError`): uvicorn closes an idle keep-alive
+  connection after 5 seconds, and the tour pauses 2 to 5. Behind a load balancer the same race is a
+  502, and AWS's rule is that the target's keep-alive outlasts the load balancer's idle timeout. A
+  small local test reproduced it (1 in 120 at a 1-second keep-alive, none at 130). The entrypoint
+  now passes `--timeout-keep-alive 130` (the entrypoint's tests failed first), and the repeated run
+  made all 7,750 requests without an error.
+- **The console row's cost** is the turn's own ledger sum, read in the transaction that writes the
+  row, so it matches in every ending by construction; the abandoned row carries the dead turn's
+  spend. **The request form's check** waits 300 ms and skips a half-picked range, which the date
+  picker now reports.
+- **Task 39** moved the AWS-only items into the backlog's Phase 9 section and removed two stale
+  ones: the denial note's encryption (done in Stage 3) and the sandbox start limits (done in
+  Stage 4).
+- **The close's review.** `/code-review medium` ran six rounds and stopped at the sixth, which had
+  nothing high or medium. Most findings were about the load script reporting truthfully, each fixed
+  with a test first:
+  - the API binding every interface of its own container on Linux;
+  - a request with no answer, a stream cut partway, or one ending with no closing event counting
+    as a client error, never a finished 200 turn;
+  - client errors and failed tours marking a run saturated;
+  - a tour counted as completed only if it got its sandbox, with the tours begun reported apart
+    from the slots;
+  - each size's counts run smallest first, since the first run is the baseline;
+  - a fresh database for every run, not one per size, so no run reads an earlier one's data or
+    shares its day's start total;
+  - a failed slot stopping rather than retrying at once;
+  - $1,000 sandbox caps as well as daily ones in the size runs, and the day's start total lifted
+    for a long-conversation run;
+  - the real-caps run described as what it is: reservations in flight, since scripted turns cost
+    $0;
+  - and smaller fixes (a sandbox answer without a tenant, a body that isn't JSON, an error body
+    with no `type`, a card of an unexpected shape, a repeated count, the sampler's wait, the
+    proxy lookup's logs, a Ctrl-C leaving the network).
+
+  On the API, the ledger read now names the tenant (the index's first column; proved by a
+  mutation), and the comments and the changelog no longer claim the row always matches: a settle
+  that lands after the row is written, or a slow turn recovered as abandoned, leaves the row at the
+  reservation, above the ledger. On the web, inputs that come back after a moment with nothing to
+  ask are asked again, and count as checking until they are (both proved by mutation). A two-run
+  smoke of the launcher passed after the fixes.
+- Lows recorded, not fixed:
+  - `ai_turns.cost_usd` keeps the turn's tally, which the eval runner reads (backlog);
+  - the two launchers' duplicated Docker helpers and the load test's memory units (backlog);
+  - production's refusal of a delay profile overlaps the transport check (kept: the spec asks for
+    it on its own);
+  - recovery reads one sum per abandoned turn, and each turn's end runs one more query (one row
+    each; measured cheap);
+  - the date picker reports "not picking" for an instant between two picking states (harmless
+    while its callback is stable);
+  - the 130-second keep-alive also applies to a client reaching the task directly (only the load
+    balancer does);
+  - an answer for earlier inputs landing in the 300 ms pause is shown muted, which is correct;
+  - the real-caps run's size is fixed at 1 vCPU (`--no-real-caps-run` skips it);
+  - a Ctrl-C removes the load test's network even if it existed before (it's the test's own).
+
 ## Backlog
 
 (Low findings from the stages' reviews, with their reasons.)

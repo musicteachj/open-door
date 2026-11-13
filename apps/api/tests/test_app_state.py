@@ -13,7 +13,7 @@ from pydantic import SecretStr
 
 from app.ai.anthropic_transport import AnthropicTransport
 from app.ai.embeddings import QueryEmbeddingLru
-from app.ai.scripted import ScriptedTransport
+from app.ai.scripted import REALISTIC, ScriptedTransport
 from app.api.deps import get_app_settings, get_embedder, get_keys, get_streams, get_transport
 from app.core.config import Settings
 from app.core.encryption import LocalKeyProvider
@@ -94,6 +94,24 @@ def test_production_refuses_to_start_without_the_entry_settings() -> None:
     )
     with pytest.raises(ValueError, match="SANDBOX_IP_HASH_KEY"):
         create_app(settings)
+
+
+def test_production_refuses_a_delay_profile_at_boot_even_with_the_real_transport() -> None:
+    settings = settings_with(
+        app_env="production",
+        app_origin="https://opendoor.example.com",
+        ai_transport="anthropic",
+        anthropic_api_key=KEY,
+        scripted_delay_profile="realistic",
+    )
+    with pytest.raises(ValueError, match="SCRIPTED_DELAY_PROFILE"):
+        create_app(settings)
+
+
+def test_the_realistic_profile_builds_a_paced_scripted_transport() -> None:
+    app = create_app(settings_with(scripted_delay_profile="realistic"))
+    with TestClient(app):
+        assert app.state.transport.delays == REALISTIC
 
 
 def test_replay_is_refused_for_the_app_at_boot() -> None:

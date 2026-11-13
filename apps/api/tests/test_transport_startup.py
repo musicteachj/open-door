@@ -3,6 +3,8 @@
 It is not on `Settings`, which alembic, the setup scripts, and the cleanup job build too.
 """
 
+from pathlib import Path
+
 import pytest
 from pydantic import SecretStr
 
@@ -78,3 +80,35 @@ def test_the_anthropic_setting_with_another_transport_is_refused_at_startup() ->
 
     with pytest.raises(ValueError, match="AnthropicTransport"):
         _build_summarizer(real, ScriptedTransport())
+
+
+def profile_settings(app_env: str, transport: str, profile: str) -> Settings:
+    return Settings(
+        _env_file=None,
+        database_url=APP_URL,
+        app_env=app_env,
+        app_origin="https://opendoor.example.com",
+        ai_transport=transport,
+        scripted_delay_profile=profile,
+    )
+
+
+def test_production_refuses_a_delay_profile_on_its_own() -> None:
+    # Refused by itself: even with the real transport, where it would do nothing.
+    with pytest.raises(ValueError, match="SCRIPTED_DELAY_PROFILE must be none"):
+        require_a_transport_fit_for(profile_settings("production", "anthropic", "realistic"))
+
+
+def test_production_accepts_no_delay_profile() -> None:
+    require_a_transport_fit_for(profile_settings("production", "anthropic", "none"))
+
+
+@pytest.mark.parametrize("app_env", ["development", "test"])
+def test_other_environments_accept_the_realistic_profile(app_env: str) -> None:
+    require_a_transport_fit_for(profile_settings(app_env, "scripted", "realistic"))
+
+
+def test_the_profile_defaults_to_none_and_the_example_env_lists_it() -> None:
+    assert Settings(_env_file=None, database_url=APP_URL).scripted_delay_profile == "none"
+    example = (Path(__file__).resolve().parents[1] / ".env.example").read_text(encoding="utf-8")
+    assert "SCRIPTED_DELAY_PROFILE=none" in example

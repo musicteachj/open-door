@@ -136,14 +136,19 @@ def test_a_sensitive_turn_that_made_a_card_redacts_the_card() -> None:
 
 def test_an_abandoned_turn_is_redacted_with_no_labels_and_no_measurements() -> None:
     built = build_abandoned_row(
-        occurred_at=datetime(2026, 10, 31, 3, 0, tzinfo=UTC), hq_timezone=DENVER
+        occurred_at=datetime(2026, 10, 31, 3, 0, tzinfo=UTC),
+        hq_timezone=DENVER,
+        cost_usd=Decimal("0.012500"),
     )
 
+    # The one measurement is the dead turn's ledger spend. Its tokens are unknown, so they stay at
+    # the columns' defaults of 0.
     assert built == {
         "flagged": True,
         "abandoned": True,
         "occurred_on": date(2026, 10, 30),
         "served_by": [],
+        "cost_usd": Decimal("0.012500"),
     }
 
 

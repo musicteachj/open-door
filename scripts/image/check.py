@@ -70,8 +70,7 @@ EXPECTED_HEADERS = {
     "cross-origin-opener-policy": "same-origin",
 }
 NONCE_META = re.compile(r'<meta name="csp-nonce" content="([^"]+)"')
-# The access log is JSON lines, so the request's quotes arrive escaped: `1.2.3.4:5 - \"GET / ...`.
-CLIENT_IN_ACCESS_LOG = re.compile(r'(\d+\.\d+\.\d+\.\d+):\d+ - \\?"(?:GET|HEAD|POST)')
+CLIENT_IN_ACCESS_LOG = container.CLIENT_IN_ACCESS_LOG
 
 
 CheckError = ContainerError
@@ -152,9 +151,7 @@ def problems_in_nonces(first: str | None, second: str | None) -> list[str]:
     return []
 
 
-def client_addresses_in(log: str) -> list[str]:
-    """The client addresses uvicorn's access log shows."""
-    return CLIENT_IN_ACCESS_LOG.findall(log)
+client_addresses_in = container.client_addresses_in
 
 
 def problems_in_forwarding(untrusted_log: str, trusted_log: str, peer: str | None) -> list[str]:

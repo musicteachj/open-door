@@ -59,6 +59,8 @@ jobs:
               # check's, and the entrypoint).
               - 'scripts/**'
               - 'compose.yaml'
+              # The load test's test reads the guided tour's questions, to keep the visitors' equal.
+              - 'apps/web/src/features/tour/script.ts'
               # The eval runner's tests read the eval-live target and the fixtures' ignore rule.
               - 'Makefile'
               - '.gitignore'

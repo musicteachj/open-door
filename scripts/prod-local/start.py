@@ -34,14 +34,14 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "image"))
 import container
 
 # The same tag as compose.yaml's database (a test keeps them equal).
-POSTGRES_IMAGE = "pgvector/pgvector:0.8.7-pg17"
+POSTGRES_IMAGE = container.POSTGRES_IMAGE
 NETWORK = "open-door-prod-local"
 DB_NAME = "open-door-prod-local-db"
 API_NAME = "open-door-prod-local-api"
-DB_OWNER = "opendoor"
-DB_DATABASE = "opendoor"
-APP_LOGIN = "od_app_login"
-CLEANUP_LOGIN = "od_cleanup_login"
+DB_OWNER = container.DB_OWNER
+DB_DATABASE = container.DB_DATABASE
+APP_LOGIN = container.APP_LOGIN
+CLEANUP_LOGIN = container.CLEANUP_LOGIN
 DEFAULT_PORT = 8300
 # Production refuses the development default origin, which is this port.
 DEV_PORT = 5173
@@ -52,13 +52,6 @@ STOP_SIGNALS = (signal.SIGTERM, signal.SIGINT, signal.SIGHUP)
 READY_TIMEOUT_SECONDS = 90
 DB_READY_TIMEOUT_SECONDS = 60
 LOG_LINES = 40
-# The one-off setup, as a deploy runs it: migrate, create the login users, load the handbook. Run
-# from the image's working directory (/app/apps/api).
-SETUP_SCRIPT = (
-    "alembic upgrade head"
-    " && python scripts/bootstrap_db_users.py"
-    " && python scripts/ingest_handbook.py ingest"
-)
 
 
 class LaunchError(Exception):
@@ -123,7 +116,7 @@ def require_anthropic_key(key: str | None) -> str:
 
 
 def _database_url(user: str, password: str) -> str:
-    return f"postgresql+asyncpg://{user}:{password}@{DB_NAME}:5432/{DB_DATABASE}"
+    return container.database_url(user, password, DB_NAME)
 
 
 def db_env(passwords: Passwords) -> dict[str, str]:
@@ -232,46 +225,12 @@ def read_secrets() -> Secrets:
 # --- docker arguments --------------------------------------------------------------------------
 
 
-def _env_flags(env: dict[str, str]) -> list[str]:
-    args: list[str] = []
-    for key in env:
-        args += ["--env", key]
-    return args
-
-
 def db_run_args(env: dict[str, str]) -> list[str]:
-    """A throwaway Postgres: detached, removed when stopped, no volume, not published to the host.
-    The pgvector image's own entrypoint, so the settings are the image's POSTGRES_* ones."""
-    return [
-        "docker",
-        "run",
-        "--detach",
-        "--rm",
-        "--name",
-        DB_NAME,
-        "--network",
-        NETWORK,
-        *_env_flags(env),
-        POSTGRES_IMAGE,
-    ]
+    return container.database_run_args(DB_NAME, NETWORK, env)
 
 
 def setup_run_args(env: dict[str, str]) -> list[str]:
-    return [
-        "docker",
-        "run",
-        "--rm",
-        "--name",
-        f"{API_NAME}-setup",
-        "--network",
-        NETWORK,
-        *_env_flags(env),
-        "--entrypoint",
-        "sh",
-        container.PROD_TAG,
-        "-c",
-        SETUP_SCRIPT,
-    ]
+    return container.setup_run_args(f"{API_NAME}-setup", NETWORK, env)
 
 
 def api_run_args(env: dict[str, str], *, port: int, detach: bool) -> list[str]:
@@ -309,20 +268,11 @@ def ensure_network() -> bool:
 
 
 def wait_for_postgres() -> None:
-    deadline = time.monotonic() + DB_READY_TIMEOUT_SECONDS
-    while time.monotonic() < deadline:
-        # Over TCP: on a fresh database, Postgres first runs a socket-only setup server.
-        probe = docker(
-            "exec", DB_NAME, "pg_isready", "-h", "127.0.0.1", "-U", DB_OWNER, "-d", DB_DATABASE,
-            check=False,
-        )  # fmt: skip
-        if probe.returncode == 0:
-            return
-        time.sleep(1)
-    raise LaunchError(
-        f"The database did not become ready in {DB_READY_TIMEOUT_SECONDS} seconds.\n"
-        + last_logs(DB_NAME)
-    )
+    if not container.postgres_ready(DB_NAME, timeout_seconds=DB_READY_TIMEOUT_SECONDS):
+        raise LaunchError(
+            f"The database did not become ready in {DB_READY_TIMEOUT_SECONDS} seconds.\n"
+            + last_logs(DB_NAME)
+        )
 
 
 def last_logs(name: str) -> str:

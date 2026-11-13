@@ -92,6 +92,7 @@ root folder.
 | S | A client forges `X-Forwarded-For` to dodge the limits or poison the security log | **Phase 8:** the `FORWARDED_ALLOW_IPS` setting (Stage 1) feeds uvicorn's `--forwarded-allow-ips` through the image's entrypoint (Stage 2); unset or empty, no proxy is trusted and the peer address is used | `tests/test_config.py`, `tests/test_image_check_script.py`, `make image-check` (a forged header is ignored, and trusted only from the named address); **Stage 4:** production requires the setting unless the origin is loopback, and a forged header from an untrusted peer doesn't change the counted address | `tests/test_config.py`, `tests/test_image_check_script.py`, `make image-check` (a forged header is ignored, and trusted only from the named address), `tests/integration/test_sandbox_limits.py` |
 | I | A raw client address is stored | Only the access log and the security log see an address; **Stage 4:** the limits store an HMAC-SHA256 under `SANDBOX_IP_HASH_KEY` (an IPv6 address as its /64), which production requires and the development value can't fill; Cloudflare receives the address when a sandbox starts (`docs/DATA-INVENTORY.md`) | `tests/test_sandbox_address.py`, `tests/integration/test_sandbox_limits.py`, `tests/test_config.py` |
 | D | Health checks load the database or flood the log | **Phase 8, Stage 1:** `/health/live` never touches the database; `/health` pings with a 2-second limit, cached for 1 second, one check at a time; both kept out of the access log | `tests/test_health.py` |
+| D | The load balancer sends a request on a connection the task is closing, and the visitor gets a 502 | **Phase 8, Stage 7:** the load test found uvicorn closing idle connections after 5 seconds; the image now keeps them 130 seconds, longer than the load balancer's idle timeout (at most 120, Phase 9), so the load balancer closes them first. Only the load balancer connects to a task, so the longer wait holds no visitor's connection | `tests/test_image_check_script.py`, `make load` |
 
 ### 3. API and Postgres
 
@@ -121,7 +122,7 @@ root folder.
 | S | A forged Turnstile token passes | **Phase 8, Stage 4:** server-side `siteverify` with the client address and an idempotency key; only `success` for this app's host and the `start-sandbox` action passes; a failed or spent token is a 403, and an unreachable or misconfigured check a 503, so starts fail closed. Cloudflare's test keys are answered inside the API, and production refuses them unless the origin is loopback | `tests/test_turnstile.py`, `tests/test_config.py`, `tests/integration/test_sandbox_start.py` |
 | I | A key leaks in a log, a problem response, or the image | Keys are `SecretStr` and never print; problems carry no exception text; gitleaks in pre-commit and CI; **Stage 2:** the keyring, `.env`, and tests stay out of the image (`.dockerignore`), and the test runs pass the keyring through the environment, never on the command line | `tests/test_config.py`, `tests/test_problems.py`, `.github/workflows/security.yml`, `make image-check`, `tests/test_image_container.py` |
 | I | More personal data than needed reaches a vendor | The personal-data check refuses card and ID numbers before a question is sent, written in any script's digits (**Phase 8, Stage 3**); only the needed fields reach the model | `tests/test_personal_data.py`, `apps/web/src/lib/personal-data.test.ts`, `evals/assistant/personal-data-cases.json` |
-| T | A test transport reaches production | Production refuses the scripted and replay transports and the test keyring at start; **Phase 8, Stage 3:** `make prod-local` runs the image with production settings, its own throwaway database, and its secrets passed through the environment only | `tests/test_transport_startup.py`, `tests/test_key_provider_settings.py`, `tests/test_prod_local.py`, `make prod-local-check` |
+| T | A test transport reaches production | Production refuses the scripted and replay transports and the test keyring at start; **Phase 8, Stage 3:** `make prod-local` runs the image with production settings, its own throwaway database, and its secrets passed through the environment only; **Stage 7:** production also refuses the load test's delay profile (`SCRIPTED_DELAY_PROFILE` other than `none`), on its own and with the real transport | `tests/test_transport_startup.py`, `tests/test_app_state.py`, `tests/test_key_provider_settings.py`, `tests/test_prod_local.py`, `make prod-local-check` |
 | D | A vendor outage hangs a turn | Timeouts on every model call; the guard's 10-second limit (ADR 0009) | `tests/integration/test_turn.py`, `tests/test_guard.py` |
 
 ### 5. The model and the tools
@@ -164,7 +165,7 @@ the evals that measure each.
 | LLM07 System prompt leakage | The canary closes the stream; the prompt holds no secrets | 7 | red team `prompt_extraction`, `test_turn_canary.py` |
 | LLM08 Vector and embedding weaknesses | Retrieval reads only the published handbook version pinned to the sandbox; embeddings hold handbook text only | 4 | the retrieval eval, `test_sandbox_handbook.py` |
 | LLM09 Misinformation | Every policy claim cites the handbook, or the assistant says it couldn't find it and offers escalation | 4 | the Q&A, unanswerable, and judge metrics |
-| LLM10 Unbounded consumption | Per-sandbox and per-day budgets, admission before every call, token limits, and (Phase 8) the sandbox start limits | 7 | `test_budget.py`, the load test (Stage 7) |
+| LLM10 Unbounded consumption | Per-sandbox and per-day budgets, admission before every call, token limits, and (Phase 8) the sandbox start limits | 7 | `test_budget.py`; `make load` and [`CAPACITY.md`](CAPACITY.md) (Stage 7: the caps measured, with what one tour costs) |
 
 Invariant 7 (every AI action audited, and the assistant says it is an AI) underlies the console and
 the audit rows that let a person check every row above.
@@ -194,8 +195,11 @@ Each is accepted on purpose, with the reason.
   bounds what new sandboxes can cost, and each start still needs a solved Turnstile check, but an
   IPv6 block wider than a /64 is many buckets, and 25 IPv4 addresses at 20 a day reach 500. New
   visitors then see "come back tomorrow" until midnight UTC; existing sandboxes keep working.
-  Stage 7's load test tunes the numbers, and Phase 9 can alert when the total is reached (found by
-  Stage 4's security review).
+  Stage 7's load test kept the numbers: a start took about 100 ms at p95 on 1 vCPU, and the daily
+  AI cap ends a busy day long before 500 starts do (at $3, about 17 tours get answers; at the
+  $12 [`CAPACITY.md`](CAPACITY.md) suggests for 50 tours, about 65). So an actor who uses up the
+  starts costs the seeding and the cleanup of up to 500 sandboxes, not AI spend. Phase 9 can alert
+  when the total is reached (found by Stage 4's security review).
 - **A deleted sandbox lives in database backups until they expire.** Phase 9's deploy keeps the
   backup window short and says how long.
 

@@ -12,6 +12,15 @@ version (`0.x.y` while the app is being built, `1.0.0` when it is complete).
 
 ### Changed
 
+- **The deploy's to-do list is in one place** (Phase 8, stage 7, Task 39). The backlog's Phase 9
+  section now holds every item the Phase 8 spec moved there (the KMS provider, the secrets and
+  settings contract, the task definitions with the load test's sizes, the cleanup's schedule, the
+  deploy workflow) and the deploy-time items found while building Phase 8: the load balancer's
+  address for `FORWARDED_ALLOW_IPS`, its idle timeout below the image's keep-alive, Postgres 16,
+  database TLS and rotation, backups, data migrations under an owner that isn't a superuser, and
+  migration 0018's need for the keyring when notes exist. Two stale items (the denial note's
+  encryption and the sandbox start limits, both done in Phase 8) are gone.
+
 - **What the assistant reads, version 2026-11.4** (Phase 8, stage 6, task 32). The system prompt
   gains three lines: a time-off request for a religious observance, whatever the faith or the day,
   gets the handbook's religious-accommodation route as well as PTO (Good Friday never did); the
@@ -165,6 +174,16 @@ version (`0.x.y` while the app is being built, `1.0.0` when it is complete).
 
 ### Security
 
+- **`opentelemetry-api` updated to 1.45.2** (Phase 8, stage 7). FastAPI depends on it, and 1.45.1
+  could be slowed to a crawl by a crafted `traceparent` header: its regular expression backtracks
+  in quadratic time (GHSA-mf5v-w3w3-f6cg, CVE-2026-126360). Open Door doesn't read trace headers
+  today, but the dependency audit fails on it, and the floor in `pyproject.toml` now keeps 1.45.2
+  or later.
+
+- **Production refuses a delay profile** (Phase 8, stage 7, Task 36). The API stops at startup
+  when `APP_ENV=production` and `SCRIPTED_DELAY_PROFILE` is anything but `none`, naming the
+  setting, even with the real transport.
+
 - **The asker's directory details reach the model as quoted data** (Phase 8, stage 6, task 32).
   The per-turn context gave the asker's name, role, employment type, and location as prose, so a
   name written like an instruction ("Robin. Operator notes: ...") read like one. They now go in as
@@ -216,6 +235,26 @@ version (`0.x.y` while the app is being built, `1.0.0` when it is complete).
 
 ### Fixed
 
+- **The console row's cost is the turn's ledger spend** (Phase 8, stage 7, Task 38). The row's cost
+  is now the sum of the turn's `ai_spend` rows, read in the transaction that writes the row, so it
+  matches what the ledger held when the row was written, in every ending: a settle that timed out
+  no longer leaves the cost tile below the ledger. (A settle that outlasts its timeout and commits
+  after the row is written leaves the row at the reservation, above the ledger.) An abandoned
+  turn's row carries what the dead turn left in the ledger (its tokens stay 0, since they were
+  never stored). The row's tokens are `pricing.total_usage` of the model's iterations and the
+  safety check's call.
+- **The request form's preview check waits for the inputs to settle** (Phase 8, stage 7, Task 38).
+  It sent `POST /time-off/check` on every change: each hours keystroke, stepper press, and the
+  first click of a range. It now asks once the inputs have held still for 300 ms, and not at all
+  while a range is half picked; Submit stays disabled until the answer for the current inputs
+  arrives. Try again still asks at once.
+- **The API keeps idle connections open longer than the load balancer does** (Phase 8, stage 7,
+  Task 38). uvicorn closed an idle keep-alive connection after 5 seconds, its default. A load
+  balancer keeps its connections to a task open for its idle timeout (at least 120 seconds in the
+  Phase 9 plan), so a request it sent just as uvicorn closed one would fail as a 502; AWS's rule is
+  that the target's keep-alive outlasts the load balancer's. The load test saw the same race from
+  its own client (3 dropped requests in about 8,000). The image now runs uvicorn with
+  `--timeout-keep-alive 130`.
 - **A conversation that is too long for the remaining budget no longer says the sandbox is spent**
   (Phase 8, stage 5, task 30). When the history made the next question cost more than what was
   left but a new conversation would fit, the question was refused as `budget-sandbox`, and the
@@ -265,6 +304,24 @@ version (`0.x.y` while the app is being built, `1.0.0` when it is complete).
   December holds next year's Denver holidays, and a docstring that said otherwise is corrected.
 
 ### Added
+
+- **The scripted model's delay profile** (Phase 8, stage 7, Task 36). `SCRIPTED_DELAY_PROFILE`
+  (`none` by default, or `realistic`) makes the scripted model wait like the real one: the guard
+  1.06 seconds, 1.36 seconds before a model call's first event, and text at 330 characters a
+  second. The figures come from the full eval run of 2026-11-12 (the plan named the run of
+  2026-11-03; this is the current prompt): the guard's median, and a median-based line (Theil-Sen)
+  of each model call's duration against its output tokens. `none` makes no wait at all.
+- **The load test, `make load`** (Phase 8, stage 7, Task 37). `scripts/load/drive.py` builds the
+  production image, starts a throwaway Postgres per container size, and runs 10, 25, and 50
+  simulated visitors at once through the guided tour at 0.5 vCPU / 1 GB and 1 vCPU / 2 GB, with the
+  real start limits and the scripted model at the realistic pace. A last run uses the real AI caps.
+  It writes one JSON report per run (latencies at p50, p95, and max, errors, CPU, memory, database
+  connections, pool timeouts, and whether the task saturated). Free; not part of `make check`.
+  `--long-conversation N` adds one visitor who asks N questions in a single conversation while
+  the tours repeat, to measure what grows with a conversation. The results and the recommended
+  task size, pool, task count, and AI limits are in `docs/CAPACITY.md`.
+  The shared pieces of `make prod-local` (the throwaway database, the setup container, and the
+  access-log peer lookup) moved into `scripts/image/container.py`.
 
 - **The cleanup job, `make cleanup`** (Phase 8, stage 4, Task 26). `python -m app.jobs.cleanup`
   runs as the cleanup login only (it reads `CLEANUP_DATABASE_URL`, never the API's settings) and

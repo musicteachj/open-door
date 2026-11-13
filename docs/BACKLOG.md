@@ -250,10 +250,6 @@ conversation-page glitches are fixed with browser tests (stage 6).
     `useTurnFinished`'s);
   - the console's day heading counts the rows loaded so far, and a day's redacted rows sort after
     its timed ones, so on a day of more than 50 turns they appear only after "Show more turns";
-  - a console row's cost leaves out a reservation kept because its cost was unknown (a settle that
-    timed out), so the cost tile can read below the ledger's spend;
-  - the console row adds the safety check's tokens to the turn's field by field instead of with
-    `pricing.total_usage`;
   - after a send whose outcome is unknown (a network failure, or a 5xx since the review), the
     plain chat doesn't read the conversation again, so a turn the API did start shows only on the
     next read; and a proxy's own 4xx page (nginx's 413) now counts as unknown too, so the tour
@@ -262,10 +258,7 @@ conversation-page glitches are fixed with browser tests (stage 6).
   - the scoreboard's `pct` and `_count` each have their own float-noise tolerance, and the
     escalation run's terminal report keeps its own `_pct`, which can still print "100.0%" for a
     rate just under 1; a board holding NaN or Infinity (which `json` reads) isn't refused when
-    loaded;
-  - an abandoned turn's console row shows no cost, tokens, or timings, though the dead turn's
-    safety check and model charges are already in the spend ledger, so the cost tile's sandbox
-    spend and the rows' costs drift apart with no row to explain it (the v0.7.0 release review).
+    loaded.
 - **A repeated send of the same words reads the case twice and isn't audited.** `_repeat` in the
   case service unwraps the key and decrypts the stored words to compare them, once outside and once
   under the lock, and a second submission from another tab with the same words is folded into the
@@ -288,9 +281,6 @@ conversation-page glitches are fixed with browser tests (stage 6).
   concern is about someone in HR has no other way in through Open Door; today the handbook's
   contacts are the only route. A later phase could add a named second reviewer outside HR for
   such cases. (Phase 6 spec.)
-- **Encrypt the time-off denial note.** `time_off_requests.decision_note` is a manager's own
-  words and stays readable in Phase 6, which encrypts only conversation and case text (ADR 0015).
-  Seal it with a data key for the request, as the conversation store does. (Phase 6 spec.)
 - **One stored value that won't decrypt breaks the conversation for good.** Its owner's
   `GET /conversations/current` and `GET /budget` return a 500 from then on, since "current" is the
   newest conversation. Only a damaged row or a lost key causes it. Let the person start a new
@@ -306,7 +296,11 @@ conversation-page glitches are fixed with browser tests (stage 6).
   reads every card in the conversation and checks each against every stored context's
   `reported_outcomes` array, with no index, while it holds the cards' share locks. Fine at demo
   scale (conversations end with the sandbox); bound it (skip contexts older than the card, or keep a
-  time pre-filter) if conversations ever last. (Phase 5 phase review.)
+  time pre-filter) if conversations ever last. (Phase 5 phase review.) Measured in the Phase 8
+  load test ([`CAPACITY.md`](CAPACITY.md)): in a conversation run to its history limit (47
+  questions, a card every other turn) beside 25 tour visitors at 0.5 vCPU, the time to
+  `turn.started` grew from 23 ms (median of questions 2 to 11) to 46 ms (questions 38 to 47), so it
+  stays here.
 - **A person recorded as their own manager is half handled.** PTO for them is now refused with
   `no-approver`, but the summary still names them as their own manager and their requests count as
   waiting for themselves. Exclude the person wherever manager links are resolved. The seed never
@@ -315,11 +309,9 @@ conversation-page glitches are fixed with browser tests (stage 6).
 - **The Approvals reads load each person's facts one at a time.** `_managed_view` loads each
   direct report's facts and requests in turn for the waiting list and every single-request read,
   and coverage now loads each colleague's schedule too. Batch the loads per set of people. (Phase 5
-  phase review.)
-- **The request form checks the preview on every change.** Each hours keystroke, stepper press, and
-  the first click of a range sends `POST /time-off/check`; stale answers are dropped, so it's only
-  wasted requests. A short debounce, or no check while a range is half picked, would cut them.
-  (Phase 5 phase review.)
+  phase review.) Measured in the Phase 8 load test ([`CAPACITY.md`](CAPACITY.md)): Marcus's waiting
+  list took 98 ms at p95 with 25 visitors at 0.5 vCPU and 36 ms with 50 at 1 vCPU, under the 500 ms
+  bar, so it stays here.
 - **Small duplications the phase review left.** Weekday and month names and the long-date format
   live in `proposals.py`, `scripted.py`, and `context.py`; the confirm card's executed lines repeat
   the pages' toast texts; `balances`, `pto_available_minutes`, and `_evaluate_own` gather the same
@@ -368,6 +360,10 @@ conversation-page glitches are fixed with browser tests (stage 6).
   event. Keep a running size on the conversation, or pass the admitted history into `begin`
   (which also closes the small window in which a recovered turn could carry the history past the
   limit after the check). (Phase 4 stage 4 `/code-review medium`.) Moved from Phase 4 at its close: it fits the cost and load test.
+  Measured in the Phase 8 load test ([`CAPACITY.md`](CAPACITY.md)): run to the history limit (47
+  questions) beside 25 tour visitors at 0.5 vCPU, the time to `turn.started` grew from 23 ms to
+  46 ms, and that conversation's `GET /assistant/conversations/current` stayed at 70 ms p95, under
+  the 300 ms and 500 ms bars, so it stays here.
 - **Small API polish from stage 4's reviews:** problem
   `type` values are bare codes (`turn-running`), a relative URI reference that RFC 9457 allows but
   that a full URI would make unambiguous; there's no limit on how many conversations one person
@@ -383,12 +379,15 @@ conversation-page glitches are fixed with browser tests (stage 6).
   own tail, so every new event path has needed its own patch. Holding and checking every outgoing
   string at the one exit in `events()` would cover future paths with one rule. Its `_keep_from`
   also NFKC-normalizes one character at a time, twice per text delta, on up to 512 characters;
-  measure it in the load test. (Phase 4 phase review.)
+  measure it in the load test. (Phase 4 phase review.) The Phase 8 load test measured it only as
+  part of the whole: streaming at the real model's pace, the API used 58% of 1 vCPU at peak with
+  50 visitors at once ([`CAPACITY.md`](CAPACITY.md)).
 - **Don't re-parse the whole answer on every streamed word.** Each `text.delta` re-runs the
   marker placement and react-markdown over the full text, and the thread follows the end each
   time, so the work grows with the square of the answer's length. Batch deltas per animation frame
   in the store, or memoize finished blocks; measure on a low-end phone first. (v0.4.0 release
-  review.)
+  review.) The Phase 8 load test can't measure it: the work is in the browser, and the server's
+  load test has none ([`CAPACITY.md`](CAPACITY.md)).
 - **Delete handbook versions no sandbox uses.** Each `make ingest` of changed text adds a version,
   and nothing removes old ones. A cleanup step can delete unpublished versions and published ones
   that are neither the newest nor pinned by any sandbox; the foreign key already refuses to delete
@@ -396,25 +395,25 @@ conversation-page glitches are fixed with browser tests (stage 6).
 - **Make the directory's counts cheaper.** `GET /people/facets` runs up to five queries one after
   another (total, matching, the location and department menus, and "My team") on every debounced
   search. Total and matching can be one `count(*) FILTER (WHERE …)`, and the total doesn't change
-  with the filters. Measure in the load test first. (Phase 2 close-out review.)
+  with the filters. Measure in the load test first. (Phase 2 close-out review.) Measured in the
+  Phase 8 load test ([`CAPACITY.md`](CAPACITY.md)): 16 ms at p95 with 25 visitors at 0.5 vCPU,
+  faster than `GET /people` itself, so it stays here.
 - **Keyboard shortcuts.** Add `/` to focus the composer (never while typing in a field) and ⌘K to
   jump to a page. Both need screen-reader and conflict checks. (2026-10-06 design brainstorm.)
 
 
-- **Set `FORWARDED_ALLOW_IPS` in the task definition.** The image's entrypoint passes it to
-  uvicorn's `--forwarded-allow-ips`, and empty trusts no proxy (Phase 8 stage 2). The Phase 9 task
-  definition must set it to the load balancer's addresses only, never `*`, or the limits and the
-  security log see the load balancer's address for every visitor.
-
-- **Data migrations can't see tenant rows on AWS.** With row-level security forced, a table
-  owner that isn't a superuser sees no rows. That is the managed-Postgres case, unlike
-  development and CI, where the owner is a superuser. A migration that changes data must set the
-  tenant context for each tenant, or run under a role made for it. (Stage 1 security review.)
-- **Postgres 16 or later.** The bootstrap script grants roles `WITH INHERIT TRUE`, which needs
-  Postgres 16. Development and CI run 17. The managed Postgres chosen in Phase 9 must be 16 or
-  later.
-
-
+- **A turn keeps two costs.** The console row's cost is now the turn's ledger sum (Phase 8 stage
+  7), but `ai_turns.cost_usd` still stores the turn's own tally, so the two differ for a turn whose
+  settle timed out. The eval runner reads the turn's figure, so moving it to the ledger's changes
+  what the eval boards count; do both together. The row's tokens also pass the guard's usage
+  through a stand-in `IterationUsage`; a `Usage` sum would say it more plainly. (Phase 8 stage 7
+  review.)
+- **The two local launchers repeat their Docker helpers.** `scripts/load/drive.py` and
+  `scripts/prod-local/start.py` each have their own `docker()`, log tail, readiness loop, network
+  and image checks, cleanup, and passwords; Stage 7 moved the database and setup pieces into
+  `scripts/image/container.py` but not these. Move them there when either launcher next changes.
+  The load test's memory parser also maps `MB` and `MiB` both to 1 while `GB` is 1,000 and `GiB`
+  1,024 (Docker prints binary units, so the reports are in MiB). (Phase 8 stage 7 review.)
 - **`ping()` has no hard wall-clock bound.** If canceling the query stalls on the network,
   closing the connection can take longer than the timeout, because SQLAlchemy shields the close.
   The orchestrator's own probe timeout covers it; revisit only if health checks need a strict
@@ -422,23 +421,65 @@ conversation-page glitches are fixed with browser tests (stage 6).
 - **Keep probe traffic out of traces.** Phase 8 stage 1 filters both health paths from
   `uvicorn.access`; if OpenTelemetry is enabled, filter them there too.
 
-From the Phase 1 review ([the spec's Later phases](specs/2026-10-03-phase-1-tenancy-identity-permissions.md#later-phases)):
-
-- **Rate limits and Turnstile on sandbox creation.** `POST /api/v1/sandboxes` needs no session,
-  and each call seeds 120 people.
-- **The scheduled cleanup job.** The `od_cleanup` role can already delete only expired
-  sandboxes. Nothing runs it on a schedule yet.
-- **Re-test `set_config` under RDS Proxy or PgBouncer.** Row-level security depends on settings
-  scoped to one transaction, and a pooler in transaction mode must not carry them between
-  clients. The reused-connection tests are the model. Background: the pgsql-bugs thread on local
-  settings,
-  https://www.postgresql.org/message-id/CA+Q86ij0KDCB0G45G509-8q0DNR611gcKG-sSM83GA1EBL7boA@mail.gmail.com.
-- **Database TLS with certificate checks, and secret rotation** for the three database URLs.
-- **Deletion from backups.** A sandbox deleted from the database still exists in backups until
-  they expire. Document how long, or exclude sandbox data from them.
-
-
 ## Phase 9: deploy to AWS
+
+Written and checked when the deploy is planned, against the real AWS account and the chosen
+managed database. The first group is the Phase 8 spec's "Moved to Phase 9" list; the rest were
+found while building Phase 8, or moved here from its backlog because they only matter on AWS.
+
+- **The KMS key provider,** as [ADR 0015](adr/0015-envelope-encryption.md)'s amendment describes
+  it, and production's refusal of the local keyring. Each list of time-off requests unwraps one
+  key per request with a denial note: cheap with the local keyring, a KMS round trip each in
+  production, so cache or batch the unwraps if the lists get slow. (Phase 8 spec; Stage 3.)
+- **The secrets and settings contract** (`docs/DEPLOY.md`): every setting, which process reads it,
+  the secret store's names, least-privilege roles, and egress to Anthropic, Voyage, and Cloudflare.
+  Production's setup steps (the migrations, the login bootstrap, the handbook load) need none of
+  `TURNSTILE_SITE_KEY`, `TURNSTILE_SECRET_KEY`, `SANDBOX_IP_HASH_KEY`, and `FORWARDED_ALLOW_IPS`;
+  only the API does, and it refuses to start in production without them. The AI limits start from
+  [`CAPACITY.md`](CAPACITY.md): $1 a sandbox, and a daily cap sized to the visits wanted plus
+  headroom for questions in flight (about $12 for 50 tours a day). (Phase 8 spec; Stages 4 and 7.)
+- **ECS task definitions** for the API, the migration, and the cleanup, from the load test's
+  measurements ([`CAPACITY.md`](CAPACITY.md)): the API at 1 vCPU and 2 GB (it peaked at 58% of
+  1 vCPU and 142 MB with 50 visitors at once), one uvicorn process, the default database pool, and
+  two tasks for availability. **The cleanup's hourly schedule** runs `python -m app.jobs.cleanup`
+  as the cleanup login. (Phase 8 spec; Stage 7.)
+- **The deploy workflow** (OIDC, the image to ECR, the migration, the service update), written and
+  enabled together. (Phase 8 spec.)
+- **Set `FORWARDED_ALLOW_IPS` in the task definition.** The image's entrypoint passes it to
+  uvicorn's `--forwarded-allow-ips`, and empty trusts no proxy (Phase 8 stage 2). The Phase 9 task
+  definition must set it to the load balancer's addresses only, never `*`, or the limits and the
+  security log see the load balancer's address for every visitor.
+- **The load balancer's idle timeout: at least 120 seconds, and below the image's keep-alive of
+  130.** The image runs uvicorn with `--timeout-keep-alive 130` so that the load balancer, not the
+  task, closes idle connections; otherwise a request it sends just as the task closes one fails as
+  a 502 (the load test saw that race at uvicorn's default of 5 seconds). If the idle timeout ever
+  goes above 120, raise the keep-alive in `scripts/image/entrypoint.sh` first. (Phase 8 stage 7.)
+- **Postgres 16 or later.** The bootstrap script grants roles `WITH INHERIT TRUE`, which needs
+  Postgres 16. Development and CI run 17. The managed Postgres chosen in Phase 9 must be 16 or
+  later.
+- **Database TLS with certificate checks, the provider's certificate bundle in the image, and
+  secret rotation** for the three database URLs. (Phase 1 review; Phase 8 spec.)
+- **Backup retention, and deletion from backups.** A sandbox deleted from the database still
+  exists in backups until they expire, and so does the plain-text denial note from before migration
+  0018 in any backup taken before it ran (Phase 9 starts empty, so only a restored older database
+  has one). Set the retention, and document it in the data inventory, or exclude sandbox data from
+  backups. (Phase 1 review; Phase 8 stage 3 security review.)
+- **Data migrations can't see tenant rows on AWS.** With row-level security forced, a table
+  owner that isn't a superuser sees no rows. That is the managed-Postgres case, unlike
+  development and CI, where the owner is a superuser. A migration that changes data must set the
+  tenant context for each tenant, or turn forcing off around its data step as 0018 does, or run
+  under a role made for it. Migration 0017's audit `UPDATE` is a no-op there, which is fine on an
+  empty database. (Phase 8 stage 1 security review; Stage 3.)
+- **Migration 0018's data step needs the keyring when notes exist.** Upgrading a database that
+  already holds denial notes seals them inside the migration, so the migration task needs
+  `ENCRYPTION_KEYRING` (or the KMS provider) in its environment. A fresh database has no notes and
+  needs no key. (Phase 8 stage 3.)
+- **Re-test `set_config` under RDS Proxy or PgBouncer,** if a pooler is used. Row-level security
+  depends on settings scoped to one transaction, and a pooler in transaction mode must not carry
+  them between clients. The reused-connection tests are the model. Background: the pgsql-bugs
+  thread on local settings,
+  https://www.postgresql.org/message-id/CA+Q86ij0KDCB0G45G509-8q0DNR611gcKG-sSM83GA1EBL7boA@mail.gmail.com.
+  (Phase 1 review.)
 
 - **Don't share a Postgres server between environments that reuse these role names.** Roles
   belong to the whole server, and Postgres lets every role connect to every database by default.

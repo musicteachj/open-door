@@ -10,7 +10,7 @@ from app import __version__
 from app.ai import anthropic_transport
 from app.ai.case_summary import Summarizer
 from app.ai.embeddings import Embedder, QueryEmbeddingLru, VoyageEmbedder
-from app.ai.scripted import ScriptedSummarizer, ScriptedTransport
+from app.ai.scripted import NO_DELAYS, REALISTIC, ScriptedSummarizer, ScriptedTransport
 from app.ai.transport import Transport, require_a_transport_fit_for
 from app.api.problems import document_problems_as_problem_json
 from app.api.v1.health import ReadinessCache
@@ -40,7 +40,9 @@ logger = logging.getLogger(__name__)
 def _build_transport(settings: Settings) -> Transport:
     if settings.ai_transport == "anthropic":
         return anthropic_transport.from_settings(settings)
-    return ScriptedTransport()
+    return ScriptedTransport(
+        delays=REALISTIC if settings.scripted_delay_profile == "realistic" else NO_DELAYS
+    )
 
 
 def _build_summarizer(settings: Settings, transport: Transport) -> Summarizer:

@@ -18,7 +18,7 @@ PIP_AUDIT := pip-audit@2.10.1
 PRE_COMMIT := pre-commit@4.7.0
 
 .DEFAULT_GOAL := help
-.PHONY: help setup keyring db db-stop migrate bootstrap-db ingest embed eval-retrieval eval-offline eval-live scoreboard migrations-roundtrip cleanup dev dev-api dev-web openapi check check-api check-web e2e e2e-image proxy-check image image-check prod-local prod-local-check captures check-docs check-workflows audit
+.PHONY: help setup keyring db db-stop migrate bootstrap-db ingest embed eval-retrieval eval-offline eval-live scoreboard migrations-roundtrip cleanup dev dev-api dev-web openapi check check-api check-web e2e e2e-image proxy-check image image-check prod-local prod-local-check load captures check-docs check-workflows audit
 
 help: ## List the available commands
 	@grep -E '^[a-zA-Z_-]+:.*## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*## "}; {printf "  %-22s %s\n", $$1, $$2}'
@@ -228,6 +228,18 @@ prod-local: ## Run the production image on its own empty database at localhost:8
 prod-local-check: ## Start the production image on its own database, fetch the pages, stop; asks the model nothing (needs ANTHROPIC_API_KEY to start, Docker)
 	$(BUILD_PROD_IMAGE)
 	cd $(API) && uv run python ../../scripts/prod-local/start.py --check
+
+# The cost and load test: free (the scripted model, paced like the real one) and local; `make check`
+# and CI never run it. It builds the production image, then starts a throwaway Postgres per
+# container size and drives simulated visitors through the guided tour at the API running under a
+# CPU and memory limit. Reports go to /tmp/od-p8/s7/load. LOAD_ARGS passes options to
+# scripts/load/drive.py, for example `make load LOAD_ARGS="--sizes 1:2g --visitors 3 --no-real-caps-run"`
+# for a small smoke. The full matrix takes about half an hour. SKIP_BUILD=1 reuses the image.
+LOAD_ARGS ?=
+
+load: ## Load-test the production image with simulated visitors under a CPU and memory limit (free; throwaway Postgres; Docker)
+	$(BUILD_PROD_IMAGE)
+	cd $(API) && uv run python ../../scripts/load/drive.py $(LOAD_ARGS)
 
 # Local only: `make check` and CI never run it. The specimen pages load React and Babel from
 # unpkg.com, so it needs a network. The screens start real sandboxes, so it needs Postgres up with

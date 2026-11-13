@@ -1,5 +1,6 @@
 """The scripted model: a rule-based stand-in for Claude that needs no network and no database."""
 
+import asyncio
 import json
 import time
 from collections.abc import Awaitable, Callable
@@ -10,13 +11,18 @@ from typing import Any
 
 import pytest
 
+from app.ai.case_summary import SummaryRequest
 from app.ai.pricing import SCRIPTED_MODEL, Usage, turn_call_cost
 from app.ai.scripted import (
     BEHAVIORS,
     DECLINE_SCOPE_TEXT,
+    NO_DELAYS,
+    REALISTIC,
     SCENARIOS_PATH,
     SICK_DAYS_QUERY,
     WORKING_NOTE_TEXT,
+    DelayProfile,
+    ScriptedSummarizer,
     ScriptedTransport,
     _time_off_first_call,
     load_scenarios,
@@ -1617,3 +1623,110 @@ async def test_cancel_my_request_never_picks_one_that_has_already_started() -> N
 
     assert not any(isinstance(event, ToolCall) for event in second)
     assert text_of(second) == "You have no requests that can be canceled."
+
+
+# --- The delay profile (Phase 8, stage 7): the scripted model paced like the real one ---------
+
+
+class Clock:
+    """Stands in for `asyncio.sleep`: it records each wait and lets no time pass."""
+
+    def __init__(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        self.log: list[tuple[str, float | str]] = []
+        original = asyncio.sleep
+
+        async def fake_sleep(seconds: float, result: Any = None) -> Any:
+            self.log.append(("sleep", seconds))
+            return await original(0, result)
+
+        monkeypatch.setattr(asyncio, "sleep", fake_sleep)
+
+    @property
+    def sleeps(self) -> list[float]:
+        return [float(value) for kind, value in self.log if kind == "sleep"]
+
+
+async def log_stream(clock: Clock, transport: ScriptedTransport, request: ModelRequest) -> None:
+    async for event in transport.stream(request):
+        clock.log.append(("event", type(event).__name__))
+
+
+PROFILE = DelayProfile(guard_seconds=1.0, first_text_seconds=2.0, characters_per_second=100.0)
+
+
+def test_the_realistic_profile_carries_the_measured_figures() -> None:
+    assert DelayProfile(1.06, 1.36, 330) == REALISTIC
+    assert DelayProfile(0, 0, 0) == NO_DELAYS
+    assert ScriptedTransport().delays == NO_DELAYS
+
+
+async def test_no_delays_makes_no_sleep_call_at_all(monkeypatch: pytest.MonkeyPatch) -> None:
+    clock = Clock(monkeypatch)
+    transport = ScriptedTransport()
+    await transport.classify(guard_request("How many sick days do I get?"))
+    await first_then_second(
+        transport,
+        QUESTION,
+        search_result("/handbook/4.3?passage=p1", "4.3 Sick leave", PASSAGE_ONE),
+    )
+    assert clock.log == []
+
+
+async def test_the_guard_waits_once_before_its_result(monkeypatch: pytest.MonkeyPatch) -> None:
+    clock = Clock(monkeypatch)
+    result = await ScriptedTransport(delays=PROFILE).classify(guard_request("Hello there"))
+    assert result.category == "ordinary"
+    assert clock.sleeps == [1.0]
+
+
+async def test_a_model_call_waits_for_the_first_text_before_its_first_event(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # The first call of a default question begins with a status note, then a tool call.
+    clock = Clock(monkeypatch)
+    await log_stream(clock, ScriptedTransport(delays=PROFILE), a_request(user(QUESTION)))
+    assert clock.log[0] == ("sleep", 2.0)
+    assert clock.log[1] == ("event", "StatusNote")
+    assert clock.sleeps == [2.0]
+
+
+async def test_the_chunks_waits_add_up_to_the_texts_length_over_the_pace(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    clock = Clock(monkeypatch)
+    transport = ScriptedTransport(delays=PROFILE)
+    _first, second = await first_then_second(
+        transport,
+        QUESTION,
+        search_result("/handbook/4.3?passage=p1", "4.3 Sick leave", PASSAGE_ONE),
+    )
+    text = text_of(second)
+    deltas = [event for event in second if isinstance(event, TextDelta)]
+    assert text
+    # Two model calls: each waits the first-text time, and the second also waits per chunk.
+    assert clock.sleeps[:1] == [2.0]
+    assert clock.sleeps[1] == 2.0
+    chunk_waits = clock.sleeps[2:]
+    assert len(chunk_waits) == len(deltas)
+    assert sum(chunk_waits) == pytest.approx(len(text) / 100.0)
+    for delta, wait in zip(deltas, chunk_waits, strict=True):
+        assert wait == pytest.approx(len(delta.text) / 100.0)
+
+
+async def test_a_chunk_waits_before_it_is_yielded(monkeypatch: pytest.MonkeyPatch) -> None:
+    clock = Clock(monkeypatch)
+    transport = ScriptedTransport(delays=PROFILE)
+    await log_stream(clock, transport, a_request(user("What's Leo's home address?")))
+    kinds = [kind for kind, _ in clock.log]
+    assert kinds[0] == "sleep"
+    deltas_at = [i for i, entry in enumerate(clock.log) if entry == ("event", "TextDelta")]
+    assert deltas_at  # the decline scenario streams its words
+    assert all(clock.log[i - 1][0] == "sleep" for i in deltas_at)
+
+
+async def test_the_scripted_summarizer_gets_no_delay(monkeypatch: pytest.MonkeyPatch) -> None:
+    clock = Clock(monkeypatch)
+    await ScriptedSummarizer().summarize(
+        SummaryRequest(category="other", messages=(), timeout_seconds=1)
+    )
+    assert clock.log == []

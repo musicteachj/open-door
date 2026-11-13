@@ -9,6 +9,11 @@
 #
 # PORT is the port uvicorn listens on (8000 when unset). The deploy never sets it. The test runs do,
 # because on Linux the container shares the host's network and must not take :8000 from `make dev`.
+#
+# --timeout-keep-alive 130 keeps an idle connection open longer than the load balancer's idle
+# timeout (at least 120 seconds, Phase 9), so the load balancer, not uvicorn, closes idle
+# connections. With uvicorn's default of 5 seconds, a request the load balancer sends just as
+# uvicorn closes the connection fails as a 502. Raise it if the idle timeout ever goes above 120.
 set -eu
 
 PORT="${PORT:-8000}"
@@ -19,7 +24,7 @@ FORWARDED_ALLOW_IPS="${FORWARDED_ALLOW_IPS:-}"
 export FORWARDED_ALLOW_IPS
 
 set -- --factory app.main:create_app --host "$HOST" --port "$PORT" \
-  --proxy-headers --no-server-header --timeout-graceful-shutdown 15
+  --proxy-headers --no-server-header --timeout-graceful-shutdown 15 --timeout-keep-alive 130
 if [ -n "$FORWARDED_ALLOW_IPS" ]; then
   set -- "$@" --forwarded-allow-ips "$FORWARDED_ALLOW_IPS"
 fi

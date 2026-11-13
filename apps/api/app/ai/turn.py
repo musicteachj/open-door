@@ -87,6 +87,7 @@ from app.ai.conversations import (
     search_sources,
     start_turn,
     store_crisis_verdict,
+    turn_spend_usd,
     write_console_row,
 )
 from app.ai.embeddings import Embedder
@@ -1921,23 +1922,33 @@ class TurnRun:
         building it nor writing it can fail the turn: an error is logged by its type alone and the
         row is dropped (`write_console_row`)."""
         try:
-            row = build_console_row(self._console_inputs(outcome), turn_id=self.turn_id)
+            # The row's cost is the ledger's figure for this turn, read in the transaction that
+            # writes the row: the ledger is what the caps count, and the turn's own tally can
+            # drift from it (a settle that timed out keeps its reservation in the ledger). A
+            # settle that outlasts its timeout and commits after this read still leaves the row
+            # at the reservation, above the ledger. If the read fails, the tally stands in.
+            try:
+                async with db.begin_nested():
+                    spent_usd = await turn_spend_usd(db, self.deps.actor.tenant_id, self.turn_id)
+            except Exception as error:
+                logger.error("Reading the turn's spend failed (%s)", error_name(error))
+                spent_usd = outcome.cost_usd
+            row = build_console_row(
+                self._console_inputs(outcome, spent_usd=spent_usd), turn_id=self.turn_id
+            )
         except Exception as error:
             logger.error("Building the console row failed (%s)", error_name(error))
             return
         await write_console_row(db, self.deps.actor.tenant_id, row)
 
-    def _console_inputs(self, outcome: TurnOutcome) -> ConsoleInputs:
+    def _console_inputs(self, outcome: TurnOutcome, *, spent_usd: Decimal) -> ConsoleInputs:
         """What the console row is made from. The tool names are checked against the registry's
         (the model writes them), and no input summary, answer text beyond the not-found reading,
         or explanation goes on."""
-        # The outcome's counts are the main model's (already totaled); the safety check's are added.
+        # The main model's iterations and the safety check's call, totaled the one way.
         guard = self.guard_usage or Usage(0, 0, 0, 0)
-        usage = Usage(
-            outcome.input_tokens + guard.input_tokens,
-            outcome.output_tokens + guard.output_tokens,
-            outcome.cache_read_tokens + guard.cache_read_tokens,
-            outcome.cache_write_tokens + guard.cache_write_tokens,
+        usage = total_usage(
+            [*self.iterations, IterationUsage(self.conversation.guard_model, guard)]
         )
         view = self.deps.actor_view
         return ConsoleInputs(
@@ -1971,7 +1982,7 @@ class TurnRun:
             prompt_version=outcome.prompt_version,
             toolset_version=outcome.toolset_version,
             usage=usage,
-            cost_usd=outcome.cost_usd,
+            cost_usd=spent_usd,
             guard_ms=self.guard_ms,
             first_text_ms=self.first_text_ms,
             total_ms=outcome.total_ms,

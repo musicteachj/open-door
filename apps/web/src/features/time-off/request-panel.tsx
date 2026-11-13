@@ -29,16 +29,21 @@ type RequestPanelProps = {
   onSubmitted: (request: RequestOut) => void
 }
 
+/** How long the inputs must hold still before the preview is asked about them. */
+const CHECK_PAUSE_MS = 300
+
 /** The last answer the server gave, and the inputs it was for (null when it could not say). */
 type Settled = { key: string | null; answer: CheckOut | null }
 
 /**
  * The request form with its state (Task 35): the page mounts it while the form is open, so closing
  * throws away the inputs and opening starts clean. It owns the type, the dates, how much, and the
- * hours, asks `POST /time-off/check` on each change, and sends `POST /time-off/requests` with what
+ * hours, asks `POST /time-off/check` once the inputs have held still for `CHECK_PAUSE_MS` (and
+ * never while a range is half picked), and sends `POST /time-off/requests` with what
  * the form reports.
  *
- * `checking` is true from the render in which an input changes until the answer for those inputs
+ * `checking` is true from the render in which an input changes (or while a range is half picked)
+ * until the answer for those inputs
  * arrives (it is worked out from the answer's own key, so there is no render in between), and an
  * answer that arrives for older inputs is dropped. Until the new answer lands the old one shows
  * muted and Submit waits.
@@ -59,6 +64,8 @@ function RequestPanel({
   const [settled, setSettled] = useState<Settled>({ key: null, answer: null })
   // Bumped to ask again for inputs that haven't changed (after the server refused a send).
   const [round, setRound] = useState(0)
+  // The date picker has a range begun and not ended.
+  const [picking, setPicking] = useState(false)
   const [submitError, setSubmitError] = useState<string | null>(null)
   const { mutateAsync: askCheck } = useCheckTimeOff()
   const create = useCreateTimeOff()
@@ -72,29 +79,52 @@ function RequestPanel({
   const body = toPossibleRequest(type, start, end, choice, calendar.halfDayMinutes)
   const key = body === null ? null : JSON.stringify(body)
 
-  // The check for the current inputs. The effect's cleanup marks its answer as stale, so one that
-  // lands after the inputs changed again (or the form closed) is dropped.
+  // The inputs the preview was last asked about, and the round it was asked in. A change waits out
+  // `CHECK_PAUSE_MS` before it is asked, and nothing is asked while a range is half picked, so a
+  // burst of changes sends one check. Asking again (`round`) goes at once.
+  const [asked, setAsked] = useState<{ key: string | null; round: number }>({ key: null, round: 0 })
+
+  // With nothing to ask, forget what was asked, so inputs that come back are asked afresh. Set
+  // while rendering (React's pattern for state that follows an input), not in an effect.
+  if (key === null && asked.key !== null) setAsked({ key: null, round })
+
   useEffect(() => {
-    if (key === null) return
+    if (key === null || picking) return
+    if (asked.key === key && asked.round === round) return
+    const ask = () => setAsked({ key, round })
+    if (asked.round !== round) {
+      ask()
+      return
+    }
+    const timer = setTimeout(ask, CHECK_PAUSE_MS)
+    return () => clearTimeout(timer)
+  }, [key, picking, round, asked])
+
+  // The check for the inputs last asked about. The effect's cleanup marks its answer as stale, so
+  // one that lands after another check began (or the form closed) is dropped.
+  useEffect(() => {
+    const askedKey = asked.key
+    if (askedKey === null) return
     // The check itself isn't canceled (it is a short read); only its answer is dropped.
     const run = { stale: false }
-    const asked = JSON.parse(key) as NonNullable<typeof body>
-    askCheck({ data: asked })
+    const body = JSON.parse(askedKey) as NonNullable<ReturnType<typeof toPossibleRequest>>
+    askCheck({ data: body })
       .then((answer) => {
-        if (!run.stale) setSettled({ key, answer })
+        if (!run.stale) setSettled({ key: askedKey, answer })
       })
       .catch(() => {
-        if (!run.stale) setSettled({ key, answer: null })
+        if (!run.stale) setSettled({ key: askedKey, answer: null })
       })
     return () => {
       run.stale = true
     }
-    // Only a change of inputs, or a round, asks again.
-  }, [key, round, askCheck])
+  }, [asked, askCheck])
 
   // With nothing to ask there is nothing to show, and nothing is on its way.
   const answer = key === null ? null : settled.answer
-  const checking = key !== null && settled.key !== key
+  // A half-picked range counts as checking too: its days may still change. So do inputs not yet
+  // asked about, though an older answer for the same inputs is on hand.
+  const checking = key !== null && (picking || settled.key !== key || asked.key !== key)
   const sick = type === 'sick'
   const minDate = sick ? calendar.earliestStart.sick : calendar.earliestStart.pto
 
@@ -135,6 +165,7 @@ function RequestPanel({
       start={start}
       end={end}
       onDatesChange={changed(setSelection)}
+      onPickingChange={setPicking}
       calendar={{
         today,
         minDate,
