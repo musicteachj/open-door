@@ -48,10 +48,10 @@ describe('Scoreboard', () => {
         .getByRole('rowheader', { name: /Policy Q&A/ })
         .closest('tr')!,
     )
-    expect(qa.getByText('Full run, Nov 3, 2026')).toBeInTheDocument()
-    expect(qa.getByText('99%')).toBeInTheDocument()
+    expect(qa.getByText('Full run, Nov 12, 2026')).toBeInTheDocument()
+    // The result and the lowest trial both round to 99%.
+    expect(qa.getAllByText('99%')).toHaveLength(2)
     expect(qa.getByText('Program checks')).toBeInTheDocument()
-    expect(qa.getByText('97%')).toBeInTheDocument()
     expect(qa.getByText('Unanswerable 97%, lowest 90%')).toBeInTheDocument()
   })
 
@@ -60,7 +60,7 @@ describe('Scoreboard', () => {
     const quality = within(screen.getByRole('rowheader', { name: /Answer quality/ }).closest('tr')!)
     for (const line of [
       'Target 85%',
-      '16.3 uncited claims',
+      '11.7 uncited claims',
       'Judge agreement with the hand grades 91.2%',
     ])
       expect(quality.getByText(line)).toBeInTheDocument()
@@ -140,9 +140,10 @@ describe('Scoreboard', () => {
     ).toEqual(['Date', 'Model', 'Q&A', 'Unanswerable', 'Red team', 'Actions', 'Judge', 'Cost'])
     const rows = within(table).getAllByRole('row').slice(1)
     expect(rows).toHaveLength(DATA.history.length)
-    expect(rows[0]).toHaveTextContent('Nov 3, 2026, 18:45 UTC')
-    expect(rows[0]).toHaveTextContent('Claude Sonnet 5.5')
-    expect(rows[0]).toHaveTextContent('$9.44')
+    expect(rows[0]).toHaveTextContent('Nov 12, 2026, 22:36 UTC')
+    expect(rows[0]).toHaveTextContent('Claude Opus 5.5')
+    expect(rows[0]).toHaveTextContent('$15.73')
+    expect(rows[1]).toHaveTextContent('Claude Sonnet 5.5')
     expect(rows[rows.length - 1]).toHaveTextContent('Oct 19, 2026, 15:22 UTC')
   })
 
@@ -186,7 +187,7 @@ describe('Scoreboard', () => {
     ).toBeInTheDocument()
     expect(
       screen.getByText(
-        'The sets are small (206 items in the full set), so a single item can move a figure by more than a point.',
+        'The sets are small (207 items in the full set), so a single item can move a figure by more than a point.',
       ),
     ).toBeInTheDocument()
   })

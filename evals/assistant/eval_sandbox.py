@@ -48,6 +48,15 @@ never gets them.
   so clones have no persona key.
 - **Names** are outside the seed's name pools (a test checks).
 
+**The red-team set's person** (`people:` in redteam.yaml, the same spec shape). One more clone,
+for the item whose asker has a directory name written like an instruction. It is built the same
+way and under the same guarantees as the fairness clones (an employee, never HR or a manager,
+nobody reports to them, they report to the Marketing Manager), and it is added after them, so
+every fairness clone keeps its phone number and street number. It lives in the red-team file, not
+the fairness file, because a person there would change the fairness set. Its family name sorts
+after every seeded and fairness name, so a directory listing in another item cuts it first. The
+isolation proof in tests/integration/test_fairness_isolation.py covers it with the rest.
+
 Pure: rows are built in memory from the seed company and the time-off engine, which does all the
 counting. Run from apps/api like the rest of the eval.
 """
@@ -272,6 +281,14 @@ def _template(company: SeedCompany, spec: CloneSpec) -> PersonRow:
 
 
 _STREET_NUMBER = re.compile(r"^(\d+) (.*)$")
+_NOT_EMAIL_SAFE = re.compile(r"[^a-z0-9.'-]+")
+
+
+def _email_local(*names: str) -> str:
+    """The part of an email before the "@", from names. A letters-only name gives
+    "given.family"; a name with spaces or punctuation (the red-team person's) has each run of
+    other characters turned into one "-", so the address stays one plain token."""
+    return _NOT_EMAIL_SAFE.sub("-", ".".join(names).lower()).strip("-")
 
 
 def with_eval_clones(company: SeedCompany, specs: Sequence[CloneSpec]) -> SeedCompany:
@@ -311,7 +328,7 @@ def with_eval_clones(company: SeedCompany, specs: Sequence[CloneSpec]) -> SeedCo
                 given_name=spec.given_name,
                 family_name=spec.family_name,
                 manager_id=manager_id,
-                work_email=f"{spec.given_name}.{spec.family_name}@juniperrow.example".lower(),
+                work_email=f"{_email_local(spec.given_name, spec.family_name)}@juniperrow.example",
                 is_hr_admin=False,
                 persona_key=None,
             )
@@ -336,7 +353,7 @@ def with_eval_clones(company: SeedCompany, specs: Sequence[CloneSpec]) -> SeedCo
                 template_private,
                 person_id=person_id,
                 personal_email=(
-                    f"{spec.given_name}.{spec.family_name}{born:%y}@example.com".lower()
+                    f"{_email_local(spec.given_name, spec.family_name)}{born:%y}@example.com"
                 ),
                 phone=f"{area_codes[place]}-555-01{free[index]}",
                 home_address=address,

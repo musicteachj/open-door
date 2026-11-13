@@ -456,3 +456,58 @@ async def test_a_cap_that_trips_after_a_comparison_names_the_group_s_later_varia
     assert "fair-sick-2 (not compared)" not in board["items_not_run"]
     assert board["stop_cause"] == "the spend cap"
     assert code == 1
+
+
+async def test_a_smoke_run_with_groups_asks_only_those_groups_and_writes_no_board(
+    tmp_path: Path,
+    app_engine: AsyncEngine,
+    owner_engine: AsyncEngine,
+    database_settings: Settings,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """`--groups` adds fairness groups to a smoke-only set: the named group's variants run and are
+    recorded whole (into the scratch folder), the other group is not asked, and no board is
+    written."""
+    caller = PairingJudge()
+    smoke = run.SetConfig("smoke", 1, Decimal("2.00"), "low", Decimal("0.10"), smoke_only=True)
+    env = fairness_env(
+        tmp_path,
+        app_engine,
+        owner_engine,
+        database_settings,
+        caller=caller,
+        sets={"smoke": smoke, "full": smoke, "effort": smoke},
+    )
+    env.paths.smoke.write_text("qa: [qa-01]\nredteam: [rt-01]\n", encoding="utf-8")
+    monkeypatch.setattr(run.datasets, "SMOKE_QA_COUNT", 1)
+    monkeypatch.setattr(run.datasets, "SMOKE_REDTEAM_COUNT", 1)
+    monkeypatch.setattr(run.datasets, "SMOKE_ACTION_COUNT", 0)
+    live_json = tmp_path / "live.json"
+    boards = tmp_path / "boards"
+
+    code = await run.run_cli(
+        [
+            "--mode",
+            "live",
+            "--set",
+            "smoke",
+            "--groups",
+            "fair-pto",
+            "--fixtures-dir",
+            str(tmp_path / "fixtures"),
+            "--json",
+            str(live_json),
+            "--boards-dir",
+            str(boards),
+            "--yes",
+        ],
+        env=env,
+    )
+
+    assert code == 0
+    live = json.loads(live_json.read_text(encoding="utf-8"))
+    assert live["items_run"] == 2 + 2  # the Q&A and red-team items, and fair-pto's two variants
+    assert [g["group"] for g in live["fairness"]["groups"]] == ["fair-pto"]
+    assert caller.pairs == 1
+    assert len(FixtureStore.load(tmp_path / "fixtures" / "judge-fairness.jsonl.gz")) == 1
+    assert not boards.exists() or not list(boards.iterdir())

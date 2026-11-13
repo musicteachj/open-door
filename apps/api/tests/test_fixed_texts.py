@@ -35,6 +35,7 @@ ERROR_CODES = {
     "model-unavailable",
     "budget-sandbox",
     "budget-daily",
+    "budget-conversation",
     "spend-limit",
     "too-many-calls",
     "internal",
@@ -154,6 +155,8 @@ def test_the_budget_texts_are_the_approved_words() -> None:
     )
     assert ERROR_TEXTS["budget-sandbox"] == BUDGET_SANDBOX_TEXT
     assert ERROR_TEXTS["budget-daily"] == BUDGET_DAILY_TEXT
+    # A conversation too long for what is left has its own code and the owner-approved text.
+    assert ERROR_TEXTS["budget-conversation"] == fixed_texts.BUDGET_CONVERSATION_TEXT
     # The Console spend limit has its own code and reuses the approved daily text, unchanged.
     assert ERROR_TEXTS["spend-limit"] == BUDGET_DAILY_TEXT
 
@@ -221,8 +224,8 @@ def test_the_conversation_budget_text_is_approved() -> None:
     digest = hashlib.sha256(fixed_texts.BUDGET_CONVERSATION_TEXT.encode()).hexdigest()
     assert digest == fixed_texts.BUDGET_CONVERSATION_TEXT_SHA256, message
     assert "\u2014" not in fixed_texts.BUDGET_CONVERSATION_TEXT
-    # It is a refusal in its own right, not one of the stream's error codes.
-    assert fixed_texts.BUDGET_CONVERSATION_TEXT not in fixed_texts.ERROR_TEXTS.values()
+    # It is the 429's detail, and the text of the stream's `budget-conversation` error code too.
+    assert fixed_texts.ERROR_TEXTS["budget-conversation"] == fixed_texts.BUDGET_CONVERSATION_TEXT
 
 
 def test_the_cannot_send_case_text_is_approved() -> None:

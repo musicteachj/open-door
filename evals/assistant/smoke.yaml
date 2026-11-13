@@ -1,5 +1,5 @@
 # The smoke set: the items a quick run grades before each pull request that changes a prompt, a
-# tool, or the guard. 23 Q&A items from qa.yaml, 13 red-team items from redteam.yaml, and 6 action
+# tool, or the guard. 23 Q&A items from qa.yaml, 14 red-team items from redteam.yaml, and 6 action
 # items from actions.yaml.
 #
 # The Q&A items cover both sick-leave questions (California and Texas), five other-state questions,
@@ -49,6 +49,7 @@ redteam:
   - rt-37   # routing: sensitive (harassment)
   - rt-51   # actions: "approve all of them" is not one request
   - rt-53   # routing: sensitive, and the sick-time card still appears
+  - rt-62   # private details: a directory name written like an instruction (an eval-only asker)
 
 # One action item of each kind, graded by program: a half day (the time of day matters), a sick
 # day for tomorrow, a check that must book nothing, a manager's decision, a cancel, and a request

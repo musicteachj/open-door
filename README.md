@@ -33,11 +33,11 @@ Three trials per set unless noted.
 | Set | Result | Lowest trial | Other figures |
 |---|---|---|---|
 | Retrieval (Handbook 2026.11.3) | **100%** Hit rate at 5 | No trials: retrieval is exact. | Every negative passed. |
-| Policy Q&A (Full run, Nov 3, 2026) | **99%** Program checks | 97% | Unanswerable 97%, lowest 90% |
-| Answer quality (Nov 3, 2026) | **73%** Judge pass rate | 69% | Target 85%<br>16.3 uncited claims<br>Judge agreement with the hand grades 91.2% |
-| Red team (Nov 3, 2026) | **100%** In every trial | 100% | All six groups at 100%: actions, cases, injection, private details, prompt extraction, routing. |
-| Actions (Nov 3, 2026) | **100%** Pass rate | 100% | Numbers match the engine 100% |
-| Fairness (Nov 3, 2026) | **11 of 12** Groups consistent | Groups are judged across all trials. | 1 identity assumption in the worst trial<br>Judge equivalence 85% (lowest trial 82%)<br>Groups consistent by attribute: name 100%, parent 100%, religion 0%, age 100%, origin 100%, spouse 100%.<br>Graded again from the saved run on 2026-11-03; no new model calls |
+| Policy Q&A (Full run, Nov 12, 2026) | **99%** Program checks | 99% | Unanswerable 97%, lowest 90% |
+| Answer quality (Nov 12, 2026) | **80%** Judge pass rate | 76% | Target 85%<br>11.7 uncited claims<br>Judge agreement with the hand grades 91.2% |
+| Red team (Nov 12, 2026) | **100%** In every trial | 100% | All six groups at 100%: actions, cases, injection, private details, prompt extraction, routing. |
+| Actions (Nov 12, 2026) | **100%** Pass rate | 100% | Numbers match the engine 100% |
+| Fairness (Nov 12, 2026) | **12 of 12** Groups consistent | Groups are judged across all trials. | No identity assumption in any trial<br>Judge equivalence 87% (lowest trial 82%)<br>Groups consistent by attribute: name 100%, parent 100%, religion 100%, age 100%, origin 100%, spouse 100%. |
 | Escalation (Oct 27, 2026) | **100%** Crisis recall | 100% | Sensitive recall 100%<br>Ordinary questions offered no case 100% |
 | Case summary (Oct 30, 2026) | **22 of 22** Passed every check | 22 of 22 | By the judge: 22 of 22 |
 
@@ -50,12 +50,13 @@ Three trials per set unless noted.
 | Oct 29, 2026, 14:23 UTC | `claude-opus-5-5` | 97% | 93% | 100% | 99% | 68% | $10.93 |
 | Nov 3, 2026, 14:00 UTC | `claude-opus-5-5` | 99% | 97% | 100% | 100% | 73% | $15.20 |
 | Nov 3, 2026, 18:45 UTC | `claude-sonnet-5-5` | 98% | 100% | 99% | 97% | 83% | $9.44 |
+| Nov 12, 2026, 22:36 UTC | `claude-opus-5-5` | 99% | 97% | 100% | 100% | 80% | $15.73 |
 
 Actions joined the full set on Oct 25, 2026.
 
 These figures come from recorded eval runs. CI replays the recordings on every change, so it checks the app's handling, not the model.
 
-The sets are small (206 items in the full set), so a single item can move a figure by more than a point.
+The sets are small (207 items in the full set), so a single item can move a figure by more than a point.
 <!-- scoreboard:end -->
 
 ## Documentation

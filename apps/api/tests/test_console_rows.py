@@ -157,7 +157,12 @@ def test_the_budget_codes_are_the_turns_own() -> None:
     assert {_budget_code("sandbox"), _budget_code("daily")} < set(BUDGET_ERROR_CODES)
     assert set(BUDGET_ERROR_CODES) <= set(get_args(ErrorCode))
     assert set(BUDGET_ERROR_CODES) <= set(ERROR_TEXTS)
-    assert set(BUDGET_ERROR_CODES) == {"budget-sandbox", "budget-daily", "spend-limit"}
+    assert set(BUDGET_ERROR_CODES) == {
+        "budget-sandbox",
+        "budget-daily",
+        "budget-conversation",
+        "spend-limit",
+    }
 
 
 def test_the_card_actions_are_the_proposal_actions() -> None:
@@ -224,6 +229,7 @@ def test_an_ordinary_turn_gives_every_column() -> None:
         ({"error_code": "max-tokens"}, "answered"),
         ({"answer_text": "I couldn't find that in the handbook."}, "not_found"),
         ({"status": "failed", "error_code": "budget-sandbox"}, "budget"),
+        ({"status": "failed", "error_code": "budget-conversation"}, "budget"),
         ({"status": "failed", "error_code": "budget-daily"}, "budget"),
         ({"status": "failed", "error_code": "spend-limit"}, "budget"),
         ({"status": "failed", "error_code": "refusal", "refusal": True}, "refused"),

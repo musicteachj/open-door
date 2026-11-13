@@ -10,6 +10,7 @@ from decimal import Decimal
 from typing import Any
 
 import pytest
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 from app.ai import turn as turn_module
@@ -279,3 +280,34 @@ async def test_a_stopped_sensitive_turn_sends_no_closing_event_either(
         if e.action == "escalation.offered"
     ]
     assert len(rows) == 1
+
+
+async def test_the_guard_is_shown_the_crisis_text_after_an_abandoned_crisis_turn(
+    app_engine: AsyncEngine, owner_engine: AsyncEngine, seeded_sandbox: SeedCompany
+) -> None:
+    """A crisis turn whose end-of-turn write never landed is stored as failed ("abandoned") with no
+    answer, but the person was shown the crisis text. The next safety check must be given it, so
+    a short reply such as "yes, tonight" is screened with what it answers."""
+    env = await make_env(app_engine, seeded_sandbox)
+    await env.ask("I want to hurt myself")
+    async with owner_engine.begin() as connection:
+        await connection.execute(
+            text("ALTER TABLE ai_turns DISABLE TRIGGER refuse_finished_turn_update")
+        )
+        try:
+            await connection.execute(
+                text(
+                    "UPDATE ai_turns SET status = 'failed', error_code = 'abandoned',"
+                    " answer_ciphertext = NULL"
+                )
+            )
+        finally:
+            await connection.execute(
+                text("ALTER TABLE ai_turns ENABLE TRIGGER refuse_finished_turn_update")
+            )
+    abandoned = await env.last_turn()
+    assert (abandoned.status, abandoned.answer_text) == ("failed", "")
+
+    await env.ask("yes, tonight")
+
+    assert CRISIS_TEXT in env.transport.guard_requests[-1].messages[0]["content"]

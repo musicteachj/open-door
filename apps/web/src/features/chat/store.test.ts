@@ -897,6 +897,51 @@ describe('an error in the middle of an answer', () => {
     },
   )
 
+  it('offers a new conversation, without the notice words, after a budget-conversation error, as for its 429', async () => {
+    onTurn(() =>
+      eventStream(started, [
+        'error',
+        { code: 'budget-conversation', message: 'This conversation is too long.', requestId: null },
+      ]),
+    )
+    const deps = makeDeps()
+    await state().send('Sick days?', deps)
+    expect(deps.invalidateConversation).toHaveBeenCalledTimes(1)
+    expect(state().status).toBe('error')
+    // The server's words are the turn's own error; nothing is set under the box as well.
+    expect(state().turn?.error).toEqual({
+      code: 'budget-conversation',
+      message: 'This conversation is too long.',
+    })
+    expect(state().sendError).toBeNull()
+    expect(state().offerNewConversation).toBe(true)
+    expect(state().offerWithoutNoticeWords).toBe(true)
+  })
+
+  it.each(['budget-sandbox', 'budget-daily', 'spend-limit', 'internal'])(
+    'does not offer a new conversation after the %s error',
+    async (code) => {
+      onTurn(() => eventStream(started, ['error', { code, message: 'Words.', requestId: null }]))
+      await state().send('Sick days?', makeDeps())
+      expect(state().offerNewConversation).toBe(false)
+      expect(state().offerWithoutNoticeWords).toBe(false)
+    },
+  )
+
+  it('clears that offer on the next send', async () => {
+    onTurn(() =>
+      eventStream(started, [
+        'error',
+        { code: 'budget-conversation', message: 'Too long.', requestId: null },
+      ]),
+    )
+    await state().send('Sick days?', makeDeps())
+    onTurn(() => eventStream(started, completed))
+    await state().send('Hello', makeDeps())
+    expect(state().offerNewConversation).toBe(false)
+    expect(state().offerWithoutNoticeWords).toBe(false)
+  })
+
   it('lets Retry send the same question again', async () => {
     let calls = 0
     const posted = onTurn(() =>

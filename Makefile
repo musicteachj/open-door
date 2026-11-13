@@ -89,13 +89,21 @@ eval-offline: ## Replay the recorded assistant evals (needs `make db`); no netwo
 # MODEL=<model id> runs the assistant (or, for SET=case-summary, the summarizer) on another model for
 # a model comparison on one commit (MODEL=claude-sonnet-5-5 SET=full: about $9.60, cap $13); it records into the git-ignored evals/assistant/fixtures-sonnet/
 # (never the committed fixtures) and is still boarded. It does not apply to SET=escalation.
+# GROUPS=<fairness group IDs, comma-separated> (SET=smoke only) adds those groups, every variant and
+# pairwise comparison, to a smoke run: GROUPS=fair-religious,fair-pto-age,fair-final-pay-age prints
+# about $1.50 (cap $2). A smoke run writes no board, with groups or without.
+# ITEMS=<item IDs, comma-separated> (SET=smoke only, not with GROUPS) runs only those red-team, Q&A,
+# or action items, for one trial (about $0.10 an item, cap $0.50), and re-records only what they
+# used; it writes no board.
 # One run at a time; don't start it in the middle of `make check`.
 SET ?= smoke
 STAMP := $(shell date -u +%Y%m%dT%H%M%SZ)
 RUNS := ../../evals/assistant/runs
-eval-live: ## PAID: record the assistant evals. SET=smoke|full|effort|escalation|case-summary, YES=1 to run, COMPARE=<scoreboard.json>, HALF=tuning|held_out (escalation), FIXTURES_DIR=<scratch folder to record into>, MODEL=<model id> (compare models; records into fixtures-sonnet/)
+eval-live: ## PAID: record the assistant evals. SET=smoke|full|effort|escalation|case-summary, YES=1 to run, COMPARE=<scoreboard.json>, HALF=tuning|held_out (escalation), GROUPS=<fairness group IDs> (smoke), ITEMS=<item IDs> (smoke), FIXTURES_DIR=<scratch folder to record into>, MODEL=<model id> (compare models; records into fixtures-sonnet/)
 	cd $(API) && uv run python ../../evals/assistant/run.py --mode live --set $(SET) \
 		$(if $(HALF),--half $(HALF)) \
+		$(if $(GROUPS),--groups $(GROUPS)) \
+		$(if $(ITEMS),--items $(ITEMS)) \
 		$(if $(MODEL),--model $(MODEL)) \
 		$(if $(FIXTURES_DIR),--fixtures-dir $(abspath $(FIXTURES_DIR)),$(if $(MODEL),--fixtures-dir ../../evals/assistant/fixtures-sonnet,$(if $(filter effort,$(SET)),--fixtures-dir ../../evals/assistant/fixtures-effort))) \
 		$(if $(COMPARE),--compare $(abspath $(COMPARE))) \
