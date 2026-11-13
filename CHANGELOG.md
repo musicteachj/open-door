@@ -174,6 +174,12 @@ version (`0.x.y` while the app is being built, `1.0.0` when it is complete).
 
 ### Security
 
+- **`opentelemetry-api` updated to 1.45.2** (Phase 8, stage 7). FastAPI depends on it, and 1.45.1
+  could be slowed to a crawl by a crafted `traceparent` header: its regular expression backtracks
+  in quadratic time (GHSA-mf5v-w3w3-f6cg, CVE-2026-126360). Open Door doesn't read trace headers
+  today, but the dependency audit fails on it, and the floor in `pyproject.toml` now keeps 1.45.2
+  or later.
+
 - **Production refuses a delay profile** (Phase 8, stage 7, Task 36). The API stops at startup
   when `APP_ENV=production` and `SCRIPTED_DELAY_PROFILE` is anything but `none`, naming the
   setting, even with the real transport.

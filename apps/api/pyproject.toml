@@ -28,9 +28,10 @@ build-backend = "uv_build"
 [tool.uv]
 # Floors for packages we don't depend on directly. certifi (through httpx) must be 2026.10.19 or
 # later, which drops the emSign roots whose intermediate keys were compromised (GHSA-6q48-6c7w-9gw2).
-# opentelemetry-api (through FastAPI) must be 1.45.1 or later, which bounds the parsing of the
-# `tracestate` header (GHSA-xcq7-p3pf-p88h).
-constraint-dependencies = ["certifi>=2026.10.19", "opentelemetry-api>=1.45.1"]
+# opentelemetry-api (through FastAPI) must be 1.45.2 or later: 1.45.1 bounds the parsing of the
+# `tracestate` header (GHSA-xcq7-p3pf-p88h), and 1.45.2 fixes slow regex backtracking on a crafted
+# `traceparent` header (GHSA-mf5v-w3w3-f6cg).
+constraint-dependencies = ["certifi>=2026.10.19", "opentelemetry-api>=1.45.2"]
 
 [tool.uv.build-backend]
 module-name = "app"
