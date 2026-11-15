@@ -15,7 +15,19 @@ import {
   stubConversation,
   waitForTurnSaved,
 } from './conversation-helpers'
+import { SENSITIVE_QUESTION } from './cases-helpers'
 import { addTestStyle, MODAL_OVERLAY_RULES, scan, startAs } from './helpers'
+
+/** Waits until the page has stopped scrolling: its position holds still for a moment. */
+async function scrollStill(page: Page) {
+  await expect
+    .poll(async () => {
+      const before = await page.evaluate(() => window.scrollY)
+      await page.waitForTimeout(150)
+      return before === (await page.evaluate(() => window.scrollY))
+    })
+    .toBe(true)
+}
 
 // The conversation page's layout in a real browser, measured on the real page (not the gallery's
 // frame, whose column is a different width). Two rules keep these from failing on another
@@ -140,13 +152,7 @@ test.describe('at 390 px', () => {
       'A long question about how many sick days an employee gets each year, and whether they carry over',
     )
     // Wait for the page to finish moving: the scroll position holds still for a moment.
-    await expect
-      .poll(async () => {
-        const before = await page.evaluate(() => window.scrollY)
-        await page.waitForTimeout(150)
-        return before === (await page.evaluate(() => window.scrollY))
-      })
-      .toBe(true)
+    await scrollStill(page)
     expect(await page.evaluate(() => window.scrollY)).toBeGreaterThan(0)
     const composer = await boxOf(composerForm(page))
     const chip = await boxOf(page.locator('[data-slot="source-chip"]'))
@@ -434,6 +440,123 @@ test.describe('at 1440 px', () => {
     expectSameRow(disclosure, await boxOf(askButton(page)), 14)
     await expect(page.getByRole('complementary', { name: 'Sandbox status' })).toBeVisible()
     expect((await scan(page)).violations).toEqual([])
+  })
+
+  test('after a sensitive answer, "Show your work" under the tall HR panel is fully above the composer (the accessibility audit)', async ({
+    page,
+  }) => {
+    await startAs(page, 'Priya')
+    await askAndWaitForAnswer(page, SENSITIVE_QUESTION)
+    const toggle = page.getByRole('button', { name: 'Show your work' }).last()
+    await expect(toggle).toBeVisible()
+    // Wait for the page to finish moving: the scroll position holds still for a moment.
+    await scrollStill(page)
+    const dock = await boxOf(page.locator('[data-slot="composer-dock"]'))
+    const shown = await boxOf(toggle)
+    expect(shown.y + shown.height).toBeLessThanOrEqual(dock.y)
+  })
+
+  test('opening "Show your work" with a click that has no pointer or key before it (a screen reader’s) leaves the page where it is', async ({
+    page,
+  }) => {
+    await startAs(page, 'Priya')
+    await askAndWaitForAnswer(page, SENSITIVE_QUESTION)
+    const toggle = page.getByRole('button', { name: 'Show your work' }).last()
+    await expect(toggle).toBeVisible()
+    await scrollStill(page)
+    const before = await page.evaluate(() => window.scrollY)
+    await toggle.evaluate((el) => (el as HTMLElement).click())
+    await expect(toggle).toHaveAttribute('aria-expanded', 'true')
+    await page.waitForTimeout(300)
+    expect(await page.evaluate(() => window.scrollY)).toBe(before)
+  })
+
+  test('a focused control the reader scrolled behind the composer stays there when the thread grows, below it or above it', async ({
+    page,
+  }) => {
+    await startAs(page, 'Priya')
+    await askAndWaitForAnswer(page, SENSITIVE_QUESTION)
+    await askAndWaitForAnswer(page, QUESTIONS.cited)
+    await scrollStill(page)
+    const link = page.getByRole('button', { name: 'Show your work' }).last()
+    await link.focus()
+    // Scroll up until it sits behind the composer, as the reader might with a wheel.
+    const dockTop = (await boxOf(page.locator('[data-slot="composer-dock"]'))).y
+    const linkTop = (await boxOf(link)).y
+    await page.mouse.move(700, 400)
+    await page.mouse.wheel(0, linkTop - dockTop - 30)
+    await scrollStill(page)
+    const before = await page.evaluate(() => window.scrollY)
+    expect((await boxOf(link)).y).toBeGreaterThan(dockTop)
+    // Something below it grows.
+    await page.evaluate(() => {
+      const grown = document.createElement('div')
+      grown.style.height = '60px'
+      document.querySelector('[data-slot="thread-end"]')!.before(grown)
+    })
+    await page.waitForTimeout(300)
+    expect(await page.evaluate(() => window.scrollY)).toBe(before)
+    // Something above it grows: the browser's scroll anchoring keeps it in place on screen.
+    const onScreen = (await boxOf(link)).y
+    await page.evaluate(() => {
+      const grown = document.createElement('div')
+      grown.style.height = '60px'
+      document.querySelector('[data-slot="conversation-thread"]')!.prepend(grown)
+    })
+    await page.waitForTimeout(300)
+    expect(Math.abs((await boxOf(link)).y - onScreen)).toBeLessThanOrEqual(1)
+  })
+
+  test('a reload puts the page back where the reader left it, even when the HR panel’s case line loads late', async ({
+    page,
+  }) => {
+    await startAs(page, 'Priya')
+    await askAndWaitForAnswer(page, SENSITIVE_QUESTION)
+    await askAndWaitForAnswer(page, QUESTIONS.cited)
+    await scrollStill(page)
+    // Just above the end: before the case line loads, the page is too short to reach it.
+    await page.mouse.move(700, 400)
+    await page.mouse.wheel(0, -30)
+    await scrollStill(page)
+    const left = await page.evaluate(() => window.scrollY)
+    await page.route('**/api/v1/cases/texts', async (route) => {
+      await new Promise((resolve) => setTimeout(resolve, 600))
+      await route.fallback()
+    })
+    await page.reload()
+    await expect(page.getByRole('button', { name: 'Show your work' })).toHaveCount(2)
+    await page.waitForTimeout(900)
+    await scrollStill(page)
+    expect(Math.abs((await page.evaluate(() => window.scrollY)) - left)).toBeLessThanOrEqual(2)
+  })
+
+  test('focusing the composer or the header’s button leaves the page where it is (the room kept for the sticky parts is the thread’s own)', async ({
+    page,
+  }) => {
+    await startAs(page, 'Priya')
+    await askAndWaitForAnswer(page, SENSITIVE_QUESTION)
+    await askAndWaitForAnswer(page, QUESTIONS.cited)
+    await expect(page.getByRole('button', { name: 'Show your work' })).toHaveCount(2)
+    const targets = [
+      page.getByRole('textbox', { name: 'Ask Open Door' }),
+      page.getByRole('button', { name: 'Start a new conversation' }),
+    ]
+    const max = await page.evaluate(
+      () => document.documentElement.scrollHeight - window.innerHeight,
+    )
+    expect(max).toBeGreaterThan(400)
+    for (const y of [Math.round(max / 2), max]) {
+      for (const target of targets) {
+        await page.evaluate((to) => {
+          ;(document.activeElement as HTMLElement | null)?.blur()
+          window.scrollTo(0, to)
+        }, y)
+        await expect.poll(() => page.evaluate(() => window.scrollY)).toBe(y)
+        await target.focus()
+        await page.waitForTimeout(100)
+        expect(await page.evaluate(() => window.scrollY), `${y}`).toBe(y)
+      }
+    }
   })
 
   test("the docked panel is 420 px beside the thread, in the rail's place, and the rail hides while it is open", async ({

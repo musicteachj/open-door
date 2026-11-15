@@ -272,11 +272,6 @@ conversation-page glitches are fixed with browser tests (stage 6).
   the next year would get a reply-by date on a closed day. Check the seed always writes the next
   year's holidays, or read them from the calendar. (v0.6.0 release review.)
 
-- **The sticky composer can cover "Show your work".** At a 900-pixel-high window, with a tall HR
-  panel above it, the conversation page's sticky composer partly covers the "Show your work"
-  toggle, and axe's target-size rule flags it, so Stage 6's case tests scan the panel only. Check
-  it in the accessibility audit: scroll padding under the last turn, or a test of the toggle's
-  visible area. (Phase 6 stage 6.)
 - **A second route for a concern about the HR team.** A case goes only to HR, so a person whose
   concern is about someone in HR has no other way in through Open Door; today the handbook's
   contacts are the only route. A later phase could add a named second reviewer outside HR for
@@ -368,11 +363,15 @@ conversation-page glitches are fixed with browser tests (stage 6).
   `type` values are bare codes (`turn-running`), a relative URI reference that RFC 9457 allows but
   that a full URI would make unambiguous; there's no limit on how many conversations one person
   starts (sandbox expiry cleans them up). (Phase 4 stage 4 reviews.) Moved from Phase 4 at its close: for the hardening pass.
-- **Small web polish from Phase 4 stage 6:** the shared passage panel puts Close before its title in
-  the DOM, so Tab goes from the title to the passage text rather than to Close as screen 07's notes
-  say; a second tab that starts a new conversation leaves this tab asking in the old one; and a
-  malformed stored search source would fail the conversation `GET` (only the API writes them).
-  For the accessibility audit and the hardening pass. (Phase 4 stage 6 reviews.)
+- **Small web polish from Phase 4 stage 6:** a second tab that starts a new conversation leaves
+  this tab asking in the old one, and a malformed stored search source would fail the conversation
+  `GET` (only the API writes them). For the hardening pass. (Phase 4 stage 6 reviews; the passage
+  panel's Tab order was fixed in Phase 8 stage 8.)
+- **The phone nav's "Directory" link shows only in part when focused.** At 390 px, the nav scrolls
+  sideways on its own, and Tab to "Directory" leaves it about 58% in view; it is readable and the
+  rest is a swipe away, so it is low (2.4.11 asks only that it isn't entirely hidden). Scrolling the
+  focused link fully into the nav's view, or fitting the links, would fix it. (Phase 8 stage 8,
+  the accessibility audit's L3; see [`ACCESSIBILITY.md`](ACCESSIBILITY.md).)
 
 - **One exit for the canary check, and a cheaper fold.** `turn.py` checks the canary at about seven
   places (held text, status notes, the take-back, the restore, closing events), each keeping its

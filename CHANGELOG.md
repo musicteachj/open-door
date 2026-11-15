@@ -235,6 +235,37 @@ version (`0.x.y` while the app is being built, `1.0.0` when it is complete).
 
 ### Fixed
 
+- **A control that takes focus on the conversation page is never hidden behind the composer**
+  (Phase 8, stage 8, the accessibility audit, WCAG 2.4.11). Tab could land on the HR panel's
+  contact links, the "How confidential HR cases work" link, or a confirm card's Confirm while each
+  was entirely behind the sticky composer, and at a 900 px high window "Show your work" under the
+  HR panel stayed behind it even at rest. Everything in the thread now has a scroll margin of the
+  sticky header's and the composer's heights, so the browser scrolls a focused control clear of
+  both, and a text box that takes focus from the keyboard is brought clear too (Chromium scrolls a
+  text box to its caret, not its margin). A reader following the answer is taken to the end again
+  when the last turn grows after it ended (the HR panel's case line loads a moment later), until
+  they press a key or the pointer, click (a screen reader's click comes with neither), or scroll
+  (and never on Back or a reload, where the page goes back to where the reader left it).
+  A focused control the page pushes behind the composer, such as "Send feedback" when its error
+  appears, is brought clear; one the reader scrolled there stays. The case tests' scans of the chat states cover the whole page again.
+- **"Resume the tour" keeps focus on the step it shows** (Phase 8, stage 8). The persona menu,
+  closing, took focus back from the step's title to the switcher, so a screen reader didn't read
+  the step. The menu now gives focus back to the switcher only when nothing else has taken it.
+- **The passage panel's Tab order follows screen 07** (Phase 8, stage 8): the title, then Close,
+  the passage, and "Open in handbook". Close used to come first, before the title it closes. It
+  stays in the same corner on screen, and stays the same button, with its focus, when the panel
+  goes from a passage to loading another.
+- **The design tokens' table gives the marker clock's contrast as 3.5:1** (it said 3.6:1).
+- **Time off's balance cards fit a 320 px screen** (Phase 8, stage 8, the accessibility audit's L6,
+  WCAG 1.4.10). Their column was at least 300 px, wider than the page leaves at 320 px, so each
+  card's right edge was cut off. The column is now at most the space there is; nothing changes at
+  390 px or wider.
+- **The short-notice time-off test passes in any week** (tests, found at Phase 8 stage 8's close).
+  It stepped a week past any holiday in its Monday-to-Thursday request, so in the days before
+  Thanksgiving it started 15 days out, no longer short notice, and failed. It now asks from the
+  first Monday at least two days away to the next Wednesday, which leaves at least six counted
+  days on any date (checked for every day from 2026 to 2030).
+
 - **The console row's cost is the turn's ledger spend** (Phase 8, stage 7, Task 38). The row's cost
   is now the sum of the turn's `ai_spend` rows, read in the transaction that writes the row, so it
   matches what the ledger held when the row was written, in every ending: a settle that timed out
@@ -304,6 +335,18 @@ version (`0.x.y` while the app is being built, `1.0.0` when it is complete).
   December holds next year's Denver holidays, and a docstring that said otherwise is corrected.
 
 ### Added
+
+- **An accessibility audit that runs with the browser tests** (Phase 8, stage 8, Tasks 41 and 42).
+  New checks for what axe doesn't measure: reflow at 320 px (WCAG 1.4.10), text spacing (1.4.12),
+  reduced motion, target size (2.5.8), focus not hidden behind the sticky parts (2.4.11), and a
+  visible focus ring at every stop. They run on every page and on the main flows' states at
+  1280 px and 320 px, and the component gallery's states at 320 px. Ten keyboard-only walks cover
+  the main flows, from starting a sandbox to resuming the tour. A unit test checks every pair in
+  the design tokens' contrast table, and the pairs the components use, against the theme's colors.
+  Each check proves itself on a planted failure. The gallery's 320 px sweep uses the same reflow
+  check, and the keyboard walk to the composer waits for the conversation to load (it could pass
+  the composer and land on the rail's links, which then hide). [`docs/ACCESSIBILITY.md`](docs/ACCESSIBILITY.md)
+  records the method, the findings, the known gaps, and a VoiceOver checklist for a person to run.
 
 - **The scripted model's delay profile** (Phase 8, stage 7, Task 36). `SCRIPTED_DELAY_PROFILE`
   (`none` by default, or `realistic`) makes the scripted model wait like the real one: the guard

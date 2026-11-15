@@ -33,10 +33,6 @@ import { nav, scrollsSideways, settledScan, switchPersona } from './time-off-hel
 // sandbox seeds four cases (Keisha new, Chloe new, Aaliyah in review, Lucia closed), and no
 // persona has a case of their own to start.
 
-// The conversation's sticky composer can cover the "Show your work" toggle under a panel in a short
-// window, which axe reads as a small target. That belongs to the conversation page, so the scans
-// of the chat states look at the panel itself.
-const PANEL = ['[data-slot="escalation-panel"]']
 const dialog = (page: Page) => page.getByRole('alertdialog')
 const casesLink = (page: Page, news: number) =>
   nav(page).getByRole('link', {
@@ -84,7 +80,7 @@ test.describe('the demo, from the panel and from My cases, at 1440 px', () => {
     await askAndWaitForAnswer(page, SENSITIVE_QUESTION)
     await expect(casePanels(page)).toHaveCount(1)
     await expect(openCaseButton(page)).toBeVisible()
-    expect.soft((await settledScan(page, [], PANEL)).violations).toEqual([])
+    expect.soft((await settledScan(page)).violations).toEqual([])
 
     await openCaseButton(page).click()
     // The form opens prefilled with the turn's own question, verbatim, and focus is on its heading.
@@ -114,7 +110,7 @@ test.describe('the demo, from the panel and from My cases, at 1440 px', () => {
         .getByRole('alert')
         .filter({ hasText: 'That looks like a Social Security or card number.' }),
     ).toBeVisible()
-    expect.soft((await settledScan(page, [], PANEL)).violations).toEqual([])
+    expect.soft((await settledScan(page)).violations).toEqual([])
     await wordsBox(page).fill(SENSITIVE_QUESTION)
 
     // A double click on Send makes one case.
@@ -129,7 +125,7 @@ test.describe('the demo, from the panel and from My cases, at 1440 px', () => {
     await expect(openCaseButton(page)).toHaveCount(0)
     expect(await myCasesFromApi(page)).toHaveLength(1)
     priyaCaseId = (await myCasesFromApi(page))[0]!.id
-    expect.soft((await settledScan(page, [], PANEL)).violations).toEqual([])
+    expect.soft((await settledScan(page)).violations).toEqual([])
   })
 
   test('a reload and a second tab show the sent case, with no button', async () => {
@@ -360,7 +356,7 @@ test.describe('My cases, at 1440 px', () => {
     await expect(page.locator('[data-slot="case-sent"]')).toContainText('You have 5 cases waiting')
     await expect(page.getByRole('link', { name: 'View your cases' })).toBeVisible()
     await expect(openCaseButton(page)).toHaveCount(0)
-    expect.soft((await settledScan(page, [], PANEL)).violations).toEqual([])
+    expect.soft((await settledScan(page)).violations).toEqual([])
   })
 })
 
@@ -433,7 +429,7 @@ test.describe('at 390 px', () => {
     await openCaseButton(page).click()
     await expect(formHeading(page)).toBeFocused()
     expect(await scrollsSideways(page)).toBe(false)
-    expect.soft((await settledScan(page, [], PANEL)).violations).toEqual([])
+    expect.soft((await settledScan(page)).violations).toEqual([])
     await fillForm(page, HARASSMENT, null)
     await sendButton(page).click()
     await expect(sentLine(page)).toBeVisible()

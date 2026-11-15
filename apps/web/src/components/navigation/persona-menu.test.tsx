@@ -1,4 +1,4 @@
-import { render, screen, within } from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import type { ReactNode } from 'react'
 import { describe, expect, it, vi } from 'vitest'
@@ -207,6 +207,23 @@ describe('PersonaMenu', () => {
     await user.click(document.body)
     expect(screen.queryByRole('menu')).not.toBeInTheDocument()
     expect(trigger).toHaveFocus()
+  })
+
+  it('returns focus to the switcher after a row that moves focus nowhere', async () => {
+    const user = userEvent.setup()
+    render(
+      <PersonaMenu
+        personas={PERSONAS}
+        currentKey="priya"
+        onSwitch={() => {}}
+        onSignOut={() => {}}
+        extra={<DropdownMenuItem onSelect={() => {}}>Start the tour over</DropdownMenuItem>}
+      />,
+    )
+    const trigger = screen.getByRole('button')
+    await open(user, trigger)
+    await user.click(screen.getByRole('menuitem', { name: 'Start the tour over' }))
+    await waitFor(() => expect(trigger).toHaveFocus())
   })
 
   it('closes without switching when the current persona is chosen', async () => {

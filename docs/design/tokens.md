@@ -67,7 +67,7 @@ at `primary-tint`, so the brand's cinnamon accent is called `marker`.
 | `ink` on `danger-tint` / `danger` icon on it | 14.7:1 / 5.9:1 | 4.5:1 / 3:1 |
 | `ink` on `apricot-tint` / `success` icon / `primary` link on it | 14.5:1 / 5.6:1 / 9.8:1 | 4.5:1 |
 | `ink` / `ink-muted` / `primary` / `danger` on `confidential-tint` | 14.9:1 / 5.6:1 / 10.1:1 / 6.0:1 | 4.5:1 |
-| `marker` clock on white ("Waiting for approval") | 3.6:1 | 3:1 (an icon beside its word) |
+| `marker` clock on white ("Waiting for approval") | 3.5:1 | 3:1 (an icon beside its word) |
 | The `-border` tokens on white | 1.35:1 to 1.7:1 | decorative: the icon and the words carry the meaning |
 
 `border`, `border-subtle`, and `border-strong` are below 3:1 on purpose. They are decorative, or
