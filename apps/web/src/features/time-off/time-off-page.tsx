@@ -195,7 +195,7 @@ export function TimeOffPage() {
           <PageHeader title={pageCopy.title} right={<PageSandboxIndicator />} />
           <LoadingStatus loading={loading} text={pageCopy.loading} />
 
-          <div className="mt-8 grid grid-cols-[repeat(auto-fit,minmax(300px,1fr))] gap-6">
+          <div className="mt-8 grid grid-cols-[repeat(auto-fit,minmax(min(300px,100%),1fr))] gap-6">
             {balances.data ? (
               <>
                 <BalanceCard kind="pto" balance={balances.data.pto} rule={ptoRule} />

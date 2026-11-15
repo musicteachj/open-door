@@ -912,6 +912,8 @@ Tests first:
 - [ ] the image serves the video with `Accept-Ranges` and answers a range request with 206
       (Safari needs it); `media-src 'self'` allows it
 - [ ] axe clean at 1440 and 390 px; capture rows for screen 16
+- [ ] the page in the accessibility audit's page list (`e2e/accessibility/pages.spec.ts`, at 1280
+      and 320 px) and a keyboard walk of its own in `keyboard.spec.ts` (added at Stage 8's close)
 
 ### Task 45: The recording (paid)
 
@@ -1681,6 +1683,136 @@ What the stage decided, or the runs changed:
   - an answer for earlier inputs landing in the 300 ms pause is shown muted, which is correct;
   - the real-caps run's size is fixed at 1 vCPU (`--no-real-caps-run` skips it);
   - a Ctrl-C removes the load test's network even if it existed before (it's the test's own).
+
+### Stage 8 (`feat/phase-8-accessibility`, 2026-11-15)
+
+Built in two batches: A (Tasks 41 and 42, the audit and its fixes) and B (Task 43, this close).
+No migration and no paid call: every browser test uses the scripted model. The results, the
+findings, and the owner's VoiceOver checklist are in [`ACCESSIBILITY.md`](../ACCESSIBILITY.md).
+
+What the stage decided, or changed from the plan:
+- **The passage panel's Tab order follows screen 07's notes,** not Task 42's line: title, Close,
+  the passage text, "Open in handbook" (the notes and the backlog both say so; Task 42's "title,
+  passage, Close" was a slip). Close moved after the title in the page and stays where it was on
+  screen, so the panel looks the same.
+- **The checks live in `e2e/accessibility/checks.ts`,** not `e2e/helpers.ts`, with a self-test of
+  each in `checks.spec.ts` (clean, then a planted failure) as its permanent mutation proof. The
+  contrast test is `src/styles/contrast.test.ts`, not `tokens.test.ts`: it reads `theme.css` and
+  also fails if `tokens.md`'s stated ratios drift.
+- **Text spacing is a differential check:** it reports only text that overflows with 1.4.12's
+  spacing and didn't without it, so the design's own truncation doesn't count. The lows it finds
+  (L1 and L2) are listed in `pages.spec.ts` by component and kind, so a new one still fails.
+- **Ten keyboard walks, not eight:** the source sheet at 390 px and the Time off form's date picker
+  are walks of their own.
+- **The composer's fix is a scroll margin on everything in the thread,** of the sticky header's
+  and the composer's heights, not padding under the last turn: the browser then scrolls a focused
+  control clear of both. Batch A used scroll padding on the whole page; the first review round
+  showed that focusing the composer or the header's button, which sit inside the padded edges,
+  then scrolled the page (by 286 px from mid-thread in the new test), so it moved to the thread.
+  Two more parts came with the move: a text box focused from the keyboard is scrolled clear by
+  hand (Chromium scrolls a text box to its caret, ignoring its margin, so "Your words" stayed
+  under the composer), and a following reader is taken to the end again when the last turn grows
+  after it ended (the HR panel's case line loads about 30 ms later; the page's padding had hidden
+  that by accident). Each part's test fails without it.
+- **"Resume the tour" (M1)** keeps focus on the step's title: the persona menu gives focus back to
+  the switcher only when nothing else has taken it. jsdom closes the menu in another order, so the
+  proof is the browser walk, which checks focus is still on the title 250 ms later.
+- **The walkthrough page's checks moved to Task 44,** since the page doesn't exist yet; its
+  checklist has the line.
+- **The first review round** (`/code-review medium`, eight findings) also made the reflow check
+  honest: it counted any clipping wrapper as a region of its own, and the app's sheet clips (for
+  its rounded corners), so nothing inside the app could fail. It now excuses only a region that
+  scrolls or text truncated by design, and found one low, Time off's balance cards cut off at
+  320 px (L6; its fix changes how the page looks, so it waited for the owner, and is fixed
+  below). The gallery's 320 px sweep
+  uses the same check; "outermost only" means an ancestor already reported; and a shadow counts
+  as a focus ring only in the ring's color. The keyboard walk to the composer waits for the
+  conversation to load: it flaked about one run in twelve, on `dev`'s code too, by passing the
+  composer before it could take focus. Recorded, not fixed: the persona menu keeps focus wherever
+  something took it before Radix gives it back, which a persona switch could in theory hit if
+  something took focus within that moment (a switch waits on the API first, so nothing does).
+- **The second review round** (ten findings) found one medium: a screen reader's click on "Show
+  your work" comes with no key or pointer press, so the late-growth follow pulled the page to the
+  end as it opened (217 px to 539 in its new test); any click now stops it. The audit's own tests
+  got stricter: target size checks a small target's circle against every neighbor's box, not only
+  a small neighbor's center; the contrast test ties each stated ratio to its row of `tokens.md`,
+  in order; and the ring check waits for a transition and reads a ring-colored shadow at any
+  opacity, so the composer passes on its real ring, the primary border and halo, not on the shadow
+  it has at rest. It also showed round one wrong about the persona menu: the menu is modal, so a
+  click outside does give focus back to the switcher, and the comment says so again. Recorded,
+  not fixed (low): a resize can take an untouched, following reader to the end; a streamed chunk
+  scrolls to the end twice (the growth effect and the observer); `focusView` counts a sample
+  point on an ancestor; a right-click outside the menu could leave Radix's own flag set if focus
+  had moved, which a modal menu doesn't allow; the end marker's inline margin repeats the
+  thread's (it's needed for the first scroll, before the variable is set); the thread's margins
+  use a universal selector; and the focus handler's `nearest` scroll is a no-op when the target is
+  already clear.
+- **The third review round** found nothing high or medium, so the loop stopped there. Its lows,
+  recorded: the late-growth observer answers any resize of the thread (a window resize or a font
+  arriving while an untouched reader is at the end takes them to the end; a screen reader's
+  virtual cursor scrolls the page, which ends following); every automatic scroll to the end
+  resets the "untouched" flag, though while an answer streams the growth effect follows anyway;
+  `useFollowThread` finds the thread as the end marker's parent beside the view's own ref; the
+  focus handler could be limited to text boxes; the ring check takes a 2 px outline of any color,
+  a transparent one included (nothing in the app draws one); the persona menu's unit test waits
+  20 ms for Radix's 0 ms timer; and the menu's rule would keep focus on a still-mounted row if
+  Radix ever fired its close event before removing the menu.
+- **The full browser suite after the review** caught one more case: a failed feedback send's
+  error appears above "Send feedback" and pushes the focused button behind the composer. `dev`
+  had the same layout and passed only because Playwright's scroll before the click left spare
+  room. When the thread resizes, a focused control in the composer's zone is now brought clear;
+  the existing test fails without it.
+- **A fourth review round,** for that new code, found a medium in it: a focused control the
+  reader had scrolled behind the composer (a marker they clicked, say) was pulled back on any
+  later resize. It now acts only when the resize moved the control in the page, and a new test
+  scrolls one there with the wheel (the page jumped from 450 to 512 without the fix). Also from
+  that round: a wheel or touch scroll ends the late-growth follow (a reader rereading just above
+  the end isn't taken back), the ring check counts no shadow if the ring's token is missing, the
+  persona menu's test polls instead of waiting 20 ms, and the "scroll is still" wait is one
+  helper. Recorded, not fixed (low): a click into a text box partly behind the composer brings it
+  clear (the comment now says so); the rest repeat earlier rounds' lows.
+- **A fifth review round** found a medium in Batch A's panel change: Close was drawn in two places
+  (after the title, or at the header's end while loading), so React replaced the button when the
+  state changed and a focused Close lost its focus to the page. It now has one place in every
+  state; a new unit test fails without it. Also: the date test's guard reads `SHORT_NOTICE_DAYS`.
+  Tried and dropped: bringing a control clear when the page pushes it up behind the header; no
+  test could make that happen, since the browser's scroll anchoring holds what's in view in place
+  when content above it changes. Recorded, not fixed (low): every automatic scroll to the end
+  resets "untouched" (a key pressed while an answer streams is forgotten at the next chunk); a
+  second "scroll is still" wait lives in `keyboardFocus`; and the earlier rounds' repeats.
+- **A sixth review round** found a medium in round four's fix: it told a moved control by its
+  place in the page, so content growing above a control the reader had scrolled behind the
+  composer still pulled it out, though scroll anchoring had held it in place on screen. It now
+  compares the place on screen, which the reader's scrolling updates; the test grows content
+  above it too (it moved 62 px without the fix). The late-growth follow also answers only growth
+  now, not a thread made wider or narrower (the docked panel closing by the browser's Back), and
+  the listeners share one `AbortController`. The short-notice test was run at a held clock on
+  each of the 62 days from 2026-11-15 (Thanksgiving, Christmas, and the new year's crossing
+  included) and passed on all. Recorded, not fixed (low): the persona menu could keep focus that
+  something else took within Radix's moment (repeat), and earlier repeats.
+- **A seventh review round** found a medium: the late-growth follow was armed on page open too,
+  so on Back or a reload, when the HR panel's case line loaded after the scroll restorer had put
+  the page back, it could take the reader to the end instead (30 px off in the new test, which
+  reloads with the case texts delayed). It is now armed only by a question asked in this visit.
+  Recorded, not fixed (low): the reflow check reports only content past the right edge, not the
+  left; the contrast test reads ratios with one decimal, as the table writes them; and repeats.
+- **The eighth review round** found nothing high or medium, so the loop stopped there. Its lows,
+  recorded: text that rewraps taller (a window resize) can take a reader who is untouched and
+  already within 160 px of the end to the end; the thread's margins would apply inside a part of
+  a turn that scrolls on its own (none does today: the only such regions are the composer and Time
+  off's form); the focus note reads the control's place on each scroll; and repeats.
+- **`make check`** found two more things after the loop: lint refused a variable reassigned inside
+  the observer (now one object holds its state), and the first keyboard walk flaked once against
+  the image by tabbing before the home had loaded (it now waits for the composer, like the
+  others; 12 of 12 against the image after).
+- **L6 fixed at the owner's OK** (2026-11-15): Time off's grid column is
+  `minmax(min(300px, 100%), 1fr)`, so the balance cards fit at 320 px. The 390 px page is
+  identical to before, pixel for pixel, and 1440 px matches screen 08. The page sweep's reflow
+  allowlist is gone with it.
+- **Run times:** the audit's browser tests (about 50) take about a minute on one worker locally, about 20
+  seconds with the default workers; the full host browser suite took 3.4 minutes, and against the image
+  the audit and the specs it changed (114 tests) took 1.5 minutes. `make check` below gives the
+  full image run.
 
 ## Backlog
 
