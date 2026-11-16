@@ -112,6 +112,9 @@ test.describe('at 320 px (WCAG 1.4.10, the accessibility audit)', () => {
   test('the component gallery fits a 320 px screen, and no state reaches past the window’s edge', async ({
     page,
   }) => {
+    // It checks every gallery state in turn: 18 to 27 seconds on a Mac, past the default 30 on
+    // CI's runner, where it timed out on dev after stage 8 and on stage 9's PR.
+    test.setTimeout(90_000)
     await openGallery(page)
     expect(await scrollWidth(page)).toBeLessThanOrEqual(320)
     // The page sweep's reflow check (e2e/accessibility/checks.ts), state by state: content that

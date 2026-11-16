@@ -56,7 +56,9 @@ function BudgetBanner({
           {kind === 'daily' && (
             <>
               {' '}
-              <span className="mt-1 block">
+              {/* 8 px above, so its 24 px target circle clears "Write to HR" on the line above
+                  (WCAG 2.5.8; at 4 px Linux's fonts put them under 24 px apart). */}
+              <span className="mt-2 block">
                 <WalkthroughLink />
               </span>
             </>

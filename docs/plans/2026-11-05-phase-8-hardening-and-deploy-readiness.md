@@ -1873,6 +1873,11 @@ What the code forced, or the owner decided:
 - **The backlog** closed four items Phase 8 fixed (audit `NULL`s, the unreadable conversation,
   digits of any script, unused handbook versions); the rest moved to "Any phase", and the two that
   only matter with AWS's orchestrator and tracing to Phase 9.
+- **CI on the PR (#121)** failed two browser tests that passed on a Mac. The audit's target-size
+  check found the banner's walkthrough link under 24 px from "Write to HR" on the line above
+  (Linux's fonts set the lines a little closer), so the link sits 8 px below the text, not 4. And
+  the gallery's 320 px sweep, 18 to 27 seconds on a Mac, passed CI's 30-second limit, as it had on
+  `dev` after stage 8; it now has 90 seconds.
 
 **The close's reviews.** The `/code-review medium` loop ran six rounds on the whole branch and
 stopped at the sixth, which had nothing high or medium:
