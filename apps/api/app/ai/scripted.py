@@ -63,6 +63,7 @@ GUARD_BEHAVIORS: Final = (
 # The behaviors that call the time-off tools (the real engine, proposals, and cards run).
 TIME_OFF_BEHAVIORS: Final = (
     "book_friday",
+    "book_this_friday",
     "sick_tomorrow",
     "show_balance",
     "waiting_on_me",
@@ -329,6 +330,15 @@ def next_friday(today: date) -> date:
     return next_monday + timedelta(days=_FRIDAY)
 
 
+def this_friday(today: date) -> date:
+    """ "This Friday" for the scripted model: the coming Friday, today on a Friday. On a weekend it
+    is the Friday ahead, as people say it then."""
+    return today + timedelta(days=(_FRIDAY - today.weekday()) % 7)
+
+
+_BOOK_FRIDAY: Final = {"book_friday": next_friday, "book_this_friday": this_friday}
+
+
 def _day_name(day: date) -> str:
     return f"{_WEEKDAY_NAMES[day.weekday()]}, {_MONTH_NAMES[day.month - 1]} {day.day}"
 
@@ -576,8 +586,8 @@ def _time_off_first_call(
         return _tool_call("list_time_off_requests", arguments, question, messages)
     if today is None:
         return None
-    if behavior == "book_friday":
-        return _request_call(question, messages, next_friday(today), "pto")
+    if behavior in _BOOK_FRIDAY:
+        return _request_call(question, messages, _BOOK_FRIDAY[behavior](today), "pto")
     return _request_call(question, messages, today + timedelta(days=1), "sick")
 
 
@@ -592,7 +602,7 @@ def _time_off_next(
     """What follows a successful tool result: the next call, or the closing words."""
     if data is None:
         return "I couldn't read what the tool sent back."
-    if behavior in ("book_friday", "sick_tomorrow"):
+    if behavior in (*_BOOK_FRIDAY, "sick_tomorrow"):
         return _request_words(behavior, today, data)
     if behavior == "show_balance":
         return _balance_words(data)
@@ -687,10 +697,12 @@ def _case_words(behavior: str, result: Any) -> str:
 def _request_words(behavior: str, today: date | None, data: Any) -> str:
     day = None
     if today is not None:
-        day = next_friday(today) if behavior == "book_friday" else today + timedelta(days=1)
+        friday = _BOOK_FRIDAY.get(behavior)
+        day = friday(today) if friday is not None else today + timedelta(days=1)
+    booking = behavior in _BOOK_FRIDAY
     amount = data.get("amountLabel") if isinstance(data, dict) else None
-    what = "book PTO" if behavior == "book_friday" else "record sick time"
-    done = "booked" if behavior == "book_friday" else "recorded"
+    what = "book PTO" if booking else "record sick time"
+    done = "booked" if booking else "recorded"
     when = "" if day is None else f" for {_day_name(day)}"
     figure = f": {amount}" if isinstance(amount, str) else ""
     return f"I've prepared a card to {what}{when}{figure}. Nothing is {done} until you confirm."

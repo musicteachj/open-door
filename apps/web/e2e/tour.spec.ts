@@ -173,7 +173,7 @@ test.describe('the walk, at 1440 px', () => {
     await page.goto('/')
     await page.getByRole('button', { name: 'Take the 2-minute tour' }).click()
     await expect(page).toHaveURL('/ask')
-    await skipUnlessScriptedDayCounts(test, page, 'book next friday')
+    await skipUnlessScriptedDayCounts(test, page, 'book this friday')
 
     // 1: Priya asks about sick days, and the answer cites CA-4.3.
     let step = TOUR[0]!
@@ -199,7 +199,7 @@ test.describe('the walk, at 1440 px', () => {
     asked.mateo = await sendChips(page, step, asked.mateo)
     await expect(page.locator('[data-tour="source-chip"]').first()).not.toContainText('CA-')
 
-    // 3: Priya books next Friday, and the test confirms the card.
+    // 3: Priya books this Friday, and the test confirms the card.
     await nextAcross(page, step, 'priya')
     step = TOUR[2]!
     await expectStep(page, step, 3)

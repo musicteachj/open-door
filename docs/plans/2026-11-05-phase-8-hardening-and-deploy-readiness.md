@@ -1814,6 +1814,103 @@ What the stage decided, or changed from the plan:
   the audit and the specs it changed (114 tests) took 1.5 minutes. `make check` below gives the
   full image run.
 
+### Stage 9 (`feat/phase-8-walkthrough`, 2026-11-16)
+
+Built in three batches: A (Task 44, free), B (Tasks 45 and 46, paid, each run with the owner's OK),
+and C (Tasks 47 and 48, this close). Paid spend: the recording $1.01 of its $2 cap, the live check
+$0.12 of its $1 cap.
+
+What the code forced, or the owner decided:
+- **The transcript is imported, not fetched** (`src/features/walkthrough/walkthrough.json`, in the
+  lazy route's own chunk), so the page has no loading or failure state and no new undesigned text.
+  Screen 16's notes put it beside the video; only the video and poster live in `public/media/`.
+  Each step's persona is a key into the personas, not a copy, and a unit test checks every step's
+  id, title, words, persona, and chips against the tour's own script, so a tour change fails the
+  tests until the walkthrough is recorded again. The end card's paragraph moved to
+  `components/tour/end-card-copy.ts`, shared by the end card and step 10 (the browser tests'
+  TypeScript config has no JSX, so it couldn't stay in the `.tsx`). Answers render through the
+  app's own `Answer` component, so the transcript's Markdown matches the chat; sources are plain
+  text. The landing's footer became `PublicFooter`, shared with the page.
+- **Serving the video.** Starlette's `FileResponse` already answered ranges (206, and 416 past the
+  end), now pinned by tests. One real gap: a missing file under `/media/` got the app's page with a
+  200, which a `<video>` fails on silently; it is now a `no-store` 404 (mutation-proved).
+- **The video's focus ring was clipped** by its frame's `overflow: hidden`, found by a new
+  geometric check in the keyboard walk; the frame moved onto the video. The video's native controls
+  are several Tab stops of their own, so walk 11 loops through them both ways.
+- **The recording's cap is one ledger for the whole recording,** not a budget per take: an Opus
+  turn reserves about $0.20, so a per-take budget of $0.66 could refuse turns mid-take. Each take
+  runs with the app's daily budget set to what is left of the cap, and refuses to start under
+  $0.30.
+- **Six takes.** Takes 1 (Sunday) and 2 (Monday) failed at step 3: asked "Book next Friday off.",
+  the live model asked which Friday was meant (this week's or next) instead of making a card. **The
+  owner approved changing the tour's chip to "Book this Friday off."** and its hint to "Ask for this
+  Friday." (screen 15's approved copy); the scripted model gained a `book this friday` scenario
+  (the coming Friday, today on a Friday), the browser tests' holiday skip knows it, and the load
+  test's tour follows. Take 3 got the "can't answer right now" text at step 2 with no log to say
+  why, so a failed take now keeps each turn's status and error code and the API's log. Take 4
+  failed at the console: the live safety check flags both of step 6's questions, so there were two
+  flagged rows, and the recorder now takes the first (newest), as the tour does. Take 5 passed, but
+  the resting cursor hid a letter of each step's title; it now waits in the "Step N of 10" row.
+  Take 6 passed and **the owner approved it.** Its poster is step 3's confirm card (screen 16's
+  notes call step 3 the poster), and the recorder now takes the poster there, with the cursor
+  hidden.
+- **What the recording showed about the model:** at step 6, Priya's answer said her request was
+  "now waiting for Marcus Bell to approve it", after Marcus had approved it. The per-turn context
+  tells the asker's own card's outcome, not the request's later approval. It is in the backlog
+  (a change to what the model is told needs a full run), and the transcript keeps the model's words.
+- **The live check passed on 2026-11-16** ($0.116942): two turns completed on `claude-opus-5-5`
+  (input 6 and 4 tokens, output 762 and 366, cache reads 8,709 and 20,771, cost $0.099241 and
+  $0.017701), both questions sealed, no plaintext in `ai_turns`, `ai_messages`, or
+  `ai_console_turns`, the answer cited CA-4.3, the card ended "Requested. Marcus Bell will review
+  it.", and the browser logged no CSP violation. Before it ran, its plaintext search still looked
+  for "Book next Friday off", which the browser no longer typed, so the check would have passed
+  empty; a test now requires every searched phrase to appear in what the browser sends.
+- **Article 50(2), re-read from the official text** (Publications Office, CELEX 32024R1689 and the
+  consolidated text 02024R1689-20260727): the duty to mark output covers any provider whose system
+  writes text, not only published text (that limit is Article 50(4)'s). Regulation (EU) 2026/1744
+  added Article 111(4), a transition to 2 December 2026 for systems already on the market, which
+  Open Door is not. The machine-readable mark is a Phase 9 item, with the owner's agreement.
+- **The backlog** closed four items Phase 8 fixed (audit `NULL`s, the unreadable conversation,
+  digits of any script, unused handbook versions); the rest moved to "Any phase", and the two that
+  only matter with AWS's orchestrator and tracing to Phase 9.
+
+**The close's reviews.** The `/code-review medium` loop ran six rounds on the whole branch and
+stopped at the sixth, which had nothing high or medium:
+- Round 1 (fixed): the recorder and the live check heard CSP violations only as events, and now use
+  the browser suite's `watchCsp` (the console's reports too) without its fake Turnstile; a failed
+  database read in their `finally` could hide the real failure or leave a paid take's spend
+  unnoted, so `settle_take` notes all the cap had left when it can't read the spend, and a missing
+  `npx` is a clear error; `backTarget` refused `//` and backslashes but not tabs, newlines, or other
+  control characters, which URL parsing drops; the transcript now renders every answer as the
+  `public` viewer, for whom no link is live, whatever form a link takes in the recording; the data
+  inventory said Cloudflare receives nothing during a recording, but the browser loads its real
+  script; and `make walkthrough` built the image before refusing a run without `YES` or `DRY_RUN`.
+- Round 2 (fixed): ffmpeg and ffprobe are checked before a take, and a failed encode keeps the
+  take; the live check's report could carry an earlier run's `browser.json`; the recording date
+  was UTC's; and the video and poster were cached for an hour under fixed names while the transcript
+  ships in hashed code, so they are now `no-cache`, with a 304 while unchanged (the page server
+  borrows `StaticFiles.is_not_modified`, since `FileResponse` alone sends the file again).
+- Round 3 (fixed): the guard that refuses to install a dry run compared a label written in two
+  places, now tied by a test; the recorder waited on the page's feedback rows against the API's turn
+  count, and now waits on the API's own count of ended turns.
+- Round 4 (fixed): the recording date came from a locale's format (`en-CA`), now built from its
+  parts and tested; the self-link guard compared case-sensitively, but the router doesn't.
+- Round 5 (fixed): the paid live check ran whatever image was left over, so `make live-check`
+  builds first and needs `YES=1`; the tour's "this Friday" had no API integration test through the
+  real engine and confirm; and a dry run's unreadable database printed a $1000 cost.
+- Round 6's lows, two fixed: an ffprobe failure is a clear error, and the self-link guard decodes
+  the path first. Recorded, not fixed (low or by decision): "this Friday" on a weekend or a Friday
+  is the owner's chosen wording; Christmas 2026 and New Year's Day 2027 are Fridays, so step 3
+  meets a holiday from December 19 to January 1, the same window "next Friday" had a week earlier
+  (the backlog's scripted-holiday item); the live check scans only the three conversation tables
+  for plaintext; the free dry runs still need an Anthropic key in `.env`; `--cap-usd` with a
+  malformed number is a traceback; the media prefix is matched case-sensitively; the root-file
+  stat runs on the event loop; the daily banner's status region also announces the walkthrough link
+  (screen 16 places it there); the 3.5 MB video lives in git, not LFS; and duplications (the spend
+  query in both scripts and the API, the recorder's copies of the tour spec's locators and of the
+  conversation fetch, the AI label and avatar markup in the transcript, `check()` beside
+  `running()` in `start.py`).
+
 ## Backlog
 
 (Low findings from the stages' reviews, with their reasons.)

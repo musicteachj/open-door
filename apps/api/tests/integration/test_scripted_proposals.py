@@ -80,6 +80,22 @@ async def test_book_next_friday_makes_a_pto_card_for_the_friday_of_next_week(
     assert kinds[at - 2 : at + 1] == [ToolStarted, ToolFinished, Proposal]
 
 
+async def test_the_tours_book_this_friday_makes_a_card_for_this_weeks_friday(
+    app_engine: AsyncEngine, seeded_sandbox: SeedCompany
+) -> None:
+    """The tour's step 3 chip, through the real tool, engine, and proposal, then confirmed."""
+    env = await make_env(app_engine, seeded_sandbox, persona="priya")
+    events = await env.ask("Book this Friday off.")
+
+    (event,) = of_type(events, Proposal)
+    data = event.to_json()
+    assert (data["card"]["type"], data["card"]["startDate"]) == ("pto", "2026-10-16")
+    assert said(events).startswith("I've prepared a card to book PTO for Friday, October 16: ")
+    await confirm_latest(env)
+    (row,) = await stored(env)
+    assert row.status == "executed"
+
+
 async def test_the_booked_card_can_be_confirmed_after_the_turn(
     app_engine: AsyncEngine, seeded_sandbox: SeedCompany
 ) -> None:

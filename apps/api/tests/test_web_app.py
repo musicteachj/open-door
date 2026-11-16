@@ -312,3 +312,82 @@ def test_it_refuses_to_start_without_an_index_file(dist: Path) -> None:
 
 def test_load_index_returns_the_text(dist: Path) -> None:
     assert "csp-nonce" in load_index(dist)
+
+
+# The walkthrough's video (Phase 8, Task 44). Safari plays a video only from a server that
+# answers range requests, so the page server's file responses must keep doing so.
+VIDEO = bytes(range(256)) * 4  # 1,024 bytes, each position distinct
+
+
+@pytest.fixture
+def media(dist: Path) -> Path:
+    (dist / "media").mkdir()
+    (dist / "media" / "walkthrough.mp4").write_bytes(VIDEO)
+    return dist
+
+
+def test_the_video_says_it_accepts_ranges(media: Path) -> None:
+    with client_for(media) as client:
+        response = client.get("/media/walkthrough.mp4")
+    assert response.status_code == 200
+    assert response.headers["accept-ranges"] == "bytes"
+    assert response.headers["content-type"] == "video/mp4"
+    # Asked again each visit (a 304 while unchanged), so a re-recorded video never shows beside the
+    # transcript of the one before, which ships in the page's own hashed code.
+    assert response.headers["cache-control"] == "no-cache"
+    assert response.headers["etag"]
+    assert response.content == VIDEO
+
+
+def test_an_unchanged_video_is_not_sent_again(media: Path) -> None:
+    with client_for(media) as client:
+        etag = client.get("/media/walkthrough.mp4").headers["etag"]
+        response = client.get("/media/walkthrough.mp4", headers={"If-None-Match": etag})
+    assert response.status_code == 304
+
+
+def test_a_range_request_gets_206_and_only_those_bytes(media: Path) -> None:
+    with client_for(media) as client:
+        response = client.get("/media/walkthrough.mp4", headers={"Range": "bytes=100-199"})
+    assert response.status_code == 206
+    assert response.headers["content-range"] == f"bytes 100-199/{len(VIDEO)}"
+    assert response.content == VIDEO[100:200]
+    assert response.headers["cache-control"] == "no-cache"
+
+
+def test_an_open_ended_range_gets_the_rest_of_the_file(media: Path) -> None:
+    # What Safari and Chromium send first: `bytes=0-`, then later pieces.
+    with client_for(media) as client:
+        response = client.get("/media/walkthrough.mp4", headers={"Range": "bytes=1000-"})
+    assert response.status_code == 206
+    assert response.content == VIDEO[1000:]
+
+
+def test_a_range_past_the_end_is_416(media: Path) -> None:
+    with client_for(media) as client:
+        response = client.get("/media/walkthrough.mp4", headers={"Range": "bytes=5000-6000"})
+    assert response.status_code == 416
+    assert response.headers["content-range"] == f"bytes */{len(VIDEO)}"
+
+
+@pytest.mark.parametrize("path", ["/media/gone.mp4", "/media/", "/media/sub/walkthrough.jpg"])
+def test_a_missing_media_file_is_a_404_never_the_page(media: Path, path: str) -> None:
+    # A video element given the HTML page fails silently; a 404 shows in the network panel.
+    with client_for(media) as client:
+        response = client.get(path)
+    assert response.status_code == 404
+    assert "csp-nonce" not in response.text
+    assert response.headers["cache-control"] == "no-store"
+
+
+def test_a_page_path_that_only_starts_like_media_is_still_the_page(media: Path) -> None:
+    with client_for(media) as client:
+        response = client.get("/mediation")
+    assert response.status_code == 200
+    assert "csp-nonce" in response.text
+
+
+def test_the_page_lets_the_video_load_from_its_own_origin(dist: Path) -> None:
+    with client_for(dist) as client:
+        csp = client.get("/walkthrough").headers["content-security-policy"]
+    assert "media-src 'self'" in csp

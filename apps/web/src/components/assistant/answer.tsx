@@ -311,11 +311,13 @@ function CaretSlot() {
 
 /**
  * Only a path inside the app is a link: under /handbook/ or /directory/; for HR, exactly /cases
- * or below /cases/; for a person, exactly /my-cases (a query or fragment may follow). It has no
- * "." or ".." segment (written plainly or percent-encoded, since the router would resolve it to a
- * page outside those) and no backslash. Anything else shows as its text.
+ * or below /cases/; for a person, exactly /my-cases (a query or fragment may follow); for the public
+ * walkthrough, nothing. It has no "." or ".." segment (written plainly or percent-encoded, since the
+ * router would resolve it to a page outside those) and no backslash. Anything else shows as its
+ * text.
  */
 function isAppPath(href: string, viewer: AnswerViewer): boolean {
+  if (viewer === 'public') return false
   const path = href.split(/[?#]/, 1)[0]!
   const exact =
     (viewer === 'person' && path === '/my-cases') || (viewer === 'hr' && path === '/cases')

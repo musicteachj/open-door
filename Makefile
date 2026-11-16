@@ -18,7 +18,7 @@ PIP_AUDIT := pip-audit@2.10.1
 PRE_COMMIT := pre-commit@4.7.0
 
 .DEFAULT_GOAL := help
-.PHONY: help setup keyring db db-stop migrate bootstrap-db ingest embed eval-retrieval eval-offline eval-live scoreboard migrations-roundtrip cleanup dev dev-api dev-web openapi check check-api check-web e2e e2e-image proxy-check image image-check prod-local prod-local-check load captures check-docs check-workflows audit
+.PHONY: help setup keyring db db-stop migrate bootstrap-db ingest embed eval-retrieval eval-offline eval-live scoreboard migrations-roundtrip cleanup dev dev-api dev-web openapi check check-api check-web e2e e2e-image proxy-check image image-check prod-local prod-local-check live-check walkthrough load captures check-docs check-workflows audit
 
 help: ## List the available commands
 	@grep -E '^[a-zA-Z_-]+:.*## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*## "}; {printf "  %-22s %s\n", $$1, $$2}'
@@ -228,6 +228,28 @@ prod-local: ## Run the production image on its own empty database at localhost:8
 prod-local-check: ## Start the production image on its own database, fetch the pages, stop; asks the model nothing (needs ANTHROPIC_API_KEY to start, Docker)
 	$(BUILD_PROD_IMAGE)
 	cd $(API) && uv run python ../../scripts/prod-local/start.py --check
+
+# The live check (Phase 8, Task 46): the production image on its own throwaway database, built
+# first so it checks what will ship, then a browser pass and the database's rows.
+live-check: ## The production image end to end with the real model (PAID: about $0.25, cap $1; YES=1, or DRY_RUN=1 for free)
+	@test "$(YES)" = 1 -o "$(DRY_RUN)" = 1 || { echo "The live check is paid (about \$$0.25, cap \$$1): pass YES=1 once the owner has agreed, or DRY_RUN=1 for a free run." >&2; exit 1; }
+	$(BUILD_PROD_IMAGE)
+	cd $(API) && uv run python ../../scripts/prod-local/live_check.py $(if $(filter 1,$(DRY_RUN)),--dry-run) $(if $(filter 1,$(YES)),--yes)
+
+# The walkthrough's video (Phase 8, Task 45): the guided tour recorded through the production image
+# on its own database, with the real model. PAID, about $0.25 a take, and the whole recording is
+# capped at $2 (the app's own AI budgets, less what earlier takes spent; see `takes.json` in
+# /tmp/od-walkthrough). YES=1 runs a paid take; DRY_RUN=1 runs the free scripted one. A take is
+# watched before `make walkthrough INSTALL=<take folder>` copies it into the app. Re-record only
+# when the tour or the screens it shows change visibly. Needs Docker, ffmpeg, and the API's .env.
+walkthrough: ## Record the walkthrough video (PAID: about $0.25 a take, cap $2; YES=1, or DRY_RUN=1 for free; INSTALL=<take> to install one)
+ifneq ($(INSTALL),)
+	cd $(API) && uv run python ../../scripts/walkthrough/record.py --install $(abspath $(INSTALL))
+else
+	@test "$(YES)" = 1 -o "$(DRY_RUN)" = 1 || { echo "A take is paid (about \$$0.25, cap \$$2): pass YES=1 once the owner has agreed, or DRY_RUN=1 for a free run." >&2; exit 1; }
+	$(BUILD_PROD_IMAGE)
+	cd $(API) && uv run python ../../scripts/walkthrough/record.py $(if $(filter 1,$(DRY_RUN)),--dry-run) $(if $(filter 1,$(YES)),--yes)
+endif
 
 # The cost and load test: free (the scripted model, paced like the real one) and local; `make check`
 # and CI never run it. It builds the production image, then starts a throwaway Postgres per

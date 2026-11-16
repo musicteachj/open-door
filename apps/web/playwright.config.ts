@@ -38,8 +38,8 @@ export default defineConfig({
   testDir: './e2e',
   // Notes the database's time before the run and deletes the daily AI ledger rows made since, after.
   globalSetup: './e2e/ledger-cleanup.ts',
-  // `make captures` has its own config (playwright.captures.config.ts), and CI never runs it.
-  testIgnore: '**/captures/**',
+  // `make captures`, `make walkthrough`, and the live check have their own configs; CI runs none.
+  testIgnore: ['**/captures/**', '**/walkthrough/**', '**/live/**'],
   // Every spec starts its own sandbox, so files run side by side.
   fullyParallel: true,
   forbidOnly: !!process.env.CI,

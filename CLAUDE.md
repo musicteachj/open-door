@@ -176,6 +176,11 @@ the owner's explicit agreement first.
     case-summary set** (`make eval-live SET=case-summary YES=1`, about $0.75, cap $3), and the
     seeded summaries are copied from that run (`scripts/apply_seeded_summaries.py`).
   **A release gets the full run too**, unless the last one already covers everything it ships.
+- **The recorded walkthrough is recorded again when the guided tour or the assistant's model
+  changes** (`make walkthrough YES=1`, about $0.25 a take, cap $2). Try it free with `DRY_RUN=1`
+  first; the owner approves the video before `make walkthrough INSTALL=<take>` copies it into the
+  app. The paid live check of the production image is `make live-check YES=1` (about $0.25, cap $1;
+  it builds the image first; `DRY_RUN=1` is free).
 - **Model IDs are pinned.** A new model is adopted only after an eval comparison.
 - **No paid AI calls on push or PR.** CI replays recorded fixtures. A live eval is a local
   `make eval-live` run with a cap.
@@ -264,6 +269,9 @@ make e2e-image  the browser tests against the test image on one origin, with the
 make proxy-check  the turn stream through a strict nginx, the API in the test image (needs `make db` and Docker)
 make prod-local  the production image with production settings on its own empty database at :8300; any question asked is paid
 make prod-local-check  start prod-local, check the page and its CSP, and stop; asks the model nothing
+make load       the free cost and load test: the production image under a CPU and memory limit, simulated visitors on the scripted model
+make live-check  paid; the production image end to end with the real model, then its database rows (`YES=1`; `DRY_RUN=1` is free)
+make walkthrough  paid; record the walkthrough video and transcript with the live model (`YES=1`; `DRY_RUN=1` is free; `INSTALL=<take>` after approval)
 make captures   a local report of each design beside the build (needs `make db` and a network; not in CI)
 make openapi    after changing an API route: regenerate the schema and the web client
 make audit      scan for leaked secrets and vulnerable dependencies

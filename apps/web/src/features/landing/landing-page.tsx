@@ -1,4 +1,3 @@
-import { Info } from 'lucide-react'
 import { useRef } from 'react'
 import { Navigate } from 'react-router'
 import type { PersonaKey } from '@/api/generated'
@@ -7,12 +6,13 @@ import { useStartSandbox } from '@/app/useStartSandbox'
 import { Logo } from '@/components/core/logo'
 import { InlineError } from '@/components/feedback/inline-error'
 import { PersonaCard } from '@/components/landing/persona-card'
+import { PublicFooter } from '@/components/landing/public-footer'
 import { TurnstileSlot } from '@/components/landing/turnstile-slot'
 import { TourStartButton } from '@/components/tour/tour-start-button'
+import { WalkthroughLink } from '@/components/walkthrough/walkthrough-link'
 import { useStartTour } from '@/features/tour/use-start-tour'
 import { PERSONAS } from '@/features/personas/personas'
 import { isSignedOutError } from '@/lib/api-fetch'
-import { AI_DISCLOSURE } from '@/lib/disclosure'
 import { sandboxStartError } from '@/lib/sandbox-copy'
 
 // From docs/design/screens/01-landing/notes.md. Nothing here is the signed-in person's: the
@@ -23,8 +23,8 @@ const PITCH =
   'An AI help desk for HR questions. It answers with citations to the company handbook, proposes actions for a person to confirm, and sends sensitive topics like harassment or medical leave to a human HR partner.'
 const SANDBOX_NOTE =
   'Each visit gets its own private copy of Juniper Row, a fictional company. It resets after 24 hours.'
-const NOTICE =
-  "Juniper Row and everyone in it are fictional. This is a demo, not legal advice. Don't enter real personal information."
+// Approved with screen 16 (2026-11-09).
+const CHECK_NOTE = 'Starting a sandbox runs a quick Cloudflare check to keep the demo safe.'
 
 export function LandingPage() {
   const me = useMe()
@@ -113,28 +113,28 @@ export function LandingPage() {
           )}
 
           <div className="mt-6 flex flex-wrap items-center justify-between gap-x-6 gap-y-4">
-            <p className="m-0 text-small text-ink-muted">{SANDBOX_NOTE}</p>
-            <div>
-              <TourStartButton
-                starting={tour.starting}
-                disabled={tour.blocked}
-                onStart={startTour}
-              />
-              <TurnstileSlot ref={tourSlot} />
+            <div className="flex max-w-160 flex-col gap-1">
+              <p className="m-0 text-small text-pretty text-ink-muted">{SANDBOX_NOTE}</p>
+              <p className="m-0 text-small text-pretty text-ink-muted">{CHECK_NOTE}</p>
+            </div>
+            {/* Screen 16: the walkthrough's link left of the tour button, which keeps the row's
+                right edge. On a phone the row wraps and both sit left-aligned under the notes. */}
+            <div className="flex flex-wrap items-center gap-x-6 gap-y-4">
+              <WalkthroughLink />
+              <div>
+                <TourStartButton
+                  starting={tour.starting}
+                  disabled={tour.blocked}
+                  onStart={startTour}
+                />
+                <TurnstileSlot ref={tourSlot} />
+              </div>
             </div>
           </div>
         </main>
       </div>
 
-      <footer className="mx-auto mt-16 w-full max-w-292">
-        <div className="flex flex-col gap-1 border-t border-border py-6 text-small text-ink-muted">
-          <p className="m-0 flex items-center gap-2">
-            <Info aria-hidden="true" className="size-4 shrink-0" />
-            {AI_DISCLOSURE}
-          </p>
-          <p className="m-0 pl-6">{NOTICE}</p>
-        </div>
-      </footer>
+      <PublicFooter />
     </div>
   )
 }

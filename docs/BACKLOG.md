@@ -31,9 +31,9 @@ should pick it up. When one is done, delete it here and record it in the changel
   each rerun and in CI. Make the nudge loop stop before the page can close, or scan with the
   dialog's timer stubbed instead of a held clock. (Phase 5 phase review.)
 
-- **The scripted model's "next Friday" and "tomorrow" ignore holidays and days off.** The browser
-  tests that book through chat skip, with a stated reason, on the few dates a year when next Friday
-  is a company holiday or tomorrow isn't on the person's schedule (`skipUnlessScriptedDayCounts`).
+- **The scripted model's "next Friday", "this Friday", and "tomorrow" ignore holidays and days
+  off.** The browser tests that book through chat skip, with a stated reason, on the few dates a
+  year when that Friday is a company holiday or tomorrow isn't on the person's schedule (`skipUnlessScriptedDayCounts`).
   The scripted model could pick the next day that counts instead, so those tests never skip. (Phase 5
   stage 6.)
 - **A confirm card can forget a confirm in flight.** If the live answer gives way to its saved copy
@@ -194,31 +194,23 @@ should pick it up. When one is done, delete it here and record it in the changel
   worker is reported under a later, innocent test (seen with `query-client.test.ts`), so the guard
   needs a way to tell those apart first, or `isolate`d workers. (`/code-review medium` on
   `fix/shell-test-directory-fakes`.)
+- **The assistant reports a card's outcome as if it were current.** Recording the walkthrough
+  (2026-11-16), Priya's answer after Marcus had approved her request said it was "now waiting for
+  Marcus Bell to approve it". The per-turn context tells the model what happened to the asker's own
+  card (requested), not what happened to the request since, and the model words it as the present
+  status. Tell the request's current status, or word the line in the past tense; it changes what
+  the model is told, so it needs a full eval run, and the walkthrough is recorded again after.
+  (Phase 8, Stage 9.)
+- **"Book next Friday off" in the personas' "Try asking" lists is ambiguous.** The live model
+  asks which Friday is meant on many days (this week's or next week's), so the suggestion often
+  gets a question instead of a card. The tour's chip became "Book this Friday off." in Phase 8,
+  Stage 9; the suggestion is approved copy (screen 03), so changing it is the owner's call.
 
-## Handbook content
-
-- **A military leave section.** The handbook has none. A company section under the federal
-  reemployment law for service members (USERRA) comes first; state addenda follow, such as
-  Georgia's leave for state guard members (O.C.G.A. §38-2-279, not verified). (Phase 3 stage 6.)
-- **A Georgia persona,** if the owner wants one: a fifth sign-in card for an Atlanta employee,
-  with a design pass on the landing page first and a migration for the new persona key. Georgia is
-  covered today by Atlanta employees in the directory and Georgia askers in the eval. (Phase 3
-  stage 6.)
-
-## Phase 5: time off
-
-All five items were closed in stage 6 (2026-10-25): the nav after a switch (a `navFor` test and the
-shell's switch test), writes from an old identity (no write sets query data; a test enforces it),
-the scroll-restoration exception (a history marker), "Show your work" for the time-off tools, and
-the conversation read after a turn ends.
-
-## Phase 6: cases and escalation
-
-All three items were closed in Phase 6: the hand-off's texts say only what's true (the panel and
-form texts approved in stage 4), case text is encrypted (stages 1 and 2), and the four
-conversation-page glitches are fixed with browser tests (stage 6).
-
-## Phase 8: hardening and deploy-readiness
+Moved from Phase 8 at its close (2026-11-16). None of these needs AWS or blocks the deploy; each
+keeps the reason it was deferred. Phase 8 closed four items: audit events store SQL `NULL`
+(Stage 1), an unreadable conversation no longer breaks the page and personal data in any script's
+digits is caught (Stage 3), and the cleanup job deletes handbook versions no sandbox uses
+(Stage 4).
 
 - **HR asking something the handbook doesn't cover is not always pointed to the HR team.** The
   prompt says to suggest the HR team, by that name, when the search finds nothing. Asked by Dana
@@ -228,12 +220,6 @@ conversation-page glitches are fixed with browser tests (stage 6).
   next prompt change. In the 2026-11-12 run the failing trial was the one CI replays, so that
   item's recording was made again on its own (`ITEMS=qa-49`); the board keeps the failure.
   (Phase 8, Stage 6.)
-- **The audit log stores `None` as the JSON value `null`.** `AuditEvent.before` and `after` are
-  nullable `jsonb` columns without `none_as_null=True`, so an event with no before or after state
-  holds JSON `null`, not SQL `NULL`, and an `IS NULL` query misses it. The assistant tables were
-  fixed in stage 1; the audit columns need the same type change and a data fix for existing rows.
-  (Phase 4 stage 1 review.) Moved from Phase 7 at its close: the console only counts audit events
-  by action and never queries these columns, so the fix goes with the hardening pass.
 - **Phase 7 review lows, recorded, not fixed** (2026-11-05). Each is a rare edge case in the
   tour or the console:
   - starting a new conversation while a tour chip's answer is still coming leaves the step with
@@ -271,22 +257,15 @@ conversation-page glitches are fixed with browser tests (stage 6).
   sandbox's table in a 21-day window; a case sent in late December in a sandbox with no rows for
   the next year would get a reply-by date on a closed day. Check the seed always writes the next
   year's holidays, or read them from the calendar. (v0.6.0 release review.)
-
 - **A second route for a concern about the HR team.** A case goes only to HR, so a person whose
   concern is about someone in HR has no other way in through Open Door; today the handbook's
   contacts are the only route. A later phase could add a named second reviewer outside HR for
   such cases. (Phase 6 spec.)
-- **One stored value that won't decrypt breaks the conversation for good.** Its owner's
-  `GET /conversations/current` and `GET /budget` return a 500 from then on, since "current" is the
-  newest conversation. Only a damaged row or a lost key causes it. Let the person start a new
-  conversation from that state, or mark the conversation unreadable. (Phase 6 stage 1 security
-  review.)
 - **Encryption binds each message to its row, not to its order.** Someone who can write to the
   database could reorder a conversation's messages, or cut tool-call entries off the end of a
   turn's list, and they would still decrypt. That access is outside the threat model. If it ever
   isn't, bind `position` and the list's length into the associated data. And if a second
   ciphertext format is added, bind the version byte too. (Phase 6 stage 1 security review.)
-
 - **The per-turn check for untold card outcomes grows with the conversation.** Each turn start
   reads every card in the conversation and checks each against every stored context's
   `reported_outcomes` array, with no index, while it holds the cards' share locks. Fine at demo
@@ -300,7 +279,6 @@ conversation-page glitches are fixed with browser tests (stage 6).
   `no-approver`, but the summary still names them as their own manager and their requests count as
   waiting for themselves. Exclude the person wherever manager links are resolved. The seed never
   makes such a row; it would be a data error. (Phase 5 phase review.)
-
 - **The Approvals reads load each person's facts one at a time.** `_managed_view` loads each
   direct report's facts and requests in turn for the waiting list and every single-request read,
   and coverage now loads each colleague's schedule too. Batch the loads per set of people. (Phase 5
@@ -313,14 +291,12 @@ conversation-page glitches are fixed with browser tests (stage 6).
   inputs three times; the eval graders check ISO dates the tool's own input model already checks;
   the eval runner builds the seed company twice. Share each when that code next changes. (Phase 5
   phase review.)
-
 - **Recent decisions leave out two kinds of past decision.** The `decided` scope lists requests
   the manager approved or denied that are still approved or denied, among the manager's current
   reports. An approval the employee later canceled, and a decision about someone who has since moved
   to another manager, drop out of "Your decisions from the last 90 days", though the request still
   records who decided it. Showing them needs a line such as "Approved October 20, later canceled".
   Reporting lines can't change in the demo yet. (Phase 5 stage 6 review.)
-
 - **Time-off lists stop silently at 200 rows.** `GET /time-off/requests` caps every scope at 200,
   ordered by start date (newest decision first for `decided`). A person with very many short sick
   entries would lose the newest rows of My requests, and a manager of a large organization the end
@@ -331,7 +307,6 @@ conversation-page glitches are fixed with browser tests (stage 6).
   steps between same-page entries that aren't an open-and-close pair then skips restoring that
   entry's saved position. Rare: it needs history steps, not the panel's own close. (Phase 5 stage 6
   review.)
-
 - **Catch a card number written after other four-digit numbers.** "Room 2401 4242 4242 4242 4242"
   passes the personal-data check: the grouped pattern takes the leading number as the card's first
   group, and that 20-digit number fails the length check. Trying every run of groups inside a
@@ -339,11 +314,6 @@ conversation-page glitches are fixed with browser tests (stage 6).
   about one time in ten, since those are card-shaped and pass the checksum by chance. The v0.4.0
   release review tried it and went back; decide with the other personal-data gaps here, in both
   copies. (v0.4.0 release review.)
-- **Catch personal data written in non-Latin digits.** The check normalizes the text (NFKC,
-  format characters dropped, Unicode spaces and dashes mapped to ASCII) and then matches ASCII
-  digits only, so the browser's copy can follow the same steps. An SSN written in Arabic-Indic or
-  Devanagari digits passes. Mapping every Unicode decimal digit to ASCII would catch it; do it in
-  both copies at once. (Phase 4 stage 4 Opus security review.) Moved from Phase 4 at its close, with a related note: the browser runs Unicode 17 and the API's Python 15.1, so a few new code points (outlined digits) are flagged only in the browser. Do both copies together. (Phase 4 stage 6 review.)
 - **The canary check misses look-alike letters.** It folds case, width, and separators, so the
   canary in capitals or letter-spaced is caught, but Cyrillic letters that look like Latin ones
   (`а` for `a`) are not. It's a tripwire, not a boundary; a confusables map would close it.
@@ -372,7 +342,6 @@ conversation-page glitches are fixed with browser tests (stage 6).
   rest is a swipe away, so it is low (2.4.11 asks only that it isn't entirely hidden). Scrolling the
   focused link fully into the nav's view, or fitting the links, would fix it. (Phase 8 stage 8,
   the accessibility audit's L3; see [`ACCESSIBILITY.md`](ACCESSIBILITY.md).)
-
 - **One exit for the canary check, and a cheaper fold.** `turn.py` checks the canary at about seven
   places (held text, status notes, the take-back, the restore, closing events), each keeping its
   own tail, so every new event path has needed its own patch. Holding and checking every outgoing
@@ -387,10 +356,6 @@ conversation-page glitches are fixed with browser tests (stage 6).
   in the store, or memoize finished blocks; measure on a low-end phone first. (v0.4.0 release
   review.) The Phase 8 load test can't measure it: the work is in the browser, and the server's
   load test has none ([`CAPACITY.md`](CAPACITY.md)).
-- **Delete handbook versions no sandbox uses.** Each `make ingest` of changed text adds a version,
-  and nothing removes old ones. A cleanup step can delete unpublished versions and published ones
-  that are neither the newest nor pinned by any sandbox; the foreign key already refuses to delete
-  a version in use. (Phase 3 spec, Data model.)
 - **Make the directory's counts cheaper.** `GET /people/facets` runs up to five queries one after
   another (total, matching, the location and department menus, and "My team") on every debounced
   search. Total and matching can be one `count(*) FILTER (WHERE …)`, and the total doesn't change
@@ -399,8 +364,6 @@ conversation-page glitches are fixed with browser tests (stage 6).
   faster than `GET /people` itself, so it stays here.
 - **Keyboard shortcuts.** Add `/` to focus the composer (never while typing in a field) and ⌘K to
   jump to a page. Both need screen-reader and conflict checks. (2026-10-06 design brainstorm.)
-
-
 - **A turn keeps two costs.** The console row's cost is now the turn's ledger sum (Phase 8 stage
   7), but `ai_turns.cost_usd` still stores the turn's own tally, so the two differ for a turn whose
   settle timed out. The eval runner reads the turn's figure, so moving it to the ledger's changes
@@ -413,12 +376,29 @@ conversation-page glitches are fixed with browser tests (stage 6).
   `scripts/image/container.py` but not these. Move them there when either launcher next changes.
   The load test's memory parser also maps `MB` and `MiB` both to 1 while `GB` is 1,000 and `GiB`
   1,024 (Docker prints binary units, so the reports are in MiB). (Phase 8 stage 7 review.)
-- **`ping()` has no hard wall-clock bound.** If canceling the query stalls on the network,
-  closing the connection can take longer than the timeout, because SQLAlchemy shields the close.
-  The orchestrator's own probe timeout covers it; revisit only if health checks need a strict
-  bound.
-- **Keep probe traffic out of traces.** Phase 8 stage 1 filters both health paths from
-  `uvicorn.access`; if OpenTelemetry is enabled, filter them there too.
+
+## Handbook content
+
+- **A military leave section.** The handbook has none. A company section under the federal
+  reemployment law for service members (USERRA) comes first; state addenda follow, such as
+  Georgia's leave for state guard members (O.C.G.A. §38-2-279, not verified). (Phase 3 stage 6.)
+- **A Georgia persona,** if the owner wants one: a fifth sign-in card for an Atlanta employee,
+  with a design pass on the landing page first and a migration for the new persona key. Georgia is
+  covered today by Atlanta employees in the directory and Georgia askers in the eval. (Phase 3
+  stage 6.)
+
+## Phase 5: time off
+
+All five items were closed in stage 6 (2026-10-25): the nav after a switch (a `navFor` test and the
+shell's switch test), writes from an old identity (no write sets query data; a test enforces it),
+the scroll-restoration exception (a history marker), "Show your work" for the time-off tools, and
+the conversation read after a turn ends.
+
+## Phase 6: cases and escalation
+
+All three items were closed in Phase 6: the hand-off's texts say only what's true (the panel and
+form texts approved in stage 4), case text is encrypted (stages 1 and 2), and the four
+conversation-page glitches are fixed with browser tests (stage 6).
 
 ## Phase 9: deploy to AWS
 
@@ -502,3 +482,15 @@ found while building Phase 8, or moved here from its backlog because they only m
   graceful timeout (to let long answers finish during a deploy), raise `stopTimeout` (at most
   120) and the load balancer's deregistration delay with it, and keep the 12-second drain inside
   the gap. (Phase 4 stage 4.)
+- **Mark each answer in a machine-readable way (EU AI Act, Article 50(2)).** Re-read on
+  2026-11-16, the duty covers any provider whose system writes synthetic text, not only published
+  text, so a deployed Open Door must mark its answers as AI-generated in a form a machine can
+  detect. Choose the mark against the Commission's guidance and code of practice as they stand at
+  deploy time, and add it to each answer in the API and the page
+  ([`AI-GOVERNANCE.md`](AI-GOVERNANCE.md#the-disclosure-eu-ai-act-article-50)). (Phase 8, Stage 9.)
+- **`ping()` has no hard wall-clock bound.** If canceling the query stalls on the network,
+  closing the connection can take longer than the timeout, because SQLAlchemy shields the close.
+  The orchestrator's own probe timeout covers it; revisit only if health checks need a strict
+  bound.
+- **Keep probe traffic out of traces.** Phase 8 stage 1 filters both health paths from
+  `uvicorn.access`; if OpenTelemetry is enabled, filter them there too.

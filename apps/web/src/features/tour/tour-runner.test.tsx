@@ -366,7 +366,7 @@ describe('the coach mark', () => {
           turns: [
             turnOut({
               id: 'c0ffee00-0000-4000-8000-0000000000bb',
-              question: 'Book next Friday off.',
+              question: 'Book this Friday off.',
             }),
           ],
         }),
@@ -374,7 +374,7 @@ describe('the coach mark', () => {
     )
     const card = await mark(/Book a day off/)
     await screen.findByRole('textbox', { name: 'Ask Open Door' })
-    await user.click(within(card).getByRole('button', { name: /^Book next Friday off\./ }))
+    await user.click(within(card).getByRole('button', { name: /^Book this Friday off\./ }))
     await waitFor(() => expect(posted).toHaveLength(1))
     // The new answer is still streaming: the earlier turn must not finish the step or flash the
     // line.
@@ -419,7 +419,7 @@ describe('the coach mark', () => {
         }),
         turnOut({
           id: TURN,
-          question: 'Book next Friday off.',
+          question: 'Book this Friday off.',
           proposals: [
             proposalOut({ id: 'c0ffee00-0000-4000-8000-0000000000b2', turnRunning: false }),
           ],
@@ -438,7 +438,7 @@ describe('the coach mark', () => {
           question: 'Book Monday off.',
           proposals: [proposalOut({ turnRunning: false })],
         }),
-        turnOut({ id: TURN, question: 'Book next Friday off.' }),
+        turnOut({ id: TURN, question: 'Book this Friday off.' }),
       ])
       expect(await within(card).findByRole('status')).toHaveTextContent(
         /^The assistant usually shows a confirm card here/,
@@ -452,7 +452,7 @@ describe('the coach mark', () => {
           question: 'Book Monday off.',
           proposals: [proposalOut({ turnRunning: false })],
         }),
-        turnOut({ id: TURN, question: 'Book next Friday off.', status: 'running' }),
+        turnOut({ id: TURN, question: 'Book this Friday off.', status: 'running' }),
       ])
       await waitFor(() =>
         expect(document.querySelector('[data-slot="confirm-card"]')).not.toBeNull(),
@@ -489,9 +489,9 @@ describe('the coach mark', () => {
     await screen.findByRole('textbox', { name: 'Ask Open Door' })
     expect(within(card).queryByRole('status')).not.toBeInTheDocument()
     api.setCurrent(
-      conversationOut({ turns: [turnOut({ id: TURN, question: 'Book next Friday off.' })] }),
+      conversationOut({ turns: [turnOut({ id: TURN, question: 'Book this Friday off.' })] }),
     )
-    await user.click(within(card).getByRole('button', { name: /^Book next Friday off\./ }))
+    await user.click(within(card).getByRole('button', { name: /^Book this Friday off\./ }))
     await waitFor(() => expect(posted).toHaveLength(1))
     expect(await within(card).findByRole('status')).toHaveTextContent(
       /^The assistant usually shows a confirm card here/,
@@ -520,7 +520,7 @@ describe('the coach mark', () => {
     expect(within(card).queryByRole('button', { name: 'Next' })).not.toBeInTheDocument()
     expect(within(card).getByRole('button', { name: 'Skip this step' })).toBeInTheDocument()
     // A turn that brings no new card still ends in the missing line.
-    await user.click(within(card).getByRole('button', { name: /^Book next Friday off\./ }))
+    await user.click(within(card).getByRole('button', { name: /^Book this Friday off\./ }))
     await waitFor(() => expect(posted).toHaveLength(1))
     expect(await within(card).findByRole('status')).toHaveTextContent(
       /^The assistant usually shows a confirm card here/,
@@ -539,13 +539,13 @@ describe('the coach mark', () => {
         turns: [
           turnOut({
             id: TURN,
-            question: 'Book next Friday off.',
+            question: 'Book this Friday off.',
             proposals: [proposalOut({ turnRunning: false })],
           }),
         ],
       }),
     )
-    await user.click(within(card).getByRole('button', { name: /^Book next Friday off\./ }))
+    await user.click(within(card).getByRole('button', { name: /^Book this Friday off\./ }))
     expect(await within(card).findByRole('button', { name: 'Next' })).toBeInTheDocument()
     expect(document.querySelector('[data-slot="confirm-card"]')).not.toBeNull()
     // Wait past the missing line's settle time: it never comes.
@@ -572,7 +572,7 @@ describe('the coach mark', () => {
     )
     const card = await mark(/Book a day off/)
     await waitFor(() => expect(document.querySelector('[data-slot="confirm-card"]')).not.toBeNull())
-    await user.click(within(card).getByRole('button', { name: /^Book next Friday off\./ }))
+    await user.click(within(card).getByRole('button', { name: /^Book this Friday off\./ }))
     stream.push('turn.started', { turnId: TURN })
     stream.push(
       'proposal',
@@ -586,7 +586,7 @@ describe('the coach mark', () => {
         turns: [
           turnOut({
             id: TURN,
-            question: 'Book next Friday off.',
+            question: 'Book this Friday off.',
             proposals: [
               proposalOut({ id: 'c0ffee00-0000-4000-8000-0000000000b2', turnRunning: false }),
             ],
@@ -646,13 +646,13 @@ describe('a latched outcome', () => {
         turns: [
           turnOut({
             id: TURN,
-            question: 'Book next Friday off.',
+            question: 'Book this Friday off.',
             proposals: [proposalOut({ turnRunning: false })],
           }),
         ],
       }),
     )
-    await user.click(within(card).getByRole('button', { name: /^Book next Friday off\./ }))
+    await user.click(within(card).getByRole('button', { name: /^Book this Friday off\./ }))
     expect(await within(card).findByRole('button', { name: 'Next' })).toBeInTheDocument()
     await act(() => router.navigate('/handbook'))
     await new Promise((resolve) => setTimeout(resolve, 450))
@@ -685,16 +685,16 @@ describe('a latched outcome', () => {
     const card = await mark(/Book a day off/)
     await screen.findByRole('textbox', { name: 'Ask Open Door' })
     api.setCurrent(
-      conversationOut({ turns: [turnOut({ id: TURN, question: 'Book next Friday off.' })] }),
+      conversationOut({ turns: [turnOut({ id: TURN, question: 'Book this Friday off.' })] }),
     )
-    await user.click(within(card).getByRole('button', { name: /^Book next Friday off\./ }))
+    await user.click(within(card).getByRole('button', { name: /^Book this Friday off\./ }))
     expect(await within(card).findByRole('status')).toBeInTheDocument()
     api.setCurrent(
       conversationOut({
         turns: [
           turnOut({
             id: TURN,
-            question: 'Book next Friday off.',
+            question: 'Book this Friday off.',
             proposals: [proposalOut({ turnRunning: false })],
           }),
         ],
@@ -772,7 +772,7 @@ describe('a chip that cannot be sent', () => {
     )
     const card = await mark(/Book a day off/)
     await screen.findByRole('textbox', { name: 'Ask Open Door' })
-    await user.click(within(card).getByRole('button', { name: /^Book next Friday off\./ }))
+    await user.click(within(card).getByRole('button', { name: /^Book this Friday off\./ }))
     await waitFor(() => expect(useChatStore.getState().sendError).not.toBeNull())
     await waitFor(() => expect(useTourStore.getState().sent).toEqual([]))
     expect(posted).toEqual([])
@@ -869,7 +869,7 @@ describe('a chip that cannot be sent', () => {
     )
     const card = await mark(/Book a day off/)
     await screen.findByRole('textbox', { name: 'Ask Open Door' })
-    await user.click(within(card).getByRole('button', { name: /^Book next Friday off\./ }))
+    await user.click(within(card).getByRole('button', { name: /^Book this Friday off\./ }))
     await waitFor(() => expect(useTourStore.getState().sent).toEqual([0]))
     await user.click(screen.getByRole('button', { name: 'Skip this step' }))
     await mark(/Decide as the manager/)
@@ -906,7 +906,7 @@ describe('a typed question that fails while the chip is pending', () => {
     const { user } = setup('priya', 2)
     const card = await mark(/Book a day off/)
     await screen.findByRole('textbox', { name: 'Ask Open Door' })
-    await user.click(within(card).getByRole('button', { name: /^Book next Friday off\./ }))
+    await user.click(within(card).getByRole('button', { name: /^Book this Friday off\./ }))
     await waitFor(() => expect(posted).toHaveLength(1))
     // A typed question fails now, in the chat store's global error, while the chip's own turn is
     // still coming.

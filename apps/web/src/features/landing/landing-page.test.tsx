@@ -109,6 +109,32 @@ describe('the landing page', () => {
     expect(screen.getByRole('button', { name: 'Take the 2-minute tour' })).toBeEnabled()
   })
 
+  it('says starting a sandbox runs a Cloudflare check, under the sandbox note (screen 16)', async () => {
+    installFakeApi()
+    renderApp({ at: '/' })
+    await screen.findByRole('heading', { level: 2, name: 'Choose who to be' })
+    const note = screen.getByText(/^Each visit gets its own private copy/)
+    const check = screen.getByText(
+      'Starting a sandbox runs a quick Cloudflare check to keep the demo safe.',
+    )
+    expect(note.compareDocumentPosition(check) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(check.parentElement).toBe(note.parentElement)
+  })
+
+  it('links the recorded walkthrough left of the tour button, and Back returns here', async () => {
+    installFakeApi()
+    const { router, user } = renderApp({ at: '/' })
+    await screen.findByRole('heading', { level: 2, name: 'Choose who to be' })
+    const link = screen.getByRole('link', { name: 'Watch the recorded walkthrough' })
+    const tour = screen.getByRole('button', { name: 'Take the 2-minute tour' })
+    expect(link).toHaveAttribute('href', '/walkthrough')
+    expect(link.compareDocumentPosition(tour) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    await user.click(link)
+    await screen.findByRole('heading', { level: 1, name: 'The recorded walkthrough' })
+    expect(router.state.location.pathname).toBe('/walkthrough')
+    expect(screen.getByRole('link', { name: 'Back to the demo' })).toHaveAttribute('href', '/')
+  })
+
   it('starts the tour as Priya: busy and announced, the four cards disabled, then step 1', async () => {
     const api = installFakeApi()
     const held = gate()

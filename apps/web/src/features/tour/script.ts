@@ -53,8 +53,8 @@ const TOUR: readonly TourStep[] = [
     path: '/ask',
     targets: [composer, confirm],
     title: 'Book a day off',
-    body: 'Ask for next Friday. The assistant fills in a card with the date and the balance after. Nothing happens until you confirm.',
-    chips: ['Book next Friday off.'],
+    body: 'Ask for this Friday. The assistant fills in a card with the date and the balance after. Nothing happens until you confirm.',
+    chips: ['Book this Friday off.'],
     expect: 'card',
     missing:
       'The assistant usually shows a confirm card here, with the date and the balance after. It didn’t this time, which can happen with a live model. Ask again, or go on.',

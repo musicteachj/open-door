@@ -17,12 +17,15 @@ the docker client's environment (`--env KEY`), never on a command line.
 """
 
 import argparse
+import re
 import secrets
 import signal
 import subprocess
 import sys
 import threading
 import time
+from collections.abc import Iterator, Mapping
+from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 from types import FrameType
@@ -156,6 +159,26 @@ def setup_env(passwords: Passwords, origin: str) -> dict[str, str]:
     }
 
 
+# The AI budgets a run may lower (the recording's per-take cap, the live check's cap), by name.
+BUDGET_SETTINGS = {"daily": "AI_DAILY_BUDGET_USD", "sandbox": "AI_SANDBOX_BUDGET_USD"}
+DOLLARS = re.compile(r"\d{1,4}(\.\d{1,2})?")
+
+
+def budget_env(budgets_usd: Mapping[str, str] | None) -> dict[str, str]:
+    """The AI budget settings for `budgets_usd` ({"daily": "0.66"}): positive dollars only."""
+    env: dict[str, str] = {}
+    for name, amount in (budgets_usd or {}).items():
+        setting = BUDGET_SETTINGS.get(name)
+        if setting is None:
+            raise LaunchError(f"Only the daily and sandbox budgets can be set, not {name!r}.")
+        if not DOLLARS.fullmatch(amount) or float(amount) <= 0:
+            raise LaunchError(
+                f"The {name} budget must be a positive dollar amount, not {amount!r}."
+            )
+        env[setting] = amount
+    return env
+
+
 def api_env(
     *,
     port: int,
@@ -163,25 +186,35 @@ def api_env(
     keyring: str,
     anthropic_api_key: str,
     voyage_api_key: str | None,
+    scripted: bool = False,
+    budgets_usd: Mapping[str, str] | None = None,
 ) -> dict[str, str]:
     """The API's settings: production, the real transport, a loopback origin, the API's login only
-    (never the owner's or the cleanup login's URL). The test keyring is refused."""
+    (never the owner's or the cleanup login's URL). The test keyring is refused.
+
+    `scripted` runs the same image as a test with the scripted model, paced like the real one, and
+    no model key: production refuses that transport, and a dry run must cost nothing.
+    `budgets_usd` lowers the AI budgets, so a paid run can't pass its cap."""
     from app.core.encryption import LocalKeyProvider  # imported here: needs apps/api on the path.
 
     if keyring == container.TEST_KEYRING or LocalKeyProvider.from_keyring(keyring).uses_test_key:
         raise LaunchError("The keyring holds the test key, which production refuses.")
     env = {
-        "APP_ENV": "production",
-        "AI_TRANSPORT": "anthropic",
+        "APP_ENV": "test" if scripted else "production",
+        "AI_TRANSPORT": "scripted" if scripted else "anthropic",
         "APP_ORIGIN": origin_for(port),
         "PORT": str(port),
         "DATABASE_URL": _database_url(APP_LOGIN, passwords.app),
         "ENCRYPTION_KEYRING": keyring,
-        "ANTHROPIC_API_KEY": anthropic_api_key,
         **entry_env(passwords),
+        **budget_env(budgets_usd),
     }
-    if voyage_api_key:
-        env["VOYAGE_API_KEY"] = voyage_api_key
+    if scripted:
+        env["SCRIPTED_DELAY_PROFILE"] = "realistic"
+    else:
+        env["ANTHROPIC_API_KEY"] = anthropic_api_key
+        if voyage_api_key:
+            env["VOYAGE_API_KEY"] = voyage_api_key
     return env
 
 
@@ -348,7 +381,13 @@ def problems_in_pages(base: str) -> list[str]:
 # --- the two ways to run -----------------------------------------------------------------------
 
 
-def bring_up(secrets_: Secrets, port: int) -> tuple[bool, dict[str, str]]:
+def bring_up(
+    secrets_: Secrets,
+    port: int,
+    *,
+    scripted: bool = False,
+    budgets_usd: Mapping[str, str] | None = None,
+) -> tuple[bool, dict[str, str]]:
     """Start the database and run the setup; returns whether this run made the network and the
     API's settings. Cleans up after itself if a step fails."""
     passwords = Passwords.new()
@@ -367,11 +406,49 @@ def bring_up(secrets_: Secrets, port: int) -> tuple[bool, dict[str, str]]:
             keyring=secrets_.keyring,
             anthropic_api_key=secrets_.anthropic_api_key,
             voyage_api_key=secrets_.voyage_api_key,
+            scripted=scripted,
+            budgets_usd=budgets_usd,
         )
     except BaseException:
         cleanup(made_network=made_network)
         raise
     return made_network, env
+
+
+@contextmanager
+def running(
+    secrets_: Secrets,
+    port: int,
+    *,
+    scripted: bool = False,
+    budgets_usd: Mapping[str, str] | None = None,
+) -> Iterator[str]:
+    """The API running on its own database for the length of the block, at its loopback origin
+    (what a browser must use: the API checks the origin). Everything is stopped and removed after,
+    however the block ends. For the recording and the live check."""
+    made_network, env = bring_up(secrets_, port, scripted=scripted, budgets_usd=budgets_usd)
+    try:
+        container.run(*api_run_args(env, port=port, detach=True), env=env)
+        wait_until_ready(f"http://127.0.0.1:{port}")
+        yield origin_for(port)
+    finally:
+        cleanup(made_network=made_network)
+
+
+def query_args(sql: str) -> list[str]:
+    """`psql` in the run's database container, as the owner, printing bare values."""
+    return [
+        "docker", "exec", DB_NAME,
+        "psql", "-U", DB_OWNER, "-d", DB_DATABASE, "-v", "ON_ERROR_STOP=1", "-At", "-c", sql,
+    ]  # fmt: skip
+
+
+def query(sql: str) -> str:
+    """Run `sql` in the run's database and return what it printed. Only while `running`."""
+    result = subprocess.run(query_args(sql), capture_output=True, text=True, check=False)  # noqa: S603
+    if result.returncode != 0:
+        raise LaunchError(f"The query failed: {result.stderr.strip()}")
+    return result.stdout.strip()
 
 
 def check(secrets_: Secrets, port: int) -> int:

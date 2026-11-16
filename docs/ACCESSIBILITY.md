@@ -37,7 +37,8 @@ flows, at 1280 px and again at 320 px: the landing page, the assistant's home, a
 its source open, the HR panel and the case form, the crisis panel, a confirm card, Time off with
 the request form, Approvals with a decision dialog, My cases, the HR case queue, a case with the
 person's words shown, the console with a turn's trace, the directory and a profile, the handbook
-and a section, the not-found page, and the tour's first step. `narrow.spec.ts` also checks every
+and a section, the not-found page, the tour's first step, and (added in stage 9) the recorded
+walkthrough and the daily-limit banner with its link to it. `narrow.spec.ts` also checks every
 gallery state at 320 px.
 
 ### Keyboard walks
@@ -56,6 +57,11 @@ Enter, Space, and Escape; no clicks), and asserts where focus is at each step:
 8. Review a case as HR: open it, show the person's words, and a status dialog.
 9. Open a turn's trace in the console, and Escape back to its row.
 10. The tour: start it, send a step's question, Next across a persona switch, leave, and resume.
+11. The recorded walkthrough (stage 9): from the landing's link to the page, then the logo, "Back
+    to the demo", and the video. The video is a stop of its own, with the app's focus ring (nothing
+    around it may clip the ring, which the walk measures), and its native controls are stops inside
+    it, each with the browser's own ring. The transcript takes no focus: it is text, and its sources
+    are plain text. Back returns to the landing.
 
 ### Contrast
 
@@ -102,15 +108,17 @@ off form, approvals, reviewing a case, and the console.
 
 ## Known gaps
 
-- **The walkthrough page** (Phase 8, stage 9) doesn't exist yet. Stage 9 adds it to
-  `pages.spec.ts` and gives it a keyboard walk of its own.
+- **The walkthrough's video uses the browser's own controls** (screen 16's decision), so their
+  names, focus rings, and keyboard use are the browser's. Chromium's are checked by the walk;
+  Safari's are on the VoiceOver checklist. The video has no sound, so it has no captions: the
+  transcript on the page is its text alternative (1.2.1).
 - **Only Chromium runs.** Safari and Firefox are not automated. The VoiceOver checklist below is
   in Safari.
 - **No screen reader is automated.** The checks assert names, roles, focus, and live regions, which
   is what a screen reader reads, but how it is spoken is checked by hand.
 - The open and accepted lows above: L1 to L4.
 
-## VoiceOver checklist (about 15 minutes)
+## VoiceOver checklist (about 20 minutes)
 
 For the owner, in Safari on a Mac, with VoiceOver on (Command+F5). VO means Control+Option. Start
 from the landing page in a fresh window.
@@ -141,5 +149,10 @@ from the landing page in a fresh window.
 10. **The tour.** Start the 2-minute tour from the persona menu. Each step's title is read when it
     shows. Press Escape to leave, then "Resume the tour" in the persona menu: the step's title is
     read again.
+11. **The recorded walkthrough.** From the landing, follow "Watch the recorded walkthrough". The
+    video is read as "The recorded walkthrough", and Safari's own controls play it. In the rotor,
+    the Headings list shows "Transcript" and each step's title; each answer is read as "Open Door,
+    the AI assistant", and the HR panel's words as "HR panel, Fixed text written by a person, not
+    the AI". "Back to the demo" returns to the landing.
 
 Note anything VoiceOver reads wrongly, twice, or not at all, with the step's number.

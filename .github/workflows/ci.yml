@@ -61,6 +61,10 @@ jobs:
               - 'compose.yaml'
               # The load test's test reads the guided tour's questions, to keep the visitors' equal.
               - 'apps/web/src/features/tour/script.ts'
+              # The live check's and the recorder's tests read their browser parts, to keep the
+              # questions and the dry run's label equal on both sides.
+              - 'apps/web/e2e/live/check.ts'
+              - 'apps/web/e2e/walkthrough/record.ts'
               # The eval runner's tests read the eval-live target and the fixtures' ignore rule.
               - 'Makefile'
               - '.gitignore'

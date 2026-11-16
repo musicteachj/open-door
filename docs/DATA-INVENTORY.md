@@ -725,3 +725,26 @@ seed generator.
   two fixed warnings with no fields: a client that stopped reading a stream, and streams still
   open at shutdown (with a count). A refused question (too long, or a Social Security or card
   number) is a problem response; the text is never logged, stored, or echoed back.
+
+### The recorded walkthrough (`apps/web/public/media/`, `apps/web/src/features/walkthrough/`)
+
+The video of the guided tour and its transcript, recorded with the live model (Phase 8, Stage 9;
+ADR 0019). No real person's data is involved.
+
+- **What they hold:** the screen at 1440 by 900 (no sound) and, in `walkthrough.json`, each step's
+  coach-mark words, the questions the tour asks, the model's answers (Markdown links dropped), the
+  HR panel's fixed text, and notes written by the recorder. The people, balances, and the case's
+  words all come from the seed of a throwaway sandbox on the recording's own throwaway database,
+  which is deleted when the recording ends.
+- **Who can see them:** anyone. They are committed, and the app serves them at `/walkthrough` with
+  no sign-in.
+- **How long:** until the walkthrough is recorded again (when the tour or the model changes).
+- **What a recording leaves on the owner's machine** (under `/tmp/od-walkthrough/`): each take's
+  raw video, the encoded files, and a ledger of what each take cost. A failed take also keeps each
+  turn's status and error code and the API's log, never a question's or an answer's words.
+- **Who receives what:** Anthropic and Voyage receive the tour's questions and the throwaway
+  sandbox's tool results, as in any live turn. The recording's browser loads Cloudflare's real
+  Turnstile script and widget with the test key, so Cloudflare receives that browser's requests and
+  the owner's address, as for any visitor; the API's check of the test key is answered inside the
+  API and sends Cloudflare nothing. The live check (`scripts/prod-local/live_check.py`) does the
+  same.

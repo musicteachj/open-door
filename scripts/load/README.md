@@ -23,7 +23,7 @@ at the real model's rates, then settles to $0), never because a sandbox or the d
 spend. Its 429s and budget errors are expected and reported.
 
 Each visitor follows the guided tour through the real HTTP routes: Priya starts a sandbox, asks
-about sick days, books next Friday off (one preview check, then a confirm after the stream closes),
+about sick days, books this Friday off (one preview check, then a confirm after the stream closes),
 Mateo asks the same, Marcus opens Approvals and the directory, asks what waits, approves, and asks
 about Leo, Priya tries the rules (an address, an injection, a sensitive message), and Dana opens
 cases and the console. Every visitor sends its own `X-Forwarded-For` from the benchmarking range

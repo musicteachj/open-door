@@ -96,6 +96,12 @@
     "note": "It works out next Friday from the per-turn context's date (the Friday of the following week), asks for a PTO card through the real tool, and says nothing is booked until the person confirms."
   },
   {
+    "id": "book-this-friday",
+    "trigger": "book this friday",
+    "behavior": "book_this_friday",
+    "note": "The tour's step 3 chip. It works out this Friday from the per-turn context's date (the coming Friday, today on a Friday), asks for a PTO card through the real tool, and says nothing is booked until the person confirms."
+  },
+  {
     "id": "sick-tomorrow",
     "trigger": "I'm sick tomorrow",
     "behavior": "sick_tomorrow",

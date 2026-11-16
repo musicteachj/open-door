@@ -61,9 +61,9 @@ test('usable at 390 px: the cards stack, and nothing overflows', async ({ page }
 test('each persona card is a single button with the accessible name above, reachable by keyboard and showing the focus ring', async ({
   page,
 }) => {
-  // The four cards and the tour button, and nothing else to tab to.
+  // The four cards, the walkthrough's link (screen 16), and the tour button: nothing else to tab to.
   await expect(page.getByRole('button')).toHaveCount(5)
-  await expect(page.getByRole('link')).toHaveCount(0)
+  await expect(page.getByRole('link')).toHaveCount(1)
   for (const name of FIRST_NAMES) {
     await page.keyboard.press('Tab')
     await expect(card(page, name)).toBeFocused()
@@ -80,7 +80,9 @@ test('each persona card is a single button with the accessible name above, reach
     await expect(card(page, name).locator('a, button, input')).toHaveCount(0)
     await expect(card(page, name)).toContainText(`Start as ${name}`)
   }
-  // The tour button comes after the cards.
+  // After the cards: the walkthrough's link, then the tour button, in the order they show.
+  await page.keyboard.press('Tab')
+  await expect(page.getByRole('link', { name: 'Watch the recorded walkthrough' })).toBeFocused()
   await page.keyboard.press('Tab')
   await expect(page.getByRole('button', { name: 'Take the 2-minute tour' })).toBeFocused()
 })

@@ -24,5 +24,11 @@
     "erasableSyntaxOnly": true,
     "noFallthroughCasesInSwitch": true
   },
-  "include": ["playwright.config.ts", "playwright.captures.config.ts", "e2e"]
+  "include": [
+    "playwright.config.ts",
+    "playwright.captures.config.ts",
+    "playwright.walkthrough.config.ts",
+    "playwright.live.config.ts",
+    "e2e"
+  ]
 }
