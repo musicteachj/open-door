@@ -1874,8 +1874,11 @@ What the code forced, or the owner decided:
   digits of any script, unused handbook versions); the rest moved to "Any phase", and the two that
   only matter with AWS's orchestrator and tracing to Phase 9.
 - **CI on the PR (#121)** failed two browser tests that passed on a Mac. The audit's target-size
-  check found the banner's walkthrough link under 24 px from "Write to HR" on the line above
-  (Linux's fonts set the lines a little closer), so the link sits 8 px below the text, not 4. And
+  check found "Write to HR" on the daily banner too close to another target. Batch A had wrapped
+  the banner's approved text in an element of its own, so "Write to HR" no longer had text beside
+  it and lost the check's exemption for a link in a sentence; on CI's fonts the 988 link then broke
+  across two lines, and its box covered "Write to HR". The wrapper is gone (a unit test keeps the
+  link beside its text), and the walkthrough link also sits 8 px below the text, not 4. And
   the gallery's 320 px sweep, 18 to 27 seconds on a Mac, passed CI's 30-second limit, as it had on
   `dev` after stage 8; it now has 90 seconds.
 

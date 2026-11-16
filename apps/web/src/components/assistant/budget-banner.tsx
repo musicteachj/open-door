@@ -40,9 +40,9 @@ function BudgetBanner({
     <Banner
       message={
         <>
-          <span data-slot="budget-text">
-            <Segments segments={linkifyEmergency(message)} />
-          </span>
+          {/* No wrapper: "Write to HR" must sit beside the sentence's own text, which is what lets it
+              count as a link in a sentence (WCAG 2.5.8's inline exception). */}
+          <Segments segments={linkifyEmergency(message)} />
           {writeToHr && (
             <>
               {' '}
@@ -57,7 +57,7 @@ function BudgetBanner({
             <>
               {' '}
               {/* 8 px above, so its 24 px target circle clears "Write to HR" on the line above
-                  (WCAG 2.5.8; at 4 px Linux's fonts put them under 24 px apart). */}
+                  with room to spare (WCAG 2.5.8). */}
               <span className="mt-2 block">
                 <WalkthroughLink />
               </span>

@@ -21,7 +21,7 @@ describe('BudgetBanner: the 911 and 988 calls', () => {
     renderWithRouter(<BudgetBanner kind={kind} message={text} />)
     const status = screen.getByRole('status')
     expect(status).toHaveTextContent(text)
-    expect(status.querySelector('[data-slot="budget-text"]')!.textContent).toBe(text)
+    expect(status.textContent!.startsWith(text)).toBe(true)
     expect(screen.getByRole('link', { name: 'call 911' })).toHaveAttribute('href', 'tel:911')
     expect(screen.getByRole('link', { name: 'call or text 988' })).toHaveAttribute(
       'href',
@@ -101,14 +101,33 @@ describe('BudgetBanner: the recorded walkthrough', () => {
     )
     const link = screen.getByRole('link', { name: WALKTHROUGH })
     expect(link).toHaveAttribute('href', '/walkthrough')
-    const text = screen.getByRole('status').querySelector('[data-slot="budget-text"]')!
-    expect(text.compareDocumentPosition(link) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
-    expect(text).not.toContainElement(link)
+    // After the approved text, on a line of its own.
+    const lastOfText = screen.getByRole('link', { name: 'call or text 988' })
+    expect(lastOfText.compareDocumentPosition(link) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(link.parentElement).toHaveClass('block')
     await user.click(link)
     expect(await screen.findByRole('link', { name: 'Back to the demo' })).toHaveAttribute(
       'href',
       '/ask?c=abc',
     )
+  })
+
+  it('keeps "Write to HR" in the sentence, beside its text, as WCAG 2.5.8 exempts it', () => {
+    // The accessibility audit's target-size check exempts a link with text beside it in the same
+    // element. Wrapping the approved text in an element of its own (stage 9's first try) lost that
+    // on CI, where the 988 link's two-line box then covered "Write to HR".
+    renderWithRouter(
+      <BudgetBanner
+        kind="daily"
+        message={DAILY_TEXT}
+        writeToHr={{ to: '/my-cases', label: 'Write to HR' }}
+      />,
+    )
+    const write = screen.getByRole('link', { name: 'Write to HR' })
+    const besideIt = [...write.parentElement!.childNodes].filter(
+      (n) => n !== write && n.nodeType === Node.TEXT_NODE && (n.textContent ?? '').trim() !== '',
+    )
+    expect(besideIt).not.toHaveLength(0)
   })
 
   it('has no walkthrough link on the sandbox banner: a new sandbox is the way on', () => {
