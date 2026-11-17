@@ -2,8 +2,10 @@ import type { PersonaKey } from '@/api/generated'
 import { TOUR_TARGETS, type TourTargetName } from '@/lib/tour-targets'
 
 // The guided tour's ten steps (screen 15, docs/design/screens/15-guided-tour). The copy is the
-// design's, except steps 4, 5, and 8, whose bodies the owner approved on 2026-11-04. A chip is
-// sent as typed, with the design's curly apostrophes; the scripted model straightens them.
+// design's, except steps 4, 5, and 8, whose bodies the owner approved on 2026-11-04. Step 5's was
+// changed on 2026-11-17: the live safety check sends that question to HR after the answer, so the
+// body allows for the HR panel (the scripted model shows none). A chip is sent as typed, with the
+// design's curly apostrophes; the scripted model straightens them.
 
 type TourStep = {
   id: string
@@ -77,7 +79,7 @@ const TOUR: readonly TourStep[] = [
     path: '/ask',
     targets: [composer],
     title: 'Ask about someone’s absence',
-    body: 'A manager sees when someone on the team was out, never why. Ask about Leo’s absence last week, and the answer says only that it was approved time off.',
+    body: 'A manager sees when someone on the team was out, never why. Ask about Leo’s absence last week: the answer says only that it was approved time off, and an HR panel may follow, since the reason is private.',
     chips: ['Why was Leo out last week?'],
   },
   {

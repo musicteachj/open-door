@@ -10,6 +10,34 @@ version (`0.x.y` while the app is being built, `1.0.0` when it is complete).
 
 ## [Unreleased]
 
+### Changed
+
+- **The guided tour's step 5 says what the live assistant does** (Phase 8 follow-up). Asked "Why was
+  Leo out last week?", Marcus gets an answer that Leo had approved time off, and the live safety
+  check then shows the HR panel, since the reason for an absence is private. The coach mark used to
+  promise only the answer; it now says an HR panel may follow (the scripted model shows none). The
+  owner approved the words on 2026-11-17, as a change to screen 15's copy, instead of changing the
+  safety check's prompt.
+- **The recorded walkthrough was recorded again** with the new words. The transcript test now
+  accepts a question followed by an answer and then the HR panel, the order the video shows.
+
+### Fixed
+
+- **The walkthrough's transcript keeps the answers that come before an HR panel** (steps 5 and 7).
+  The take of 2026-11-16 was recorded before the recorder kept such an answer, so its transcript
+  (the video's text alternative) showed only the panel at both steps.
+
+### Security
+
+- **The npm audit accepts one advisory through 2026-12-17** (Phase 8 follow-up). GHSA-fc5q-39xc-vjpf,
+  a ReDoS in picomatch, was widened on 2026-11-17 to every version up to the latest, with no fixed
+  release, so every audit failed. Only build and test tools use picomatch; the shipped app has
+  none. `npm audit` can't accept one advisory, so CI and `make audit` now pass its report through a
+  small script that still fails on any other high or critical advisory, ends each exception after
+  its last day or when its advisory is raised in severity, checks in the lockfile that a package
+  accepted for build tools only isn't a production dependency, and fails on an advisory of unknown
+  severity and on a report that isn't a whole audit. The owner agreed to the exception.
+
 ## [0.8.0] - 2026-11-17
 
 Phase 8: hardening and deploy-readiness. Open Door now builds as one production image that serves

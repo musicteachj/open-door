@@ -278,7 +278,11 @@ audit: ## Scan for leaked secrets and vulnerable dependencies (what the Security
 	docker run --rm -v "$(CURDIR):/repo:ro" $(GITLEAKS) git --redact --exit-code 1 /repo
 	@# Through a file, not a pipe: make's shell has no pipefail, and pip-audit passes on an empty list.
 	cd $(API) && reqs=$$(mktemp) && { uv export --locked --no-emit-project > "$$reqs" && uvx $(PIP_AUDIT) -r "$$reqs" --no-deps --disable-pip; rc=$$?; rm -f "$$reqs"; exit $$rc; }
-	cd $(WEB) && npm audit --audit-level=high
+	@# npm audit exits 1 on any finding, so its report goes through the script that knows the dated
+	@# exceptions, as in the Security workflow. npm exits 1 on findings and on most of its own
+	@# errors, so the script, which refuses a report that isn't a whole audit, is the real guard;
+	@# a status above 1 stops here as well.
+	cd $(WEB) && report=$$(mktemp) && { npm audit --json > "$$report"; rc=$$?; if [ $$rc -gt 1 ]; then echo "npm audit itself failed (exit $$rc)." >&2; else uv run --quiet --no-project --python 3.13 ../../scripts/check_npm_audit.py "$$report" package-lock.json; rc=$$?; fi; rm -f "$$report"; exit $$rc; }
 
 check-docs: ## Check spelling (American English), links between files, and leftover placeholders
 	uvx $(TYPOS)

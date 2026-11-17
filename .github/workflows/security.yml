@@ -78,5 +78,17 @@ jobs:
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version-file: .nvmrc
-      # npm audit reads package-lock.json, so no install is needed.
-      - run: npm audit --audit-level=high
+      # npm audit reads package-lock.json, so no install is needed. It can't accept one advisory, so
+      # its report goes through scripts/check_npm_audit.py, which fails on any high or critical
+      # advisory except the dated exceptions it lists, and reads the lockfile to confirm that a
+      # package accepted for build tools only isn't a production dependency. npm audit exits 1 both
+      # when it finds something and on most of its own errors, so the script is the real guard: it
+      # refuses a report that isn't a whole audit (an error report from an unreachable registry,
+      # an empty or cut-short one). A status above 1 stops the step here as well.
+      - name: Audit the locked dependencies
+        shell: bash
+        run: |
+          status=0
+          npm audit --json > "$RUNNER_TEMP/npm-audit.json" || status=$?
+          if [ "$status" -gt 1 ]; then echo "npm audit itself failed (exit $status)." >&2; exit "$status"; fi
+          python3 ../../scripts/check_npm_audit.py "$RUNNER_TEMP/npm-audit.json" package-lock.json
