@@ -2010,7 +2010,15 @@ The two step 5 items the fix branch's review left open, settled in one PR:
   report's own total must now match its entries, the wiring test looks for the exit-status check,
   and the docs say the exception's last day is a UTC day. Step 7's coach mark ("A sensitive topic
   goes to a person, not the AI") while the live assistant answers before the HR panel went to the
-  owner.
+  owner, who approved new words ("A sensitive topic goes to a person. The assistant answers from
+  the handbook, then shows the HR panel, where Priya can send her own words to HR as a
+  confidential case.") and another take, folded into the release-prep PR (#126). That take ($0.22;
+  the recording has spent $1.44 of its $2 cap) shows both models' answer before the panel, citing
+  7.2, 2.3, and 2.2; the tour's browser test now checks that the step 7 answer cites a section and
+  comes before "Open a confidential case" (mutation-proved both ways). The review of the step 7
+  change had nothing high or medium after its first round; it made that check retry instead of
+  holding an element, and cut the script's comment to a pointer to the changelog. In this take
+  step 5's answer opens with a line about Priya's approved request before answering about Leo.
 
 ## Backlog
 

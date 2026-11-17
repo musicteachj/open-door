@@ -2,10 +2,9 @@ import type { PersonaKey } from '@/api/generated'
 import { TOUR_TARGETS, type TourTargetName } from '@/lib/tour-targets'
 
 // The guided tour's ten steps (screen 15, docs/design/screens/15-guided-tour). The copy is the
-// design's, except steps 4, 5, and 8, whose bodies the owner approved on 2026-11-04. Step 5's was
-// changed on 2026-11-17: the live safety check sends that question to HR after the answer, so the
-// body allows for the HR panel (the scripted model shows none). A chip is sent as typed, with the
-// design's curly apostrophes; the scripted model straightens them.
+// design's, except the bodies of steps 4, 5, 7, and 8, which the owner approved (the changelog
+// records when and why; script.test.ts pins them). A chip is sent as typed, with the design's
+// curly apostrophes; the scripted model straightens them.
 
 type TourStep = {
   id: string
@@ -97,7 +96,7 @@ const TOUR: readonly TourStep[] = [
     path: '/ask',
     targets: [composer, openCase, caseSend],
     title: 'Raise something sensitive',
-    body: 'A sensitive topic goes to a person, not the AI. Priya can send her own words to HR as a confidential case.',
+    body: 'A sensitive topic goes to a person. The assistant answers from the handbook, then shows the HR panel, where Priya can send her own words to HR as a confidential case.',
     chips: ['My manager keeps making comments about my age.'],
     expect: 'panel',
     missing:

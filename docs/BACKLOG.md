@@ -200,7 +200,10 @@ should pick it up. When one is done, delete it here and record it in the changel
   card (requested), not what happened to the request since, and the model words it as the present
   status. Tell the request's current status, or word the line in the past tense; it changes what
   the model is told, so it needs a full eval run, and the walkthrough is recorded again after.
-  (Phase 8, Stage 9.)
+  The takes of 2026-11-17 repeat it at step 6, and the second also opens Marcus's answer about Leo
+  (step 5) with "Priya Raman's PTO for Friday, November 20 is now approved.", a recap of the card
+  he had just confirmed, before answering the question; telling the model not to recap a card the
+  person has already seen would cover both. (Phase 8, Stage 9; the v0.8.1 takes.)
 - **"Book next Friday off" in the personas' "Try asking" lists is ambiguous.** The live model
   asks which Friday is meant on many days (this week's or next week's), so the suggestion often
   gets a question instead of a card. The tour's chip became "Book this Friday off." in Phase 8,

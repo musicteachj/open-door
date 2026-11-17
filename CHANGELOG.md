@@ -12,11 +12,12 @@ version (`0.x.y` while the app is being built, `1.0.0` when it is complete).
 
 ## [0.8.1] - 2026-11-17
 
-A follow-up to Phase 8. The guided tour's step 5 now says what the live assistant does (an HR
-panel may follow the answer about Leo's absence), and the recorded walkthrough was made again, so
-its transcript keeps the answers that come before an HR panel. The npm audit accepts one advisory
-with no fix yet, in picomatch, which only build and test tools use, through 2026-12-17. No new
-live eval run: nothing the model reads changed after the full run of 2026-11-12.
+A follow-up to Phase 8. The guided tour's steps 5 and 7 now say what the assistant does (an HR
+panel may follow the answer about Leo's absence; a sensitive message gets an answer from the
+handbook, then the HR panel), and the recorded walkthrough was made again, so its transcript keeps
+the answers that come before an HR panel. The npm audit accepts one advisory with no fix yet, in
+picomatch, which only build and test tools use, through 2026-12-17. No new live eval run: nothing
+the model reads changed after the full run of 2026-11-12.
 
 ### Changed
 
@@ -26,6 +27,10 @@ live eval run: nothing the model reads changed after the full run of 2026-11-12.
   promise only the answer; it now says an HR panel may follow (the scripted model shows none). The
   owner approved the words on 2026-11-17, as a change to screen 15's copy, instead of changing the
   safety check's prompt.
+- **The guided tour's step 7 says what the assistant does** (Phase 8 follow-up). It said a
+  sensitive topic goes "to a person, not the AI", but both the live and the scripted model answer
+  Priya from the handbook first, then show the HR panel. It now says so; the owner approved the
+  words on 2026-11-17, as a change to screen 15's copy.
 - **The recorded walkthrough was recorded again** with the new words (Phase 8 follow-up). The transcript test now
   accepts a question followed by an answer and then the HR panel, the order the video shows.
 

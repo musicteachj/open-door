@@ -74,7 +74,7 @@ directory.
 **Releases (`dev` → `main`):** `v0.1.0` (2026-10-04): planning, Phase 0, and Phase 1. `v0.2.0`
 (2026-10-06): Phase 2. `v0.3.0` (2026-10-14): Phase 3. `v0.4.0`
 (2026-10-20): Phase 4. `v0.5.0` (2026-10-26): Phase 5. `v0.6.0` (2026-10-31): Phase 6. `v0.7.0`
-(2026-11-05): Phase 7. `v0.8.0` (2026-11-17): Phase 8. `v0.8.1` (2026-11-17): the tour's step 5 and the npm audit exception.
+(2026-11-05): Phase 7. `v0.8.0` (2026-11-17): Phase 8. `v0.8.1` (2026-11-17): the tour's steps 5 and 7 and the npm audit exception.
 
 ---
 
