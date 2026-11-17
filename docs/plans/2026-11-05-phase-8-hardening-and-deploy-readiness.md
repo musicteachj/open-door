@@ -957,14 +957,14 @@ Tests first:
 
 ### Task 48: Close Stage 9 and Phase 8
 
-- [ ] `CHANGELOG.md`, the roadmap; `make db && make check`; the `/code-review medium` loop; drafts;
+- [x] `CHANGELOG.md`, the roadmap; `make db && make check`; the `/code-review medium` loop; drafts;
       propose the commit and PR
-- [ ] after it merges: the whole-app security review (one reviewer on the strongest model, briefed
+- [x] after it merges: the whole-app security review (one reviewer on the strongest model, briefed
       with the threat model and the seams in the spec, proving each finding with the smallest
       experiment) and the phase review (`/code-review high` on the phase's application code,
       migrations, scripts, and config against the base commit); real findings fixed in
       `fix/phase-8-review`
-- [ ] then the release (`v0.8.0`): the full run of Stage 6 covers it unless something the model
+- [x] then the release (`v0.8.0`): the full run of Stage 6 covers it unless something the model
       reads changed after it
 
 ---
@@ -981,13 +981,13 @@ Tests first:
 
 The roadmap's "checklist is closed" means each of these is ticked, with its task:
 
-- [ ] threat model (1, 48) · [ ] AI governance completed (47) · [ ] CSP and headers (10, 11, 13)
-- [ ] Turnstile (23, 25) · [ ] the cleanup job (26) · [ ] replay mode, the walkthrough (44, 45)
-- [ ] the cost and load test (36–38) · [ ] the accessibility audit (41, 42)
-- [ ] `/security-review` (9, 15, 22, 27, 31) and the whole-app review (48)
-- [ ] the production Dockerfile (12) · [ ] the demo video (45) · [ ] the image runs locally end
+- [x] threat model (1, 48) · [x] AI governance completed (47) · [x] CSP and headers (10, 11, 13)
+- [x] Turnstile (23, 25) · [x] the cleanup job (26) · [x] replay mode, the walkthrough (44, 45)
+- [x] the cost and load test (36–38) · [x] the accessibility audit (41, 42)
+- [x] `/security-review` (9, 15, 22, 27, 31) and the whole-app review (48)
+- [x] the production Dockerfile (12) · [x] the demo video (45) · [x] the image runs locally end
       to end (13, 18, 46)
-- [ ] the AWS pieces recorded for Phase 9 (39): the secrets contract and the disabled deploy
+- [x] the AWS pieces recorded for Phase 9 (39): the secrets contract and the disabled deploy
       workflow from the roadmap's row, the KMS provider, and the task definitions
 
 ## Self-review: spec to tasks
@@ -1956,6 +1956,17 @@ stay off the shared database and test ports.
   poll and read disagreeing on a damaged conversation, the double decryption per question, the
   "too long" rule in three places. Already recorded: per-row key unwraps (Phase 9's KMS item) and
   Turnstile before the limits (ADR 0021's order).
+
+### The release (`chore/release-0.8.0`, 2026-11-17)
+
+Stage 9 merged in #121 and the closing reviews' fixes in #122. The release review (`/code-review
+medium` on what `dev` brings to `main`) found nothing high or medium. Three of its findings
+repeated recorded ones; its five new lows join the backlog: the body cap can cut a response short
+once the app has started it; the sandbox refusal lookup uses `in`, which matches inherited keys;
+the health routes set `no-store` themselves beside the middleware that does; the clock read is
+written out where `database_now` exists; and four "blank means unset" validators repeat one test.
+No new live run: nothing the model reads changed after the full run of 2026-11-12, so the
+scoreboard is unchanged. The phase checklist is closed.
 
 ## Backlog
 

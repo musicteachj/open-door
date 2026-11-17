@@ -384,6 +384,13 @@ digits is caught (Stage 3), and the cleanup job deletes handbook versions no san
   set), or the coach mark's words should allow for it (approved screen 15 copy, the owner's call).
   The recorder can't tell a step that should have an answer from one that should go to HR, so it
   recorded the take. (Phase 8, the fix branch's review.)
+- **The v0.8.0 release review's lows.** The body cap drops a response's remaining messages if the
+  cap is crossed after the app has started it, so that response never completes (no route does
+  this today); `sandbox-copy.ts` checks a problem type with `in`, which also matches inherited keys
+  such as `constructor` (use `Object.hasOwn`); the two health routes set `no-store` beside the
+  middleware that already does; the unreadable and readable conversation reads write out the clock
+  query `database_now` already holds; and four settings validators repeat the "blank means unset"
+  test. (v0.8.0 release review.)
 - **Record the walkthrough again to fill step 5's answer.** In the take of 2026-11-16, Marcus's
   answer to "Why was Leo out last week?" came before the HR panel, and the recorder then kept only
   the panel, so the transcript (the video's text alternative) lacks words the video shows. The
