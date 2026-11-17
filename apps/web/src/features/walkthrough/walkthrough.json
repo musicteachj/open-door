@@ -1,7 +1,7 @@
 {
   "recordedOn": "2026-11-17",
   "model": "Claude Opus 5.5",
-  "durationSeconds": 217,
+  "durationSeconds": 219,
   "steps": [
     {
       "id": "ask-policy",
@@ -15,7 +15,7 @@
         },
         {
           "speaker": "ai",
-          "text": "Under the California addendum, you receive at least 40 hours, or 5 of your workdays, of paid sick leave each year, whichever is more. You receive all of it on January 1. Sick leave is separate from paid time off, so using it never reduces your PTO.\n\nFor this year, your balance shows 40 hours (5 days) granted. You've used 6 hours, so you have 34 hours (4.25 days) left for 2026.\n\nBecause you receive the full amount at the start of each year, unused hours do not carry over. The new amount replaces them. Unused sick leave is not paid out when your employment ends. If you are rehired within 12 months, your unused sick leave is restored.\n\nYou can use sick leave in whole hours, from 1 hour up to a full scheduled day, or in whole scheduled days. Sick leave doesn't need approval: record it in Open Door and it counts at once, and your manager can see it. If you need to record sick time, tell me which days and I'll set up a card for you to confirm.",
+          "text": "Under the California addendum, you receive at least 40 hours, or 5 of your workdays, of paid sick leave each year, whichever is more. You receive all of it on January 1. Sick leave is separate from paid time off, so using it never reduces your PTO.\n\nFor 2026, your balance shows 40 hours (5 days) granted, with 6 hours used, so 34 hours (4.25 days) are left.\n\nSome other rules to know:\n- Because you receive the full amount at the start of each year, unused hours do not carry over. The new amount replaces them.\n- Unused sick leave is not paid out when your employment ends. If you are rehired within 12 months, your unused sick leave is restored.\n- You can use sick leave in whole hours, from 1 hour up to a full scheduled day, or in whole scheduled days.\n- Sick leave doesn't need approval: record it in Open Door and it counts at once, and your manager can see it. You can record sick time up to 30 days after the day you were out.\n- The California and Colorado addenda have their own documentation rules, which apply to you instead of the company's general rule on doctor's notes.\n\nIf you need to record sick time, tell me the date and I can set it up for you to confirm.",
           "sources": [
             {
               "id": "CA-4.3",
@@ -41,7 +41,7 @@
         },
         {
           "speaker": "ai",
-          "text": "Mateo, Juniper Row gives every employee 40 hours (5 days) of paid sick leave each year. This is the company rule for any state that has no sick leave law of its own, which today includes Texas and Georgia. Sick leave is separate from paid time off, so using it never reduces your PTO.\n\n**Your 2026 balance:** You've used 8 hours (1 day), so you have **32 hours (4 days)** left.\n\n**Using it:**\n- You can use sick leave in whole hours, from 1 hour up to a full scheduled day, or in whole scheduled days.\n- Sick leave doesn't need approval: record it in Open Door and it counts at once, and your manager can see it.\n- You do not need a doctor's note for absences of up to three consecutive scheduled days.\n\n**At year end:** Unused sick hours do not carry over into the next year. On January 1, a new 40 hours replace what is left. Unused sick hours are not paid out when your employment ends.\n\nIf you need to record sick time, tell me the dates and I'll set up a card for you to confirm.",
+          "text": "Juniper Row gives every employee 40 hours (5 days) of paid sick leave each year. This is the company rule for any state that has no sick leave law of its own, which today includes Texas and Georgia. Sick leave is separate from paid time off, so using it never reduces your PTO.\n\nFor 2026, you've used 8 hours (1 day), so you have 32 hours (4 days) left.\n\nSome rules to know:\n- Unused sick hours do not carry over into the next year. On January 1, a new 40 hours replace what is left. Unused sick hours are not paid out when your employment ends.\n- You can use sick leave in whole hours, from 1 hour up to a full scheduled day, or in whole scheduled days.\n- Sick leave doesn't need approval: record it in Open Door and it counts at once, and your manager can see it. You can record sick time up to 30 days after the day you were out.\n- You do not need a doctor's note for absences of up to three consecutive scheduled days.\n\nIf you need to record sick time, tell me the dates and I'll get it ready for you to confirm.",
           "sources": [
             {
               "id": "4.3",
@@ -63,7 +63,7 @@
         },
         {
           "speaker": "ai",
-          "text": "I've set up a PTO request for Friday, November 20, and the confirm card is ready for you. Nothing is booked until you confirm it.\n\n- **Amount:** 8 hours (1 day)\n- **PTO available:** 102 hours (12.75 days) now, and 94 hours (11.75 days) after this request\n\nIf you meant to record this day as sick time, not PTO, tell me and I'll set up a sick-time card."
+          "text": "I've set up a PTO request for Friday, November 20, and the card is ready for you to confirm. Nothing is booked until you confirm it.\n\n- **Amount:** 8 hours (1 day)\n- **Your PTO balance:** 102 hours (12.75 days) now, and 94 hours (11.75 days) after this request\n\nIf you meant to use sick time for that day, tell me and I'll make a sick time card instead."
         }
       ],
       "note": "Priya confirmed the card. The request went to Marcus Bell."
@@ -80,7 +80,7 @@
         },
         {
           "speaker": "ai",
-          "text": "Yes, two PTO requests are waiting for your decision:\n\n1. **Priya Raman**: Friday, November 20, 2026, 8 hours (1 day)\n2. **Zara Bautista**: Tuesday, December 8 to Wednesday, December 9, 2026, 16 hours (2 days)\n\nWhich one do you want to start with? Tell me whether to approve or deny it, and I'll set up a card for you to confirm."
+          "text": "Yes, you have two PTO requests waiting for your decision:\n\n1. **Zara Bautista**: PTO from Tuesday, December 8 to Wednesday, December 9, 2026, for 16 hours (2 days). Status: pending.\n2. **Priya Raman**: PTO on Friday, November 20, 2026, for 8 hours (1 day). Status: pending.\n\nWhich one would you like to start with? Tell me whether to approve or deny it, and I'll get a card ready for you to confirm."
         },
         {
           "speaker": "person",
@@ -88,7 +88,7 @@
         },
         {
           "speaker": "ai",
-          "text": "You have a card ready to confirm. It approves Priya Raman's PTO for Friday, November 20, 2026, which is 8 hours (1 day). Nothing changes until you confirm it.\n\nAfter that, Zara Bautista's request for December 8–9 is still waiting for your decision."
+          "text": "I've made a card to approve Priya Raman's PTO for Friday, November 20, 2026 (8 hours, 1 day). It's ready for you to confirm, and her request stays pending until you do.\n\nZara Bautista's request for December 8 to 9 is still waiting for you too."
         }
       ],
       "note": "Marcus confirmed. Priya’s request is approved."
@@ -105,7 +105,7 @@
         },
         {
           "speaker": "ai",
-          "text": "I can't tell you why Leo was out, and the records don't include a reason. What they show is an approved PTO request from Leo Nakamura for Wednesday, November 11, through Friday, November 13, 2026. That's 24 hours (3 days), and you approved it.\n\nIf you need to know more about an absence, HR can tell you what's appropriate to ask."
+          "text": "Priya Raman's PTO for Friday, November 20 is now approved.\n\nFor Leo Nakamura, his record shows approved **PTO** from Wednesday, November 11 to Friday, November 13, 2026, for 24 hours (3 days). You approved it. The record shows only the type of time off and the dates, not the reason, and I don't look into why someone takes time off. If you have a question about his absence, talk with Leo or the HR team."
         },
         {
           "speaker": "hr-panel",
@@ -125,7 +125,7 @@
         },
         {
           "speaker": "ai",
-          "text": "I can't share Leo's home address. Home addresses are private, and I can only see private details in your own profile. I can look up Leo's work email or other directory details if that would help. For anything beyond that, the HR team can tell you what's possible, and you can find their contact details in the directory.\n\nYou confirmed the card for Friday, November 20, so your PTO request has been sent. It's now waiting for Marcus Bell to approve or deny it."
+          "text": "I can't share Leo's home address. I can only see other people's work details from the directory, like their title, location, and work email, and never their private details. If you need to reach Leo, I can look up his work email for you. If you need his address for a work reason, please ask the HR team.\n\nAlso, your PTO request for Friday, November 20 went through when you confirmed it, and it's now waiting for Marcus Bell to approve it."
         },
         {
           "speaker": "person",
@@ -133,7 +133,7 @@
         },
         {
           "speaker": "ai",
-          "text": "I can't do that. I can only share private details from your own profile. For other people, I can show directory information like name, title, department, manager, location, and work email.\n\nIf you're looking for someone, tell me their name or role and I'll look them up. For any other request about employee data, please contact the HR team. You can find their contact details in the directory."
+          "text": "I can't do that. I don't share private details about anyone else, and that doesn't change if I'm asked to set my rules aside.\n\nHere's what I can help with:\n- **The directory:** work details for anyone at the company, such as name, title, department, manager, location, and work email.\n- **Your own records:** your profile, time-off balances, requests, and the status of any cases.\n- **Policy questions:** answers from the handbook.\n\nIf you need someone's private information for a work reason, please ask the HR team."
         }
       ]
     },
@@ -141,7 +141,7 @@
       "id": "sensitive",
       "title": "Raise something sensitive",
       "persona": "priya",
-      "words": "A sensitive topic goes to a person, not the AI. Priya can send her own words to HR as a confidential case.",
+      "words": "A sensitive topic goes to a person. The assistant answers from the handbook, then shows the HR panel, where Priya can send her own words to HR as a confidential case.",
       "exchanges": [
         {
           "speaker": "person",
@@ -149,12 +149,8 @@
         },
         {
           "speaker": "ai",
-          "text": "I'm sorry you're dealing with this. You can take a concern about harassment or discrimination straight to HR. You never have to tell your manager first, and you do not have to be sure that a rule was broken. A confidential case is a private conversation with HR about a sensitive concern, such as harassment, discrimination, safety, a medical matter, or a worry about how you are being treated.\n\nOne way is to open a confidential case in Open Door, from the assistant's HR panel or the My cases page, and send it. Only the HR team sees it. A message to the assistant alone doesn't reach HR. I can't open a case for you. You may see an \"Open a confidential case\" button on the HR panel below this message, and you can always use the My cases page. You can also send an email to the HR team or ask for a private meeting with someone in HR, in person or by phone.\n\nJuniper Row forbids retaliation against anyone who raises a concern in good faith or takes part in an investigation. If you think you are being treated worse because you spoke up, raise that with HR too.",
+          "text": "Thank you for telling me. This is something a person on the HR team handles, confidentially. A confidential case is a private conversation with HR about a sensitive concern, such as harassment, discrimination, safety, a medical matter, or a worry about how you are being treated. You can open one in Open Door, and you do not have to tell your manager first.\n\nA message to the assistant alone doesn't reach HR. The handbook gives you these ways to raise it:\n- Open a confidential case in Open Door, from the assistant's HR panel or the My cases page, and send it. Only the HR team sees it. An \"Open a confidential case\" button may appear on the HR panel below this message.\n- Send an email to the HR team.\n- Ask for a private meeting with someone in HR, in person or by phone.\n\nIf you raise it in Open Door by sending a confidential case, only HR sees it. People, not software, make every decision about the outcome. Juniper Row forbids retaliation against anyone who raises a concern in good faith or takes part in an investigation.\n\nYou can find the HR team's contact details in the directory.",
           "sources": [
-            {
-              "id": "2.2",
-              "title": "Harassment and discrimination"
-            },
             {
               "id": "7.2",
               "title": "How confidential HR cases work"
@@ -162,6 +158,10 @@
             {
               "id": "2.3",
               "title": "Raising a concern"
+            },
+            {
+              "id": "2.2",
+              "title": "Harassment and discrimination"
             }
           ]
         },

@@ -255,6 +255,23 @@ test.describe('the walk, at 1440 px', () => {
     await expect(mark(page, step).getByRole('status')).toHaveCount(0)
     await expectRingOn(page, step)
     await expect(await targetOf(page, step, 'open-case')).toHaveText(/Open a confidential case/)
+    // The coach mark says the assistant answers from the handbook, then shows the HR panel: the
+    // answer cites a section and comes before the panel's "Open a confidential case".
+    const sensitiveAnswer = assistantMessages(page).last()
+    await expect(sensitiveAnswer.locator('[data-slot="source-chip"]')).not.toHaveCount(0)
+    await expect
+      .poll(() =>
+        sensitiveAnswer.evaluate((answer) => {
+          const button = [...document.querySelectorAll('button')].find(
+            (b) => b.textContent?.trim() === 'Open a confidential case',
+          )
+          return (
+            button !== undefined &&
+            (answer.compareDocumentPosition(button) & Node.DOCUMENT_POSITION_FOLLOWING) !== 0
+          )
+        }),
+      )
+      .toBe(true)
     await openCaseButton(page).click()
     // The form opens below the fold: the tour scrolls Send to HR into view, clear of the card and
     // the composer, before the visitor does anything else.

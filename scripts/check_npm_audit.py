@@ -25,9 +25,9 @@ from datetime import UTC, date, datetime
 from pathlib import Path
 
 SEVERITIES = ("info", "low", "moderate", "high", "critical")
-FAILING = ("high", "critical")
 # Only these pass on their own; a severity npm leaves out or names otherwise fails, as worse.
-PASSING = ("info", "low", "moderate")
+PASSING = SEVERITIES[: SEVERITIES.index("high")]
+FAILING = SEVERITIES[SEVERITIES.index("high") :]
 GHSA = re.compile(r"GHSA(?:-[0-9a-z]{4}){3}")
 UNUSABLE = "The npm audit report is unusable: it is not a whole audit."
 
@@ -99,7 +99,10 @@ def advisories_in(vulnerabilities: dict[str, object]) -> list[Found] | None:
                 # No id to tell two apart: the title does, so neither hides the other.
                 advisory = "an npm advisory with no id"
                 key = (advisory, package, title)
-            found.setdefault(key, Found(advisory, package, str(via.get("severity", "")), title))
+            item = Found(advisory, package, str(via.get("severity", "")), title)
+            # Reported more than once (through different entries): the highest severity counts.
+            if key not in found or rank(item.severity) > rank(found[key].severity):
+                found[key] = item
     return list(found.values())
 
 
@@ -139,6 +142,12 @@ def problems_in(
         return [UNUSABLE], []
     vulnerabilities = report.get("vulnerabilities")
     if not isinstance(vulnerabilities, dict):
+        return [UNUSABLE], []
+    # The report counts its own entries; a different number means one is missing (or added).
+    metadata = report.get("metadata")
+    counts = metadata.get("vulnerabilities") if isinstance(metadata, dict) else None
+    total = counts.get("total") if isinstance(counts, dict) else None
+    if type(total) is not int or total != len(vulnerabilities):
         return [UNUSABLE], []
     found = advisories_in(vulnerabilities)
     if found is None:
