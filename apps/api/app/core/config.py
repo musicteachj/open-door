@@ -23,7 +23,7 @@ from pydantic_settings import (
     SettingsConfigDict,
 )
 
-from app.core.encryption import DEFAULT_KEYRING_PATH
+from app.core.encryption import DEFAULT_KEYRING_PATH, KeyProvider, load_key_provider
 
 # What a browser sends in its Origin header: a lowercase scheme and host, an optional port, and
 # nothing after them. The same-origin check compares that header with APP_ORIGIN character for
@@ -106,19 +106,89 @@ class EnvWithoutBlankKeys(PydanticBaseSettingsSource):
         }
 
 
-class Settings(BaseSettings):
-    """Every setting the API reads. A missing or malformed value stops the process at boot."""
+class KeyringSettings(BaseSettings):
+    """`APP_ENV` and the encryption keyring, under the API's own rules (the default file, blank
+    means unset, never two keyrings), and nothing else. `Settings` builds on it. Migration 0018's
+    data step reads it alone, so the deploy's setup task, which holds the owner's URL and the
+    keyring but none of the API's own settings, can run it."""
 
     model_config = SettingsConfigDict(
-        # Relative to the working directory: `make` and CI always run the API from apps/api.
+        # Relative to the working directory: `make` and CI always run from apps/api.
         env_file=".env",
         env_file_encoding="utf-8",
         extra="ignore",
-        # A malformed database URL would otherwise print its password in the startup error.
         hide_input_in_errors=True,
     )
 
     app_env: Literal["development", "test", "production"] = "development"
+    # The key-encryption keys for case and conversation text (ADR 0015): lines of `id:base64`,
+    # newest first, either in a file or in ENCRYPTION_KEYRING. Both are secret values and never
+    # print. Optional here, like the API keys, because alembic, the scripts, and the tests build
+    # Settings and never encrypt; `create_app` refuses to start without a keyring. The file path is
+    # relative to apps/api whatever the working directory, and `make setup` writes the file. An
+    # empty ENCRYPTION_KEYRING or ENCRYPTION_KEYRING_FILE counts as unset.
+    encryption_keyring_file: SecretStr | None = Field(
+        default=SecretStr(DEFAULT_KEYRING_PATH), repr=False
+    )
+    encryption_keyring: SecretStr | None = Field(default=None, repr=False)
+
+    @classmethod
+    def settings_customise_sources(
+        cls,
+        settings_cls: type[BaseSettings],
+        init_settings: PydanticBaseSettingsSource,
+        env_settings: PydanticBaseSettingsSource,
+        dotenv_settings: PydanticBaseSettingsSource,
+        file_secret_settings: PydanticBaseSettingsSource,
+    ) -> tuple[PydanticBaseSettingsSource, ...]:
+        return (
+            init_settings,
+            EnvWithoutBlankKeys(env_settings),
+            dotenv_settings,
+            file_secret_settings,
+        )
+
+    @model_validator(mode="before")
+    @classmethod
+    def blank_keyring_file_is_unset(cls, data: Any) -> Any:
+        # A blank ENCRYPTION_KEYRING_FILE= in .env counts as unset, and unset means the default
+        # path (a file that is simply None, set in code, stays None). Dropping the blank here, from
+        # the raw input, keeps the field out of `model_fields_set`, so the two-keyrings check below
+        # needs no marker that a copy or a rebuild from a dump could lose.
+        if isinstance(data, dict):
+            value = data.get("encryption_keyring_file")
+            if isinstance(value, str) and not value.strip():
+                return {k: v for k, v in data.items() if k != "encryption_keyring_file"}
+        return data
+
+    @field_validator("encryption_keyring", mode="before")
+    @classmethod
+    def empty_keyring_is_none(cls, value: object) -> object:
+        # An empty value written in .env itself means no keyring (an empty one in the environment
+        # is dropped by `EnvWithoutBlankKeys`).
+        if isinstance(value, str) and not value.strip():
+            return None
+        return value
+
+    @model_validator(mode="after")
+    def refuse_two_keyrings(self) -> Self:
+        # The file has a default, so only a file someone set counts as set. A blank value was
+        # dropped as unset and is not a second keyring, but an explicit path is, even when it
+        # spells the default.
+        file_is_set = (
+            "encryption_keyring_file" in self.model_fields_set
+            and self.encryption_keyring_file is not None
+        )
+        if self.encryption_keyring is not None and file_is_set:
+            msg = "Set ENCRYPTION_KEYRING or ENCRYPTION_KEYRING_FILE, not both."
+            raise ValueError(msg)
+        return self
+
+
+class Settings(KeyringSettings):
+    """Every setting the API reads. A missing or malformed value stops the process at boot."""
+
+    # The env file, `app_env`, and the keyring come from KeyringSettings.
     # The API's own login, a member of od_app. Row-level security applies to it.
     database_url: PostgresDsn = Field(repr=False)
     # The owner's and the cleanup login's URLs are not here: the API process holds only its own
@@ -172,50 +242,9 @@ class Settings(BaseSettings):
     # proxy check uses as its control run.
     ai_heartbeat_seconds: int = Field(default=15, ge=0)
 
-    # The key-encryption keys for case and conversation text (ADR 0015): lines of `id:base64`,
-    # newest first, either in a file or in ENCRYPTION_KEYRING. Both are secret values and never
-    # print. Optional here, like the API keys, because alembic, the scripts, and the tests build
-    # Settings and never encrypt; `create_app` refuses to start without a keyring. The file path is
-    # relative to apps/api whatever the working directory, and `make setup` writes the file. An
-    # empty ENCRYPTION_KEYRING or ENCRYPTION_KEYRING_FILE counts as unset.
-    encryption_keyring_file: SecretStr | None = Field(
-        default=SecretStr(DEFAULT_KEYRING_PATH), repr=False
-    )
-    encryption_keyring: SecretStr | None = Field(default=None, repr=False)
-
-    @classmethod
-    def settings_customise_sources(
-        cls,
-        settings_cls: type[BaseSettings],
-        init_settings: PydanticBaseSettingsSource,
-        env_settings: PydanticBaseSettingsSource,
-        dotenv_settings: PydanticBaseSettingsSource,
-        file_secret_settings: PydanticBaseSettingsSource,
-    ) -> tuple[PydanticBaseSettingsSource, ...]:
-        return (
-            init_settings,
-            EnvWithoutBlankKeys(env_settings),
-            dotenv_settings,
-            file_secret_settings,
-        )
-
-    @model_validator(mode="before")
-    @classmethod
-    def blank_keyring_file_is_unset(cls, data: Any) -> Any:
-        # A blank ENCRYPTION_KEYRING_FILE= in .env counts as unset, and unset means the default
-        # path (a file that is simply None, set in code, stays None). Dropping the blank here, from
-        # the raw input, keeps the field out of `model_fields_set`, so the two-keyrings check below
-        # needs no marker that a copy or a rebuild from a dump could lose.
-        if isinstance(data, dict):
-            value = data.get("encryption_keyring_file")
-            if isinstance(value, str) and not value.strip():
-                return {k: v for k, v in data.items() if k != "encryption_keyring_file"}
-        return data
-
     @field_validator(
         "voyage_api_key",
         "anthropic_api_key",
-        "encryption_keyring",
         "turnstile_secret_key",
         mode="before",
     )
@@ -226,20 +255,6 @@ class Settings(BaseSettings):
         if isinstance(value, str) and not value.strip():
             return None
         return value
-
-    @model_validator(mode="after")
-    def refuse_two_keyrings(self) -> Self:
-        # The file has a default, so only a file someone set counts as set. A blank value was
-        # dropped as unset and is not a second keyring, but an explicit path is, even when it
-        # spells the default.
-        file_is_set = (
-            "encryption_keyring_file" in self.model_fields_set
-            and self.encryption_keyring_file is not None
-        )
-        if self.encryption_keyring is not None and file_is_set:
-            msg = "Set ENCRYPTION_KEYRING or ENCRYPTION_KEYRING_FILE, not both."
-            raise ValueError(msg)
-        return self
 
     @field_validator("database_url")
     @classmethod
@@ -410,3 +425,21 @@ def require_entry_settings_fit_for_production(settings: Settings) -> None:
 def get_settings() -> Settings:
     """Read settings once per process."""
     return Settings()
+
+
+def build_key_provider(settings: KeyringSettings) -> KeyProvider:
+    """The one key provider, or a refusal to start: no keyring, a keyring file others can read,
+    or the fake test key outside APP_ENV=test. There is no default key. The API builds it from its
+    `Settings`, and migration 0018's data step from `KeyringSettings` alone, so both follow one
+    rule."""
+    keyring = settings.encryption_keyring
+    keyring_file = settings.encryption_keyring_file
+    keys = load_key_provider(
+        keyring=None if keyring is None else keyring.get_secret_value(),
+        keyring_file=None if keyring_file is None else keyring_file.get_secret_value(),
+    )
+    # Checked on the local provider, before it is handed on as the protocol.
+    if keys.uses_test_key and settings.app_env != "test":
+        msg = "The keyring holds the test key, which only APP_ENV=test accepts. Run `make keyring`."
+        raise ValueError(msg)
+    return keys

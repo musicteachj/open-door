@@ -107,19 +107,6 @@ def short_scopes(state: BudgetState, needed_usd: Decimal) -> tuple[bool, bool]:
     return state.sandbox_remaining_usd < needed_usd, state.daily_remaining_usd < needed_usd
 
 
-def scope_without_room(
-    state: BudgetState, needed_usd: Decimal
-) -> Literal["sandbox", "daily"] | None:
-    """Which cap refuses a turn needing `needed_usd`, or None. The sandbox is named first, as
-    `reserve` does, so a visitor at their own cap is told so and not that the demo is full."""
-    sandbox_short, daily_short = short_scopes(state, needed_usd)
-    if sandbox_short:
-        return "sandbox"
-    if daily_short:
-        return "daily"
-    return None
-
-
 def room_scopes(
     state: BudgetState, needed_usd: Decimal, needed_empty_usd: Callable[[], Decimal]
 ) -> tuple[bool, bool]:
@@ -144,9 +131,10 @@ def room_scopes(
 def refusal_scope(
     state: BudgetState, needed_usd: Decimal, needed_empty_usd: Callable[[], Decimal]
 ) -> Literal["sandbox", "daily", "conversation"] | None:
-    """`scope_without_room` under `room_scopes`' rule, with a fourth answer: "conversation" when the
-    sandbox is short only because of the conversation's history and a new conversation would fit
-    both caps. The sandbox is named first, as `scope_without_room` does."""
+    """Which cap refuses the next question, under `room_scopes`' rule, or None: "sandbox", "daily",
+    or "conversation" when the sandbox is short only because of the conversation's history and a
+    new conversation would fit both caps. The sandbox is named first, as `reserve` does, so a
+    visitor at their own cap is told so and not that the demo is full."""
     sandbox_short, daily_short = room_scopes(state, needed_usd, needed_empty_usd)
     if sandbox_short:
         return "sandbox"

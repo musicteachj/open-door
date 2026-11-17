@@ -170,6 +170,12 @@ class ConversationOut(CamelModel):
     # sent, `history_too_long` is true so the page offers a new conversation, and the page shows
     # the fixed "can't be shown" line.
     unreadable: bool
+    # For an unreadable conversation, the most serious panel its turns showed: crisis, then
+    # "can't answer right now", then sensitive (invariant 6: the 988 and EAP text, or the HR team,
+    # never vanishes with the words).
+    # The verdict is a plain column, read without the key. Always null for a conversation that
+    # opens: its turns carry their own.
+    escalation: EscalationOut | None = None
 
 
 class AssistantTextsOut(CamelModel):

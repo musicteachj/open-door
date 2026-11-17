@@ -1919,6 +1919,44 @@ stopped at the sixth, which had nothing high or medium:
   conversation fetch, the AI label and avatar markup in the transcript, `check()` beside
   `running()` in `start.py`).
 
+### The phase's close: the two reviews and `fix/phase-8-review` (2026-11-16)
+
+At the owner's request, to save a session, both ran before Stage 9 merged, over `dev` plus Stage 9's
+branch (the code `dev` would hold), with `make check` running alongside; the reviewer was told to
+stay off the shared database and test ports.
+- **The whole-app security review** (one reviewer on the strongest model, briefed with the threat
+  model and the spec's seams, proving each finding offline) found nothing high or medium. Fixed: a
+  path segment over 255 bytes made `is_file()` raise, a 500 with a logged traceback for anyone;
+  the access log kept query strings, so a search's words sat beside an address; no
+  `Cross-Origin-Resource-Policy`. Accepted (the threat model): a visitor can create rows without
+  limit inside their own sandbox, bounded by its 24 hours. Noted: `/INDEX.HTML` on a Mac.
+- **The phase review** (`/code-review high`, `bdabc23` to the working tree, application code,
+  migrations, scripts, and config) found nothing high. Fixed: Stage 3's unreadable conversation
+  dropped the crisis panel Stage 5 keeps from the stored verdict, so the read now sends
+  `escalation`, the most serious panel its turns showed (crisis, then "can't answer right now",
+  then the HR panel; no case to offer), and the page shows it with the "can't be shown" line; and migration 0018 loaded the API's
+  whole settings, which the deploy's setup task doesn't have, so it now reads only `KeyringSettings`
+  (`APP_ENV` and the keyring, the base `Settings` now builds on, so the rules are one copy).
+  The fix branch's own `/code-review medium` found the first `KeyringSettings` had copied only
+  part of the API's keyring rules (no default file, two keyrings not refused), that the HR panel
+  was lost the same way as the crisis panel, and that a file replaced between the lookup's check
+  and its stat still gave a 500 (the lookup now takes one stat and passes it on). Its later rounds
+  added the "can't answer" panel (a message never screened) and the recorder's dropped answer
+  before an HR panel (step 5 of the installed take lacks it until the next recording). Round 5 added
+  "Write to HR" to a kept HR panel (its text mentions a case button it can't have), made explicit by
+  a `turnless` prop in round 6 after the first rule let the link flicker on live HR panels; and the
+  unreadable path now decides its panel with the readable path's `shown()`. The loop stopped at its
+  seventh round, which had nothing high or medium. Its lows, recorded: a kept view drops a
+  "couldn't find it" card's HR offer; a kept HR panel offers "Write to HR" even if a case was opened
+  from that turn; with a budget stop too, "Write to HR" shows twice; the unreadable path loads whole
+  turn rows and repeats the clock query; one kept panel means a crisis hides another turn's HR
+  panel; CORP is set on every response, not only files; the live check's plaintext search matches
+  two exact phrases. Also the unused
+  `scope_without_room`. To the backlog: real Turnstile proved before launch (Phase 9), the budget
+  poll and read disagreeing on a damaged conversation, the double decryption per question, the
+  "too long" rule in three places. Already recorded: per-row key unwraps (Phase 9's KMS item) and
+  Turnstile before the limits (ADR 0021's order).
+
 ## Backlog
 
 (Low findings from the stages' reviews, with their reasons.)

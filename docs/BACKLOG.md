@@ -377,6 +377,35 @@ digits is caught (Stage 3), and the cleanup job deletes handbook versions no san
   The load test's memory parser also maps `MB` and `MiB` both to 1 while `GB` is 1,000 and `GiB`
   1,024 (Docker prints binary units, so the reports are in MiB). (Phase 8 stage 7 review.)
 
+- **The live safety check sends the tour's step 5 to HR.** Asked "Why was Leo out last week?",
+  Marcus got an answer and then the HR panel in the recording of 2026-11-16, while the coach mark
+  says the answer "says only that it was approved time off". Either the guard's prompt treats a
+  manager's question about an absence as sensitive (a `guard.md` change re-records the escalation
+  set), or the coach mark's words should allow for it (approved screen 15 copy, the owner's call).
+  The recorder can't tell a step that should have an answer from one that should go to HR, so it
+  recorded the take. (Phase 8, the fix branch's review.)
+- **Record the walkthrough again to fill step 5's answer.** In the take of 2026-11-16, Marcus's
+  answer to "Why was Leo out last week?" came before the HR panel, and the recorder then kept only
+  the panel, so the transcript (the video's text alternative) lacks words the video shows. The
+  recorder is fixed; the next `make walkthrough YES=1` (about $0.25) fills it. (Phase 8, the fix
+  branch's review.)
+- **The budget poll and the conversation read can disagree on a damaged conversation.** The
+  conversation read calls a conversation unreadable when any stored text fails to open and sizes
+  its budget with no history; `GET /assistant/budget` ignores only a history that won't open. With
+  one damaged answer and a readable history, the banner can differ between the two. Only a damaged
+  row causes it; matching them would decrypt the whole conversation on every poll. (Phase 8 phase
+  review.)
+- **Each question decrypts the whole conversation twice.** Admission opens every turn (and its
+  feedback reason) only to decide whether the conversation is readable, then the turn opens the
+  history again. Fine at demo length (the load test measured it); decide readability from the
+  history alone, or share what admission opened, if conversations grow. (Phase 8 phase review.)
+- **The "too long, start a new conversation" budget rule is written in three places** (`budget_out`,
+  `admit_question`, `_budget_code_at_call`). Give `room_scopes` the history and let it own the
+  fallback when one of them next changes. (Phase 8 phase review.)
+- **`/INDEX.HTML` on a case-insensitive file system** serves the raw template (no nonce, no CSP).
+  The Linux image is case-sensitive, so only a `WEB_DIST_DIR` served from a Mac shows it; compare
+  with `samefile` if that ever happens. (Phase 8 whole-app review.)
+
 ## Handbook content
 
 - **A military leave section.** The handbook has none. A company section under the federal
@@ -482,6 +511,12 @@ found while building Phase 8, or moved here from its backlog because they only m
   graceful timeout (to let long answers finish during a deploy), raise `stopTimeout` (at most
   120) and the load balancer's deregistration delay with it, and keep the 12-second drain inside
   the gap. (Phase 4 stage 4.)
+- **Prove Turnstile with the real keys before launch.** Every run so far (development, CI, the
+  image, `make prod-local`, the live check, the recording) used Cloudflare's test keys, which the
+  API answers itself, so the real widget's domain check and `siteverify`'s `hostname` and `action`
+  checks have never run. With the production keys, start a sandbox through the deployed page and
+  confirm the token passes; if the widget refuses the domain under `Referrer-Policy: same-origin`,
+  set the policy per page or allow the domain in Cloudflare. (Phase 8 phase review.)
 - **Mark each answer in a machine-readable way (EU AI Act, Article 50(2)).** Re-read on
   2026-11-16, the duty covers any provider whose system writes synthetic text, not only published
   text, so a deployed Open Door must mark its answers as AI-generated in a form a machine can

@@ -4,7 +4,7 @@ The fixed texts come from `fixed_texts` at the time of the request, never from t
 are written by a person, and nothing generated or stored can change what a person is told.
 """
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Iterable, Mapping, Sequence
 from datetime import datetime
 from typing import Any, Literal, NamedTuple
 
@@ -39,6 +39,30 @@ MAX_TOKENS_CODE = "max-tokens"
 GUARD_ERROR_CODE = "guard-error"
 # Set by `recover_abandoned` on a `running` turn whose task died.
 ABANDONED_CODE = "abandoned"
+
+
+# The panels an unreadable conversation keeps, most serious first.
+_KEPT_ORDER: tuple[EscalationKind, ...] = ("crisis", "unavailable", "sensitive")
+
+
+def kept_escalation_out(
+    kinds: Iterable[EscalationKind | None], hr_contact: Sequence[Any]
+) -> EscalationOut | None:
+    """For a conversation whose words don't open: the most serious panel its turns showed, or None.
+    Crisis first, then "can't answer right now" (a message never screened, so its text gives 911
+    and 988 too), then sensitive. Each lists the HR team, so a person is never left without the
+    people to reach (invariant 6). One panel, not each turn's: the turns themselves can't be shown.
+    No case is offered (no turn is left to open one from)."""
+    shown = set(kinds)
+    kind: EscalationKind | None = next((k for k in _KEPT_ORDER if k in shown), None)
+    if kind is None:
+        return None
+    return EscalationOut(
+        kind=kind,
+        message=_ESCALATION_TEXTS[kind],
+        hr_contact=hr_contact_out(hr_contact),
+        offer_case=False,
+    )
 
 
 def escalation_kind(

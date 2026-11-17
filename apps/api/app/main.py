@@ -17,8 +17,12 @@ from app.api.v1.health import ReadinessCache
 from app.api.v1.router import api_router
 from app.core.body_limit import BodyLimitMiddleware
 from app.core.cache_control import NoStoreMiddleware
-from app.core.config import Settings, get_settings, require_entry_settings_fit_for_production
-from app.core.encryption import KeyProvider, load_key_provider
+from app.core.config import (
+    Settings,
+    build_key_provider,
+    get_settings,
+    require_entry_settings_fit_for_production,
+)
 from app.core.logging import configure_logging
 from app.core.problems import install_problem_handlers
 from app.core.request_id import RequestIdMiddleware
@@ -65,22 +69,6 @@ def _build_embedder(settings: Settings) -> Embedder | None:
     if settings.ai_transport != "anthropic" or settings.voyage_api_key is None:
         return None
     return QueryEmbeddingLru(VoyageEmbedder(settings.voyage_api_key))
-
-
-def build_key_provider(settings: Settings) -> KeyProvider:
-    """The one key provider, or a refusal to start: no keyring, a keyring file others can read,
-    or the fake test key outside APP_ENV=test. There is no default key."""
-    keyring = settings.encryption_keyring
-    keyring_file = settings.encryption_keyring_file
-    keys = load_key_provider(
-        keyring=None if keyring is None else keyring.get_secret_value(),
-        keyring_file=None if keyring_file is None else keyring_file.get_secret_value(),
-    )
-    # Checked on the local provider, before it is handed on as the protocol.
-    if keys.uses_test_key and settings.app_env != "test":
-        msg = "The keyring holds the test key, which only APP_ENV=test accepts. Run `make keyring`."
-        raise ValueError(msg)
-    return keys
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:

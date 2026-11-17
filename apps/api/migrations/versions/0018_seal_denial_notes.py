@@ -129,23 +129,14 @@ KeyLoader = Callable[[], "KeyProvider"]
 
 
 def settings_key_loader() -> "KeyProvider":
-    """The key provider the API's settings name. Called only when a note has to be moved."""
-    from app.core.config import get_settings
-    from app.core.encryption import load_key_provider
+    """The key provider the keyring settings name. Called only when a note has to be moved. It
+    reads only `APP_ENV` and the keyring (`KeyringSettings`), never the API's whole settings, so
+    the deploy's setup task, which holds the owner's URL and the keyring, can run it."""
+    from app.core.config import KeyringSettings, build_key_provider
 
-    settings = get_settings()
-    keyring = settings.encryption_keyring
-    keyring_file = settings.encryption_keyring_file
-    keys = load_key_provider(
-        keyring=None if keyring is None else keyring.get_secret_value(),
-        keyring_file=None if keyring_file is None else keyring_file.get_secret_value(),
-    )
-    # The API's own rule (`build_key_provider`): real notes are never sealed under the published
-    # test key, which only APP_ENV=test accepts.
-    if keys.uses_test_key and settings.app_env != "test":
-        msg = "The keyring holds the test key, which only APP_ENV=test accepts. Run `make keyring`."
-        raise ValueError(msg)
-    return keys
+    # The API's own rule: real notes are never sealed under the published test key, which only
+    # APP_ENV=test accepts.
+    return build_key_provider(KeyringSettings())
 
 
 def _place(tenant_id: UUID, request_id: UUID) -> "Place":

@@ -69,6 +69,9 @@ def assert_has_the_headers(headers: Mapping[str, str]) -> None:
     assert got["referrer-policy"] == "same-origin"
     assert got["permissions-policy"] == PERMISSIONS_POLICY
     assert got["cross-origin-opener-policy"] == COOP
+    # No other site may embed the app's files (the walkthrough's video, the assets) and spend its
+    # bandwidth (the phase's security review).
+    assert got["cross-origin-resource-policy"] == "same-origin"
     assert "content-security-policy" not in got
 
 

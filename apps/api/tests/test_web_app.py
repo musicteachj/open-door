@@ -2,6 +2,7 @@
 
 import re
 from pathlib import Path
+from typing import Any
 
 import pytest
 from fastapi.testclient import TestClient
@@ -378,6 +379,44 @@ def test_a_missing_media_file_is_a_404_never_the_page(media: Path, path: str) ->
     assert response.status_code == 404
     assert "csp-nonce" not in response.text
     assert response.headers["cache-control"] == "no-store"
+
+
+@pytest.mark.parametrize(
+    ("path", "status"),
+    [("/" + "a" * 300, 200), ("/media/" + "a" * 300, 404), ("/" + "a/" * 3000, 200)],
+    ids=["a long name", "a long media name", "a long path"],
+)
+def test_a_name_too_long_for_the_file_system_is_no_file_not_a_500(
+    media: Path, path: str, status: int
+) -> None:
+    """The phase's security review: a segment over 255 bytes made `is_file()` raise, so anyone
+    could get a 500 and a logged traceback."""
+    with client_for(media) as client:
+        response = client.get(path)
+    assert response.status_code == status
+
+
+def test_a_file_that_goes_while_it_is_looked_up_is_no_file_not_a_500(
+    media: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A recording installed again, or a deploy, can replace a file between the lookup's steps."""
+    real_stat = Path.stat
+    looked: list[Path] = []
+
+    def gone(self: Path, *args: Any, **kwargs: Any) -> Any:
+        # There for the first look, gone from the next on.
+        if self.name == "walkthrough.mp4":
+            looked.append(self)
+            if len(looked) > 1:
+                raise FileNotFoundError(self)
+        return real_stat(self, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "stat", gone)
+    with client_for(media) as client:
+        response = client.get("/media/walkthrough.mp4")
+    # Served from the one look the lookup takes, or no file: never a 500 (a separate check and
+    # stat gave one when the file went between them).
+    assert response.status_code in (200, 404)
 
 
 def test_a_page_path_that_only_starts_like_media_is_still_the_page(media: Path) -> None:

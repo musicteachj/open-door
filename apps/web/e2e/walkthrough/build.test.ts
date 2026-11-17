@@ -75,6 +75,27 @@ describe('exchangesOf: the transcript of a step’s turns', () => {
     })
   })
 
+  it('keeps an answer the panel followed: the answer, then the panel, as the video shows', () => {
+    const exchanges = exchangesOf([
+      turn({
+        question: 'Why was Leo out last week?',
+        answerText: 'Leo was out on approved time off.',
+        escalation: { kind: 'sensitive', message: 'This sounds like something a person…' },
+      }),
+    ])
+    expect(exchanges.map((e) => e.speaker)).toEqual(['person', 'ai', 'hr-panel'])
+    expect(exchanges[1]!.text).toBe('Leo was out on approved time off.')
+  })
+
+  it.each(['crisis', 'unavailable'])(
+    'refuses a %s panel: the tour has none, and the transcript would call it the HR panel',
+    (kind) => {
+      expect(() =>
+        exchangesOf([turn({ escalation: { kind, message: 'Call or text 988.' } })]),
+      ).toThrow(new RegExp(kind))
+    },
+  )
+
   it('refuses a turn with no answer and no panel: the take is not usable', () => {
     expect(() => exchangesOf([turn({ answerText: '  ' })])).toThrow(/no answer/)
   })

@@ -265,8 +265,19 @@ describe('EscalationPanel: Write to HR', () => {
     expect(screen.getByRole('link', { name: 'Write to HR' })).toHaveAttribute('href', '/my-cases')
   })
 
-  it('never shows it on the sensitive or crisis panel', () => {
-    renderPanel({ kind: 'sensitive', writeToHr: WRITE_TO_HR_LINK })
+  it.each([
+    ['the crisis panel', { kind: 'crisis' as const }],
+    ['the crisis panel, even turnless', { kind: 'crisis' as const, turnless: true }],
+    // A live or loading sensitive turn has no case button for a moment: no link may flicker in.
+    ['a sensitive panel whose case is still loading', { kind: 'sensitive' as const }],
+    ['a sensitive panel that offers its case', { kind: 'sensitive' as const, offerCase: true }],
+  ])('never shows it on %s', (_label, props) => {
+    renderPanel({ ...props, writeToHr: WRITE_TO_HR_LINK })
     expect(screen.queryByRole('link', { name: 'Write to HR' })).not.toBeInTheDocument()
+  })
+
+  it('shows it on a turnless sensitive panel, whose text mentions a case it cannot offer', () => {
+    renderPanel({ kind: 'sensitive', turnless: true, writeToHr: WRITE_TO_HR_LINK })
+    expect(screen.getByRole('link', { name: 'Write to HR' })).toHaveAttribute('href', '/my-cases')
   })
 })

@@ -22,7 +22,6 @@ version (`0.x.y` while the app is being built, `1.0.0` when it is complete).
   now a Phase 9 item. The document adds the threat model's AI risks, the Claude API over Bedrock,
   Cloudflare, retention, the walkthrough, and a review of the whole assessment against the finished
   product. The backlog closes four items Phase 8 fixed and moves the rest out of Phase 8.
-
 - **The deploy's to-do list is in one place** (Phase 8, stage 7, Task 39). The backlog's Phase 9
   section now holds every item the Phase 8 spec moved there (the KMS provider, the secrets and
   settings contract, the task definitions with the load test's sizes, the cleanup's schedule, the
@@ -185,6 +184,19 @@ version (`0.x.y` while the app is being built, `1.0.0` when it is complete).
 
 ### Security
 
+- **What Phase 8's closing reviews found is fixed** (Phase 8, the whole-app security review and the
+  phase review; neither found anything high). A conversation whose stored words no longer open keeps
+  the most serious panel one of its turns showed (crisis, then "can't answer right now", then the HR
+  panel): the 988 and EAP text, or the HR team, is never lost with the words (invariant 6), since
+  the safety check's verdict is stored unencrypted. Migration 0018 reads only the keyring and
+  `APP_ENV`, under the API's own keyring rules, so the deploy's setup task, which has none of the
+  API's own settings, can run it on a database that holds denial notes. A path segment too long for
+  the file system, or a file replaced while it is looked up, is no file, not a 500 with a logged
+  traceback. The access log keeps no query string, so a search's words never sit beside an address.
+  Every response says `Cross-Origin-Resource-Policy: same-origin`, so no other site can embed the
+  app's files (the video above all) and spend its bandwidth. An HR panel kept without its turn
+  offers "Write to HR" in place of the case button its text mentions. One unused budget rule is
+  gone.
 - **`opentelemetry-api` updated to 1.45.2** (Phase 8, stage 7). FastAPI depends on it, and 1.45.1
   could be slowed to a crawl by a crafted `traceparent` header: its regular expression backtracks
   in quadratic time (GHSA-mf5v-w3w3-f6cg, CVE-2026-126360). Open Door doesn't read trace headers
@@ -246,6 +258,11 @@ version (`0.x.y` while the app is being built, `1.0.0` when it is complete).
 
 ### Fixed
 
+- **The walkthrough's recorder keeps an answer that came before the HR panel** (Phase 8, the fix
+  branch's review). A turn routed to HR after the model answered was written with the panel alone,
+  so the transcript left out words the video shows; and a crisis or "can't answer" panel would have
+  been called the HR panel's, so a take that meets one is now refused. The installed recording's
+  step 5 has this gap until the walkthrough is recorded again.
 - **A missing file under `/media/` is a 404, not the app's page** (Phase 8, stage 9). The
   production image answered any unknown path with the page, so a video element pointed at a
   missing file was handed HTML and failed without a word. The video is served with range requests

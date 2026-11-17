@@ -6,6 +6,7 @@ have one; the 300-character limit is the service's. The migration's data step is
 temporary table, never on the shared database's real one.
 """
 
+import base64
 import importlib.util
 import logging
 from collections.abc import Callable
@@ -15,7 +16,6 @@ from typing import Any
 from uuid import UUID, uuid4
 
 import pytest
-from pydantic import SecretStr
 from sqlalchemy import insert, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncEngine
@@ -506,20 +506,60 @@ async def test_the_data_step_reads_no_keyring_when_no_row_has_a_note(
     assert (sealed, opened) == (0, 0)
 
 
+def only_the_setup_tasks_environment(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, app_env: str, keyring: str
+) -> None:
+    """What the deploy's setup task holds: the owner's URL and the keyring, none of the API's own
+    settings, and no .env file."""
+    for name in ("DATABASE_URL", "APP_ORIGIN", "ANTHROPIC_API_KEY", "ENCRYPTION_KEYRING_FILE"):
+        monkeypatch.delenv(name, raising=False)
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("APP_ENV", app_env)
+    monkeypatch.setenv("ENCRYPTION_KEYRING", keyring)
+
+
+def test_the_data_step_needs_only_the_keyring_not_the_apis_settings(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    real = "k1:" + base64.b64encode(bytes(range(32))).decode()
+    only_the_setup_tasks_environment(monkeypatch, tmp_path, "production", real)
+
+    keys = migration_module().settings_key_loader()
+
+    assert not keys.uses_test_key
+
+
+def test_the_data_steps_keyring_follows_the_apis_rules(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """The same rules as the API's: with neither variable, the default file `make keyring` writes;
+    with both, refused, so the step never seals under a keyring the API won't use."""
+    from pydantic import ValidationError
+
+    from app.core.config import KeyringSettings
+    from app.core.encryption import DEFAULT_KEYRING_PATH
+
+    only_the_setup_tasks_environment(monkeypatch, tmp_path, "development", "")
+    monkeypatch.delenv("ENCRYPTION_KEYRING")
+    settings = KeyringSettings()
+    assert settings.encryption_keyring is None
+    assert settings.encryption_keyring_file is not None
+    assert settings.encryption_keyring_file.get_secret_value() == DEFAULT_KEYRING_PATH
+
+    monkeypatch.setenv("ENCRYPTION_KEYRING", "k1:" + base64.b64encode(bytes(32)).decode())
+    monkeypatch.setenv("ENCRYPTION_KEYRING_FILE", "/elsewhere/keyring")
+    with pytest.raises(ValidationError, match="not both"):
+        KeyringSettings()
+
+
 @pytest.mark.parametrize(("app_env", "refused"), [("development", True), ("test", False)])
 def test_the_data_step_never_seals_real_notes_under_the_test_key(
-    monkeypatch: pytest.MonkeyPatch, app_env: str, refused: bool
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, app_env: str, refused: bool
 ) -> None:
-    import app.core.config
-    from app.core.config import Settings
-
     migration = migration_module()
-    settings = Settings(
-        app_env=app_env,
-        encryption_keyring=SecretStr("test:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="),
-        encryption_keyring_file=None,
+    only_the_setup_tasks_environment(
+        monkeypatch, tmp_path, app_env, "test:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="
     )
-    monkeypatch.setattr(app.core.config, "get_settings", lambda: settings)
 
     if refused:
         with pytest.raises(ValueError, match="only APP_ENV=test accepts"):

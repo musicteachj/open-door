@@ -574,7 +574,9 @@ the audit table. The events are `security.session_invalid`, `security.origin_rej
 - the first 8 characters of the session token's hash
 
 The access log (uvicorn's, one line per request) leaves out the two health paths,
-`/api/v1/health` and `/api/v1/health/live`, which probes call every few seconds. A statement or lock
+`/api/v1/health` and `/api/v1/health/live`, which probes call every few seconds, and logs every
+other path without its query string, so a search's words (what a person typed) never reach it
+(Phase 8's security review). A statement or lock
 timeout logs a warning with only the SQLSTATE code (`57014` or `55P03`). A request body over 64 KiB
 is refused with a 413 and logs nothing about its contents.
 

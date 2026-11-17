@@ -15,7 +15,6 @@ from app.ai.admission import (
     refusal_scope,
     room_needed_usd,
     room_scopes,
-    scope_without_room,
     seconds_until_next_utc_day,
     short_scopes,
 )
@@ -120,20 +119,20 @@ def test_the_smallest_question_is_one_character() -> None:
 def test_the_sandbox_is_named_first_when_both_caps_are_short() -> None:
     state = BudgetState(Decimal("0.10"), Decimal("0.10"))
 
-    assert scope_without_room(state, Decimal("0.25")) == "sandbox"
+    assert refusal_scope(state, Decimal("0.25"), lambda: Decimal("0.25")) == "sandbox"
 
 
 def test_the_day_is_named_when_only_it_is_short() -> None:
     state = BudgetState(Decimal("5"), Decimal("0.10"))
 
-    assert scope_without_room(state, Decimal("0.25")) == "daily"
+    assert refusal_scope(state, Decimal("0.25"), lambda: Decimal("0.25")) == "daily"
 
 
 def test_room_exactly_equal_to_the_need_is_enough() -> None:
     # `reserve` refuses only when spent + amount is over the cap, so equal fits.
     state = BudgetState(Decimal("0.25"), Decimal("0.25"))
 
-    assert scope_without_room(state, Decimal("0.25")) is None
+    assert refusal_scope(state, Decimal("0.25"), lambda: Decimal("0.25")) is None
 
 
 def test_a_cap_with_money_left_but_less_than_a_turn_needs_has_no_room() -> None:
@@ -141,7 +140,7 @@ def test_a_cap_with_money_left_but_less_than_a_turn_needs_has_no_room() -> None:
     state = BudgetState(Decimal("0.01"), Decimal("3"))
 
     assert not state.sandbox_reached
-    assert scope_without_room(state, needed()) == "sandbox"
+    assert refusal_scope(state, needed(), needed) == "sandbox"
 
 
 def test_history_tokens_grow_with_the_history_and_use_two_bytes_a_token() -> None:

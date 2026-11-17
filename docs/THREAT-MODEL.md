@@ -78,7 +78,7 @@ root folder.
 | S | A cross-site page sends a state-changing request with the visitor's cookie | `__Host-` cookies with `SameSite=Lax`; the same-origin check on unsafe methods (`app/modules/identity/same_origin.py`); the CSRF token in `X-CSRF-Token`, compared in constant time | `tests/test_same_origin.py`, `tests/integration/test_api_sessions.py` |
 | S | A cross-site page reads data with a signed-in `GET` (a navigation, an `<img>`, a form) | **Phase 8, Stage 1:** CSRF on every signed-in API request, any method, which retires the per-route audited-read check. A refusal is a 403 of type `csrf-rejected`, which the web app treats as signed out | `tests/integration/test_csrf.py` |
 | T | A huge body exhausts a task's memory | **Phase 8, Stage 1:** a 64 KiB body cap in the ASGI layer, by `Content-Length` and by counting a streamed body; schema ceilings at twice the real limits | `tests/test_body_limit.py` |
-| I | The page loads script or style from somewhere else, or is framed | **Phase 8, Stage 2:** the API serves the built app with a strict CSP and a fresh nonce on every page (`app/web_app.py`), no inline script, `frame-ancestors 'none'`; HSTS, `nosniff`, `Referrer-Policy: same-origin`, a closed `Permissions-Policy`, and COOP on every response, a 500 included (`app/core/security_headers.py`; ADR 0020) | `tests/test_web_app.py`, `tests/test_security_headers.py`; CI runs the browser suite against the image, and any CSP violation fails the test (`apps/web/e2e/fixtures.ts`, proved by `e2e/csp-guard.spec.ts`) |
+| I | The page loads script or style from somewhere else, or is framed | **Phase 8, Stage 2:** the API serves the built app with a strict CSP and a fresh nonce on every page (`app/web_app.py`), no inline script, `frame-ancestors 'none'`; HSTS, `nosniff`, `Referrer-Policy: same-origin`, a closed `Permissions-Policy`, COOP, and (from Phase 8's review) `Cross-Origin-Resource-Policy: same-origin` on every response, a 500 included (`app/core/security_headers.py`; ADR 0020) | `tests/test_web_app.py`, `tests/test_security_headers.py`; CI runs the browser suite against the image, and any CSP violation fails the test (`apps/web/e2e/fixtures.ts`, proved by `e2e/csp-guard.spec.ts`) |
 | D | A missing file under `/media/` gets the app's page instead, which the walkthrough's `<video>` fails on silently | **Phase 8, Stage 9:** a missing file under `/media/` is a `no-store` 404; the video is served with `Accept-Ranges` and answers a range with 206, or 416 past the end (Safari needs ranges), and is asked for again on each visit (`no-cache`, a 304 while unchanged) so a new recording never sits beside an old transcript; `media-src 'self'` allows it and nothing else | `tests/test_web_app.py`, `apps/web/e2e/walkthrough.spec.ts` |
 | I | API docs reveal every route in production | **Phase 8, Stage 1:** `/docs`, `/redoc`, `/openapi.json` are 404 in production; **Stage 2:** the image runs uvicorn with `--no-server-header` | `tests/test_app_state.py`, `make image-check` |
 | D | A script starts sandboxes in a loop | **Phase 8, Stage 4:** Cloudflare Turnstile on `POST /sandboxes`, checked first; then 5 an hour and 20 a day per address and 500 a UTC day in all, counted in Postgres (`sandbox_starts`, migration 0019) and recorded under one advisory lock in a short transaction of its own, so two starts can't both slip under; 429 with `Retry-After` (ADR 0021, `app/modules/sandbox/limits.py`) | `tests/integration/test_sandbox_limits.py`, `test_sandbox_start.py`, `tests/test_turnstile.py` |
@@ -201,6 +201,12 @@ Each is accepted on purpose, with the reason.
   $12 [`CAPACITY.md`](CAPACITY.md) suggests for 50 tours, about 65). So an actor who uses up the
   starts costs the seeding and the cleanup of up to 500 sandboxes, not AI spend. Phase 9 can alert
   when the total is reached (found by Stage 4's security review).
+- **A signed-in visitor can create rows without limit inside their own sandbox.** New
+  conversations, persona switches, and HR's private reads each write a row (or an audit row) with
+  no model call, so the AI budgets don't bound them (found by Phase 8's whole-app review). Each
+  costs one write in the visitor's own sandbox, which the cleanup job deletes 24 hours after it
+  started, and a new sandbox needs a solved Turnstile check and the start limits. Phase 9 can add a
+  per-sandbox cap if the database's growth shows it is needed.
 - **A deleted sandbox lives in database backups until they expire.** Phase 9's deploy keeps the
   backup window short and says how long.
 
@@ -217,6 +223,9 @@ Each is accepted on purpose, with the reason.
 
 ## Review
 
-Re-reviewed at the end of Phase 8 by the whole-app security reviewer, who reads this document as
-the brief and proves each finding with the smallest experiment. Each stage's close updates its
-rows here.
+Re-reviewed at the end of Phase 8 (2026-11-16) by the whole-app security reviewer, on the strongest
+model, who read this document as the brief and proved each finding with the smallest experiment.
+It found nothing high or medium. Its four lows: a path segment too long for the file system gave a
+500 (fixed), the access log kept search queries (fixed), no `Cross-Origin-Resource-Policy` (fixed),
+and unbounded row creation inside one's own sandbox (accepted above). It found no accepted risk
+whose reasoning is wrong. Each stage's close updates its rows here.

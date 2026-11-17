@@ -12,9 +12,9 @@ from pathlib import Path
 import pytest
 from pydantic import SecretStr
 
-from app.core.config import Settings
+from app.core.config import Settings, build_key_provider
 from app.core.encryption import KeyProvider, LocalKeyProvider
-from app.main import build_key_provider, create_app
+from app.main import create_app
 
 APP_URL = "postgresql+asyncpg://od_app_login:od_app_dev@localhost/opendoor"
 TEST_KEYRING = "test:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="

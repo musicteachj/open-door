@@ -753,6 +753,7 @@ export interface ConversationOut {
   historyTooLong: boolean
   outdated: boolean
   unreadable: boolean
+  escalation?: EscalationOut | null
 }
 
 export interface CountsOut {
