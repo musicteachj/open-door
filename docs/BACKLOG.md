@@ -384,6 +384,12 @@ digits is caught (Stage 3), and the cleanup job deletes handbook versions no san
   middleware that already does; the unreadable and readable conversation reads write out the clock
   query `database_now` already holds; and four settings validators repeat the "blank means unset"
   test. (v0.8.0 release review.)
+- **Remove the npm audit's picomatch exception.** GHSA-fc5q-39xc-vjpf (a ReDoS in picomatch, every
+  version up to 4.0.7, no fix as of 2026-11-17) is accepted at high in `scripts/check_npm_audit.py`
+  through 2026-12-17; the audit fails again from 2026-12-18, or sooner if the advisory is raised to
+  critical. Once picomatch publishes a fix, update the lockfile and remove the exception (the script
+  notes when the advisory is no longer reported at high or critical; an empty list is fine); if
+  there is still no fix by then, the owner decides whether to extend it. (The tour step 5 follow-up.)
 - **An answer followed by the HR panel scrolls out of view almost at once.** When the safety check
   sends a turn to a person after the answer (the tour's steps 5 and 7 on the live model), the panel
   arrives and the conversation scrolls to it, so the answer is on screen for about a quarter of a

@@ -1983,6 +1983,24 @@ The two step 5 items the fix branch's review left open, settled in one PR:
   $2 cap) so the transcript has the new words and the answers before an HR panel, at step 5 and
   also at step 7, where the old recorder had dropped Priya's answer too. The answer still scrolls
   past in about a quarter of a second in the video, as the HR panel arrives; the transcript holds it.
+- **The npm audit's first exception.** On the PR (#125), the Security workflow's npm audit failed:
+  GHSA-fc5q-39xc-vjpf, a ReDoS in picomatch, was widened that day to every version up to the latest
+  (4.0.7), with no fix. Only build and test tools use picomatch. `npm audit` has no way to accept
+  one advisory, so CI and `make audit` now pass `npm audit --json` through
+  `scripts/check_npm_audit.py`, which fails on any other high or critical advisory, ends each
+  exception after its last day (this one 2026-12-17) or when its advisory is raised above the
+  agreed severity, notes an exception no longer needed, and fails on a report that isn't an audit
+  (mutation-proved). Its review's first round added the severity, the note for an advisory lowered
+  below high, and kept two advisories with no id apart; the second made the exception hold only
+  while every installed copy of picomatch is a dev dependency in the lockfile, refused a cut-short
+  report and npm's own failure (an exit status above 1), and failed only on a raised severity; the
+  third failed an advisory of missing or unknown severity, and said what the lockfile proves (not a
+  production dependency), not more. The fourth had nothing high or medium, so the loop stopped
+  there; two of its lows were fixed (a report must carry npm's report version, and the usage line
+  names a Python that is new enough). Recorded: the lockfile's `dev` flag can't show that a build
+  doesn't bundle a dev dependency; the wiring test reads the workflow and Makefile as text; the
+  three severity lists could be one; CI runs the script on the runner's own `python3` (3.12). The owner agreed to the exception; the safety
+  classifier had refused the workflow edit until then.
 
 ## Backlog
 

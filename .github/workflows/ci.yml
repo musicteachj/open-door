@@ -72,7 +72,8 @@ jobs:
               - 'CLAUDE.md'
               - 'docs/specs/2026-10-31-phase-7-ai-ops-reviewer-model.md'
               - '.github/workflows/ci.yml'
-              # Read by the test of scripts/check_tool_versions.py, through the script.
+              # Read by the test of scripts/check_tool_versions.py, through the script, and by the
+              # test that the npm audit goes through scripts/check_npm_audit.py.
               - '.github/workflows/security.yml'
               - '.pre-commit-config.yaml'
             web:
