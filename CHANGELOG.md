@@ -10,6 +10,22 @@ version (`0.x.y` while the app is being built, `1.0.0` when it is complete).
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-11-17
+
+Phase 8: hardening and deploy-readiness. Open Door now builds as one production image that serves
+the web app and the API on one origin, with a strict Content Security Policy and a fresh nonce on
+every page, and runs locally with production settings on its own database (`make prod-local`).
+Sessions sit under row-level security and every signed-in request checks its CSRF token; starting
+a sandbox takes a Cloudflare Turnstile check and per-address and daily limits; a cleanup job
+deletes expired sandboxes and old ledger rows. The crisis text survives a failed database write,
+and every stream ends with exactly one closing event. A prompt change gives a religious observance
+the accommodation route and keeps the assistant from remarking on who is asking, and its full run
+made every fairness group consistent. A free load test sized the deploy (`CAPACITY.md`), an
+accessibility audit runs with the browser tests (`ACCESSIBILITY.md`), and when the demo's daily AI
+limit is reached a visitor gets a recorded walkthrough of the tour instead of a dead end. The AI
+governance assessment is complete, and the phase's whole-app security review and phase review
+found nothing high. Nothing is deployed: Phase 9 does that.
+
 ### Changed
 
 - **The tour's step 3 asks for "this Friday", not "next Friday"** (Phase 8, stage 9). On many days
