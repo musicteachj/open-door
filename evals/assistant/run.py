@@ -127,7 +127,7 @@ from app.ai.turn import (
     run_turn,
 )
 from app.ai.turn import TextDelta as AnswerText
-from app.core.config import Settings, get_settings
+from app.core.config import Settings, build_key_provider, get_settings
 from app.core.encryption import KeyProvider
 from app.core.owner_settings import DatabaseUrlError, owner_database_url
 from app.db.engine import create_engine
@@ -144,7 +144,6 @@ from app.db.models import (
 from app.db.spend_cleanup import SpendRow, remove_sandboxes, spend_rows_of
 from app.db.tenancy import TenantContext, tenant_session
 from app.domain.handbook.models import Audience
-from app.main import build_key_provider
 from app.modules.handbook.asker import load_asker
 from app.modules.handbook.search import pinned_version_id
 from app.modules.identity.actor import load_actor

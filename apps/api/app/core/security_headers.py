@@ -39,6 +39,9 @@ _FIXED_HEADERS = (
     ("Referrer-Policy", REFERRER_POLICY),
     ("Permissions-Policy", PERMISSIONS_POLICY),
     ("Cross-Origin-Opener-Policy", COOP),
+    # No other site may embed the app's own files (the walkthrough's video, the assets) and spend
+    # its bandwidth. It governs who loads our responses, not what the page loads (Turnstile).
+    ("Cross-Origin-Resource-Policy", "same-origin"),
 )
 
 

@@ -48,8 +48,16 @@ type EscalationPanelProps = {
    * at the foot of the panel, full width and outside the padded body, so its tint reaches the edges.
    */
   caseArea?: ReactNode
-  /** Adds "Write to HR" after the contacts of the unavailable panel. */
+  /**
+   * Adds "Write to HR" after the contacts of the unavailable panel, and of a `turnless` sensitive
+   * one.
+   */
   writeToHr?: PageLink | null
+  /**
+   * The panel stands without its turn (an unreadable conversation keeps it): there is no case
+   * button, so a sensitive panel, whose text mentions one, offers "Write to HR" instead.
+   */
+  turnless?: boolean
   /** The turn this panel answers, carried on the element so a caller can tell whose it is. */
   turnId?: string | null
   className?: string
@@ -123,6 +131,7 @@ function EscalationPanel({
   openCaseRef,
   caseArea,
   writeToHr = null,
+  turnless = false,
   turnId,
   className,
 }: EscalationPanelProps) {
@@ -173,7 +182,14 @@ function EscalationPanel({
             </Button>
           </div>
         )}
-        <HrContacts contacts={contacts} writeToHr={kind === 'unavailable' ? writeToHr : null} />
+        {/* The case button needs its turn, so an HR panel with none (`turnless`) offers the same
+            form through "Write to HR", as the unavailable panel always does. */}
+        <HrContacts
+          contacts={contacts}
+          writeToHr={
+            kind === 'unavailable' || (kind === 'sensitive' && turnless) ? writeToHr : null
+          }
+        />
         {kind === 'sensitive' && (
           <Link
             to={handbookPath('7.2')}

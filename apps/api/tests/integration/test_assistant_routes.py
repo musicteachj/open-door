@@ -206,9 +206,12 @@ def test_a_new_conversation_is_pinned_to_the_current_versions_and_is_the_current
         "historyTooLong",
         "outdated",
         "unreadable",
+        "escalation",
     }
     assert created["outdated"] is False
     assert created["unreadable"] is False
+    # Only an unreadable conversation keeps a panel at this level; a readable one's turns carry it.
+    assert created["escalation"] is None
 
 
 async def test_the_new_conversation_row_carries_the_current_pins(

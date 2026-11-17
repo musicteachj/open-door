@@ -19,10 +19,10 @@ from sqlalchemy.ext.asyncio import AsyncEngine
 from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
 
 from app.ai.admission import seconds_until_next_utc_day
-from app.core.config import Settings
+from app.core.config import Settings, build_key_provider
 from app.db.locks import database_now
 from app.db.tenancy import NO_TENANT, tenant_session
-from app.main import build_key_provider, create_app
+from app.main import create_app
 from app.modules.identity.cookies import SESSION_COOKIE
 from app.modules.sandbox import seed, service, texts
 from app.modules.sandbox.limits import StartLimitError, StartLimits, address_hash

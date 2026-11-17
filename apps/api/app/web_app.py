@@ -11,8 +11,10 @@ app and the API serves nothing outside /api/.
 """
 
 import html
+import os
 import re
 import secrets
+import stat
 from pathlib import Path
 
 from fastapi import FastAPI
@@ -113,16 +115,21 @@ class ImmutableAssets:
             )(scope, receive, send)
 
 
-def _file_inside(root: Path, relative: str) -> Path | None:
-    """The file `relative` names under `root`, or None. `..`, encoded forms (already decoded by the
-    server), and symlinks that leave the root all resolve outside it and are refused."""
+def _file_inside(root: Path, relative: str) -> tuple[Path, os.stat_result] | None:
+    """The file `relative` names under `root`, with its stat, or None. `..`, encoded forms
+    (already decoded by the server), and symlinks that leave the root all resolve outside it and
+    are refused."""
     try:
         candidate = (root / relative).resolve()
-    except (OSError, ValueError):  # a NUL byte, or a loop
+        if not candidate.is_relative_to(root) or candidate == root / INDEX_NAME:
+            return None
+        # One stat, in this guard and kept for the response: a file gone before the lookup (a
+        # deploy, a recording installed again) is no file, not a 500. One replaced while it is
+        # being sent can still cut that one response short.
+        status = candidate.stat()
+    except (OSError, ValueError):  # gone, a NUL byte, a loop, or a name too long for the system
         return None
-    if not candidate.is_relative_to(root) or candidate == root / INDEX_NAME:
-        return None
-    return candidate if candidate.is_file() else None
+    return (candidate, status) if stat.S_ISREG(status.st_mode) else None
 
 
 def install_web_app(app: FastAPI, settings: Settings) -> None:
@@ -185,10 +192,9 @@ def install_web_app(app: FastAPI, settings: Settings) -> None:
             cache = (
                 MEDIA_CACHE_CONTROL if full_path.startswith(MEDIA_PREFIX) else FILE_CACHE_CONTROL
             )
-            # The file's stat now, so its ETag and Last-Modified are known before it is sent.
-            return FileResponse(
-                found, stat_result=found.stat(), headers={CACHE_CONTROL_HEADER: cache}
-            )
+            # Its stat from the lookup, so its ETag and Last-Modified are known before it is sent.
+            path, status = found
+            return FileResponse(path, stat_result=status, headers={CACHE_CONTROL_HEADER: cache})
         if full_path.startswith(MEDIA_PREFIX):
             return not_found()
         return page()

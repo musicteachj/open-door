@@ -108,10 +108,15 @@ from app.api.problems import problem_responses
 from app.core.config import Settings
 from app.core.encryption import DecryptionFailed, KeyProvider
 from app.core.problems import ProblemError, problem_response
-from app.db.models import AiConversation, HandbookVersion
+from app.db.models import AiConversation, AiTurn, HandbookVersion
 from app.db.tenancy import TenantContext, set_is_hr, tenant_session
 from app.domain.handbook.applicability import Asker
-from app.modules.assistant.display import needs_hr_contact, shown, turn_out
+from app.modules.assistant.display import (
+    kept_escalation_out,
+    needs_hr_contact,
+    shown,
+    turn_out,
+)
 from app.modules.assistant.schemas import (
     AssistantTextsOut,
     BudgetBannerOut,
@@ -326,6 +331,14 @@ async def _unreadable_conversation_out(
         effort=conversation.effort,
         history=[],
     )
+    # The readable view's own rule (`shown`, on the database's clock), from columns the key doesn't
+    # guard: a turn's status, error code, start, and verdict.
+    database_now = (await db.execute(select(func.now()))).scalar_one()
+    turns = (
+        await db.scalars(select(AiTurn).where(AiTurn.conversation_id == conversation.id))
+    ).all()
+    kinds = {shown(turn, database_now).kind for turn in turns}
+    contacts = await hr_contact(db) if kinds - {None} else []
     return ConversationOut(
         id=conversation.id,
         created_at=conversation.created_at,
@@ -336,6 +349,7 @@ async def _unreadable_conversation_out(
         history_too_long=True,
         outdated=conversation_is_outdated(conversation),
         unreadable=True,
+        escalation=kept_escalation_out(kinds, contacts),
     )
 
 

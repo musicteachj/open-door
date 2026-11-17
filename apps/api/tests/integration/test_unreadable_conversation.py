@@ -15,6 +15,8 @@ import pytest
 from sqlalchemy import func, select, text, update
 from sqlalchemy.ext.asyncio import AsyncEngine
 
+from app.ai.conversations import TurnOutcome
+from app.ai.fixed_texts import CRISIS_TEXT, SENSITIVE_TEXT, UNAVAILABLE_TEXT
 from app.db.models import AiConversation, AiTurn
 from app.db.tenancy import TenantContext, tenant_session
 from tests.integration.conftest import Browser, begin_turn, message_row
@@ -24,6 +26,7 @@ from tests.integration.test_assistant_routes import (
     new_conversation,
     seed_turn,
     sign_in,
+    verdict_of,
 )
 from tests.integration.test_turn_stream import ask
 
@@ -116,6 +119,73 @@ async def test_the_current_conversation_is_unreadable_not_a_500(
         assert str(turn_id) in lines[0]
     assert "ZEBRA" not in caplog.text
     assert "sick leave" not in caplog.text
+
+
+@pytest.mark.parametrize(
+    ("outcomes", "kind", "message"),
+    [
+        ([TurnOutcome(status="crisis")], "crisis", CRISIS_TEXT),
+        ([completed(guard_verdict=verdict_of("sensitive"))], "sensitive", SENSITIVE_TEXT),
+        # The message was never screened, so its panel gives 911 and 988 too.
+        ([TurnOutcome(status="guard_unavailable")], "unavailable", UNAVAILABLE_TEXT),
+        (
+            [
+                completed(guard_verdict=verdict_of("sensitive")),
+                TurnOutcome(status="guard_unavailable"),
+            ],
+            "unavailable",
+            UNAVAILABLE_TEXT,
+        ),
+        # The most serious panel wins: crisis over sensitive, whatever the order.
+        (
+            [completed(guard_verdict=verdict_of("sensitive")), TurnOutcome(status="crisis")],
+            "crisis",
+            CRISIS_TEXT,
+        ),
+    ],
+    ids=[
+        "crisis",
+        "sensitive",
+        "unavailable",
+        "unavailable over sensitive",
+        "crisis over sensitive",
+    ],
+)
+async def test_the_panel_a_person_was_shown_stays_when_the_conversation_does_not_open(
+    browser: Browser,
+    app_engine: AsyncEngine,
+    owner_engine: AsyncEngine,
+    outcomes: list[TurnOutcome],
+    kind: str,
+    message: str,
+) -> None:
+    """Invariant 6: the 988 and EAP text, or the HR team, never vanishes with the words. The
+    safety check's verdict is a plain column, so it is read even when no text opens."""
+    tenant_id, person_id = sign_in(browser)
+    conversation_id = UUID(new_conversation(browser)["id"])
+    for outcome in outcomes:
+        await seed_turn(
+            app_engine, tenant_id, person_id, conversation_id, question=QUESTION, outcome=outcome
+        )
+    await damage(owner_engine, "ai_conversations", "wrapped_key", "id", conversation_id)
+
+    body = browser.client.get(f"{BASE}/conversations/current").json()
+
+    assert (body["unreadable"], body["turns"], body["hrContacts"]) == (True, [], [])
+    panel = body["escalation"]
+    assert (panel["kind"], panel["message"], panel["offerCase"]) == (kind, message, False)
+    assert panel["hrContact"]
+
+
+async def test_an_unreadable_conversation_without_a_panel_keeps_none(
+    browser: Browser, app_engine: AsyncEngine, owner_engine: AsyncEngine, damage_kind: Any
+) -> None:
+    await damage_kind(browser, app_engine, owner_engine)
+
+    body = browser.client.get(f"{BASE}/conversations/current").json()
+
+    assert body["unreadable"] is True
+    assert body["escalation"] is None
 
 
 async def test_the_budget_route_still_answers(

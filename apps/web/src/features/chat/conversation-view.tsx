@@ -10,6 +10,7 @@ import {
 import type { CitationOut, ConversationOut, HrContactOut, TurnOut } from '@/api/generated'
 import { AnswerViewerContext } from '@/components/assistant/answer-viewer'
 import { Composer } from '@/components/assistant/composer'
+import { EscalationPanel } from '@/components/assistant/escalation-panel'
 import { ConversationHeader, RetentionLine } from '@/components/assistant/conversation-header'
 import { conversationCopy } from '@/components/assistant/labels'
 import { PageSandboxIndicator } from '@/features/shell/page-sandbox-indicator'
@@ -346,6 +347,16 @@ export function ConversationView({
             {turns.map((turn) => (
               <StoredTurn key={turn.id} turn={turn} context={context} />
             ))}
+            {/* Its words can't be shown, but the crisis or HR panel it showed stays (invariant 6). */}
+            {unreadable && conversation?.escalation && (
+              <EscalationPanel
+                kind={conversation.escalation.kind}
+                message={conversation.escalation.message}
+                contacts={conversation.escalation.hrContact}
+                writeToHr={writeToHr}
+                turnless
+              />
+            )}
             {settling.map(({ turn, phase: settledPhase }) => (
               <LiveTurnView
                 key={`settling-${turn.turnId}`}

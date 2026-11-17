@@ -314,6 +314,45 @@ describe('the home and the conversation', () => {
     expect(screen.queryByRole('heading', { level: 1 })).not.toBeInTheDocument()
   })
 
+  it.each([
+    ['crisis', 'Reach a person right now', 'Call or text 988.'],
+    ['sensitive', 'A person in HR handles this, not the AI', 'HR can help with this.'],
+    ['unavailable', "Can't answer right now", 'Call 911, or call or text 988.'],
+  ] as const)(
+    'keeps the %s panel of an unreadable conversation, with the approved line',
+    async (kind, region, message) => {
+      signedInWith(
+        conversationOut({
+          unreadable: true,
+          historyTooLong: true,
+          longHistory: true,
+          turns: [],
+          escalation: { kind, message, hrContact: [DANA], offerCase: false },
+        }),
+      )
+      renderApp({ at: '/ask' })
+      expect(await screen.findByText(TEXTS.unreadableConversation)).toBeInTheDocument()
+      const panel = await screen.findByRole('region', { name: region })
+      expect(panel).toHaveTextContent(message)
+      expect(within(panel).queryByRole('button', { name: /confidential case/ })).toBeNull()
+      // The "can't answer" panel keeps its way to HR, as on a turn; the HR panel, whose case
+      // button needs the turn, offers the same form through "Write to HR".
+      expect(within(panel).queryAllByRole('link', { name: 'Write to HR' })).toHaveLength(
+        kind === 'crisis' ? 0 : 1,
+      )
+    },
+  )
+
+  it('shows no panel for an unreadable conversation that had none', async () => {
+    signedInWith(conversationOut({ unreadable: true, historyTooLong: true, turns: [] }))
+    renderApp({ at: '/ask' })
+    await screen.findByText(TEXTS.unreadableConversation)
+    expect(screen.queryByRole('region', { name: 'Reach a person right now' })).toBeNull()
+    expect(
+      screen.queryByRole('region', { name: 'A person in HR handles this, not the AI' }),
+    ).toBeNull()
+  })
+
   it('starts a new conversation from the unreadable one', async () => {
     const api = signedInWith(conversationOut({ unreadable: true, historyTooLong: true }))
     const { user } = renderApp({ at: '/ask' })

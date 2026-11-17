@@ -4294,6 +4294,16 @@
           "unreadable": {
             "type": "boolean",
             "title": "Unreadable"
+          },
+          "escalation": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/EscalationOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "type": "object",

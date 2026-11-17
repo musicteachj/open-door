@@ -44,19 +44,31 @@ function sourcesOf(citations: RecordedTurn['citations']): WalkthroughSource[] {
 }
 
 /**
- * A step's turns as its transcript: each question, then the HR panel's fixed text when the turn
- * was routed to a person, or else the answer as stored, with the sections it cited.
+ * A step's turns as its transcript, as the video shows them: each question, then the answer as
+ * stored (with the sections it cited) when there is one, then the HR panel's fixed text when the
+ * turn was routed to a person. The tour has no crisis or "can't answer" step, and the transcript
+ * would call such a panel the HR panel's, so a take that meets one is refused.
  */
 export function exchangesOf(turns: readonly RecordedTurn[]): WalkthroughExchange[] {
   return turns.flatMap((turn): WalkthroughExchange[] => {
-    const asked: WalkthroughExchange = { speaker: 'person', text: turn.question }
-    if (turn.escalation) {
-      return [asked, { speaker: 'hr-panel', text: turn.escalation.message }]
-    }
+    const exchanges: WalkthroughExchange[] = [{ speaker: 'person', text: turn.question }]
     const text = withoutLinks(turn.answerText).trim()
-    if (text === '') throw new Error(`The turn "${turn.question}" has no answer to record.`)
-    const sources = sourcesOf(turn.citations)
-    return [asked, sources.length > 0 ? { speaker: 'ai', text, sources } : { speaker: 'ai', text }]
+    if (text !== '') {
+      const sources = sourcesOf(turn.citations)
+      exchanges.push(
+        sources.length > 0 ? { speaker: 'ai', text, sources } : { speaker: 'ai', text },
+      )
+    }
+    if (turn.escalation) {
+      if (turn.escalation.kind !== 'sensitive') {
+        throw new Error(`The turn "${turn.question}" showed a ${turn.escalation.kind} panel.`)
+      }
+      exchanges.push({ speaker: 'hr-panel', text: turn.escalation.message })
+    }
+    if (exchanges.length === 1) {
+      throw new Error(`The turn "${turn.question}" has no answer to record.`)
+    }
+    return exchanges
   })
 }
 
