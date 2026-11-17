@@ -35,8 +35,13 @@ type RequestFormProps = {
   start?: string
   end?: string
   onDatesChange: (selection: DatePickerSelection) => void
+  /** The date picker's range is half picked (or no longer is). */
+  onPickingChange?: (picking: boolean) => void
   /** What the date picker marks: today, the earliest day, the schedule, the holidays. */
-  calendar: Omit<DatePickerProps, 'id' | 'start' | 'end' | 'onChange' | 'onDone' | 'className'>
+  calendar: Omit<
+    DatePickerProps,
+    'id' | 'start' | 'end' | 'onChange' | 'onPickingChange' | 'onDone' | 'className'
+  >
   /** What the API calls a PTO half day, in hours ("4 hours"), for the "Half day" choice. */
   halfDayLabel: string
   /** "How much", for a single day: PTO is full or half, sick time is full or some hours. */
@@ -90,6 +95,7 @@ function RequestForm({
   start,
   end,
   onDatesChange,
+  onPickingChange,
   calendar,
   halfDayLabel,
   howMuch,
@@ -239,6 +245,7 @@ function RequestForm({
               start={start}
               end={end}
               onChange={changeDates}
+              onPickingChange={onPickingChange}
               onDone={closePicker}
             />
           )}

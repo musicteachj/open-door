@@ -74,6 +74,26 @@ describe('PassagePanel open', () => {
     expect(screen.getByRole('heading', { name: 'Sick leave' })).toHaveFocus()
   })
 
+  it('goes from the title to Close, the passage, and "Open in handbook" by Tab (screen 07)', async () => {
+    const { user } = renderWithRouter(<PassagePanel {...base} state="open" view={passageView()} />)
+    expect(screen.getByRole('heading', { name: 'Sick leave' })).toHaveFocus()
+    await user.tab()
+    expect(screen.getByRole('button', { name: 'Close passage' })).toHaveFocus()
+    await user.tab()
+    expect(screen.getByLabelText('Passage text')).toHaveFocus()
+    await user.tab()
+    expect(screen.getByRole('link', { name: 'Open in handbook' })).toHaveFocus()
+  })
+
+  it('keeps Close first while it loads and on error, with no title before it', async () => {
+    for (const state of ['loading', 'error'] as const) {
+      const { user, unmount } = renderWithRouter(<PassagePanel {...base} state={state} />)
+      await user.tab()
+      expect(screen.getByRole('button', { name: 'Close passage' })).toHaveFocus()
+      unmount()
+    }
+  })
+
   it('moves focus to the title when loading finishes, not before', () => {
     const panel = (state: 'loading' | 'open') => (
       <MemoryRouter>
@@ -84,6 +104,20 @@ describe('PassagePanel open', () => {
     expect(document.body).toHaveFocus()
     rerender(panel('open'))
     expect(screen.getByRole('heading', { name: 'Sick leave' })).toHaveFocus()
+  })
+
+  it('keeps focus on Close when the panel goes from open to loading (the same button, not a new one)', () => {
+    const panel = (state: 'loading' | 'open') => (
+      <MemoryRouter>
+        <PassagePanel {...base} state={state} view={state === 'open' ? passageView() : undefined} />
+      </MemoryRouter>
+    )
+    const { rerender } = render(panel('open'))
+    const close = screen.getByRole('button', { name: 'Close passage' })
+    close.focus()
+    rerender(panel('loading'))
+    expect(screen.getByRole('button', { name: 'Close passage' })).toBe(close)
+    expect(close).toHaveFocus()
   })
 
   it('moves focus to the title again when the host swaps in another passage', () => {
@@ -114,7 +148,8 @@ describe('PassagePanel open', () => {
     expect(body).toHaveAttribute('tabindex', '0')
     expect(body).toHaveClass('overflow-auto')
     expect(screen.getByRole('heading', { name: 'Sick leave' })).toHaveFocus()
-    await user.tab() // from the title, the next stop in the page is the body
+    await user.tab() // from the title, Close, then the body
+    await user.tab()
     expect(body).toHaveFocus()
   })
 
@@ -248,7 +283,8 @@ describe('PassagePanel closing', () => {
       </>,
     )
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
-    await user.tab() // title -> body
+    await user.tab() // title -> Close
+    await user.tab() // Close -> body
     await user.tab() // body -> Open in handbook
     await user.tab() // out of the panel, to the page behind it
     expect(screen.getByRole('button', { name: 'After' })).toHaveFocus()

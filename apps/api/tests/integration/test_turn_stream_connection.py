@@ -30,6 +30,7 @@ from app.db.tenancy import TenantContext, tenant_session
 from app.main import create_app
 from app.modules.assistant import sse
 from app.modules.identity.cookies import CSRF_COOKIE, CSRF_HEADER, SESSION_COOKIE
+from app.modules.sandbox.turnstile import DUMMY_TOKEN
 from tests.integration.conftest import TEST_KEYS, OpenTurn, open_turns
 
 pytestmark = [
@@ -67,7 +68,9 @@ async def running_app(
             base_url="https://testserver",
             headers={"Sec-Fetch-Site": "same-origin"},
         ) as client:
-            created = await client.post("/api/v1/sandboxes", json={"persona": "priya"})
+            created = await client.post(
+                "/api/v1/sandboxes", json={"persona": "priya", "turnstileToken": DUMMY_TOKEN}
+            )
             assert created.status_code == 201, created.text
             sandbox = created.json()
             tenant_id = UUID(sandbox["tenant"]["id"])

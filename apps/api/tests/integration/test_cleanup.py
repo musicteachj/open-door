@@ -110,7 +110,13 @@ async def test_the_cleanup_login_has_exactly_two_policies_and_each_matches_only_
         (table, policy, command, squeezed(using), squeezed(with_check))
         for table, policy, command, using, with_check in rows
     ]
+    spend_cutoff = "(day < (((now() AT TIME ZONE 'UTC'::text))::date - 30))"
+    starts_cutoff = "(created_at < (now() - '24:00:00'::interval))"
     assert found == [
+        ("ai_spend_daily", "cleanup_delete", "d", spend_cutoff, ""),
+        ("ai_spend_daily", "cleanup_select", "r", spend_cutoff, ""),
+        ("sandbox_starts", "cleanup_delete", "d", starts_cutoff, ""),
+        ("sandbox_starts", "cleanup_select", "r", starts_cutoff, ""),
         ("tenants", "cleanup_delete", "d", "(expires_at < now())", ""),
         ("tenants", "cleanup_select", "r", "(expires_at < now())", ""),
     ]

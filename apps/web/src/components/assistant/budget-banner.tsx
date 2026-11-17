@@ -1,6 +1,7 @@
 import { Link } from 'react-router'
 import { Banner } from '@/components/feedback/banner'
 import { Button } from '@/components/ui/button'
+import { WalkthroughLink } from '@/components/walkthrough/walkthrough-link'
 import { APP_LINK } from './link-class'
 import type { PageLink } from '@/lib/page-link'
 import { Segments } from './crisis-segments'
@@ -26,7 +27,7 @@ type BudgetBannerProps = {
  * The full-width banner across the top of the sheet when the assistant is out of budget (from the
  * design's Conversation frames). It is the app's `Banner`, with its warning icon and polite
  * status, and it can't be dismissed, because the composer stays off until the budget is back. The
- * sandbox kind offers "Start a new sandbox" and the daily kind has nothing to do but wait.
+ * sandbox kind offers "Start a new sandbox"; the daily kind links the recorded walkthrough.
  */
 function BudgetBanner({
   kind,
@@ -39,6 +40,8 @@ function BudgetBanner({
     <Banner
       message={
         <>
+          {/* No wrapper: "Write to HR" must sit beside the sentence's own text, which is what lets it
+              count as a link in a sentence (WCAG 2.5.8's inline exception). */}
           <Segments segments={linkifyEmergency(message)} />
           {writeToHr && (
             <>
@@ -46,6 +49,18 @@ function BudgetBanner({
               <Link to={writeToHr.to} className={APP_LINK}>
                 {writeToHr.label}
               </Link>
+            </>
+          )}
+          {/* ADR 0019: at the day's limit the demo offers the recorded walkthrough, on its own line
+              under the approved text. A new sandbox doesn't help then, so only the daily kind. */}
+          {kind === 'daily' && (
+            <>
+              {' '}
+              {/* 8 px above, so its 24 px target circle clears "Write to HR" on the line above
+                  with room to spare (WCAG 2.5.8). */}
+              <span className="mt-2 block">
+                <WalkthroughLink />
+              </span>
             </>
           )}
         </>

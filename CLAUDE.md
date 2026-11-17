@@ -176,6 +176,11 @@ the owner's explicit agreement first.
     case-summary set** (`make eval-live SET=case-summary YES=1`, about $0.75, cap $3), and the
     seeded summaries are copied from that run (`scripts/apply_seeded_summaries.py`).
   **A release gets the full run too**, unless the last one already covers everything it ships.
+- **The recorded walkthrough is recorded again when the guided tour or the assistant's model
+  changes** (`make walkthrough YES=1`, about $0.25 a take, cap $2). Try it free with `DRY_RUN=1`
+  first; the owner approves the video before `make walkthrough INSTALL=<take>` copies it into the
+  app. The paid live check of the production image is `make live-check YES=1` (about $0.25, cap $1;
+  it builds the image first; `DRY_RUN=1` is free).
 - **Model IDs are pinned.** A new model is adopted only after an eval comparison.
 - **No paid AI calls on push or PR.** CI replays recorded fixtures. A live eval is a local
   `make eval-live` run with a cap.
@@ -254,10 +259,19 @@ make eval-retrieval  score handbook search against the labeled questions (needs 
 make eval-offline  replay the recorded assistant evals (needs `make db`; no network)
 make eval-live  paid; smoke by default, `SET=full` or `SET=effort`, and `YES=1` to run
 make scoreboard  rebuild the README's scoreboard and apps/web/src/generated/scoreboard.json from the boards
+make cleanup    delete expired sandboxes, old spend rows and start counts, and unused handbook versions, as the cleanup login
 make dev        Postgres, migrations, API (:8000) and web app (:5173) together
-make check      everything CI runs; needs `make db` first
-make e2e        the browser tests (Playwright, Chromium) against the real API on :8100
-make proxy-check  the turn stream through a strict nginx (needs `make db` and Docker)
+make check      everything CI runs; needs `make db` first (and Docker: it builds the images)
+make e2e        the browser tests (Playwright, Chromium) against the real API on :8100 and the Vite preview
+make image      build the production image (open-door:prod) and its test variant with the gallery (open-door:test)
+make image-check  build and inspect both images: non-root, no secrets or tests, tzdata, no emSign root, headers
+make e2e-image  the browser tests against the test image on one origin, with the real CSP (what CI runs)
+make proxy-check  the turn stream through a strict nginx, the API in the test image (needs `make db` and Docker)
+make prod-local  the production image with production settings on its own empty database at :8300; any question asked is paid
+make prod-local-check  start prod-local, check the page and its CSP, and stop; asks the model nothing
+make load       the free cost and load test: the production image under a CPU and memory limit, simulated visitors on the scripted model
+make live-check  paid; the production image end to end with the real model, then its database rows (`YES=1`; `DRY_RUN=1` is free)
+make walkthrough  paid; record the walkthrough video and transcript with the live model (`YES=1`; `DRY_RUN=1` is free; `INSTALL=<take>` after approval)
 make captures   a local report of each design beside the build (needs `make db` and a network; not in CI)
 make openapi    after changing an API route: regenerate the schema and the web client
 make audit      scan for leaked secrets and vulnerable dependencies
@@ -265,7 +279,9 @@ make audit      scan for leaked secrets and vulnerable dependencies
 
 Run a single API test: `cd apps/api && uv run pytest tests/test_health.py -q`. Run a single web
 test: `cd apps/web && npx vitest run src/lib/api-fetch.test.ts`. Run a single browser test:
-`cd apps/web && npx playwright test e2e/session.spec.ts`. The first `make e2e` (and so the first
+`cd apps/web && npx playwright test e2e/session.spec.ts` (add `E2E_TARGET=image` to run it against
+the test image; `SKIP_BUILD=1` on `make image-check`, `make e2e-image`, `make proxy-check`, or
+`make prod-local` reuses the images already built). The first `make e2e` (and so the first
 `make check`) downloads Chromium, about 170 MB. The component gallery is at `/gallery` in
 development and never in a production build.
 

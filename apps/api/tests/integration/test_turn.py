@@ -11,6 +11,7 @@ import asyncio
 import contextlib
 import dataclasses
 import json
+import time
 from collections import Counter
 from collections.abc import AsyncIterator, Callable, Sequence
 from dataclasses import dataclass
@@ -39,6 +40,7 @@ from app.ai.conversations import (
 )
 from app.ai.embeddings import FakeEmbedder
 from app.ai.fixed_texts import (
+    BUDGET_CONVERSATION_TEXT,
     BUDGET_DAILY_TEXT,
     CRISIS_TEXT,
     ERROR_TEXTS,
@@ -506,7 +508,8 @@ async def test_a_crisis_ends_the_turn_with_fixed_text_and_never_calls_the_model(
         ("crisis", CRISIS_TEXT, True)
     ]
     assert [c.name for c in escalation[0].hr_contact] == ["Dana Whitfield"]
-    assert not of_type(events, TurnCompleted)
+    # The turn closes with a completion that names no model and counts no tokens.
+    assert [type(e) for e in events[-2:]] == [Escalation, TurnCompleted]
     assert not of_type(events, Error)
     assert env.transport.requests == []
     assert await env.messages() == []
@@ -1086,6 +1089,174 @@ async def test_a_sandbox_budget_that_cannot_afford_the_model_ends_the_turn(
     assert turn.guard_verdict is not None
 
 
+def costly_tool_plan() -> tuple[Plan, tuple[IterationUsage, ...]]:
+    """A search whose call costs real money (60,000 input tokens at Opus 5.5 prices: $0.26), so
+    the next call's reservation ($0.465) is large."""
+    expensive = Usage(60_000, 1_000, 0, 0)
+    costly = (IterationUsage(OPUS, expensive),)
+    plan = tool_use_plan(("search_handbook", {"query": SICK}), usage=expensive, iterations=costly)
+    return plan, costly
+
+
+# An earlier answer of 80,000 characters: about 40,000 tokens of stored history, which every call
+# of the next turn carries.
+LONG_ANSWER = "Sick leave. " * 6_667
+
+
+async def test_a_later_call_that_fits_only_without_the_history_says_start_a_new_conversation(
+    app_engine: AsyncEngine, seeded_sandbox: SeedCompany
+) -> None:
+    """A long earlier answer, then a question whose second call ($0.465 with the history, about
+    $0.26 without it) meets about $0.43 left of a $0.70 cap: only the conversation's size is the
+    problem, so the person is told to start a new conversation, in the owner-approved words."""
+    plan, costly = costly_tool_plan()
+    env = await make_env(
+        app_engine,
+        seeded_sandbox,
+        transport=PlanTransport(text_plan(LONG_ANSWER), plan),
+        caps=Caps(Decimal("0.70"), Decimal(1000)),
+    )
+    await env.ask()
+    events = await env.ask("And for part-time staff?")
+
+    assert events[-1] == Error("budget-conversation", BUDGET_CONVERSATION_TEXT)
+    assert ERROR_TEXTS["budget-conversation"] == BUDGET_CONVERSATION_TEXT
+    turn = await env.last_turn()
+    assert (turn.status, turn.error_code) == ("failed", "budget-conversation")
+    assert turn.cost_usd == turn_call_cost(costly)
+    # The next safety check is given the text the person saw.
+    await env.ask("And for my kids?")
+    assert BUDGET_CONVERSATION_TEXT in env.transport.guard_requests[-1].messages[0]["content"]
+
+
+async def test_a_later_call_is_not_sent_to_a_new_conversation_whose_first_question_would_not_fit(
+    app_engine: AsyncEngine, seeded_sandbox: SeedCompany, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The long-history case, but with a new conversation's first turn, as the question's 429
+    sizes it, costing more than is left: "start a new conversation" would only lead to that 429,
+    so the stop is the sandbox's."""
+    monkeypatch.setattr("app.ai.admission.room_needed_usd", lambda **_: Decimal("1.00"))
+    plan, _ = costly_tool_plan()
+    env = await make_env(
+        app_engine,
+        seeded_sandbox,
+        transport=PlanTransport(text_plan(LONG_ANSWER), plan),
+        caps=Caps(Decimal("0.70"), Decimal(1000)),
+    )
+    await env.ask()
+    events = await env.ask("And for part-time staff?")
+
+    assert events[-1] == Error("budget-sandbox", ERROR_TEXTS["budget-sandbox"])
+
+
+async def test_a_budget_read_that_never_answers_gives_the_plain_stop_within_its_bound(
+    app_engine: AsyncEngine, seeded_sandbox: SeedCompany, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The long-history case with the ledger's re-read hanging: the stop is not held for it. Past
+    the bound the person gets the plain sandbox text."""
+
+    async def hangs(*_: object) -> None:
+        await asyncio.sleep(3600)
+
+    monkeypatch.setattr("app.ai.turn.budget_state", hangs)
+    monkeypatch.setattr("app.ai.turn.BUDGET_LOOKUP_TIMEOUT", timedelta(seconds=0.2))
+    plan, _ = costly_tool_plan()
+    env = await make_env(
+        app_engine,
+        seeded_sandbox,
+        transport=PlanTransport(text_plan(LONG_ANSWER), plan),
+        caps=Caps(Decimal("0.70"), Decimal(1000)),
+    )
+    await env.ask()
+    started = time.monotonic()
+    events = await env.ask("And for part-time staff?")
+
+    assert events[-1] == Error("budget-sandbox", ERROR_TEXTS["budget-sandbox"])
+    assert time.monotonic() - started < 5
+
+
+async def test_a_later_call_that_its_own_tool_results_outgrow_is_the_sandboxs_stop(
+    app_engine: AsyncEngine, seeded_sandbox: SeedCompany
+) -> None:
+    """A short earlier turn and a $0.52 cap: the second call is refused, and without the short
+    history it still wouldn't fit (about $0.25 left), since this turn's own tool results make it
+    large. A new conversation would run the same calls, so the stop is the sandbox's."""
+    plan, _ = costly_tool_plan()
+    env = await make_env(
+        app_engine,
+        seeded_sandbox,
+        transport=PlanTransport(text_plan(), plan),
+        caps=Caps(Decimal("0.52"), Decimal(1000)),
+    )
+    await env.ask()
+    events = await env.ask("And for part-time staff?")
+
+    assert events[-1] == Error("budget-sandbox", ERROR_TEXTS["budget-sandbox"])
+    assert (await env.last_turn()).error_code == "budget-sandbox"
+
+
+async def test_a_first_question_that_its_own_calls_outgrow_is_the_sandboxs_stop(
+    app_engine: AsyncEngine, seeded_sandbox: SeedCompany
+) -> None:
+    """The same costs with no earlier turn and a $0.50 cap: the conversation holds only this
+    question, so a new one would run the same calls. The stop is the sandbox's."""
+    plan, costly = costly_tool_plan()
+    env = await make_env(
+        app_engine,
+        seeded_sandbox,
+        transport=PlanTransport(plan),
+        caps=Caps(Decimal("0.5"), Decimal(1000)),
+    )
+    events = await env.ask()
+
+    assert events[-1] == Error("budget-sandbox", ERROR_TEXTS["budget-sandbox"])
+    assert roles(await env.messages()) == ["user"]
+    turn = await env.last_turn()
+    assert (turn.status, turn.error_code) == ("failed", "budget-sandbox")
+    assert turn.cost_usd == turn_call_cost(costly)
+
+
+async def test_a_later_call_whose_new_conversation_would_not_fit_the_day_is_a_daily_stop(
+    app_engine: AsyncEngine, seeded_sandbox: SeedCompany, owner_engine: AsyncEngine
+) -> None:
+    """As the new-conversation case, but the day has about $0.23 left when the call is refused:
+    the call would fit the sandbox without the history ($0.26), not the day. The next question's
+    429 would name the day, so the stream does too, not the sandbox."""
+    plan, _ = costly_tool_plan()
+    today = await daily_sum(owner_engine)
+    env = await make_env(
+        app_engine,
+        seeded_sandbox,
+        transport=PlanTransport(text_plan(LONG_ANSWER), plan),
+        caps=Caps(Decimal("0.70"), today + Decimal("0.50")),
+    )
+    await env.ask()
+    events = await env.ask("And for part-time staff?")
+
+    assert events[-1] == Error("budget-daily", ERROR_TEXTS["budget-daily"])
+    assert (await env.last_turn()).error_code == "budget-daily"
+
+
+async def test_a_later_call_that_does_not_fit_in_the_day_stays_a_daily_stop(
+    app_engine: AsyncEngine, seeded_sandbox: SeedCompany, owner_engine: AsyncEngine
+) -> None:
+    expensive = Usage(60_000, 1_000, 0, 0)
+    costly = (IterationUsage(OPUS, expensive),)
+    plan = tool_use_plan(("search_handbook", {"query": SICK}), usage=expensive, iterations=costly)
+    today = await daily_sum(owner_engine)
+
+    env = await make_env(
+        app_engine,
+        seeded_sandbox,
+        transport=PlanTransport(plan),
+        caps=Caps(Decimal(1000), today + Decimal("0.5")),
+    )
+    events = await env.ask()
+
+    assert events[-1] == Error("budget-daily", ERROR_TEXTS["budget-daily"])
+    assert (await env.last_turn()).error_code == "budget-daily"
+
+
 async def test_a_day_that_is_used_up_says_so(
     app_engine: AsyncEngine, seeded_sandbox: SeedCompany, owner_engine: AsyncEngine
 ) -> None:
@@ -1101,8 +1272,9 @@ async def test_a_day_that_is_used_up_says_so(
 async def test_a_budget_that_runs_out_between_calls_stores_only_the_question(
     app_engine: AsyncEngine, seeded_sandbox: SeedCompany
 ) -> None:
-    # A first call that costs real money (60,000 input tokens at Opus 5.5 prices), so the second
-    # call's reservation no longer fits under the cap.
+    # A first call that costs real money (60,000 input tokens at Opus 5.5 prices: $0.26), so the
+    # second call's reservation ($0.465) no longer fits under the cap, and what is left ($0.14) is
+    # less than the same question needs in an empty conversation ($0.21): the sandbox is spent.
     expensive = Usage(60_000, 1_000, 0, 0)
     costly = (IterationUsage(OPUS, expensive),)
     plan = tool_use_plan(("search_handbook", {"query": SICK}), usage=expensive, iterations=costly)
@@ -1111,7 +1283,7 @@ async def test_a_budget_that_runs_out_between_calls_stores_only_the_question(
         app_engine,
         seeded_sandbox,
         transport=PlanTransport(plan),
-        caps=Caps(Decimal("0.5"), Decimal(1000)),
+        caps=Caps(Decimal("0.4"), Decimal(1000)),
     )
     events = await env.ask()
 
@@ -1771,10 +1943,10 @@ async def test_a_sensitive_turn_that_fails_still_routes_to_hr(
     env = await make_env(app_engine, seeded_sandbox, caps=limits)
     events = await env.ask(question)
 
-    assert [type(e) for e in events[-2:]] == [Error, Escalation]
-    assert isinstance(events[-2], Error)
-    assert events[-2].code == code
-    escalation = events[-1]
+    assert [type(e) for e in events[-2:]] == [Escalation, Error]
+    assert isinstance(events[-1], Error)
+    assert events[-1].code == code
+    escalation = events[-2]
     assert isinstance(escalation, Escalation)
     assert (escalation.kind, escalation.message) == ("sensitive", SENSITIVE_TEXT)
     # Whatever the ending, a sensitive verdict offers a case.
@@ -2101,9 +2273,9 @@ BUDGET_AUDIT = {"kind": "unavailable", "reason": "budget"}
 
 
 def assert_unscreened_escalation(events: list[TurnEvent]) -> None:
-    """A message the guard never read still gets 911, 988, and the HR contact, after the error."""
-    assert isinstance(events[-2], Error)
-    escalation = events[-1]
+    """A message the guard never read still gets 911, 988, and the HR contact, before the error."""
+    assert isinstance(events[-1], Error)
+    escalation = events[-2]
     assert isinstance(escalation, Escalation)
     assert (escalation.kind, escalation.message) == ("unavailable", UNAVAILABLE_TEXT)
     assert [c.name for c in escalation.hr_contact] == ["Dana Whitfield"]
@@ -2147,7 +2319,7 @@ async def test_a_database_error_reserving_for_the_guard_ends_internal_with_the_e
     env = await make_env(app_engine, seeded_sandbox)
     events = await env.ask()
 
-    assert events[-2] == Error("internal", ERROR_TEXTS["internal"])
+    assert events[-1] == Error("internal", ERROR_TEXTS["internal"])
     assert_unscreened_escalation(events)
     assert env.transport.requests == []
     turn = await env.last_turn()
@@ -2845,7 +3017,7 @@ async def test_an_unscreened_internal_failure_gives_the_next_guard_the_outage_te
     monkeypatch.setattr("app.ai.turn.reserve", flaky)
     env = await make_env(app_engine, seeded_sandbox)
     first = await env.ask("I want to hurt myself")
-    assert first[-2] == Error("internal", ERROR_TEXTS["internal"])
+    assert first[-1] == Error("internal", ERROR_TEXTS["internal"])
     assert (await env.last_turn()).error_code == "guard-error"
 
     await env.ask("yes, tonight")

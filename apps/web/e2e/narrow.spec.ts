@@ -1,5 +1,7 @@
-import { expect, test, type Page } from '@playwright/test'
-import { startAs } from './helpers'
+import { expect, test } from './fixtures'
+import type { Page } from '@playwright/test'
+import { galleryHeadingIds, galleryState, openGallery, startAs } from './helpers'
+import { reflowFindings } from './accessibility/checks'
 
 test.use({ viewport: { width: 390, height: 844 } })
 
@@ -101,5 +103,27 @@ test.describe('the assistant home at desktop width', () => {
     // The kit: 120 px padding, a 56 px greeting, a 36 px gap, and the sheet's 1 px border.
     expect(Math.abs(box!.y - sheet!.y - 213)).toBeLessThanOrEqual(1)
     expect(await scrollWidth(page)).toBeLessThanOrEqual(1440)
+  })
+})
+
+test.describe('at 320 px (WCAG 1.4.10, the accessibility audit)', () => {
+  test.use({ viewport: { width: 320, height: 640 } })
+
+  test('the component gallery fits a 320 px screen, and no state reaches past the window’s edge', async ({
+    page,
+  }) => {
+    // It checks every gallery state in turn: 18 to 27 seconds on a Mac, past the default 30 on
+    // CI's runner, where it timed out on dev after stage 8 and on stage 9's PR.
+    test.setTimeout(90_000)
+    await openGallery(page)
+    expect(await scrollWidth(page)).toBeLessThanOrEqual(320)
+    // The page sweep's reflow check (e2e/accessibility/checks.ts), state by state: content that
+    // scrolls in its own region inside the state (a table in its Scroller) doesn't count.
+    const past: string[] = []
+    for (const id of await galleryHeadingIds(page)) {
+      const found = await reflowFindings(page, galleryState(page, id))
+      if (found.length > 0) past.push(`${id}: ${found.join('; ')}`)
+    }
+    expect.soft(past, 'states past the edge').toEqual([])
   })
 })

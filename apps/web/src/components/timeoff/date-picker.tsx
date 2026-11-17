@@ -42,6 +42,9 @@ type DatePickerProps = {
   /** The legend's last line: why some days are struck through. */
   pastLabel: string
   onChange: (selection: DatePickerSelection) => void
+  /** Whether a range is half picked: its first day is chosen and its last is not. The picker
+   * reports false when it closes. */
+  onPickingChange?: (picking: boolean) => void
   /** Done or Escape. The parent closes the picker and returns focus to the Dates field. */
   onDone: () => void
   className?: string
@@ -81,6 +84,7 @@ function DatePicker({
   end,
   pastLabel,
   onChange,
+  onPickingChange,
   onDone,
   className,
 }: DatePickerProps) {
@@ -122,6 +126,10 @@ function DatePicker({
   // (the type switched from sick time to PTO), the start can't begin a range any more.
   if (picking && start !== undefined && start < minDate) setPicking(false)
   const inProgress = picking && start !== undefined && start >= minDate
+  useEffect(() => {
+    onPickingChange?.(inProgress)
+    return () => onPickingChange?.(false)
+  }, [inProgress, onPickingChange])
   const rangeEnd =
     inProgress && preview !== null && start !== undefined && preview > start ? preview : end
   const hasRange = start !== undefined && rangeEnd !== undefined && start !== rangeEnd

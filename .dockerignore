@@ -1,0 +1,27 @@
+# Keep secrets, tests, and build output out of the image (and out of the build context).
+.git
+.github
+**/.env
+**/.env.*
+**/.keys
+**/.import_linter_cache
+**/node_modules
+**/dist
+**/dist-e2e
+**/coverage
+**/.venv
+**/__pycache__
+**/*.pyc
+**/.mypy_cache
+**/.ruff_cache
+**/.pytest_cache
+**/*.tsbuildinfo
+apps/api/tests
+apps/web/e2e
+apps/web/playwright-report
+apps/web/test-results
+evals
+docs
+captures
+**/*.log
+.DS_Store

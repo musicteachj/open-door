@@ -29,6 +29,7 @@ from sqlalchemy import insert, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.encryption import KeyProvider
 from app.db.errors import constraint_name
 from app.db.models import TimeOffRequest
 from app.domain.timeoff.evaluate import (
@@ -45,6 +46,7 @@ from app.domain.timeoff.sick import SickYear, sick_years
 from app.domain.timeoff.today import today_at
 from app.modules.audit.service import record_event
 from app.modules.timeoff import queries
+from app.modules.timeoff.notes import seal_note
 from app.policy import Action, Actor, PersonResource, TimeOffRequestResource, can
 
 # The name of the exclusion constraint that refuses two open requests for the same days. Matched by
@@ -476,6 +478,7 @@ async def decide(
     note: str | None,
     now: datetime,
     *,
+    keys: KeyProvider,
     via: Via,
     proposal_id: UUID | None = None,
 ) -> Decided | Refused:
@@ -485,7 +488,8 @@ async def decide(
     a pending PTO request (else `status-changed`), may the actor decide it (else `not-allowed`:
     HR, a manager further up, the person themselves, or a sick record). It doesn't run the engine
     again: a pending request already counts against what is available, so approving it changes
-    nothing. A denial's note is kept on the request and never in the audit log.
+    nothing. A denial's note is kept on the request, sealed under a data key of its own (made here,
+    in the same UPDATE as the decision), and never in the audit log.
 
     A note on an approval, a note over 300 characters, a `decision` that isn't `approve` or `deny`,
     or a `now` without a timezone raises ValueError: the routes' schema and clock prevent them.
@@ -509,6 +513,8 @@ async def decide(
         return refused
 
     status: Literal["approved", "denied"] = "approved" if decision == "approve" else "denied"
+    # An approval with a note has already been refused; a blank note is none.
+    sealed = seal_note(keys, actor.tenant_id, request_id, note) if note else None
     changed = (
         await db.execute(
             update(TimeOffRequest)
@@ -517,8 +523,9 @@ async def decide(
                 status=status,
                 decided_by=actor.person_id,
                 decided_at=now,
-                # An approval with a note has already been refused; a blank note is none.
-                decision_note=note or None,
+                note_key_id=None if sealed is None else sealed.key_id,
+                note_wrapped_key=None if sealed is None else sealed.wrapped_key,
+                note_ciphertext=None if sealed is None else sealed.ciphertext,
             )
             .returning(TimeOffRequest.id)
         )

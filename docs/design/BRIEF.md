@@ -248,6 +248,12 @@ the design never needs a temporary version.
 15. **Guided tour.** The landing's "Take the 2-minute tour", coach marks with one-click prompts
     across the personas, and the end card.
 
+**Phase 8:**
+16. **The walkthrough.** A public page with the demo video (the guided tour recorded with the real
+    model), its recording date and model, and a step-by-step transcript; and the landing's two
+    additions: a line saying a quick Cloudflare check runs when a sandbox starts, and a link to the
+    walkthrough. The daily-limit banner links to it too.
+
 **Brand assets (any time):** logo (an open-door motif is an obvious start, but keep it subtle),
 favicon, and a social-share image.
 
@@ -348,6 +354,19 @@ design of screens 13 and 15 (screen 14 was dropped):
   coach mark points at a part of the page, with the step count, the text, a prompt chip, Back,
   Next, Skip, and Leave. If the live answer doesn't show what a step expected (a card, a panel),
   the step says what would have appeared and still offers Next.
+
+## Decisions from the Phase 8 planning (2026-11-05)
+
+The [Phase 8 spec](../specs/2026-11-05-phase-8-hardening-and-deploy-readiness.md) has the detail.
+For the design of screen 16:
+
+- **Replay mode is the recorded walkthrough** (ADR 0019): when today's demo AI limit is reached,
+  the banner keeps its approved text and adds "Watch the recorded walkthrough". The video is the
+  tour, recorded once with the real model; it never autoplays, and its transcript repeats every
+  step in text.
+- **A Cloudflare Turnstile check runs when a sandbox starts.** Most visitors see nothing; the rare
+  checkbox appears under the control they pressed. The refusals use the existing inline error.
+- **The page is public,** like the landing: no sign-in, no persona, and no app navigation.
 
 ---
 

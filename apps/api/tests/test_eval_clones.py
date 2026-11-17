@@ -263,7 +263,9 @@ def test_a_clone_has_a_copy_of_every_time_off_request_of_its_template() -> None:
                 "status",
                 "created_at",
                 "decided_at",
-                "decision_note",
+                "note_key_id",
+                "note_wrapped_key",
+                "note_ciphertext",
                 "canceled_at",
             ):
                 assert getattr(copy, field) == getattr(original, field), field
@@ -317,7 +319,8 @@ def test_a_run_resolves_the_clones_of_its_own_groups_file(tmp_path: Path) -> Non
 
     found = run.run_clones(run.EvalPaths(fairness=groups))
 
-    assert [spec.key for spec in found] == ["custom-clone-a"]
+    # The groups file's people, then the red-team file's (a person an item asks as).
+    assert [spec.key for spec in found] == ["custom-clone-a", "rt-person-robin"]
     assert {spec.key for spec in found}.isdisjoint(spec.key for spec in SPECS)
 
 
@@ -330,7 +333,10 @@ def test_a_run_without_a_groups_file_has_no_clones_and_never_reads_the_committed
     monkeypatch.setattr(run.datasets, "load_fairness", refuse)
     monkeypatch.setattr(run, "committed_clones", refuse)
 
-    assert run.run_clones(run.EvalPaths(fairness=None)) == ()
+    # No fairness file means no fairness clones; the red-team file's person is still wanted.
+    assert [spec.key for spec in run.run_clones(run.EvalPaths(fairness=None))] == [
+        "rt-person-robin"
+    ]
 
 
 async def test_the_runner_hands_its_clones_to_the_sandbox(monkeypatch: pytest.MonkeyPatch) -> None:

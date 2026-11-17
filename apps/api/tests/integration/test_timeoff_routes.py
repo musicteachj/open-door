@@ -24,7 +24,7 @@ from app.api import deps
 from app.db.models import Person, TimeOffRequest
 from app.db.tenancy import TenantContext, tenant_session
 from app.domain.holidays import holidays_for
-from app.domain.timeoff.evaluate import SICK_WINDOW_DAYS
+from app.domain.timeoff.evaluate import SHORT_NOTICE_DAYS, SICK_WINDOW_DAYS
 from app.domain.timeoff.labels import label
 from app.domain.timeoff.model import HALF_DAY_MINUTES
 from app.domain.timeoff.today import today_at
@@ -41,6 +41,7 @@ from tests.integration.conftest import (
     MakeTenant,
     OpenBrowser,
     audit_events,
+    sealed_note_columns,
 )
 
 pytestmark = pytest.mark.integration
@@ -143,7 +144,7 @@ class World:
             "created_via": "ui",
             "decided_by": decider if decided else None,
             "decided_at": (decided_at or self.now) if decided else None,
-            "decision_note": note if status == "denied" else None,
+            **sealed_note_columns(self.tenant_id, request_id, note if status == "denied" else None),
             "canceled_at": self.now if status == "canceled" else None,
         }
         if created_at is not None:
@@ -278,7 +279,8 @@ async def test_a_write_without_the_csrf_header_is_forbidden_and_writes_nothing(
 ) -> None:
     world = start("priya")
 
-    response = world.browser.client.post(BASE + path, json=body)
+    with world.browser.without_csrf():
+        response = world.browser.client.post(BASE + path, json=body)
 
     assert problem_of(response, 403)["detail"] == "The CSRF token is missing or wrong."
     assert await world.timeoff_events() == []
@@ -1905,18 +1907,16 @@ async def test_a_sick_check_across_new_year_has_one_draw_per_year(start: StartWo
 async def test_short_notice_is_a_warning_not_a_problem(start: StartWorld) -> None:
     world = start("priya")
     await world.fund("priya")
+    # Under 14 days away (at most 8) whatever today is, and Monday to the next Wednesday: eight
+    # weekdays, so more than three are counted even in a week with two holidays (Thanksgiving's).
+    # Stepping a week past a holiday instead would start 15 days out in the week before it.
     monday = monday_on_or_after(world.today + timedelta(days=2))
-    holidays = oakland_holidays(monday.year, monday.year + 1)
-    while any(monday + timedelta(days=n) in holidays for n in range(4)):
-        monday += timedelta(days=7)
+    wednesday = monday + timedelta(days=9)
+    assert (monday - world.today).days < SHORT_NOTICE_DAYS
 
     body = world.post(
         "/check",
-        {
-            "type": "pto",
-            "startDate": monday.isoformat(),
-            "endDate": (monday + timedelta(days=3)).isoformat(),
-        },
+        {"type": "pto", "startDate": monday.isoformat(), "endDate": wednesday.isoformat()},
     ).json()
 
     assert body["warnings"] == ["short-notice"]

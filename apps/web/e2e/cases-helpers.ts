@@ -38,7 +38,12 @@ export const myCaseRows = (page: Page) => page.locator('[data-slot="case-list"] 
 /** The cases the signed-in person sent, as the API reports them. */
 export function myCasesFromApi(page: Page) {
   return page.evaluate(async () => {
-    const response = await fetch('/api/v1/cases/mine')
+    const csrf = {
+      headers: {
+        'X-CSRF-Token': /(?:^|; )__Host-od_csrf=([^;]*)/.exec(document.cookie)?.[1] ?? '',
+      },
+    }
+    const response = await fetch('/api/v1/cases/mine', csrf)
     return ((await response.json()) as { items: { id: string; status: string }[] }).items
   })
 }

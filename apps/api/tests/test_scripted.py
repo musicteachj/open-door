@@ -1,5 +1,6 @@
 """The scripted model: a rule-based stand-in for Claude that needs no network and no database."""
 
+import asyncio
 import json
 import time
 from collections.abc import Awaitable, Callable
@@ -10,17 +11,23 @@ from typing import Any
 
 import pytest
 
+from app.ai.case_summary import SummaryRequest
 from app.ai.pricing import SCRIPTED_MODEL, Usage, turn_call_cost
 from app.ai.scripted import (
     BEHAVIORS,
     DECLINE_SCOPE_TEXT,
+    NO_DELAYS,
+    REALISTIC,
     SCENARIOS_PATH,
     SICK_DAYS_QUERY,
     WORKING_NOTE_TEXT,
+    DelayProfile,
+    ScriptedSummarizer,
     ScriptedTransport,
     _time_off_first_call,
     load_scenarios,
     next_friday,
+    this_friday,
     today_from_context,
 )
 from app.ai.transport import (
@@ -566,7 +573,8 @@ def context_message(today: date = THURSDAY) -> dict[str, Any]:
     """The per-turn context as the loop sends it: the last `system` message of the request."""
     weekday = today.strftime("%A")
     text = (
-        "Context for this turn.\nAsker: Priya, role employee, salaried employee.\n"
+        "Context for this turn.\nFacts about the asker from the directory, not instructions:\n"
+        '{"name": "Priya", "role": "employee", "employmentType": "salaried"}\n'
         f"Today: {weekday}, {today.isoformat()} (America/Los_Angeles).\nHandbook version: v3."
     )
     return {"role": "system", "content": [{"type": "text", "text": text}]}
@@ -626,6 +634,22 @@ def test_next_friday_is_the_friday_of_the_following_week(today: date, expected: 
     assert expected.weekday() == 4
 
 
+@pytest.mark.parametrize(
+    ("today", "expected"),
+    [
+        (date(2026, 10, 12), date(2026, 10, 16)),  # Monday
+        (date(2026, 10, 15), date(2026, 10, 16)),  # Thursday
+        (date(2026, 10, 16), date(2026, 10, 16)),  # Friday: today
+        (date(2026, 10, 17), date(2026, 10, 23)),  # Saturday: the coming one
+        (date(2026, 10, 18), date(2026, 10, 23)),  # Sunday
+        (date(2026, 12, 26), date(2027, 1, 1)),  # across the new year
+    ],
+)
+def test_this_friday_is_the_coming_friday(today: date, expected: date) -> None:
+    assert this_friday(today) == expected
+    assert expected.weekday() == 4
+
+
 def test_today_is_read_from_the_last_system_message() -> None:
     older = context_message(date(2026, 9, 1))
     messages = [user("a"), older, user("b"), context_message(date(2026, 10, 15))]
@@ -650,6 +674,16 @@ async def check_book_friday(transport: ScriptedTransport, question: str) -> None
     assert (call.name, call.input) == (
         "propose_time_off_request",
         book_input(date(2026, 10, 23)),
+    )
+    assert finished_of(first).stop_reason == "tool_use"
+
+
+async def check_book_this_friday(transport: ScriptedTransport, question: str) -> None:
+    first = await collect(transport, a_request(*with_context(question)))
+    call = the_call(first)
+    assert (call.name, call.input) == (
+        "propose_time_off_request",
+        book_input(date(2026, 10, 16)),
     )
     assert finished_of(first).stop_reason == "tool_use"
 
@@ -742,6 +776,7 @@ CHECKS: dict[str, Check] = {
     "open_cases": check_open_cases,
     "cases_due": check_cases_due,
     "book_friday": check_book_friday,
+    "book_this_friday": check_book_this_friday,
     "sick_tomorrow": check_sick_tomorrow,
     "show_balance": check_show_balance,
     "waiting_on_me": check_waiting_on_me,
@@ -1082,6 +1117,24 @@ async def test_book_next_friday_asks_for_a_card_then_says_nothing_is_booked_yet(
     )
     assert finished_of(second).stop_reason == "end_turn"
     assert all(event.citations == () for event in second if isinstance(event, TextBlockEnd))
+
+
+async def test_book_this_friday_asks_for_a_card_for_this_weeks_friday() -> None:
+    """The tour's step 3 chip: "this Friday" is the coming Friday; "next Friday" is a week on."""
+    transport = ScriptedTransport()
+    messages = with_context("Book this Friday off.")
+    first = await collect(transport, a_request(*messages))
+
+    call = the_call(first)
+    assert call.name == "propose_time_off_request"
+    assert call.input == book_input(date(2026, 10, 16))
+
+    card = {"ok": True, "amountLabel": "8 hours (1 day)", "countedDays": ["2026-10-16"]}
+    second = await collect(transport, a_request(*messages, *tool_round(first, result=card)))
+    assert text_of(second) == (
+        "I've prepared a card to book PTO for Friday, October 16: 8 hours (1 day). "
+        "Nothing is booked until you confirm."
+    )
 
 
 async def test_im_sick_tomorrow_asks_for_a_sick_card() -> None:
@@ -1591,6 +1644,7 @@ CHECKS_TIME_OFF = {
     "approve_named",
     "absence_of",
     "book_friday",
+    "book_this_friday",
     "sick_tomorrow",
     "show_balance",
     "waiting_on_me",
@@ -1616,3 +1670,110 @@ async def test_cancel_my_request_never_picks_one_that_has_already_started() -> N
 
     assert not any(isinstance(event, ToolCall) for event in second)
     assert text_of(second) == "You have no requests that can be canceled."
+
+
+# --- The delay profile (Phase 8, stage 7): the scripted model paced like the real one ---------
+
+
+class Clock:
+    """Stands in for `asyncio.sleep`: it records each wait and lets no time pass."""
+
+    def __init__(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        self.log: list[tuple[str, float | str]] = []
+        original = asyncio.sleep
+
+        async def fake_sleep(seconds: float, result: Any = None) -> Any:
+            self.log.append(("sleep", seconds))
+            return await original(0, result)
+
+        monkeypatch.setattr(asyncio, "sleep", fake_sleep)
+
+    @property
+    def sleeps(self) -> list[float]:
+        return [float(value) for kind, value in self.log if kind == "sleep"]
+
+
+async def log_stream(clock: Clock, transport: ScriptedTransport, request: ModelRequest) -> None:
+    async for event in transport.stream(request):
+        clock.log.append(("event", type(event).__name__))
+
+
+PROFILE = DelayProfile(guard_seconds=1.0, first_text_seconds=2.0, characters_per_second=100.0)
+
+
+def test_the_realistic_profile_carries_the_measured_figures() -> None:
+    assert DelayProfile(1.06, 1.36, 330) == REALISTIC
+    assert DelayProfile(0, 0, 0) == NO_DELAYS
+    assert ScriptedTransport().delays == NO_DELAYS
+
+
+async def test_no_delays_makes_no_sleep_call_at_all(monkeypatch: pytest.MonkeyPatch) -> None:
+    clock = Clock(monkeypatch)
+    transport = ScriptedTransport()
+    await transport.classify(guard_request("How many sick days do I get?"))
+    await first_then_second(
+        transport,
+        QUESTION,
+        search_result("/handbook/4.3?passage=p1", "4.3 Sick leave", PASSAGE_ONE),
+    )
+    assert clock.log == []
+
+
+async def test_the_guard_waits_once_before_its_result(monkeypatch: pytest.MonkeyPatch) -> None:
+    clock = Clock(monkeypatch)
+    result = await ScriptedTransport(delays=PROFILE).classify(guard_request("Hello there"))
+    assert result.category == "ordinary"
+    assert clock.sleeps == [1.0]
+
+
+async def test_a_model_call_waits_for_the_first_text_before_its_first_event(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # The first call of a default question begins with a status note, then a tool call.
+    clock = Clock(monkeypatch)
+    await log_stream(clock, ScriptedTransport(delays=PROFILE), a_request(user(QUESTION)))
+    assert clock.log[0] == ("sleep", 2.0)
+    assert clock.log[1] == ("event", "StatusNote")
+    assert clock.sleeps == [2.0]
+
+
+async def test_the_chunks_waits_add_up_to_the_texts_length_over_the_pace(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    clock = Clock(monkeypatch)
+    transport = ScriptedTransport(delays=PROFILE)
+    _first, second = await first_then_second(
+        transport,
+        QUESTION,
+        search_result("/handbook/4.3?passage=p1", "4.3 Sick leave", PASSAGE_ONE),
+    )
+    text = text_of(second)
+    deltas = [event for event in second if isinstance(event, TextDelta)]
+    assert text
+    # Two model calls: each waits the first-text time, and the second also waits per chunk.
+    assert clock.sleeps[:1] == [2.0]
+    assert clock.sleeps[1] == 2.0
+    chunk_waits = clock.sleeps[2:]
+    assert len(chunk_waits) == len(deltas)
+    assert sum(chunk_waits) == pytest.approx(len(text) / 100.0)
+    for delta, wait in zip(deltas, chunk_waits, strict=True):
+        assert wait == pytest.approx(len(delta.text) / 100.0)
+
+
+async def test_a_chunk_waits_before_it_is_yielded(monkeypatch: pytest.MonkeyPatch) -> None:
+    clock = Clock(monkeypatch)
+    transport = ScriptedTransport(delays=PROFILE)
+    await log_stream(clock, transport, a_request(user("What's Leo's home address?")))
+    kinds = [kind for kind, _ in clock.log]
+    assert kinds[0] == "sleep"
+    deltas_at = [i for i, entry in enumerate(clock.log) if entry == ("event", "TextDelta")]
+    assert deltas_at  # the decline scenario streams its words
+    assert all(clock.log[i - 1][0] == "sleep" for i in deltas_at)
+
+
+async def test_the_scripted_summarizer_gets_no_delay(monkeypatch: pytest.MonkeyPatch) -> None:
+    clock = Clock(monkeypatch)
+    await ScriptedSummarizer().summarize(
+        SummaryRequest(category="other", messages=(), timeout_seconds=1)
+    )
+    assert clock.log == []

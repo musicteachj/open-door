@@ -8,6 +8,7 @@ import { useStartSandbox } from '@/app/useStartSandbox'
 import { stubAbsoluteUrls } from '@/test/absolute-urls'
 import { meFor } from '@/test/fixtures'
 import { server } from '@/test/msw'
+import { turnstileFake } from '@/test/turnstile'
 import { resetIdentity } from '@/lib/identity'
 import { useTourStore } from '@/features/tour/store'
 import { useIdentityActions } from './use-identity-actions'
@@ -57,10 +58,31 @@ describe('the identity gate at call time', () => {
     let results: unknown[] = []
     act(() => {
       results = [result.current.actions.switchTo('marcus'), result.current.actions.switchTo('dana')]
-      result.current.start.mutate({ data: { persona: 'priya' } })
+      result.current.start.mutate({ data: { persona: 'priya' } }, null)
     })
     expect(results).toEqual([true, false])
     expect(queryClient.isMutating()).toBe(1)
+  })
+})
+
+describe('the identity gate while a start waits for its token', () => {
+  it('refuses a persona switch until the token has come and the start has finished', async () => {
+    let release: () => void = () => {}
+    turnstileFake.hold = new Promise<void>((resolve) => {
+      release = resolve
+    })
+    server.use(http.put(url('/api/v1/session/persona'), () => HttpResponse.json(meFor('marcus'))))
+    const { result } = setup()
+    act(() =>
+      result.current.start.mutate({ data: { persona: 'priya' } }, document.createElement('div')),
+    )
+    let started: boolean | undefined
+    act(() => {
+      started = result.current.actions.switchTo('marcus')
+    })
+    expect(started).toBe(false)
+    release()
+    await waitFor(() => expect(result.current.start.isPending).toBe(false))
   })
 })
 
@@ -146,7 +168,7 @@ describe('a switch, a sign out, and a sandbox start never overlap', () => {
     const { result } = setup()
     act(() => result.current.actions.switchTo('marcus', { tour: true }))
     await waitFor(() => expect(result.current.actions.busyLabel).toBeDefined())
-    act(() => result.current.start.mutate({ data: { persona: 'priya' } }))
+    act(() => result.current.start.mutate({ data: { persona: 'priya' } }, null))
     await new Promise((resolve) => setTimeout(resolve, 50))
     expect(created.seen).toEqual([])
     expect(result.current.start.isPending).toBe(false)
@@ -163,7 +185,7 @@ describe('a switch, a sign out, and a sandbox start never overlap', () => {
       'post',
     )
     const { result } = setup()
-    act(() => result.current.start.mutate({ data: { persona: 'priya' } }))
+    act(() => result.current.start.mutate({ data: { persona: 'priya' } }, null))
     await waitFor(() => expect(created.seen).toHaveLength(1))
     await waitFor(() => expect(result.current.actions.busyLabel).toBe('Starting a new sandbox…'))
     act(() => result.current.actions.switchTo('marcus'))
@@ -181,7 +203,7 @@ describe('a switch, a sign out, and a sandbox start never overlap', () => {
       'post',
     )
     const { result } = setup()
-    act(() => result.current.start.mutate({ data: { persona: 'priya' } }))
+    act(() => result.current.start.mutate({ data: { persona: 'priya' } }, null))
     await waitFor(() => expect(created.seen).toHaveLength(1))
     await waitFor(() => expect(result.current.actions.busyLabel).toBe('Starting a new sandbox…'))
     act(() => result.current.actions.signOut())
@@ -215,10 +237,10 @@ describe('a switch, a sign out, and a sandbox start never overlap', () => {
     act(() => result.current.actions.signOut())
     await waitFor(() => expect(out.seen).toHaveLength(1))
     await waitFor(() => expect(result.current.actions.busyLabel).toBe('Signing out…'))
-    await expect(result.current.start.mutateAsync({ data: { persona: 'priya' } })).rejects.toThrow(
-      'identity change',
-    )
-    act(() => result.current.start.mutate({ data: { persona: 'priya' } }))
+    await expect(
+      result.current.start.mutateAsync({ data: { persona: 'priya' } }, null),
+    ).rejects.toThrow('identity change')
+    act(() => result.current.start.mutate({ data: { persona: 'priya' } }, null))
     await new Promise((resolve) => setTimeout(resolve, 50))
     expect(created.seen).toEqual([])
     out.release()

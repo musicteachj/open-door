@@ -204,7 +204,10 @@ class RequestRow:
     proposal_id: UUID | None
     decided_by: UUID | None
     decided_at: datetime | None
-    decision_note: str | None
+    # A seeded request is never denied with a note, so the sealed note columns are always null.
+    note_key_id: None
+    note_wrapped_key: None
+    note_ciphertext: None
     canceled_at: datetime | None
 
 
@@ -832,7 +835,9 @@ class _History:
             proposal_id=None,
             decided_by=decided_by,
             decided_at=decided_at,
-            decision_note=None,
+            note_key_id=None,
+            note_wrapped_key=None,
+            note_ciphertext=None,
             canceled_at=None,
         )
 

@@ -96,6 +96,18 @@ function PassagePanel({
       ? `Handbook ${sectionId}`
       : `Handbook ${number} · ${groupName}`
   const contextClass = 'mb-4 text-body text-ink-muted'
+  // Close sits in the header's top corner but comes after the title in the page (screen 07's
+  // notes): focus lands on the title, then Tab reaches Close, the passage, and "Open in handbook".
+  const close = (
+    <button
+      type="button"
+      aria-label={handbookCopy.closePassage}
+      onClick={onClose}
+      className="absolute top-3.5 right-3.5 flex size-8 cursor-pointer items-center justify-center rounded-sm text-ink-muted transition-colors hover:bg-neutral-hover hover:text-ink"
+    >
+      <X aria-hidden="true" className="size-4" />
+    </button>
+  )
 
   return (
     <Root
@@ -104,34 +116,29 @@ function PassagePanel({
       aria-busy={state === 'loading'}
       className={cn('flex h-full min-h-0 flex-col bg-surface-raised text-ink', className)}
     >
-      <header className="flex flex-none flex-col gap-1.5 border-b border-border-subtle py-3.5 pr-3.5 pb-[18px] pl-6">
-        <div className="flex items-center justify-between gap-3">
+      <header className="relative flex flex-none flex-col gap-1.5 border-b border-border-subtle py-3.5 pr-3.5 pb-[18px] pl-6">
+        {/* The eyebrow's row keeps the button's height and leaves its corner free. */}
+        <div className="flex min-h-8 items-center pr-11">
           <span className="inline-flex min-w-0 items-center gap-2 text-small text-ink-muted">
             <BookOpen aria-hidden="true" className="size-3.5 shrink-0" />
             {eyebrow}
           </span>
-          <button
-            type="button"
-            aria-label={handbookCopy.closePassage}
-            onClick={onClose}
-            className="flex size-8 shrink-0 cursor-pointer items-center justify-center rounded-sm text-ink-muted transition-colors hover:bg-neutral-hover hover:text-ink"
-          >
-            <X aria-hidden="true" className="size-4" />
-          </button>
         </div>
         {hasView && (
-          <>
-            <Title ref={titleRef} tabIndex={-1} className="m-0 text-h2 font-semibold outline-none">
-              {view.section.title}
-            </Title>
-            <div className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-2">
-              <ApplicabilityBadge label={view.section.audienceLabel} />
-              <AppliesMarker applies={view.section.appliesToMe} />
-              <LastUpdated date={view.section.lastUpdated} />
-            </div>
-          </>
+          <Title ref={titleRef} tabIndex={-1} className="m-0 text-h2 font-semibold outline-none">
+            {view.section.title}
+          </Title>
         )}
         {!hasView && titleAs !== undefined && <Title className="sr-only">{eyebrow}</Title>}
+        {/* One place in every state, so a focused Close stays the same button when the state changes. */}
+        {close}
+        {hasView && (
+          <div className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-2">
+            <ApplicabilityBadge label={view.section.audienceLabel} />
+            <AppliesMarker applies={view.section.appliesToMe} />
+            <LastUpdated date={view.section.lastUpdated} />
+          </div>
+        )}
         {state === 'loading' && (
           <>
             <Skeleton className="my-1 h-5 w-40" />

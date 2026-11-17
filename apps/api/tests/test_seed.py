@@ -522,7 +522,7 @@ def assert_the_time_off_seed_is_sound(company: SeedCompany) -> None:
             assert len(counted) >= 1, who
             assert row.amount_minutes == (row.partial_minutes or 480 * len(counted)), who
             assert (row.created_via, row.proposal_id) == ("ui", None)
-            assert (row.decision_note, row.canceled_at) == (None, None)
+            assert (row.note_ciphertext, row.canceled_at) == (None, None)
             if row.status != "pending":
                 assert row.end_date <= day_before, who
             if row != last_week:
@@ -637,7 +637,7 @@ def test_marcuss_queue_holds_one_pending_request_from_zara_about_three_weeks_out
     # Zara works Tuesday to Saturday: two scheduled days in a row, three weeks after the anchor.
     assert timedelta(days=21) <= row.start_date - ANCHOR <= timedelta(days=28)
     assert row.end_date == row.start_date + timedelta(days=1)
-    assert (row.decided_by, row.decided_at, row.decision_note, row.canceled_at) == (
+    assert (row.decided_by, row.decided_at, row.note_ciphertext, row.canceled_at) == (
         None,
         None,
         None,

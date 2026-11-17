@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test'
+import { expect, test } from './fixtures'
 import { startAs } from './helpers'
 
 // At 1440 px the directory and a profile take the sheet's full width: the right rail belongs to

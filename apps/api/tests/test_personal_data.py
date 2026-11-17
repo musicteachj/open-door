@@ -39,3 +39,9 @@ def test_the_check_never_logs_the_text(caplog: pytest.LogCaptureFixture) -> None
     with caplog.at_level("DEBUG"):
         kind_of_personal_data("123-45-6789 and 4111111111111111")
     assert caplog.records == []
+
+
+def test_digits_of_any_script_read_as_ascii() -> None:
+    from app.ai.personal_data import normalized
+
+    assert normalized("\u0660\u0669 \u06f5 \u0966\u096f \U0001d7d8\U0001d7ff") == "09 5 09 09"

@@ -1,4 +1,5 @@
-import { expect, test, type Page } from '@playwright/test'
+import { expect, test } from './fixtures'
+import type { Page } from '@playwright/test'
 import { GALLERY_STATE_IDS } from './gallery-ids'
 import {
   MODAL_OVERLAY_RULES,
@@ -80,7 +81,7 @@ test('the live coach mark has no violations open, with Next and with the missing
   await startDemo(page)
   const selector = 'section[aria-labelledby="tour-live"]'
   expect((await scan(page, [], [selector])).violations).toEqual([])
-  await coachMark(page).getByRole('button', { name: 'Book next Friday off.' }).click()
+  await coachMark(page).getByRole('button', { name: 'Book this Friday off.' }).click()
   await expect(coachMark(page).getByRole('status')).toBeVisible()
   await expect(coachMark(page).getByRole('button', { name: 'Next', exact: true })).toBeVisible()
   expect((await scan(page, [], [selector])).violations).toEqual([])
@@ -97,7 +98,7 @@ test('the title takes focus on open; Tab reaches the chip, Back, then Skip and N
   await page.keyboard.press('Shift+Tab')
   await expect(card.getByRole('button', { name: 'Leave the tour' })).toBeFocused()
   await page.keyboard.press('Tab')
-  const chip = card.getByRole('button', { name: 'Book next Friday off.' })
+  const chip = card.getByRole('button', { name: 'Book this Friday off.' })
   await expect(chip).toBeFocused()
   await page.keyboard.press('Tab')
   await expect(card.getByRole('button', { name: 'Back' })).toBeFocused()
@@ -107,7 +108,7 @@ test('the title takes focus on open; Tab reaches the chip, Back, then Skip and N
   await chip.focus()
   await page.keyboard.press('Enter')
   // Sent: still focusable, named "…, sent", and pressing it again does nothing.
-  const sent = card.getByRole('button', { name: /^Book next Friday off\.\s?, sent$/ })
+  const sent = card.getByRole('button', { name: /^Book this Friday off\.\s?, sent$/ })
   await expect(sent).toHaveAttribute('aria-disabled', 'true')
   await expect(sent).toBeFocused()
   await expect(card.getByRole('button', { name: 'Next', exact: true })).toBeVisible()
@@ -154,7 +155,7 @@ test('the card sits clear of the fake composer, and the ring is around its targe
   expect(ring.x).toBeCloseTo(composer.x - 4, 0)
   expect(ring.y).toBeCloseTo(composer.y - 4, 0)
 
-  await coachMark(page).getByRole('button', { name: 'Book next Friday off.' }).click()
+  await coachMark(page).getByRole('button', { name: 'Book this Friday off.' }).click()
   const confirm = live(page).getByRole('button', { name: 'Confirm' })
   await expect(confirm).toBeVisible()
   await expect(coachMark(page).getByRole('button', { name: 'Next', exact: true })).toBeVisible()
@@ -186,7 +187,7 @@ test('with the missing line on, the card shows it as a status and goes on to Nex
 }) => {
   await live(page).getByRole('button', { name: 'Show the missing line' }).click()
   await startDemo(page)
-  await coachMark(page).getByRole('button', { name: 'Book next Friday off.' }).click()
+  await coachMark(page).getByRole('button', { name: 'Book this Friday off.' }).click()
   await expect(coachMark(page).getByRole('status')).toContainText('It didn’t this time')
   await expect(live(page).getByRole('button', { name: 'Confirm' })).toHaveCount(0)
   await expect(coachMark(page).getByRole('button', { name: 'Next', exact: true })).toBeVisible()
@@ -195,7 +196,7 @@ test('with the missing line on, the card shows it as a status and goes on to Nex
 test('with reduced motion, nothing in the tour has a transition or animation', async ({ page }) => {
   await page.emulateMedia({ reducedMotion: 'reduce' })
   await startDemo(page)
-  await coachMark(page).getByRole('button', { name: 'Book next Friday off.' }).click()
+  await coachMark(page).getByRole('button', { name: 'Book this Friday off.' }).click()
   await expect(coachMark(page).getByRole('button', { name: 'Next', exact: true })).toBeVisible()
   const moving = await page.evaluate(() => {
     const seconds = (value: string) =>
@@ -239,7 +240,7 @@ test.describe('at 390 px', () => {
     // The ring stays on the target.
     await expect(live(page).locator('[data-slot="tour-ring"]')).toBeVisible()
 
-    await coachMark(page).getByRole('button', { name: 'Book next Friday off.' }).click()
+    await coachMark(page).getByRole('button', { name: 'Book this Friday off.' }).click()
     const confirm = live(page).getByRole('button', { name: 'Confirm' })
     await expect(confirm).toBeVisible()
     await expect

@@ -5,6 +5,13 @@ import type { CaseFormProps } from '@/components/cases/case-form'
 import { ApiError } from '@/lib/api-fetch'
 import { invalidateAfterSend } from './invalidate'
 
+/**
+ * The 422s and 404s a retry can't change (`about:blank` is the API's own validation 422). A 422
+ * that isn't the API's problem (a proxy's page) keeps "Try again".
+ */
+const CANNOT_SEND_422: ReadonlySet<string> = new Set(['about:blank', 'case-invalid'])
+const CANNOT_SEND_404: ReadonlySet<string> = new Set(['case-turn-not-found', 'case-not-found'])
+
 type Input = Parameters<CaseFormProps['onSend']>[0]
 
 type Options = {
@@ -19,6 +26,11 @@ type Options = {
    * its answer was lost). The form should close, and the data read again shows the case.
    */
   onAlreadySent: () => void
+  /**
+   * The server refused the form or the message in a way a retry cannot change (an invalid form,
+   * a turn that can't start a case, a case that is not found). The form should close and say so.
+   */
+  onCannotSend: () => void
 }
 
 /**
@@ -28,16 +40,17 @@ type Options = {
  * the conversation are read again (without holding the send pending); the server's answer is never written into the cache.
  *
  * What went wrong is told to the form: the server's own refusals of the words (`refusal`), the
- * waiting limit (`onLimit`), a send the server already holds (`onAlreadySent`), and everything else as `sendFailed`, which keeps the words and offers
+ * waiting limit (`onLimit`), a send the server already holds (`onAlreadySent`), a refusal no retry
+ * can fix (`onCannotSend`), and everything else as `sendFailed`, which keeps the words and offers
  * "Try again". The callbacks are on the mutation hook, not on each `mutate`, so they still run if
  * the form's component is swapped out while the request is out (the live turn settling).
  */
-export function useSendCase({ turnId, onSent, onLimit, onAlreadySent }: Options) {
+export function useSendCase({ turnId, onSent, onLimit, onAlreadySent, onCannotSend }: Options) {
   const queryClient = useQueryClient()
   const busy = useRef(false)
-  const latest = useRef({ onSent, onLimit, onAlreadySent })
+  const latest = useRef({ onSent, onLimit, onAlreadySent, onCannotSend })
   useLayoutEffect(() => {
-    latest.current = { onSent, onLimit, onAlreadySent }
+    latest.current = { onSent, onLimit, onAlreadySent, onCannotSend }
   })
   const [sendFailed, setSendFailed] = useState(false)
   const [refusal, setRefusal] = useState<CaseFormProps['refusal']>(null)
@@ -68,6 +81,20 @@ export function useSendCase({ turnId, onSent, onLimit, onAlreadySent }: Options)
           }
           if (error.status === 422 && type === 'case-empty-words') {
             setRefusal('empty')
+            return
+          }
+          // The server's own words for the box, so the person can shorten them and send again.
+          if (error.status === 422 && type === 'case-words-too-long' && error.problem?.detail) {
+            setRefusal({ kind: 'too-long', message: error.problem.detail })
+            return
+          }
+          // Refusals a retry can't change: the generic validation 422 (`about:blank`), an invalid
+          // form, a turn that can't start a case, or a case that isn't found.
+          if (
+            (error.status === 422 && CANNOT_SEND_422.has(type ?? '')) ||
+            (error.status === 404 && CANNOT_SEND_404.has(type ?? ''))
+          ) {
+            latest.current.onCannotSend()
             return
           }
         }

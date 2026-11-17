@@ -23,6 +23,19 @@ export class ApiError extends Error {
   }
 }
 
+/** The problem type of the API's CSRF refusal (a 403 that is not a permission denial). */
+export const CSRF_REJECTED = 'csrf-rejected'
+
+/**
+ * Whether `error` means nobody is signed in: a 401, or the CSRF refusal (the session cookie is
+ * there but the CSRF cookie is gone, so every call fails until a sandbox start sets both again).
+ * Any other 403 is a permission denial and stays one.
+ */
+export function isSignedOutError(error: unknown): boolean {
+  if (!(error instanceof ApiError)) return false
+  return error.status === 401 || (error.status === 403 && error.problem?.type === CSRF_REJECTED)
+}
+
 /** Orval's mutator convention: every generated hook's `error` is an `ApiError`. */
 export type ErrorType<_Error> = ApiError
 

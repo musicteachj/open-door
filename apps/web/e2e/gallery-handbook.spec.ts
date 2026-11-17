@@ -1,5 +1,6 @@
 import AxeBuilder from '@axe-core/playwright'
-import { expect, test, type Page } from '@playwright/test'
+import { expect, test } from './fixtures'
+import type { Page } from '@playwright/test'
 import { GALLERY_STATE_IDS } from './gallery-ids'
 import { AXE_TAGS, focusRing, themeColor } from './helpers'
 
@@ -141,8 +142,12 @@ test.describe('the passage panel', () => {
     await expect(panel(page).getByRole('heading', { name: 'Sick leave' })).toBeFocused()
   })
 
-  test('Tab reaches the body and "Open in handbook", then leaves the panel', async ({ page }) => {
-    // The close button comes before the title in the page, so Tab from the title goes on to the body.
+  test('Tab reaches Close, the body, and "Open in handbook", then leaves the panel', async ({
+    page,
+  }) => {
+    // Screen 07's order: Close comes after the title in the page, though it sits in the corner.
+    await page.keyboard.press('Tab')
+    await expect(panel(page).getByRole('button', { name: 'Close passage' })).toBeFocused()
     await page.keyboard.press('Tab')
     await expect(panel(page).getByLabel('Passage text')).toBeFocused()
     await page.keyboard.press('Tab')

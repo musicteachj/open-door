@@ -1,9 +1,9 @@
 """The assistant: the current conversation, a new one, feedback on an answer, and the turn stream.
 
-Every route needs a session, and the routes that change something need the CSRF token and the
-same-origin check like every other. Whose data is read comes only from the session (invariant 1):
-Postgres shows a person only their own conversations and turns, so another person's IDs are a 404
-here, never a 403, and an ID can't be probed.
+Every route needs a session and the CSRF token, on any method, and the routes that change something
+need the same-origin check like every other. Whose data is read comes only from the session
+(invariant 1): Postgres shows a person only their own conversations and turns, so another
+person's IDs are a 404 here, never a 403, and an ID can't be probed.
 
 **The stream's checks run before it opens**, each a problem response and not an event, in the
 spec's order: the conversation (404), its pins (409 `conversation-outdated`), the question (422, and
@@ -19,6 +19,7 @@ import contextlib
 from collections.abc import AsyncIterator, Awaitable, Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from functools import partial
 from typing import Annotated, Any
 from uuid import UUID
 
@@ -33,39 +34,41 @@ from app.ai.admission import (
     HISTORY_REFUSE_TOKENS,
     SMALLEST_QUESTION,
     history_tokens,
+    refusal_scope,
     room_needed_usd,
-    scope_without_room,
-    short_scopes,
+    room_scopes,
+    seconds_until_next_utc_day,
 )
 from app.ai.budget import Caps, budget_state
 from app.ai.context import ActorView, actor_view
 from app.ai.conversations import (
     CURRENT_PINS,
     ConversationCipher,
+    ConversationUnreadable,
     FeedbackGiven,
+    OpenedConversation,
     TurnNotCompleted,
     TurnNotFound,
     TurnRunning,
     add_feedback,
     conversation_cipher,
     conversation_is_outdated,
-    conversation_turns,
     create_conversation,
     current_conversation,
     has_running_turn,
     model_history,
-    open_reason,
-    open_turn,
+    open_conversation,
     section_names,
-    turn_feedback,
 )
 from app.ai.embeddings import Embedder, for_sandbox
 from app.ai.fixed_texts import (
+    BUDGET_CONVERSATION_TEXT,
     BUDGET_DAILY_TEXT,
     BUDGET_SANDBOX_TEXT,
     ERROR_TEXTS,
     PERSONAL_DATA_TEXT,
     STILL_ANSWERING_TEXT,
+    UNREADABLE_CONVERSATION_TEXT,
     hr_contact,
 )
 from app.ai.guard import verdict_is_flagged
@@ -103,12 +106,17 @@ from app.api.deps import (
 )
 from app.api.problems import problem_responses
 from app.core.config import Settings
-from app.core.encryption import KeyProvider
+from app.core.encryption import DecryptionFailed, KeyProvider
 from app.core.problems import ProblemError, problem_response
-from app.db.models import AiConversation, HandbookVersion
+from app.db.models import AiConversation, AiTurn, HandbookVersion
 from app.db.tenancy import TenantContext, set_is_hr, tenant_session
 from app.domain.handbook.applicability import Asker
-from app.modules.assistant.display import needs_hr_contact, shown, turn_out
+from app.modules.assistant.display import (
+    kept_escalation_out,
+    needs_hr_contact,
+    shown,
+    turn_out,
+)
 from app.modules.assistant.schemas import (
     AssistantTextsOut,
     BudgetBannerOut,
@@ -226,7 +234,7 @@ async def load_asker_context(db: AsyncSession, signed_in: SignedIn | Caller) -> 
 def budget_banner(*, sandbox_reached: bool, daily_reached: bool) -> BudgetBannerOut | None:
     """The fixed text for the cap that stops the person. The day's wins when both are reached:
     a new sandbox would not help then, and the sandbox text's only offer is a new one. The POST's
-    429 (`scope_without_room`) names the sandbox first, but no 429 shows beside this banner: with
+    429 (`refusal_scope`) names the sandbox first, but no 429 shows beside this banner: with
     either cap reached the composer is disabled, and a new sandbox doesn't lift the daily cap."""
     if daily_reached:
         return BudgetBannerOut(kind="daily", message=BUDGET_DAILY_TEXT)
@@ -256,17 +264,23 @@ async def budget_out(
     # a size estimate, and the question itself is refused (404) when a turn needs the version.
     pinned = await pinned_version(db)
     label = "" if pinned is None else pinned[1]
-    needed = room_needed_usd(
+    needed_for = partial(
+        room_needed_usd,
         model=model,
         guard_model=guard_model,
         effort=effort,
-        history=history,
         question=SMALLEST_QUESTION,
         actor_view=view,
         handbook_label=label or "",
         now=now,
     )
-    sandbox_short, daily_short = short_scopes(state, needed)
+    needed = needed_for(history=history)
+    # The question's own rule (`refusal_scope`), so the banner and the 429 never disagree: a
+    # sandbox short only because of this conversation's history is not at its cap, and the page
+    # offers a new conversation (from the 429), not the sandbox text.
+    sandbox_short, daily_short = room_scopes(
+        state, needed, (lambda: needed_for(history=[])) if history else (lambda: needed)
+    )
     return BudgetOut(
         sandbox_reached=sandbox_short,
         daily_reached=daily_short,
@@ -283,9 +297,73 @@ async def conversation_out(
     now: datetime,
     keys: KeyProvider,
 ) -> ConversationOut:
-    cipher = conversation_cipher(keys, conversation)
-    turns = await conversation_turns(db, conversation.id)
-    feedback = await turn_feedback(db, conversation.id)
+    """The conversation as the page shows it. If any of its stored text does not open (the key, a
+    turn, a feedback reason, or the history), it is returned as `unreadable` with no turns and
+    `history_too_long`, so the page offers a new conversation: a read never fails with a 500 for
+    it. One warning line names the conversation (and the turn, if one was being opened), never any
+    text."""
+    try:
+        opened = await open_conversation(db, keys, conversation)
+    except ConversationUnreadable:
+        return await _unreadable_conversation_out(db, signed_in, conversation, caps, now)
+    return await _readable_conversation_out(
+        db, signed_in, conversation, caps, now, keys, contents=opened
+    )
+
+
+async def _unreadable_conversation_out(
+    db: AsyncSession,
+    signed_in: SignedIn,
+    conversation: AiConversation,
+    caps: Caps,
+    now: datetime,
+) -> ConversationOut:
+    """`conversation_out` for a conversation that did not open: no turns, and a new one offered."""
+    # The budget is sized for a conversation that is too long to continue: the smallest next
+    # question, and no history to add (the stored history can't be read).
+    budget = await budget_out(
+        db,
+        signed_in,
+        caps,
+        now,
+        model=conversation.model,
+        guard_model=conversation.guard_model,
+        effort=conversation.effort,
+        history=[],
+    )
+    # The readable view's own rule (`shown`, on the database's clock), from columns the key doesn't
+    # guard: a turn's status, error code, start, and verdict.
+    database_now = (await db.execute(select(func.now()))).scalar_one()
+    turns = (
+        await db.scalars(select(AiTurn).where(AiTurn.conversation_id == conversation.id))
+    ).all()
+    kinds = {shown(turn, database_now).kind for turn in turns}
+    contacts = await hr_contact(db) if kinds - {None} else []
+    return ConversationOut(
+        id=conversation.id,
+        created_at=conversation.created_at,
+        turns=[],
+        hr_contacts=[],
+        budget=budget,
+        long_history=True,
+        history_too_long=True,
+        outdated=conversation_is_outdated(conversation),
+        unreadable=True,
+        escalation=kept_escalation_out(kinds, contacts),
+    )
+
+
+async def _readable_conversation_out(
+    db: AsyncSession,
+    signed_in: SignedIn,
+    conversation: AiConversation,
+    caps: Caps,
+    now: datetime,
+    keys: KeyProvider,
+    contents: OpenedConversation,
+) -> ConversationOut:
+    """`conversation_out` for a conversation that opened."""
+    turns, feedback = contents.turns, contents.feedback
     # The database's clock decides what is abandoned, as for the POST.
     database_now = (await db.execute(select(func.now()))).scalar_one()
     shows = [shown(t, database_now) for t in turns]
@@ -296,7 +374,7 @@ async def conversation_out(
     stored = await conversation_proposals(db, conversation.id)
     # A denial's note, for the person who wrote it: the card's "Zara will see your note" after a
     # reload. It goes to the page only, never to the model.
-    notes = await denial_notes(db, signed_in.actor, stored)
+    notes = await denial_notes(db, signed_in.actor, stored, keys)
     for row in stored:
         by_turn.setdefault(row.turn_id, []).append(
             proposal_out(
@@ -316,7 +394,7 @@ async def conversation_out(
         if any(verdict_is_flagged(t.guard_verdict) for t in turns)
         else {}
     )
-    history = await model_history(db, conversation.id, cipher)
+    history = contents.history
     tokens = history_tokens(history)
     budget = await budget_out(
         db,
@@ -336,10 +414,10 @@ async def conversation_out(
         turns=[
             turn_out(
                 t,
-                open_turn(cipher, t),
+                contents.texts[t.id][0],
                 s,
                 feedback.get(t.id),
-                None if t.id not in feedback else open_reason(cipher, feedback[t.id]),
+                contents.texts[t.id][1],
                 contacts,
                 names,
                 by_turn.get(t.id, ()),
@@ -360,6 +438,7 @@ async def conversation_out(
         long_history=tokens > HISTORY_OFFER_TOKENS,
         history_too_long=tokens > HISTORY_REFUSE_TOKENS,
         outdated=conversation_is_outdated(conversation),
+        unreadable=False,
     )
 
 
@@ -403,11 +482,16 @@ async def get_assistant_budget(
     # The pins and history the next question would have: the conversation's own, or today's pins
     # and an empty history for a person who has none yet.
     pins = CURRENT_PINS if conversation is None else conversation
-    history = (
-        []
-        if conversation is None
-        else await model_history(db, conversation.id, conversation_cipher(keys, conversation))
-    )
+    history: list[dict[str, Any]] = []
+    if conversation is not None:
+        # Only the history counts toward the budget, so only it is opened. An unreadable
+        # conversation can't continue, and its read says so (`unreadable`, `historyTooLong`) and
+        # logs it; the budget is only about the caps, so it is sized as for the smallest question
+        # with no history, quietly (the page polls this), not a 500.
+        with contextlib.suppress(DecryptionFailed):
+            history = await model_history(
+                db, conversation.id, conversation_cipher(keys, conversation)
+            )
     return await budget_out(
         db,
         signed_in,
@@ -431,7 +515,11 @@ async def get_assistant_budget(
 async def get_assistant_texts() -> AssistantTextsOut:
     """Needs a session like every assistant route, but reads nothing of the tenant's, so it takes
     no transaction: only the short session lookup."""
-    return AssistantTextsOut(personal_data=PERSONAL_DATA_TEXT, still_answering=STILL_ANSWERING_TEXT)
+    return AssistantTextsOut(
+        personal_data=PERSONAL_DATA_TEXT,
+        still_answering=STILL_ANSWERING_TEXT,
+        unreadable_conversation=UNREADABLE_CONVERSATION_TEXT,
+    )
 
 
 @router.post(
@@ -540,13 +628,14 @@ async def confirm_proposal(
     signed_in: SignedInDep,
     request: Request,
     now: Now,
+    keys: Annotated[KeyProvider, Depends(get_keys)],
     body: ConfirmIn | None = None,
 ) -> ProposalOut | JSONResponse:
     """Nothing but the denial's note comes from the client. A proposal the engine refuses at
     confirm time is a 200 with status `failed` and the reason: the confirm itself worked."""
     note = None if body is None else body.note
     return await _act_on_proposal(
-        request, lambda: confirm(signed_in.db, signed_in.actor, proposal_id, note, now)
+        request, lambda: confirm(signed_in.db, signed_in.actor, proposal_id, note, now, keys)
     )
 
 
@@ -625,9 +714,12 @@ async def admit_question(
             raise personal_data_refusal()
 
         # Read only now, so a refused question does not load it.
-        # (A ciphertext that does not open raises `DecryptionFailed`: a 500 with no turn written.)
-        cipher = conversation_cipher(keys, conversation)
-        history = await model_history(db, conversation.id, cipher)
+        # A ciphertext that does not open is a 409 `conversation-unreadable` with no turn written.
+        try:
+            opened = await open_conversation(db, keys, conversation)
+        except ConversationUnreadable:
+            raise unreadable_refusal() from None
+        cipher, history = opened.cipher, opened.history
         # Judged after the question, with the other 409s. Too long to send again: the page offers
         # a new conversation (the GET's `historyTooLong` says so too), and tells it apart from an
         # outdated one.
@@ -641,20 +733,35 @@ async def admit_question(
         # 5. Budgets, before the turn's row is added: a refusal leaves no `running` turn behind.
         asker = await load_asker_context(db, caller)
         caps = Caps.from_settings(settings)
-        needed = room_needed_usd(
+        needed_for = partial(
+            room_needed_usd,
             model=conversation.model,
             guard_model=conversation.guard_model,
             effort=conversation.effort,
-            history=history,
             question=question,
             actor_view=asker.actor_view,
             handbook_label=asker.handbook_label,
             now=now,
         )
-        scope = scope_without_room(await budget_state(db, caps), needed)
+        needed = needed_for(history=history)
+        scope = refusal_scope(
+            await budget_state(db, caps),
+            needed,
+            # The same question in a new conversation, to tell a sandbox that is spent from a
+            # conversation that is too long for what is left (sized only when the sandbox is
+            # short, and the same estimate when there is no history), as `budget_out` does.
+            (lambda: needed_for(history=[])) if history else (lambda: needed),
+        )
         if scope is not None:
             code = f"budget-{scope}"
-            raise ProblemError(status.HTTP_429_TOO_MANY_REQUESTS, code, ERROR_TEXTS[code])
+            # Only the day's limit resets (at the next UTC midnight). A sandbox's own never does,
+            # so it has no `Retry-After`. This 429 is a plain HTTP response: a refusal inside the
+            # turn stream (`spend-limit`, a budget `error` event) can't carry a header.
+            retry_after = (
+                {"Retry-After": str(seconds_until_next_utc_day(now))} if scope == "daily" else None
+            )
+            detail = BUDGET_CONVERSATION_TEXT if scope == "conversation" else ERROR_TEXTS[code]
+            raise ProblemError(status.HTTP_429_TOO_MANY_REQUESTS, code, detail, headers=retry_after)
     return Admitted(conversation, question, asker, caps, cipher)
 
 
@@ -671,6 +778,12 @@ def history_too_long_refusal() -> ProblemError:
         status.HTTP_409_CONFLICT,
         "history-too-long",
         "This conversation has grown too long to continue. Start a new one.",
+    )
+
+
+def unreadable_refusal() -> ProblemError:
+    return ProblemError(
+        status.HTTP_409_CONFLICT, "conversation-unreadable", UNREADABLE_CONVERSATION_TEXT
     )
 
 

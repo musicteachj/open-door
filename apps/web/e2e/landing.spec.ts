@@ -1,4 +1,5 @@
-import { expect, test, type Page } from '@playwright/test'
+import { expect, test } from './fixtures'
+import type { Page } from '@playwright/test'
 import { PERSONAS } from '../src/features/personas/personas'
 import {
   focusRing,
@@ -60,9 +61,9 @@ test('usable at 390 px: the cards stack, and nothing overflows', async ({ page }
 test('each persona card is a single button with the accessible name above, reachable by keyboard and showing the focus ring', async ({
   page,
 }) => {
-  // The four cards and the tour button, and nothing else to tab to.
+  // The four cards, the walkthrough's link (screen 16), and the tour button: nothing else to tab to.
   await expect(page.getByRole('button')).toHaveCount(5)
-  await expect(page.getByRole('link')).toHaveCount(0)
+  await expect(page.getByRole('link')).toHaveCount(1)
   for (const name of FIRST_NAMES) {
     await page.keyboard.press('Tab')
     await expect(card(page, name)).toBeFocused()
@@ -79,7 +80,9 @@ test('each persona card is a single button with the accessible name above, reach
     await expect(card(page, name).locator('a, button, input')).toHaveCount(0)
     await expect(card(page, name)).toContainText(`Start as ${name}`)
   }
-  // The tour button comes after the cards.
+  // After the cards: the walkthrough's link, then the tour button, in the order they show.
+  await page.keyboard.press('Tab')
+  await expect(page.getByRole('link', { name: 'Watch the recorded walkthrough' })).toBeFocused()
   await page.keyboard.press('Tab')
   await expect(page.getByRole('button', { name: 'Take the 2-minute tour' })).toBeFocused()
 })
@@ -99,7 +102,12 @@ for (const persona of PERSONAS) {
     await expect(greetingHeading(page, persona.firstName as FirstName)).toBeVisible()
 
     const me = await page.evaluate(async () => {
-      const response = await fetch('/api/v1/me')
+      const csrf = {
+        headers: {
+          'X-CSRF-Token': /(?:^|; )__Host-od_csrf=([^;]*)/.exec(document.cookie)?.[1] ?? '',
+        },
+      }
+      const response = await fetch('/api/v1/me', csrf)
       return (await response.json()) as {
         givenName: string
         familyName: string
@@ -187,7 +195,11 @@ test('a failed start re-enables the cards and shows the inline error with a work
   await expect(page).toHaveURL('/ask')
   await expect(greetingHeading(page, 'Mateo')).toBeVisible()
   expect(attempts).toBe(2)
-  expect(JSON.parse(bodies[1]!)).toEqual({ persona: 'mateo' })
+  // Both attempts carry a token, the second a fresh one from the retry's own check.
+  expect(JSON.parse(bodies[1]!)).toEqual({
+    persona: 'mateo',
+    turnstileToken: 'XXXX.DUMMY.TOKEN.XXXX',
+  })
 })
 
 test('the AI disclosure and the fictional-company notice are always visible', async ({ page }) => {

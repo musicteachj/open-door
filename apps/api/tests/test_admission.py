@@ -2,6 +2,7 @@
 
 from datetime import UTC, datetime
 from decimal import Decimal
+from zoneinfo import ZoneInfo
 
 import pytest
 
@@ -11,8 +12,10 @@ from app.ai.admission import (
     SMALLEST_QUESTION,
     WIDEST_CHARACTER,
     history_tokens,
+    refusal_scope,
     room_needed_usd,
-    scope_without_room,
+    room_scopes,
+    seconds_until_next_utc_day,
     short_scopes,
 )
 from app.ai.budget import BudgetState
@@ -116,20 +119,20 @@ def test_the_smallest_question_is_one_character() -> None:
 def test_the_sandbox_is_named_first_when_both_caps_are_short() -> None:
     state = BudgetState(Decimal("0.10"), Decimal("0.10"))
 
-    assert scope_without_room(state, Decimal("0.25")) == "sandbox"
+    assert refusal_scope(state, Decimal("0.25"), lambda: Decimal("0.25")) == "sandbox"
 
 
 def test_the_day_is_named_when_only_it_is_short() -> None:
     state = BudgetState(Decimal("5"), Decimal("0.10"))
 
-    assert scope_without_room(state, Decimal("0.25")) == "daily"
+    assert refusal_scope(state, Decimal("0.25"), lambda: Decimal("0.25")) == "daily"
 
 
 def test_room_exactly_equal_to_the_need_is_enough() -> None:
     # `reserve` refuses only when spent + amount is over the cap, so equal fits.
     state = BudgetState(Decimal("0.25"), Decimal("0.25"))
 
-    assert scope_without_room(state, Decimal("0.25")) is None
+    assert refusal_scope(state, Decimal("0.25"), lambda: Decimal("0.25")) is None
 
 
 def test_a_cap_with_money_left_but_less_than_a_turn_needs_has_no_room() -> None:
@@ -137,7 +140,7 @@ def test_a_cap_with_money_left_but_less_than_a_turn_needs_has_no_room() -> None:
     state = BudgetState(Decimal("0.01"), Decimal("3"))
 
     assert not state.sandbox_reached
-    assert scope_without_room(state, needed()) == "sandbox"
+    assert refusal_scope(state, needed(), needed) == "sandbox"
 
 
 def test_history_tokens_grow_with_the_history_and_use_two_bytes_a_token() -> None:
@@ -215,3 +218,69 @@ def test_the_guards_share_of_the_need_covers_any_possible_previous_answer(filler
     )
 
     assert needed(question) - first_call_usd(question) >= possible
+
+
+@pytest.mark.parametrize(
+    ("now", "seconds"),
+    [
+        (datetime(2026, 11, 9, 0, 0, 0, tzinfo=UTC), 86_400),
+        (datetime(2026, 11, 9, 12, 0, 0, tzinfo=UTC), 43_200),
+        (datetime(2026, 11, 9, 23, 59, 30, 400_000, tzinfo=UTC), 30),
+        (datetime(2026, 11, 9, 23, 59, 59, 999_999, tzinfo=UTC), 1),
+        (datetime(2026, 12, 31, 18, 0, 0, tzinfo=UTC), 21_600),
+        # Another zone's clock is still read as the instant it is: 20:00 in New York is 01:00 UTC.
+        (datetime(2026, 11, 9, 20, 0, 0, tzinfo=ZoneInfo("America/New_York")), 82_800),
+    ],
+)
+def test_retry_after_counts_whole_seconds_to_the_next_utc_midnight(
+    now: datetime, seconds: int
+) -> None:
+    assert seconds_until_next_utc_day(now) == seconds
+
+
+def test_a_sandbox_short_only_because_of_the_history_is_the_conversations_problem() -> None:
+    state = BudgetState(Decimal("0.30"), Decimal("5"))
+    big = Decimal("0.55")
+    empty = Decimal("0.21")
+
+    assert refusal_scope(state, big, lambda: empty) == "conversation"
+    # Not even an empty conversation fits: the sandbox's own limit, as before.
+    assert (
+        refusal_scope(BudgetState(Decimal("0.10"), Decimal("5")), big, lambda: empty) == "sandbox"
+    )
+    # Room for the turn with its history: nothing refuses.
+    assert refusal_scope(BudgetState(Decimal("0.60"), Decimal("5")), big, lambda: empty) is None
+
+
+def test_the_day_wins_over_the_conversations_size() -> None:
+    state = BudgetState(Decimal("0.30"), Decimal("0.10"))
+
+    assert refusal_scope(state, Decimal("0.55"), lambda: Decimal("0.21")) == "daily"
+    # The day alone is short for the turn: still the day.
+    assert (
+        refusal_scope(
+            BudgetState(Decimal("5"), Decimal("0.10")), Decimal("0.55"), lambda: Decimal("0.21")
+        )
+        == "daily"
+    )
+
+
+def test_the_banner_and_the_refusal_share_one_rule() -> None:
+    """`room_scopes` (the banner) and `refusal_scope` (the 429) agree on every combination."""
+    cases = [
+        (BudgetState(Decimal(s), Decimal(d)), Decimal("0.55"), Decimal("0.21"))
+        for s in ("0.10", "0.30", "0.60")
+        for d in ("0.10", "0.30", "0.60")
+    ]
+    for state, big, empty in cases:
+
+        def sized(value: Decimal = empty) -> Decimal:
+            return value
+
+        sandbox_short, daily_short = room_scopes(state, big, sized)
+        scope = refusal_scope(state, big, sized)
+        expected = "sandbox" if sandbox_short else "daily" if daily_short else None
+        if scope == "conversation":
+            assert (sandbox_short, daily_short) == (False, False), state
+        else:
+            assert scope == expected, state

@@ -13,6 +13,7 @@ import {
   SHORT_PREFILL,
   SSN_WORDS,
   WAITING_LIMIT,
+  CANNOT_SEND,
   wordsOfLength,
 } from '../fixtures/cases'
 import { CRISIS_TEXT, DANA, SENSITIVE_TEXT, UNAVAILABLE_TEXT } from './conversation-fixtures'
@@ -187,6 +188,20 @@ export function CasesSections() {
             />
           </Panel>
         </Section>
+        <Section id="case-cannot-send-panel" title="Can't be sent from here, in the panel">
+          <Panel>
+            <SensitivePanel
+              caseArea={
+                <CaseSent
+                  variant="panel"
+                  state="cannot-send"
+                  cannotSendLine={CANNOT_SEND}
+                  link={YOUR_CASES_LINK}
+                />
+              }
+            />
+          </Panel>
+        </Section>
         <Section id="case-crisis-offer" title="Crisis panel with the secondary case button">
           <Panel>
             <EscalationPanel kind="crisis" message={CRISIS_TEXT} contacts={[DANA]} offerCase />
@@ -242,6 +257,20 @@ export function CasesSections() {
               variant="page"
               state="limit"
               limitLine={WAITING_LIMIT}
+              link={null}
+              contacts={[DANA]}
+            />
+          </Page>
+        </Section>
+        <Section
+          id="case-page-cannot-send"
+          title="Can't be sent from here, on the page, with the HR contacts"
+        >
+          <Page>
+            <CaseSent
+              variant="page"
+              state="cannot-send"
+              cannotSendLine={CANNOT_SEND}
               link={null}
               contacts={[DANA]}
             />

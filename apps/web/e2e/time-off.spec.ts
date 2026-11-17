@@ -1,4 +1,5 @@
-import { expect, test, type Page } from '@playwright/test'
+import { expect, test } from './fixtures'
+import type { Page } from '@playwright/test'
 import { MODAL_OVERLAY_RULES, startAs } from './helpers'
 import {
   factsOf,
@@ -78,7 +79,12 @@ test.describe('at 1440 px', () => {
 
     // The balance cards and the schedule line are the API's labels and nothing else.
     const balances = await page.evaluate(async () => {
-      const response = await fetch('/api/v1/time-off/balances')
+      const csrf = {
+        headers: {
+          'X-CSRF-Token': /(?:^|; )__Host-od_csrf=([^;]*)/.exec(document.cookie)?.[1] ?? '',
+        },
+      }
+      const response = await fetch('/api/v1/time-off/balances', csrf)
       return (await response.json()) as {
         pto: { availableLabel: string }
         sick: { availableLabel: string }[]
@@ -95,9 +101,13 @@ test.describe('at 1440 px', () => {
       .soft(page.getByText('Your schedule: Monday to Friday, 8 hours a day'))
       .toBeVisible()
     await expect.soft(page.getByRole('link', { name: 'Handbook §3.1' })).toBeVisible()
-    // My requests lists the seed's history as Past, and nothing is upcoming.
+    // My requests lists the seed's history as Past, and nothing is upcoming. The seed draws the
+    // history from the sandbox's start date, so the newest past row is approved PTO on some days
+    // and a recorded sick day on others.
     await expect.soft(page.getByText('No upcoming time off.')).toBeVisible()
-    await expect.soft(page.locator('[data-slot="request-row"]').first()).toContainText('Approved')
+    await expect
+      .soft(page.locator('[data-slot="request-row"]').first())
+      .toContainText(/Approved|Recorded/)
     await expect.soft(page.getByRole('button', { name: /^Cancel PTO on / })).toHaveCount(0)
     await expectLedgersAdd(page)
     expect.soft((await settledScan(page)).violations).toEqual([])

@@ -1,4 +1,5 @@
-import { expect, test, type Locator, type Page } from '@playwright/test'
+import { expect, guardedContext, test } from './fixtures'
+import type { Locator, Page } from '@playwright/test'
 import {
   announcements,
   ask,
@@ -88,7 +89,7 @@ test.describe('the demo steps', () => {
       ],
       ['Mateo', 'Handbook §4.3 · Time off', 'Source 1: Handbook §4.3, Time off'],
     ] as const) {
-      const context = await browser.newContext()
+      const context = await guardedContext(browser)
       try {
         const page = await context.newPage()
         await startAs(page, name)
@@ -1044,12 +1045,17 @@ test.describe('budget and length states (STUB: the conversation GET)', () => {
         'Handbook',
         'Priya Raman, Visual Merchandiser. Current persona. Switch persona',
       ])
-      // The banner comes before the page: its two emergency links, then (sandbox only) its action.
-      // Then "Write to HR" (a person's banner has it), the last words of its message.
+      // The banner comes before the page: its two emergency links, "Write to HR" (a person's
+      // banner has it, the last words of its message), then the sandbox banner's action or the
+      // daily banner's link to the recorded walkthrough (on its own line, under the text).
       const afterSwitcher = names.slice(6)
-      expect(afterSwitcher.slice(0, 3)).toEqual(['call 911', 'call or text 988', 'Write to HR'])
-      if (kind === 'sandbox') expect(afterSwitcher[3]).toBe('Start a new sandbox')
-      expect(afterSwitcher[kind === 'sandbox' ? 4 : 3]).toBe('Start a new conversation')
+      expect(afterSwitcher.slice(0, 5)).toEqual([
+        'call 911',
+        'call or text 988',
+        'Write to HR',
+        kind === 'sandbox' ? 'Start a new sandbox' : 'Watch the recorded walkthrough',
+        'Start a new conversation',
+      ])
       expect(stops.some((stop) => stop.tag === 'TEXTAREA')).toBe(false)
       expect(stops.some((stop) => stop.slot === 'composer-ask')).toBe(false)
       const handbookAt = names.indexOf('Handbook', 6)

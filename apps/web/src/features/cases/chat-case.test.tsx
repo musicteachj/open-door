@@ -1,7 +1,13 @@
 import { act, screen, waitFor, within } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { CaseStatusOut, EscalationOut, PersonaKey } from '@/api/generated'
-import { MY_CASES, SENT_LINE, WAITING_LIMIT } from '@/app/gallery/fixtures/cases'
+import {
+  CANNOT_SEND,
+  MY_CASES,
+  SENT_LINE,
+  TOO_LONG,
+  WAITING_LIMIT,
+} from '@/app/gallery/fixtures/cases'
 import { announce } from '@/lib/announce'
 import { useChatStore } from '@/features/chat/store'
 import { resetIdentity } from '@/lib/identity'
@@ -98,6 +104,27 @@ describe('the case button', () => {
     await screen.findAllByRole('region', { name: HEADER })
     expect(await screen.findAllByRole('button', { name: 'Open a confidential case' })).toHaveLength(
       1,
+    )
+  })
+
+  it('is on a crisis panel whose end-of-turn write failed, running or abandoned', async () => {
+    open('priya', [
+      flagged({
+        id: 't-crisis-run',
+        status: 'running',
+        escalation: CRISIS,
+        guard: { category: 'crisis' },
+      }),
+      flagged({
+        id: 't-crisis-lost',
+        status: 'failed',
+        error: { code: 'internal', message: 'Something broke.' },
+        escalation: CRISIS,
+        guard: { category: 'crisis' },
+      }),
+    ])
+    expect(await screen.findAllByRole('button', { name: 'Open a confidential case' })).toHaveLength(
+      2,
     )
   })
 
@@ -232,6 +259,73 @@ describe('sending from the panel', () => {
     // Then the list shows fewer than five: the line goes, and the button is back.
     expect(await button()).toBeVisible()
     expect(screen.queryByText(WAITING_LIMIT)).toBeNull()
+  })
+
+  it('shows the server’s own too-long words on the words box, keeps the form open, and says Send', async () => {
+    const { user } = open('priya', [flagged()], {
+      openProblem: { status: 422, type: 'case-words-too-long', detail: TOO_LONG },
+    })
+    await sendFrom(user)
+    expect(await screen.findByText(TOO_LONG)).toBeVisible()
+    expect(await words()).toHaveValue(QUESTION)
+    expect(await words()).toHaveFocus()
+    expect(screen.getByRole('button', { name: 'Send to HR' })).toBeVisible()
+    expect(screen.queryByRole('button', { name: 'Try again' })).toBeNull()
+    expect(screen.queryByText('Your case wasn’t sent. Please try again.')).toBeNull()
+  })
+
+  it.each([
+    ['a form the server refuses as invalid', 422, 'about:blank'],
+    ['a form the server calls invalid', 422, 'case-invalid'],
+    ['a turn that cannot start a case', 404, 'case-turn-not-found'],
+    ['a case that is not found', 404, 'case-not-found'],
+  ])(
+    'closes the form and shows the can’t-send words, with no Try again, for %s',
+    async (_n, status, type) => {
+      const { user } = open('priya', [flagged()], {
+        openProblem: { status, type, detail: 'Refused.' },
+      })
+      await sendFrom(user)
+      expect(await screen.findByText(CANNOT_SEND)).toBeVisible()
+      expect(screen.queryByRole('textbox', { name: 'Your words' })).toBeNull()
+      expect(screen.queryByRole('button', { name: 'Try again' })).toBeNull()
+      expect(screen.queryByText('Your case wasn’t sent. Please try again.')).toBeNull()
+      expect(screen.getByRole('link', { name: 'View your cases' })).toHaveAttribute(
+        'href',
+        '/my-cases',
+      )
+    },
+  )
+
+  it.each([
+    [500, 'about:blank'],
+    [403, 'about:blank'],
+    [413, 'about:blank'],
+    [418, 'something-new'],
+  ])('keeps Try again for a %s (%s): a retry may work', async (status, type) => {
+    const { user } = open('priya', [flagged()], {
+      openProblem: { status, type, detail: 'Broke.' },
+    })
+    await sendFrom(user)
+    expect(await screen.findByText('Your case wasn’t sent. Please try again.')).toBeVisible()
+    expect(screen.getByRole('button', { name: 'Try again' })).toBeVisible()
+    expect(screen.queryByText(CANNOT_SEND)).toBeNull()
+  })
+
+  it('keeps Try again for a 422 that is not the API’s problem (a proxy’s page)', async () => {
+    const { user } = open('priya', [flagged()])
+    server.use(
+      http.post('*/api/v1/cases', () =>
+        HttpResponse.text('<html>Unprocessable</html>', {
+          status: 422,
+          headers: { 'Content-Type': 'text/html' },
+        }),
+      ),
+    )
+    await sendFrom(user)
+    expect(await screen.findByText('Your case wasn’t sent. Please try again.')).toBeVisible()
+    expect(screen.getByRole('button', { name: 'Try again' })).toBeVisible()
+    expect(screen.queryByText(CANNOT_SEND)).toBeNull()
   })
 
   it('shows the personal-data refusal on the words, and keeps them', async () => {

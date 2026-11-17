@@ -8,13 +8,23 @@ from typing import cast
 from fastapi import FastAPI, Request, status
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
+from sqlalchemy.exc import DBAPIError
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app.core.api_paths import is_api_request
 from app.core.cache_control import CACHE_CONTROL_HEADER, NO_STORE
 from app.core.request_id import REQUEST_ID_HEADER
+from app.core.security_headers import set_security_headers
+from app.db.errors import has_sqlstate
 
 PROBLEM_JSON = "application/problem+json"
+
+# Postgres gave up on a statement (the statement timeout) or on a lock wait (a lock timeout). Both
+# are the database being too busy, not a bug: the request fails cleanly and the person can retry.
+QUERY_CANCELED = "57014"
+LOCK_NOT_AVAILABLE = "55P03"
+DATABASE_BUSY = "database-busy"
+DATABASE_BUSY_TEXT = "The service is busy right now. Try again in a moment."
 
 logger = logging.getLogger(__name__)
 
@@ -72,6 +82,7 @@ class ProblemError(Exception):
         code: str,
         detail: str,
         extra: Mapping[str, object] | None = None,
+        headers: Mapping[str, str] | None = None,
     ) -> None:
         super().__init__(code)
         self.status_code = status_code
@@ -80,11 +91,31 @@ class ProblemError(Exception):
         # More fields for the problem's body, such as the current status of the thing refused, under
         # names that are not the standard members (`status` is the HTTP status).
         self.extra = dict(extra or {})
+        # Response headers the refusal carries, such as `Retry-After` on a 429.
+        self.headers = dict(headers or {})
 
 
 async def _problem_error(request: Request, exc: Exception) -> JSONResponse:
     exc = cast(ProblemError, exc)
-    return problem_response(request, exc.status_code, exc.detail, {**exc.extra, "type": exc.code})
+    return problem_response(
+        request, exc.status_code, exc.detail, {**exc.extra, "type": exc.code}, headers=exc.headers
+    )
+
+
+async def _database_error(request: Request, exc: Exception) -> JSONResponse:
+    """A canceled statement or a lock wait that timed out is a 503; any other database error is
+    the unhandled one it always was (raised again, to the server's error handling)."""
+    exc = cast(DBAPIError, exc)
+    code = next((c for c in (QUERY_CANCELED, LOCK_NOT_AVAILABLE) if has_sqlstate(exc, c)), None)
+    if code is None:
+        raise exc
+    logger.warning("Database timeout: %s", code)
+    return problem_response(
+        request,
+        status.HTTP_503_SERVICE_UNAVAILABLE,
+        DATABASE_BUSY_TEXT,
+        {"type": DATABASE_BUSY},
+    )
 
 
 async def _http_exception(request: Request, exc: Exception) -> JSONResponse:
@@ -116,15 +147,19 @@ async def _unhandled(request: Request, exc: Exception) -> JSONResponse:
     logger.error("Unhandled error", exc_info=exc, extra={"request_id": request_id})
     # Like the request-ID header, this can't come from a middleware: this response is sent from
     # outside all of them.
+    # The security headers are set here for the same reason.
     headers = {CACHE_CONTROL_HEADER: NO_STORE} if is_api_request(request.scope) else None
-    return problem_response(
+    response = problem_response(
         request, status.HTTP_500_INTERNAL_SERVER_ERROR, "Something went wrong.", headers=headers
     )
+    set_security_headers(response.headers)
+    return response
 
 
 def install_problem_handlers(app: FastAPI) -> None:
     """Route every error the API can produce through problem details."""
     app.add_exception_handler(ProblemError, _problem_error)
+    app.add_exception_handler(DBAPIError, _database_error)
     app.add_exception_handler(StarletteHTTPException, _http_exception)
     app.add_exception_handler(RequestValidationError, _validation_error)
     app.add_exception_handler(Exception, _unhandled)

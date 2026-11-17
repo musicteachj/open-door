@@ -25,7 +25,7 @@ from app.db.tenancy import TenantContext, tenant_session
 from app.domain.timeoff.labels import label
 from app.modules.sandbox.seed import SeedCompany
 from app.modules.timeoff.texts import REFUSAL_TEXTS, refusal_text
-from tests.integration.conftest import audit_events
+from tests.integration.conftest import audit_events, sealed_note_columns
 from tests.integration.test_proposals import end_turn, make_chat
 from tests.integration.test_tools import NOW
 from tests.integration.test_tools import context_for as base_context
@@ -129,7 +129,7 @@ async def put_request(
                 created_via="ui",
                 decided_by=person_id(company, decided_by) if decided_by else None,
                 decided_at=NOW if status in {"approved", "denied"} else None,
-                decision_note=note,
+                **sealed_note_columns(company.tenant_id, request_id, note),
                 canceled_at=NOW if status == "canceled" else None,
             )
         )

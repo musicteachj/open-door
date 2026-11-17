@@ -47,9 +47,9 @@ def person_id(tenant_id: UUID, key: str) -> UUID:
     return uuid5(tenant_id, f"person:{key}")
 
 
-async def session_count(engine: AsyncEngine, person_id: UUID) -> int:
-    """A person's session count. `sessions` has no row-level security, so any context sees it."""
-    async with tenant_session(engine, NO_TENANT) as session:
+async def session_count(engine: AsyncEngine, tenant_id: UUID, person_id: UUID) -> int:
+    """A person's session count, read in their sandbox (sessions are under row-level security)."""
+    async with tenant_session(engine, TenantContext(tenant_id, None)) as session:
         count = await session.scalar(
             select(func.count()).select_from(UserSession).where(UserSession.person_id == person_id)
         )
@@ -145,7 +145,7 @@ async def test_rotating_a_session_that_is_already_gone_raises_and_starts_nothing
         with pytest.raises(SessionGoneError):
             await rotate_session(session, current, tenant.hr_id)
 
-    assert await session_count(app_engine, tenant.hr_id) == 0
+    assert await session_count(app_engine, tenant.id, tenant.hr_id) == 0
 
 
 async def test_two_requests_rotating_the_same_session_cannot_both_win(
@@ -169,8 +169,8 @@ async def test_two_requests_rotating_the_same_session_cannot_both_win(
         "SessionGoneError",
         "SessionTokens",
     ]
-    started = await session_count(app_engine, tenant.hr_id) + await session_count(
-        app_engine, tenant.colleague_id
+    started = await session_count(app_engine, tenant.id, tenant.hr_id) + await session_count(
+        app_engine, tenant.id, tenant.colleague_id
     )
     assert started == 1
 
@@ -193,8 +193,8 @@ async def test_a_session_cannot_be_started_for_the_wrong_person_or_tenant(
             await start_session(session, tenant_id, person_id)
 
     # Each person keeps only the one session that make_tenant gave them.
-    assert await session_count(app_engine, mine.employee_id) == 1
-    assert await session_count(app_engine, theirs.employee_id) == 1
+    assert await session_count(app_engine, mine.id, mine.employee_id) == 1
+    assert await session_count(app_engine, theirs.id, theirs.employee_id) == 1
 
 
 async def test_a_session_cannot_be_started_for_nobody(

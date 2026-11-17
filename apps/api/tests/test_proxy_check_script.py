@@ -215,12 +215,12 @@ def test_the_shutdown_run_passes_on_exit_code_0_and_a_stopped_turn() -> None:
     assert check.problems_in_shutdown_run(exit_code=0, turn_statuses=["stopped"]) == []
 
 
-def test_the_shutdown_run_accepts_uvicorn_ending_by_sigterm_after_a_clean_shutdown() -> None:
-    assert check.problems_in_shutdown_run(exit_code=-15, turn_statuses=["stopped"]) == []
+def test_the_shutdown_run_accepts_uvicorn_ending_by_sigterm_as_docker_reports_it() -> None:
+    assert check.problems_in_shutdown_run(exit_code=143, turn_statuses=["stopped"]) == []
 
 
 def test_the_shutdown_run_fails_on_a_crash_or_a_kill() -> None:
-    for code in (1, -9, None):
+    for code in (1, 137, -9, None):
         problems = check.problems_in_shutdown_run(exit_code=code, turn_statuses=["stopped"])
         assert any("exit code" in problem for problem in problems)
 
@@ -230,24 +230,25 @@ def test_the_shutdown_run_fails_when_the_turn_is_not_stopped() -> None:
     assert check.problems_in_shutdown_run(exit_code=0, turn_statuses=[])
 
 
-# --- Where the API listens ----------------------------------------------------------------
+def test_the_api_binds_the_loopback_on_macos_and_the_bridge_gateway_on_linux() -> None:
+    assert check.api_host_for("darwin", bridge_gateway=None) == "127.0.0.1"
+    assert check.api_host_for("linux", bridge_gateway="172.17.0.1") == "172.17.0.1"
+    with pytest.raises(check.CheckError):
+        check.api_host_for("linux", bridge_gateway=None)
+    assert check.api_host_for("linux", bridge_gateway=None, override="10.1.2.3") == "10.1.2.3"
+    assert check.api_host_for("darwin", bridge_gateway=None, override="10.1.2.3") == "127.0.0.1"
 
 
-def test_the_api_binds_to_loopback_on_macos() -> None:
-    assert check.bind_host_for("darwin", override=None, bridge_gateway=None) == "127.0.0.1"
+def test_the_api_gets_a_daily_budget_the_check_cannot_use_up(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """On CI the browser suite's turns stay in the day's ledger before the check runs, so the
+    check's API must not run with the real $3 cap (each run's own settings still apply)."""
+    monkeypatch.setattr(check.container, "database_url_for_container", lambda url, **_: url)
+    api = check.Api("127.0.0.1")
 
-
-def test_the_api_binds_to_the_docker_bridge_gateway_on_linux() -> None:
-    assert check.bind_host_for("linux", override=None, bridge_gateway="172.17.0.1") == "172.17.0.1"
-
-
-def test_an_override_wins_on_any_platform() -> None:
-    assert (
-        check.bind_host_for("linux", override="10.0.0.5", bridge_gateway="172.17.0.1") == "10.0.0.5"
-    )
-    assert check.bind_host_for("darwin", override="10.0.0.5", bridge_gateway=None) == "10.0.0.5"
-
-
-def test_linux_without_a_bridge_gateway_is_an_error_not_a_wide_open_bind() -> None:
-    with pytest.raises(check.CheckError, match="PROXY_CHECK_BIND"):
-        check.bind_host_for("linux", override=None, bridge_gateway=None)
+    assert api.env()["AI_DAILY_BUDGET_USD"] == check.DAILY_BUDGET_USD
+    with_heartbeat = api.env(heartbeat_seconds="1")
+    assert with_heartbeat["AI_DAILY_BUDGET_USD"] == check.DAILY_BUDGET_USD
+    assert with_heartbeat["AI_HEARTBEAT_SECONDS"] == "1"
+    assert float(check.DAILY_BUDGET_USD) >= 100

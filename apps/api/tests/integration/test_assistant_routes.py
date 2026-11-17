@@ -28,6 +28,7 @@ from app.ai.fixed_texts import (
     PERSONAL_DATA_TEXT,
     STILL_ANSWERING_TEXT,
     UNAVAILABLE_TEXT,
+    UNREADABLE_CONVERSATION_TEXT,
 )
 from app.db.models import AiConversation, AiSpend
 from app.db.tenancy import TenantContext, set_is_hr, tenant_session
@@ -143,10 +144,13 @@ def test_every_route_needs_a_session(browser: Browser) -> None:
 def test_the_routes_that_change_state_need_the_csrf_token(browser: Browser) -> None:
     sign_in(browser)
 
-    create = browser.client.post(f"{BASE}/conversations")
-    feedback = browser.client.post(f"{BASE}/turns/{uuid4()}/feedback", json={"helpful": True})
+    with browser.without_csrf():
+        create = browser.client.post(f"{BASE}/conversations")
+        feedback = browser.client.post(f"{BASE}/turns/{uuid4()}/feedback", json={"helpful": True})
+        current = browser.client.get(f"{BASE}/conversations/current")
 
-    assert (create.status_code, feedback.status_code) == (403, 403)
+    # A read is refused too, since Phase 8.
+    assert (create.status_code, feedback.status_code, current.status_code) == (403, 403, 403)
     assert browser.client.get(f"{BASE}/conversations/current").json() is None
 
 
@@ -201,8 +205,13 @@ def test_a_new_conversation_is_pinned_to_the_current_versions_and_is_the_current
         "longHistory",
         "historyTooLong",
         "outdated",
+        "unreadable",
+        "escalation",
     }
     assert created["outdated"] is False
+    assert created["unreadable"] is False
+    # Only an unreadable conversation keeps a panel at this level; a readable one's turns carry it.
+    assert created["escalation"] is None
 
 
 async def test_the_new_conversation_row_carries_the_current_pins(
@@ -850,6 +859,59 @@ async def test_a_long_history_is_offered_a_new_conversation_and_a_longer_one_is_
     current = browser.client.get(f"{BASE}/conversations/current").json()
 
     assert (current["longHistory"], current["historyTooLong"]) == (long, too_long)
+
+
+async def test_a_big_history_with_room_for_a_new_conversation_is_not_the_sandboxs_cap(
+    browser: Browser, app_engine: AsyncEngine
+) -> None:
+    tenant_id, person_id = sign_in(browser)
+    cid = UUID(new_conversation(browser)["id"])
+    turn_id = await seed_turn(app_engine, tenant_id, person_id, cid, outcome=completed())
+    await add_history(app_engine, tenant_id, person_id, cid, turn_id, 140_000)
+    # $0.30 left: under the next turn with this history (about $0.58), over a new conversation's
+    # first turn (about $0.21).
+    await add_spend(app_engine, tenant_id, person_id, turn_id, "0.70")
+
+    budget = browser.client.get(f"{BASE}/conversations/current").json()["budget"]
+
+    assert budget["sandboxReached"] is False
+    assert budget["banner"] is None
+    assert budget["sandboxRemainingCents"] == 30
+
+
+async def test_a_big_history_that_leaves_both_caps_short_offers_a_new_conversation_not_the_day(
+    open_browser_with: OpenBrowserWith, app_engine: AsyncEngine, owner_engine: AsyncEngine
+) -> None:
+    """The banner follows the question's own rule (`refusal_scope`): when the sandbox is short
+    with the history, what an empty conversation needs decides both caps, so a day that is short
+    only because of this conversation shows no daily banner (the question's 429 offers a new
+    conversation instead)."""
+    async with owner_engine.connect() as connection:
+        spent_today: Decimal = (
+            await connection.execute(
+                text(
+                    "SELECT coalesce(sum(amount_usd), 0) FROM ai_spend_daily"
+                    " WHERE day = (now() AT TIME ZONE 'UTC')::date"
+                )
+            )
+        ).scalar_one()
+    # $0.30 left in the day, whatever other runs spent today.
+    browser = open_browser_with(ai_daily_budget_usd=Decimal(spent_today) + Decimal("0.30"))
+    tenant_id, person_id = sign_in(browser)
+    cid = UUID(new_conversation(browser)["id"])
+    turn_id = await seed_turn(app_engine, tenant_id, person_id, cid, outcome=completed())
+    await add_history(app_engine, tenant_id, person_id, cid, turn_id, 140_000)
+    # $0.30 left in the sandbox too: both under the next turn with this history (about $0.58),
+    # both over a new conversation's first turn (about $0.21).
+    await add_spend(app_engine, tenant_id, person_id, turn_id, "0.70")
+
+    budget = browser.client.get(f"{BASE}/conversations/current").json()["budget"]
+
+    assert (budget["sandboxReached"], budget["dailyReached"], budget["banner"]) == (
+        False,
+        False,
+        None,
+    )
 
 
 # --- Feedback -------------------------------------------------------------------------------
@@ -1505,7 +1567,7 @@ async def test_the_budget_route_sizes_the_estimate_with_the_conversations_histor
     assert seen[-1]["history"] != []
 
 
-def test_the_texts_route_returns_the_two_fixed_texts_the_composer_needs(browser: Browser) -> None:
+def test_the_texts_route_returns_the_fixed_texts_the_composer_needs(browser: Browser) -> None:
     sign_in(browser)
 
     response = browser.client.get(f"{BASE}/texts")
@@ -1514,6 +1576,7 @@ def test_the_texts_route_returns_the_two_fixed_texts_the_composer_needs(browser:
     assert response.json() == {
         "personalData": PERSONAL_DATA_TEXT,
         "stillAnswering": STILL_ANSWERING_TEXT,
+        "unreadableConversation": UNREADABLE_CONVERSATION_TEXT,
     }
     assert response.headers["cache-control"] == "no-store"
 

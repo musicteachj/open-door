@@ -59,8 +59,10 @@ async def test_the_app_schema_holds_only_the_known_functions_none_leakproof_or_d
     assert functions == [
         ("current_is_hr", "s", False, False),
         ("current_person_id", "s", False, False),
+        ("current_session_token_hash", "s", False, False),
         ("current_tenant_id", "s", False, False),
-        # The trigger functions (migrations 0003, 0005, 0008, 0009, 0013, and 0014) are volatile.
+        # The trigger functions (migrations 0003, 0005, 0008, 0009, 0013, 0014, and 0019) are
+        # volatile.
         ("enforce_case_event_insert", "v", False, False),
         ("enforce_case_screening", "v", False, False),
         ("enforce_case_status", "v", False, False),
@@ -70,6 +72,7 @@ async def test_the_app_schema_holds_only_the_known_functions_none_leakproof_or_d
         ("enforce_time_off_request_update", "v", False, False),
         ("pin_tenant_handbook_version", "v", False, False),
         ("refuse_finished_turn_update", "v", False, False),
+        ("refuse_newest_handbook_version_delete", "v", False, False),
         ("stamp_case_clock", "v", False, False),
         ("stamp_tenant_created_at", "v", False, False),
     ]
@@ -100,6 +103,24 @@ async def test_public_cannot_execute_the_trigger_functions(app_engine: AsyncEngi
         ("enforce_time_off_request_update", False),
         ("pin_tenant_handbook_version", False),
         ("refuse_finished_turn_update", False),
+        ("refuse_newest_handbook_version_delete", False),
         ("stamp_case_clock", False),
         ("stamp_tenant_created_at", False),
     ]
+
+
+async def test_the_presented_token_hash_is_read_as_bytes_and_empty_means_none(
+    app_engine: AsyncEngine,
+) -> None:
+    hash_bytes = bytes(range(32))
+    async with app_engine.connect() as connection:
+        none = await connection.scalar(text("SELECT app.current_session_token_hash()"))
+        await connection.execute(
+            text("SELECT set_config('app.session_token_hash', :hash, true)"),
+            {"hash": hash_bytes.hex()},
+        )
+        presented = await connection.scalar(text("SELECT app.current_session_token_hash()"))
+        await connection.execute(text("SELECT set_config('app.session_token_hash', '', true)"))
+        cleared = await connection.scalar(text("SELECT app.current_session_token_hash()"))
+
+    assert (none, presented, cleared) == (None, hash_bytes, None)

@@ -1,5 +1,5 @@
 {
-  "about": "Shared vectors for the personal-data check. The API (app/ai/personal_data.py) and the web app's copy both read this file, so the two cannot drift. 'caught' texts must be flagged, 'passes' texts must not. Every number here is made up. Both copies normalize the text first, in this order, and then match ASCII digits only ([0-9], never a Unicode-aware digit class): (1) Unicode NFKC normalization; (2) drop every character in category Cf (format characters such as the zero-width space and joiners); (3) map every character in category Zs (space separators such as the no-break space and the thin space) to an ASCII space; (4) map every character in category Pd (dashes such as the non-breaking hyphen, en dash, and minus-like dashes) to an ASCII hyphen-minus. Full-width digits become ASCII digits in step 1.",
+  "about": "Shared vectors for the personal-data check. The API (app/ai/personal_data.py) and the web app's copy both read this file, so the two cannot drift. 'caught' texts must be flagged, 'passes' texts must not. Every number here is made up. Both copies normalize the text first, in this order, and then match ASCII digits only ([0-9], never a Unicode-aware digit class): (1) Unicode NFKC normalization; (2) drop every character in category Cf (format characters such as the zero-width space and joiners); (3) map every character in category Zs (space separators such as the no-break space and the thin space) to an ASCII space; (4) map every character in category Pd (dashes such as the non-breaking hyphen, en dash, and minus-like dashes) to an ASCII hyphen-minus; (5) map every character in category Nd (a decimal digit of any script, such as Arabic-Indic, Extended Arabic-Indic, and Devanagari digits) to its ASCII digit value. Full-width digits become ASCII digits in step 1. The browser's Unicode tables may be newer than the API's and flag a few code points the API does not; the API is the authority.",
   "caught": [
     {"text": "123-45 6789", "why": "Social Security number with a dash and a space"},
     {"text": "123456789", "why": "Social Security number as nine bare digits"},
@@ -35,7 +35,17 @@
     {"text": "Card 4242 4242 4242 4242 123 please", "why": "a card number followed by its CVV"},
     {"text": "4242 4242 4242 4242 0927", "why": "a card number followed by an expiry as four digits"},
     {"text": "4242-4242-4242-4242-123", "why": "a dashed card number followed by a CVV"},
-    {"text": "4242-4242-4242-4242-12/27", "why": "a dashed card number followed by an expiry"}
+    {"text": "4242-4242-4242-4242-12/27", "why": "a dashed card number followed by an expiry"},
+    {"text": "\u0660\u0667\u0668-\u0660\u0665-\u0661\u0661\u0662\u0660", "why": "Social Security number in Arabic-Indic digits"},
+    {"text": "\u06f0\u06f7\u06f8-\u06f0\u06f5-\u06f1\u06f1\u06f2\u06f0", "why": "Social Security number in Extended Arabic-Indic digits"},
+    {"text": "\u0966\u096d\u096e-\u0966\u096b-\u0967\u0967\u0968\u0966", "why": "Social Security number in Devanagari digits"},
+    {"text": "\u0660\u0667\u0668\u0660\u0665\u0661\u0661\u0662\u0660", "why": "nine bare Arabic-Indic digits"},
+    {"text": "\u0660\u096d\u06f8-\u0660\u096b-\u06f1\u0661\u0968\u06f0", "why": "Social Security number mixing Arabic-Indic, Devanagari, and Extended Arabic-Indic digits"},
+    {"text": "078-\u0660\u0665-1120", "why": "Social Security number with ASCII and Arabic-Indic digits mixed"},
+    {"text": "\u0664\u0662\u0664\u0662 \u0664\u0662\u0664\u0662 \u0664\u0662\u0664\u0662 \u0664\u0662\u0664\u0662", "why": "card number in Arabic-Indic digits"},
+    {"text": "\u096a\u0968\u096a\u0968 \u096a\u0968\u096a\u0968 \u096a\u0968\u096a\u0968 \u096a\u0968\u096a\u0968", "why": "card number in Devanagari digits"},
+    {"text": "\u06f4\u06f2\u06f4\u06f2\u06f4\u06f2\u06f4\u06f2\u06f4\u06f2\u06f4\u06f2\u06f4\u06f2\u06f4\u06f2", "why": "card number in Extended Arabic-Indic digits, no separators"},
+    {"text": "My SSN is \u0966\u096d\u096e-\u0966\u096b-\u0967\u0967\u0968\u0966 thanks", "why": "Social Security number in Devanagari digits inside a sentence"}
   ],
   "passes": [
     {"text": "5551234567", "why": "ten bare digits, a phone number, is longer than a Social Security number"},
@@ -66,8 +76,13 @@
     {"text": "555-123-4567 12347", "why": "a phone number and a ZIP code that happen to pass Luhn"},
     {"text": "1234567890128", "why": "13 digits that pass Luhn but start with 1, which no card issuer uses"},
     {"text": "", "why": "empty text"},
-    {"text": "\u0664\u0661\u0661\u0661\u0661\u0661\u0661\u0661\u0661\u0661\u0661\u0661\u0661\u0661\u0661\u0661", "why": "16 Arabic-Indic digits, which are not ASCII digits (the web copy matches [0-9] only)"},
     {"text": "512\u00a0555\u00a00142", "why": "phone number with no-break spaces"},
-    {"text": "\u0660\u0667\u0668-\u0660\u0665-\u0661\u0661\u0662\u0660", "why": "nine Arabic-Indic digits grouped like an SSN, not ASCII digits"}
+    {"text": "\u0664\u0662\u0664\u0662\u0664\u0662\u0664\u0662\u0664\u0662\u0664\u0662\u0664\u0662\u0664\u0661", "why": "16 Arabic-Indic digits that fail Luhn"},
+    {"text": "\u0661\u0662\u0663\u0664\u0665", "why": "a short number in Arabic-Indic digits"},
+    {"text": "Filed in \u0968\u0966\u0968\u096c", "why": "a year in Devanagari digits"},
+    {"text": "\u06f2\u06f0\u06f2\u06f6-\u06f1\u06f0-\u06f1\u06f9", "why": "a date in Extended Arabic-Indic digits"},
+    {"text": "\u0665\u0661\u0662\u0665\u0665\u0665\u0660\u0661\u0664\u0662", "why": "phone-length run of ten Arabic-Indic digits"},
+    {"text": "\u096b\u0967\u0968\u096b\u096b\u096b\u0966\u0967\u096a\u0968", "why": "phone-length run of ten Devanagari digits"},
+    {"text": "\u0665\u0661\u0662-\u0665\u0665\u0665-\u0660\u0661\u0664\u0662", "why": "phone number in Arabic-Indic digits"}
   ]
 }

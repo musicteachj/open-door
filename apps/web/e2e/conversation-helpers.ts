@@ -75,7 +75,12 @@ export const assistantMessage = (page: Page, index = 0): Locator =>
 /** The conversation as the API sends it now (a plain GET, no stub in the way when none is set). */
 export function currentConversation(page: Page) {
   return page.evaluate(async () => {
-    const response = await fetch('/api/v1/assistant/conversations/current')
+    const csrf = {
+      headers: {
+        'X-CSRF-Token': /(?:^|; )__Host-od_csrf=([^;]*)/.exec(document.cookie)?.[1] ?? '',
+      },
+    }
+    const response = await fetch('/api/v1/assistant/conversations/current', csrf)
     return (await response.json()) as null | {
       turns: {
         status: string

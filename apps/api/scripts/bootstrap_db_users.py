@@ -31,6 +31,12 @@ from sqlalchemy.exc import DBAPIError
 from sqlalchemy.ext.asyncio import AsyncConnection, create_async_engine
 
 from app.core.config import get_settings
+from app.core.owner_settings import (
+    DatabaseUrlError,
+    optional_cleanup_database_url,
+    owner_database_url,
+)
+from app.db.engine import IDLE_IN_TRANSACTION_TIMEOUT, STATEMENT_TIMEOUT
 
 ROLES = ("od_app", "od_cleanup")
 
@@ -39,6 +45,20 @@ ALTER_LOGIN = "ALTER ROLE %I WITH LOGIN PASSWORD %L"
 # The login must inherit the role's privileges: the row-level security policies are written
 # TO od_app, and they reach the login only through an inheriting membership.
 GRANT_ROLE = "GRANT %I TO %I WITH INHERIT TRUE"
+# The timeouts the API's engine sets on each connection, as a second line for any other connection
+# the login opens. The cleanup login gets a longer statement limit: deleting an expired sandbox
+# cascades through every table, and the cleanup job (Phase 8, Stage 4) will set its own. The values
+# are our own constants, never input.
+CLEANUP_STATEMENT_TIMEOUT = "60s"
+STATEMENT_TIMEOUTS = {"od_app": STATEMENT_TIMEOUT, "od_cleanup": CLEANUP_STATEMENT_TIMEOUT}
+
+
+def login_settings(role: str) -> tuple[tuple[str, str], ...]:
+    return (
+        ("statement_timeout", STATEMENT_TIMEOUTS[role]),
+        ("idle_in_transaction_session_timeout", IDLE_IN_TRANSACTION_TIMEOUT),
+    )
+
 
 FORMAT = text("SELECT format(CAST(:template AS text), CAST(:first AS text), CAST(:second AS text))")
 
@@ -182,18 +202,25 @@ async def ensure_login(connection: AsyncConnection, login: Login, exists: bool) 
     await connection.exec_driver_sql(
         await server_formatted(connection, GRANT_ROLE, login.role, login.user)
     )
+    for name, value in login_settings(login.role):
+        await connection.exec_driver_sql(
+            await server_formatted(connection, f"ALTER ROLE %I SET {name} = %L", login.user, value)
+        )
     return f"{login.user}: {'password reset' if exists else 'created'}, with {login.role}"
 
 
 async def main() -> None:
     settings = get_settings()
-    if settings.migration_database_url is None:
-        raise SystemExit("MIGRATION_DATABASE_URL is not set. See apps/api/.env.example.")
-    owner_url = str(settings.migration_database_url)
-    cleanup_url = settings.cleanup_database_url
-    logins = logins_from(
-        str(settings.database_url), None if cleanup_url is None else str(cleanup_url), owner_url
-    )
+    try:
+        owner_url = owner_database_url()
+    except DatabaseUrlError as error:
+        raise SystemExit(str(error)) from None
+    # The cleanup login is optional here: without its URL only the app's login is created.
+    try:
+        cleanup_url = optional_cleanup_database_url()
+    except DatabaseUrlError as error:
+        raise SystemExit(str(error)) from None
+    logins = logins_from(str(settings.database_url), cleanup_url, owner_url)
 
     # hide_parameters keeps bound values out of SQLAlchemy's error messages.
     engine = create_async_engine(owner_url, hide_parameters=True)

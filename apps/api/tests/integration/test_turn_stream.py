@@ -19,6 +19,7 @@ from sqlalchemy.ext.asyncio import AsyncEngine
 from app.ai.admission import HISTORY_REFUSE_TOKENS
 from app.ai.conversations import Pins, create_conversation
 from app.ai.fixed_texts import (
+    BUDGET_CONVERSATION_TEXT,
     BUDGET_DAILY_TEXT,
     BUDGET_SANDBOX_TEXT,
     PERSONAL_DATA_TEXT,
@@ -311,12 +312,75 @@ async def test_a_sandbox_without_room_is_429_budget_sandbox_and_starts_no_turn(
     assert response.headers["content-type"] == "application/problem+json"
     assert response.json()["type"] == "budget-sandbox"
     assert response.json()["detail"] == BUDGET_SANDBOX_TEXT
+    # A sandbox's own limit never resets, so there is nothing to wait for.
+    assert "retry-after" not in response.headers
     # Checked before the turn's row is added: nothing was left `running`.
     rows = await turn_rows(app_engine, tenant_id, person_id)
     assert [r.status for r in rows] == ["stopped"]
     async with tenant_session(app_engine, TenantContext(tenant_id, person_id)) as db:
         spent = await db.scalars(select(AiSpend.amount_usd))
         assert sum(spent, Decimal(0)) == Decimal("0.90")
+
+
+async def seed_big_history(
+    app_engine: AsyncEngine, tenant_id: UUID, person_id: UUID, conversation_id: str, spent: str
+) -> None:
+    """A stopped earlier turn with a history under the 80,000-token refusal but costly to resend
+    (about $0.58 for the next turn, against about $0.21 for an empty conversation), and `spent`
+    of the sandbox's $1.00 already used."""
+    async with tenant_session(app_engine, TenantContext(tenant_id, person_id)) as db:
+        conversation = await db.get(AiConversation, UUID(conversation_id))
+        assert conversation is not None
+        earlier = await begin_turn(db, conversation, "earlier")
+        db.add(
+            message_row(
+                conversation,
+                earlier.id,
+                position=0,
+                role="user",
+                content=[{"type": "text", "text": "y" * 140_000}],
+            )
+        )
+        await db.flush()
+        await db.execute(
+            update(AiTurn)
+            .where(AiTurn.id == earlier.id)
+            .values(status="stopped", ended_at=text("now()"))
+        )
+    await add_spend(app_engine, tenant_id, person_id, earlier.id, spent)
+
+
+async def test_a_conversation_too_big_for_what_is_left_is_429_budget_conversation(
+    browser: Browser, app_engine: AsyncEngine
+) -> None:
+    tenant_id, person_id = sign_in(browser)
+    conversation_id = new_conversation(browser)["id"]
+    # $0.30 left: a new conversation's first turn fits, this one with its history does not.
+    await seed_big_history(app_engine, tenant_id, person_id, conversation_id, "0.70")
+
+    response = ask(browser, conversation_id)
+
+    assert response.status_code == 429
+    assert response.headers["content-type"] == "application/problem+json"
+    assert response.json()["type"] == "budget-conversation"
+    assert response.json()["detail"] == BUDGET_CONVERSATION_TEXT
+    assert "retry-after" not in response.headers
+    rows = await turn_rows(app_engine, tenant_id, person_id)
+    assert [r.status for r in rows] == ["stopped"]
+
+
+async def test_a_sandbox_that_cannot_fit_even_an_empty_conversation_stays_budget_sandbox(
+    browser: Browser, app_engine: AsyncEngine
+) -> None:
+    tenant_id, person_id = sign_in(browser)
+    conversation_id = new_conversation(browser)["id"]
+    await seed_big_history(app_engine, tenant_id, person_id, conversation_id, "0.90")
+
+    response = ask(browser, conversation_id)
+
+    assert response.status_code == 429
+    assert response.json()["type"] == "budget-sandbox"
+    assert response.json()["detail"] == BUDGET_SANDBOX_TEXT
 
 
 async def test_a_day_without_room_is_429_budget_daily(open_browser_with: OpenBrowserWith) -> None:
@@ -329,6 +393,9 @@ async def test_a_day_without_room_is_429_budget_daily(open_browser_with: OpenBro
     assert response.status_code == 429
     assert response.json()["type"] == "budget-daily"
     assert response.json()["detail"] == BUDGET_DAILY_TEXT
+    # Whole seconds to the next UTC midnight, when the day's budget resets.
+    retry_after = int(response.headers["retry-after"])
+    assert 1 <= retry_after <= 86_400
 
 
 async def test_the_checks_run_in_the_specs_order(browser: Browser, app_engine: AsyncEngine) -> None:
@@ -355,7 +422,8 @@ def test_the_stream_needs_the_csrf_token_and_the_same_origin_check(browser: Brow
     sign_in(browser)
     conversation_id = new_conversation(browser)["id"]
 
-    no_csrf = browser.client.post(turns_url(conversation_id), json={"question": SICK})
+    with browser.without_csrf():
+        no_csrf = browser.client.post(turns_url(conversation_id), json={"question": SICK})
     cross_site = browser.client.post(
         turns_url(conversation_id),
         json={"question": SICK},
@@ -678,7 +746,7 @@ async def test_a_cited_answer_and_a_decline_that_never_searched_are_not_not_foun
 # --- A ciphertext that does not open ----------------------------------------------------------
 
 
-async def test_a_ciphertext_moved_between_messages_is_a_500_with_no_turn_row_written(
+async def test_a_ciphertext_moved_between_messages_makes_the_conversation_unreadable(
     open_browser: OpenBrowser, app_engine: AsyncEngine, owner_engine: AsyncEngine
 ) -> None:
     browser = open_browser(raise_server_exceptions=False)
@@ -717,11 +785,14 @@ async def test_a_ciphertext_moved_between_messages_is_a_500_with_no_turn_row_wri
     response = ask(browser, conversation_id)
     reading = browser.client.get(f"{BASE}/conversations/current")
 
+    # Not a 500 any more: the question is a 409 and the read says the conversation is unreadable.
+    assert response.status_code == 409
+    assert response.headers["content-type"] == "application/problem+json"
+    assert response.json()["type"] == "conversation-unreadable"
+    assert reading.status_code == 200
+    assert (reading.json()["unreadable"], reading.json()["turns"]) == (True, [])
     for refused in (response, reading):
-        assert refused.status_code == 500
-        assert refused.headers["content-type"] == "application/problem+json"
-        assert refused.json()["detail"] == "Something went wrong."
-        # Only the generic problem surfaces: no word of ciphertexts, keys, or the text.
+        # No word of ciphertexts, keys, or the text.
         assert "decrypt" not in refused.text.lower()
         assert "message 0" not in refused.text
     # Admission failed before the turn's row was added: only the earlier turn is there.

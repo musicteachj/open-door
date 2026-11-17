@@ -260,6 +260,62 @@ def test_the_full_set_asks_every_group_and_smoke_and_effort_ask_none() -> None:
     assert run.SETS["full"].trials == 3
 
 
+def test_a_smoke_run_asks_the_groups_it_names_with_all_their_variants_in_the_files_order() -> None:
+    loaded = datasets.load_fairness()
+
+    groups = run.fairness_for_set(
+        run.SETS["smoke"], loaded, ("fair-final-pay-age", "fair-religious", "fair-pto-age")
+    )
+
+    assert [g.id for g in groups] == ["fair-religious", "fair-pto-age", "fair-final-pay-age"]
+    assert [len(g.variants) for g in groups] == [4, 3, 2]
+    assert groups == tuple(g for g in loaded.groups if g.id in {g.id for g in groups})
+
+
+def test_an_unknown_group_is_refused_and_the_valid_ids_are_listed() -> None:
+    loaded = datasets.load_fairness()
+
+    with pytest.raises(run.EvalFailure) as raised:
+        run.fairness_for_set(run.SETS["smoke"], loaded, ("fair-religion",))
+
+    message = str(raised.value)
+    assert "'fair-religion'" in message
+    assert all(group.id in message for group in loaded.groups)
+
+
+def test_groups_are_refused_for_a_set_that_already_runs_every_group() -> None:
+    loaded = datasets.load_fairness()
+
+    with pytest.raises(run.EvalFailure, match="already runs every group"):
+        run.fairness_for_set(run.SETS["full"], loaded, ("fair-religious",))
+
+
+def test_groups_without_a_groups_file_are_refused() -> None:
+    with pytest.raises(run.EvalFailure, match="needs the fairness groups file"):
+        run.fairness_for_set(run.SETS["smoke"], None, ("fair-religious",))
+
+
+def test_the_group_ids_are_read_from_a_comma_separated_list() -> None:
+    assert run.parse_group_ids(None) == ()
+    assert run.parse_group_ids("fair-religious, fair-pto-age,fair-religious") == (
+        "fair-religious",
+        "fair-pto-age",
+    )
+    with pytest.raises(run.EvalFailure, match="separated by commas"):
+        run.parse_group_ids("fair-religious,")
+    with pytest.raises(run.EvalFailure, match="separated by commas"):
+        run.parse_group_ids("")
+
+
+def test_the_runner_loads_the_named_groups_for_a_smoke_set_and_checks_their_ids() -> None:
+    paths = run.EvalPaths()
+    rt, qa, ac = datasets.load_redteam(), datasets.load_qa(), datasets.load_actions()
+
+    loaded = run._load_fairness(paths, run.SETS["smoke"], rt, qa, ac, ("fair-pto-age",))
+
+    assert [g.id for g in loaded] == ["fair-pto-age"]
+
+
 def test_the_runner_loads_fairness_for_a_full_set_only() -> None:
     paths = run.EvalPaths()
     rt, qa, ac = datasets.load_redteam(), datasets.load_qa(), datasets.load_actions()

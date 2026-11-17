@@ -9,7 +9,13 @@ import type {
   OpenCaseBody,
   QueuePageOut,
 } from '@/api/generated'
-import { CASE_BULLETS, SENT_LINE, WAITING_LIMIT, type DemoCase } from '@/app/gallery/fixtures/cases'
+import {
+  CANNOT_SEND,
+  CASE_BULLETS,
+  SENT_LINE,
+  WAITING_LIMIT,
+  type DemoCase,
+} from '@/app/gallery/fixtures/cases'
 import { DANA } from './assistant-fixtures'
 import { problemResponse } from './fake-assistant'
 import { meFor } from './fixtures'
@@ -25,6 +31,7 @@ export const CASE_TEXTS: CaseTextsOut = {
   bullets: CASE_BULLETS,
   replyBy: '2026-10-28',
   waitingLimit: WAITING_LIMIT,
+  cannotSend: CANNOT_SEND,
   hrContacts: [DANA],
 }
 

@@ -29,6 +29,29 @@ class JsonFormatter(logging.Formatter):
         return json.dumps(entry, default=str)
 
 
+# The probes' paths, matched exactly (a query string is ignored). They are called every few seconds
+# by the load balancer and the container check, and say nothing a person needs.
+HEALTH_PATHS = frozenset({"/api/v1/health", "/api/v1/health/live"})
+
+
+class AccessLogFilter(logging.Filter):
+    """Drop uvicorn's access-log line for the two health paths, and log every other path without
+    its query string: a search's query is what a person typed ("pregnancy leave"), which must not
+    sit in the log beside their address.
+
+    uvicorn's access record carries (client, method, path, http version, status) as its args.
+    """
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        args = record.args
+        if isinstance(args, tuple) and len(args) >= 3 and isinstance(args[2], str):
+            path = args[2].partition("?")[0]
+            if path in HEALTH_PATHS:
+                return False
+            record.args = (*args[:2], path, *args[3:])
+        return True
+
+
 def configure_logging(level: str) -> None:
     """Send every log record, including uvicorn's, through one JSON handler on the root logger.
 
@@ -47,3 +70,6 @@ def configure_logging(level: str) -> None:
         uvicorn_logger.propagate = True
         # uvicorn pins its own levels; NOTSET defers to the root, so LOG_LEVEL governs everything.
         uvicorn_logger.setLevel(logging.NOTSET)
+    access_logger = logging.getLogger("uvicorn.access")
+    access_logger.filters = [f for f in access_logger.filters if not isinstance(f, AccessLogFilter)]
+    access_logger.addFilter(AccessLogFilter())

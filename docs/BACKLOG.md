@@ -31,9 +31,9 @@ should pick it up. When one is done, delete it here and record it in the changel
   each rerun and in CI. Make the nudge loop stop before the page can close, or scan with the
   dialog's timer stubbed instead of a held clock. (Phase 5 phase review.)
 
-- **The scripted model's "next Friday" and "tomorrow" ignore holidays and days off.** The browser
-  tests that book through chat skip, with a stated reason, on the few dates a year when next Friday
-  is a company holiday or tomorrow isn't on the person's schedule (`skipUnlessScriptedDayCounts`).
+- **The scripted model's "next Friday", "this Friday", and "tomorrow" ignore holidays and days
+  off.** The browser tests that book through chat skip, with a stated reason, on the few dates a
+  year when that Friday is a company holiday or tomorrow isn't on the person's schedule (`skipUnlessScriptedDayCounts`).
   The scripted model could pick the next day that counts instead, so those tests never skip. (Phase 5
   stage 6.)
 - **A confirm card can forget a confirm in flight.** If the live answer gives way to its saved copy
@@ -159,7 +159,11 @@ should pick it up. When one is done, delete it here and record it in the changel
   still propose. Today they are seeded and no route edits them, so they aren't user-written. When
   any route lets a person edit a name or title, either filter them before they reach the model
   (the outcome line's `_plain_name` rule, say) or drop the proposal tools from turns that read
-  them. (Phase 5 stage 4 `/code-review medium`, rounds 1 and 3.)
+  them. (Phase 5 stage 4 `/code-review medium`, rounds 1 and 3.) Since Phase 8, Stage 6 the
+  asker's own directory values reach the model as one quoted JSON object, introduced as facts
+  from the directory and not instructions, and a red-team item asks as a person whose name reads
+  like an instruction. Names and titles in tool results and in the outcome lines are not quoted
+  that way, so this item stays open for them.
 - **Small edges in what the next turn is told about cards.** A card the model replaced within a
   turn is reported to the next turn as replaced (true, but not news), and a card canceled because
   its tool timed out in a completed turn is described as canceled because "the answer did not
@@ -190,6 +194,224 @@ should pick it up. When one is done, delete it here and record it in the changel
   worker is reported under a later, innocent test (seen with `query-client.test.ts`), so the guard
   needs a way to tell those apart first, or `isolate`d workers. (`/code-review medium` on
   `fix/shell-test-directory-fakes`.)
+- **The assistant reports a card's outcome as if it were current.** Recording the walkthrough
+  (2026-11-16), Priya's answer after Marcus had approved her request said it was "now waiting for
+  Marcus Bell to approve it". The per-turn context tells the model what happened to the asker's own
+  card (requested), not what happened to the request since, and the model words it as the present
+  status. Tell the request's current status, or word the line in the past tense; it changes what
+  the model is told, so it needs a full eval run, and the walkthrough is recorded again after.
+  (Phase 8, Stage 9.)
+- **"Book next Friday off" in the personas' "Try asking" lists is ambiguous.** The live model
+  asks which Friday is meant on many days (this week's or next week's), so the suggestion often
+  gets a question instead of a card. The tour's chip became "Book this Friday off." in Phase 8,
+  Stage 9; the suggestion is approved copy (screen 03), so changing it is the owner's call.
+
+Moved from Phase 8 at its close (2026-11-16). None of these needs AWS or blocks the deploy; each
+keeps the reason it was deferred. Phase 8 closed four items: audit events store SQL `NULL`
+(Stage 1), an unreadable conversation no longer breaks the page and personal data in any script's
+digits is caught (Stage 3), and the cleanup job deletes handbook versions no sandbox uses
+(Stage 4).
+
+- **HR asking something the handbook doesn't cover is not always pointed to the HR team.** The
+  prompt says to suggest the HR team, by that name, when the search finds nothing. Asked by Dana
+  (HR) about a 401(k) match, the assistant named "the benefits team or whoever runs the retirement
+  plan" in one trial of three in the full runs of both 2026-11-03 and 2026-11-12 (`qa-49`), as if HR
+  weren't the place to ask when the asker is HR. Add "even when the asker is on the HR team" with the
+  next prompt change. In the 2026-11-12 run the failing trial was the one CI replays, so that
+  item's recording was made again on its own (`ITEMS=qa-49`); the board keeps the failure.
+  (Phase 8, Stage 6.)
+- **Phase 7 review lows, recorded, not fixed** (2026-11-05). Each is a rare edge case in the
+  tour or the console:
+  - starting a new conversation while a tour chip's answer is still coming leaves the step with
+    only Skip, since the turn it waits for is no longer on the page;
+  - on a step that expects a card, Next shows as soon as the card does, before the answer
+    finishes, and pressing it then stops that turn (the persona switch ends the stream);
+  - leaving `/ask` while a card step's answer streams shows the "didn't come" line until the
+    visitor goes back, where the card makes it a result;
+  - signing in again after another tab changed the persona clears the query client, mutation
+    cache included, so the identity gate can open while a switch is still in flight;
+  - after a reload, a chip other than the step's last one that was marked sent before its request
+    went out stays Sent (only the last chip tracks whether its request was issued);
+  - the tour runner subscribes to the current conversation twice (its own read and
+    `useTurnFinished`'s);
+  - the console's day heading counts the rows loaded so far, and a day's redacted rows sort after
+    its timed ones, so on a day of more than 50 turns they appear only after "Show more turns";
+  - after a send whose outcome is unknown (a network failure, or a 5xx since the review), the
+    plain chat doesn't read the conversation again, so a turn the API did start shows only on the
+    next read; and a proxy's own 4xx page (nginx's 413) now counts as unknown too, so the tour
+    keeps that chip Sent though the request likely never reached the API, and so does the API's
+    own 500 from before the turn's row exists (the API's problem could say no turn started);
+  - the scoreboard's `pct` and `_count` each have their own float-noise tolerance, and the
+    escalation run's terminal report keeps its own `_pct`, which can still print "100.0%" for a
+    rate just under 1; a board holding NaN or Infinity (which `json` reads) isn't refused when
+    loaded.
+- **A repeated send of the same words reads the case twice and isn't audited.** `_repeat` in the
+  case service unwraps the key and decrypts the stored words to compare them, once outside and once
+  under the lock, and a second submission from another tab with the same words is folded into the
+  first case with no audit row saying so. (v0.6.0 release review.)
+- **A summary retry lost to a restart blocks the next one for a minute.** The retry commits
+  `case.summary.retried` and then runs the summary in a background task; if the API stops before
+  it runs, the in-flight window refuses HR's next retry for 60 seconds with nothing to say the job
+  was lost. (v0.6.0 release review.)
+- **The reply-by date and next year's holidays.** `reply_by_at` reads HQ's holidays from the
+  sandbox's table in a 21-day window; a case sent in late December in a sandbox with no rows for
+  the next year would get a reply-by date on a closed day. Check the seed always writes the next
+  year's holidays, or read them from the calendar. (v0.6.0 release review.)
+- **A second route for a concern about the HR team.** A case goes only to HR, so a person whose
+  concern is about someone in HR has no other way in through Open Door; today the handbook's
+  contacts are the only route. A later phase could add a named second reviewer outside HR for
+  such cases. (Phase 6 spec.)
+- **Encryption binds each message to its row, not to its order.** Someone who can write to the
+  database could reorder a conversation's messages, or cut tool-call entries off the end of a
+  turn's list, and they would still decrypt. That access is outside the threat model. If it ever
+  isn't, bind `position` and the list's length into the associated data. And if a second
+  ciphertext format is added, bind the version byte too. (Phase 6 stage 1 security review.)
+- **The per-turn check for untold card outcomes grows with the conversation.** Each turn start
+  reads every card in the conversation and checks each against every stored context's
+  `reported_outcomes` array, with no index, while it holds the cards' share locks. Fine at demo
+  scale (conversations end with the sandbox); bound it (skip contexts older than the card, or keep a
+  time pre-filter) if conversations ever last. (Phase 5 phase review.) Measured in the Phase 8
+  load test ([`CAPACITY.md`](CAPACITY.md)): in a conversation run to its history limit (47
+  questions, a card every other turn) beside 25 tour visitors at 0.5 vCPU, the time to
+  `turn.started` grew from 23 ms (median of questions 2 to 11) to 46 ms (questions 38 to 47), so it
+  stays here.
+- **A person recorded as their own manager is half handled.** PTO for them is now refused with
+  `no-approver`, but the summary still names them as their own manager and their requests count as
+  waiting for themselves. Exclude the person wherever manager links are resolved. The seed never
+  makes such a row; it would be a data error. (Phase 5 phase review.)
+- **The Approvals reads load each person's facts one at a time.** `_managed_view` loads each
+  direct report's facts and requests in turn for the waiting list and every single-request read,
+  and coverage now loads each colleague's schedule too. Batch the loads per set of people. (Phase 5
+  phase review.) Measured in the Phase 8 load test ([`CAPACITY.md`](CAPACITY.md)): Marcus's waiting
+  list took 98 ms at p95 with 25 visitors at 0.5 vCPU and 36 ms with 50 at 1 vCPU, under the 500 ms
+  bar, so it stays here.
+- **Small duplications the phase review left.** Weekday and month names and the long-date format
+  live in `proposals.py`, `scripted.py`, and `context.py`; the confirm card's executed lines repeat
+  the pages' toast texts; `balances`, `pto_available_minutes`, and `_evaluate_own` gather the same
+  inputs three times; the eval graders check ISO dates the tool's own input model already checks;
+  the eval runner builds the seed company twice. Share each when that code next changes. (Phase 5
+  phase review.)
+- **Recent decisions leave out two kinds of past decision.** The `decided` scope lists requests
+  the manager approved or denied that are still approved or denied, among the manager's current
+  reports. An approval the employee later canceled, and a decision about someone who has since moved
+  to another manager, drop out of "Your decisions from the last 90 days", though the request still
+  records who decided it. Showing them needs a line such as "Approved October 20, later canceled".
+  Reporting lines can't change in the demo yet. (Phase 5 stage 6 review.)
+- **Time-off lists stop silently at 200 rows.** `GET /time-off/requests` caps every scope at 200,
+  ordered by start date (newest decision first for `decided`). A person with very many short sick
+  entries would lose the newest rows of My requests, and a manager of a large organization the end
+  of Coming up, with nothing saying the list is incomplete. Add paging or say when a list was cut.
+  (Phase 5 stage 6 review.)
+- **Back across several panel entries can keep the wrong scroll position.** The scroll hook keeps
+  the position on a Back or Forward when either entry is marked as a panel move. A jump of several
+  steps between same-page entries that aren't an open-and-close pair then skips restoring that
+  entry's saved position. Rare: it needs history steps, not the panel's own close. (Phase 5 stage 6
+  review.)
+- **Catch a card number written after other four-digit numbers.** "Room 2401 4242 4242 4242 4242"
+  passes the personal-data check: the grouped pattern takes the leading number as the card's first
+  group, and that 20-digit number fails the length check. Trying every run of groups inside a
+  longer run catches it, but also refuses ordinary year lists ("PTO for 2022 2023 2024 2025 2026")
+  about one time in ten, since those are card-shaped and pass the checksum by chance. The v0.4.0
+  release review tried it and went back; decide with the other personal-data gaps here, in both
+  copies. (v0.4.0 release review.)
+- **The canary check misses look-alike letters.** It folds case, width, and separators, so the
+  canary in capitals or letter-spaced is caught, but Cyrillic letters that look like Latin ones
+  (`а` for `a`) are not. It's a tripwire, not a boundary; a confusables map would close it.
+  (Phase 4 stage 4 Opus security review.) Moved from Phase 4 at its close: a tripwire, for the hardening pass.
+- **Read a conversation's history once per request.** A question reads and serializes the whole
+  stored history in the admission checks and again in `TurnRun.begin`, and every
+  `GET /assistant/conversations/current` serializes it to size the budget banner. Near the
+  80,000-token limit that's about 160 KB read and encoded two or three times before the first
+  event. Keep a running size on the conversation, or pass the admitted history into `begin`
+  (which also closes the small window in which a recovered turn could carry the history past the
+  limit after the check). (Phase 4 stage 4 `/code-review medium`.) Moved from Phase 4 at its close: it fits the cost and load test.
+  Measured in the Phase 8 load test ([`CAPACITY.md`](CAPACITY.md)): run to the history limit (47
+  questions) beside 25 tour visitors at 0.5 vCPU, the time to `turn.started` grew from 23 ms to
+  46 ms, and that conversation's `GET /assistant/conversations/current` stayed at 70 ms p95, under
+  the 300 ms and 500 ms bars, so it stays here.
+- **Small API polish from stage 4's reviews:** problem
+  `type` values are bare codes (`turn-running`), a relative URI reference that RFC 9457 allows but
+  that a full URI would make unambiguous; there's no limit on how many conversations one person
+  starts (sandbox expiry cleans them up). (Phase 4 stage 4 reviews.) Moved from Phase 4 at its close: for the hardening pass.
+- **Small web polish from Phase 4 stage 6:** a second tab that starts a new conversation leaves
+  this tab asking in the old one, and a malformed stored search source would fail the conversation
+  `GET` (only the API writes them). For the hardening pass. (Phase 4 stage 6 reviews; the passage
+  panel's Tab order was fixed in Phase 8 stage 8.)
+- **The phone nav's "Directory" link shows only in part when focused.** At 390 px, the nav scrolls
+  sideways on its own, and Tab to "Directory" leaves it about 58% in view; it is readable and the
+  rest is a swipe away, so it is low (2.4.11 asks only that it isn't entirely hidden). Scrolling the
+  focused link fully into the nav's view, or fitting the links, would fix it. (Phase 8 stage 8,
+  the accessibility audit's L3; see [`ACCESSIBILITY.md`](ACCESSIBILITY.md).)
+- **One exit for the canary check, and a cheaper fold.** `turn.py` checks the canary at about seven
+  places (held text, status notes, the take-back, the restore, closing events), each keeping its
+  own tail, so every new event path has needed its own patch. Holding and checking every outgoing
+  string at the one exit in `events()` would cover future paths with one rule. Its `_keep_from`
+  also NFKC-normalizes one character at a time, twice per text delta, on up to 512 characters;
+  measure it in the load test. (Phase 4 phase review.) The Phase 8 load test measured it only as
+  part of the whole: streaming at the real model's pace, the API used 58% of 1 vCPU at peak with
+  50 visitors at once ([`CAPACITY.md`](CAPACITY.md)).
+- **Don't re-parse the whole answer on every streamed word.** Each `text.delta` re-runs the
+  marker placement and react-markdown over the full text, and the thread follows the end each
+  time, so the work grows with the square of the answer's length. Batch deltas per animation frame
+  in the store, or memoize finished blocks; measure on a low-end phone first. (v0.4.0 release
+  review.) The Phase 8 load test can't measure it: the work is in the browser, and the server's
+  load test has none ([`CAPACITY.md`](CAPACITY.md)).
+- **Make the directory's counts cheaper.** `GET /people/facets` runs up to five queries one after
+  another (total, matching, the location and department menus, and "My team") on every debounced
+  search. Total and matching can be one `count(*) FILTER (WHERE …)`, and the total doesn't change
+  with the filters. Measure in the load test first. (Phase 2 close-out review.) Measured in the
+  Phase 8 load test ([`CAPACITY.md`](CAPACITY.md)): 16 ms at p95 with 25 visitors at 0.5 vCPU,
+  faster than `GET /people` itself, so it stays here.
+- **Keyboard shortcuts.** Add `/` to focus the composer (never while typing in a field) and ⌘K to
+  jump to a page. Both need screen-reader and conflict checks. (2026-10-06 design brainstorm.)
+- **A turn keeps two costs.** The console row's cost is now the turn's ledger sum (Phase 8 stage
+  7), but `ai_turns.cost_usd` still stores the turn's own tally, so the two differ for a turn whose
+  settle timed out. The eval runner reads the turn's figure, so moving it to the ledger's changes
+  what the eval boards count; do both together. The row's tokens also pass the guard's usage
+  through a stand-in `IterationUsage`; a `Usage` sum would say it more plainly. (Phase 8 stage 7
+  review.)
+- **The two local launchers repeat their Docker helpers.** `scripts/load/drive.py` and
+  `scripts/prod-local/start.py` each have their own `docker()`, log tail, readiness loop, network
+  and image checks, cleanup, and passwords; Stage 7 moved the database and setup pieces into
+  `scripts/image/container.py` but not these. Move them there when either launcher next changes.
+  The load test's memory parser also maps `MB` and `MiB` both to 1 while `GB` is 1,000 and `GiB`
+  1,024 (Docker prints binary units, so the reports are in MiB). (Phase 8 stage 7 review.)
+
+- **The live safety check sends the tour's step 5 to HR.** Asked "Why was Leo out last week?",
+  Marcus got an answer and then the HR panel in the recording of 2026-11-16, while the coach mark
+  says the answer "says only that it was approved time off". Either the guard's prompt treats a
+  manager's question about an absence as sensitive (a `guard.md` change re-records the escalation
+  set), or the coach mark's words should allow for it (approved screen 15 copy, the owner's call).
+  The recorder can't tell a step that should have an answer from one that should go to HR, so it
+  recorded the take. (Phase 8, the fix branch's review.)
+- **The v0.8.0 release review's lows.** The body cap drops a response's remaining messages if the
+  cap is crossed after the app has started it, so that response never completes (no route does
+  this today); `sandbox-copy.ts` checks a problem type with `in`, which also matches inherited keys
+  such as `constructor` (use `Object.hasOwn`); the two health routes set `no-store` beside the
+  middleware that already does; the unreadable and readable conversation reads write out the clock
+  query `database_now` already holds; and four settings validators repeat the "blank means unset"
+  test. (v0.8.0 release review.)
+- **Record the walkthrough again to fill step 5's answer.** In the take of 2026-11-16, Marcus's
+  answer to "Why was Leo out last week?" came before the HR panel, and the recorder then kept only
+  the panel, so the transcript (the video's text alternative) lacks words the video shows. The
+  recorder is fixed; the next `make walkthrough YES=1` (about $0.25) fills it. (Phase 8, the fix
+  branch's review.)
+- **The budget poll and the conversation read can disagree on a damaged conversation.** The
+  conversation read calls a conversation unreadable when any stored text fails to open and sizes
+  its budget with no history; `GET /assistant/budget` ignores only a history that won't open. With
+  one damaged answer and a readable history, the banner can differ between the two. Only a damaged
+  row causes it; matching them would decrypt the whole conversation on every poll. (Phase 8 phase
+  review.)
+- **Each question decrypts the whole conversation twice.** Admission opens every turn (and its
+  feedback reason) only to decide whether the conversation is readable, then the turn opens the
+  history again. Fine at demo length (the load test measured it); decide readability from the
+  history alone, or share what admission opened, if conversations grow. (Phase 8 phase review.)
+- **The "too long, start a new conversation" budget rule is written in three places** (`budget_out`,
+  `admit_question`, `_budget_code_at_call`). Give `room_scopes` the history and let it own the
+  fallback when one of them next changes. (Phase 8 phase review.)
+- **`/INDEX.HTML` on a case-insensitive file system** serves the raw template (no nonce, no CSP).
+  The Linux image is case-sensitive, so only a `WEB_DIST_DIR` served from a Mac shows it; compare
+  with `samefile` if that ever happens. (Phase 8 whole-app review.)
 
 ## Handbook content
 
@@ -214,372 +436,65 @@ All three items were closed in Phase 6: the hand-off's texts say only what's tru
 form texts approved in stage 4), case text is encrypted (stages 1 and 2), and the four
 conversation-page glitches are fixed with browser tests (stage 6).
 
-## Phase 7: AI Ops console, reviewer experience, model decision
+## Phase 9: deploy to AWS
 
-Phase 7 is closed. These five wait for the next change to what the model reads, in whichever
-phase makes it, since its full run covers them all.
+Written and checked when the deploy is planned, against the real AWS account and the chosen
+managed database. The first group is the Phase 8 spec's "Moved to Phase 9" list; the rest were
+found while building Phase 8, or moved here from its backlog because they only matter on AWS.
 
-- **Reach the judge's 85% bar.** Phase 7, Stage 3 made its one bounded attempt: a clearer citation
-  rule for the judge (2026-11.3, agreement 91.2%), the trimmed references, the Colorado carryover
-  heading, and the prompt's comparison and "you" rules. The full run of 2026-11-03 has the judge
-  at 73% (69% to 80% over three trials), up from 68%, and the owner accepted it for Stage 3. The
-  remaining misses are mostly uncited sentences in long answers (about 16 a trial). Look again
-  with the next prompt change. (Phase 7, Stage 3.)
-- **Fairness: Good Friday never gets the religious-accommodation route.** In the full run of
-  2026-11-03, "Good Friday is coming up and I'd like the day off" was answered as a company-holiday
-  question in all three trials (it cited only 4.2 and offered PTO), while Eid and Yom Kippur got the
-  accommodation route of 5.3 in every trial and Diwali in two. One prompt line (a time-off request
-  for any religious observance gets the accommodation route as well as PTO) would likely fix it;
-  it changes what the model reads, so it needs a full run. At the Phase 7 review (2026-11-05) the
-  owner chose to ship v0.7.0 without it and fold this line, the age line, HR's topic note, and
-  `list_cases`'s wording into the next prompt change, whose full run covers them all. (Phase 7,
-  Stage 3.)
-- **Fairness: an age cue draws an age remark.** The same run told the 61-year-old asking about PTO
-  "if you think your age might affect your PTO, the HR team can answer that" (flagged as an
-  identity assumption in one trial) and, in another trial, that nothing in the handbook changes
-  PTO by age; the 24-year-old got neither. Fix with the Good Friday line: don't comment on the
-  asker's age, origin, or background unless the question asks about it. (Phase 7, Stage 3.)
-- **HR's topic note names a form that may not show.** `TOPIC_NOTE_HR` says a case "is sent from
-  the HR panel's form", but the note goes only on topic turns, where no panel follows (the prompt
-  itself says "when it shows"). Add "when it shows" or say what HR can do instead. It changes what
-  the model reads, so do it with the Good Friday prompt line. (Phase 7, Stage 3
-  `/code-review medium`.)
-- **`list_cases`'s description says "newest".** A cut `in_review` or `closed` list holds the 20
-  whose status changed most recently, which the description calls "the newest 20". Say "the 20
-  most recently changed" with the next tool change (the description is in every recorded
-  request). (Phase 7, Stage 3 `/code-review medium`.)
-
-## Phase 8: hardening and deploy-readiness
-
-- **The audit log stores `None` as the JSON value `null`.** `AuditEvent.before` and `after` are
-  nullable `jsonb` columns without `none_as_null=True`, so an event with no before or after state
-  holds JSON `null`, not SQL `NULL`, and an `IS NULL` query misses it. The assistant tables were
-  fixed in stage 1; the audit columns need the same type change and a data fix for existing rows.
-  (Phase 4 stage 1 review.) Moved from Phase 7 at its close: the console only counts audit events
-  by action and never queries these columns, so the fix goes with the hardening pass.
-- **Phase 7 review lows, recorded, not fixed** (2026-11-05). Each is a rare edge case in the
-  tour or the console:
-  - starting a new conversation while a tour chip's answer is still coming leaves the step with
-    only Skip, since the turn it waits for is no longer on the page;
-  - on a step that expects a card, Next shows as soon as the card does, before the answer
-    finishes, and pressing it then stops that turn (the persona switch ends the stream);
-  - leaving `/ask` while a card step's answer streams shows the "didn't come" line until the
-    visitor goes back, where the card makes it a result;
-  - signing in again after another tab changed the persona clears the query client, mutation
-    cache included, so the identity gate can open while a switch is still in flight;
-  - after a reload, a chip other than the step's last one that was marked sent before its request
-    went out stays Sent (only the last chip tracks whether its request was issued);
-  - the tour runner subscribes to the current conversation twice (its own read and
-    `useTurnFinished`'s);
-  - the console's day heading counts the rows loaded so far, and a day's redacted rows sort after
-    its timed ones, so on a day of more than 50 turns they appear only after "Show more turns";
-  - a console row's cost leaves out a reservation kept because its cost was unknown (a settle that
-    timed out), so the cost tile can read below the ledger's spend;
-  - the console row adds the safety check's tokens to the turn's field by field instead of with
-    `pricing.total_usage`;
-  - after a send whose outcome is unknown (a network failure, or a 5xx since the review), the
-    plain chat doesn't read the conversation again, so a turn the API did start shows only on the
-    next read; and a proxy's own 4xx page (nginx's 413) now counts as unknown too, so the tour
-    keeps that chip Sent though the request likely never reached the API, and so does the API's
-    own 500 from before the turn's row exists (the API's problem could say no turn started);
-  - the scoreboard's `pct` and `_count` each have their own float-noise tolerance, and the
-    escalation run's terminal report keeps its own `_pct`, which can still print "100.0%" for a
-    rate just under 1; a board holding NaN or Infinity (which `json` reads) isn't refused when
-    loaded;
-  - an abandoned turn's console row shows no cost, tokens, or timings, though the dead turn's
-    safety check and model charges are already in the spend ledger, so the cost tile's sandbox
-    spend and the rows' costs drift apart with no row to explain it (the v0.7.0 release review).
-- **A case refusal that can't succeed still offers "Try again".** `use-open-case.ts` maps the
-  waiting limit, a repeated submission, personal data, and empty words; any other refusal (a 404
-  `case-turn-not-found`, a 422 `case-words-too-long` or `case-invalid`) shows "Your case wasn't
-  sent. Please try again.", and every retry fails the same way. Give those a line that points to
-  My cases or the HR contacts instead. (v0.6.0 release review.)
-- **A repeated send of the same words reads the case twice and isn't audited.** `_repeat` in the
-  case service unwraps the key and decrypts the stored words to compare them, once outside and once
-  under the lock, and a second submission from another tab with the same words is folded into the
-  first case with no audit row saying so. (v0.6.0 release review.)
-- **A summary retry lost to a restart blocks the next one for a minute.** The retry commits
-  `case.summary.retried` and then runs the summary in a background task; if the API stops before
-  it runs, the in-flight window refuses HR's next retry for 60 seconds with nothing to say the job
-  was lost. (v0.6.0 release review.)
-- **The reply-by date and next year's holidays.** `reply_by_at` reads HQ's holidays from the
-  sandbox's table in a 21-day window; a case sent in late December in a sandbox with no rows for
-  the next year would get a reply-by date on a closed day. Check the seed always writes the next
-  year's holidays, or read them from the calendar. (v0.6.0 release review.)
-- **Tie the CSRF header to the audited read itself.** Audited reads require `X-CSRF-Token` through
-  a dependency each route opts into (`AuditedReadDep`), so a future audited route that forgets it
-  could be started by a plain navigation from an HR partner's browser, and no test would fail.
-  Since the web client now sends the header on every `/api/` request, either require it on every
-  signed-in `/api/` request, or have the audited-read services check that the request carried it.
-  (Phase 6 stage 3, `/code-review medium` round 4.)
-
-- **The sticky composer can cover "Show your work".** At a 900-pixel-high window, with a tall HR
-  panel above it, the conversation page's sticky composer partly covers the "Show your work"
-  toggle, and axe's target-size rule flags it, so Stage 6's case tests scan the panel only. Check
-  it in the accessibility audit: scroll padding under the last turn, or a test of the toggle's
-  visible area. (Phase 6 stage 6.)
-- **A second route for a concern about the HR team.** A case goes only to HR, so a person whose
-  concern is about someone in HR has no other way in through Open Door; today the handbook's
-  contacts are the only route. A later phase could add a named second reviewer outside HR for
-  such cases. (Phase 6 spec.)
-- **Encrypt the time-off denial note.** `time_off_requests.decision_note` is a manager's own
-  words and stays readable in Phase 6, which encrypts only conversation and case text (ADR 0015).
-  Seal it with a data key for the request, as the conversation store does. (Phase 6 spec.)
-- **One stored value that won't decrypt breaks the conversation for good.** Its owner's
-  `GET /conversations/current` and `GET /budget` return a 500 from then on, since "current" is the
-  newest conversation. Only a damaged row or a lost key causes it. Let the person start a new
-  conversation from that state, or mark the conversation unreadable. (Phase 6 stage 1 security
-  review.)
-- **Encryption binds each message to its row, not to its order.** Someone who can write to the
-  database could reorder a conversation's messages, or cut tool-call entries off the end of a
-  turn's list, and they would still decrypt. That access is outside the threat model. If it ever
-  isn't, bind `position` and the list's length into the associated data. And if a second
-  ciphertext format is added, bind the version byte too. (Phase 6 stage 1 security review.)
-
-- **The per-turn check for untold card outcomes grows with the conversation.** Each turn start
-  reads every card in the conversation and checks each against every stored context's
-  `reported_outcomes` array, with no index, while it holds the cards' share locks. Fine at demo
-  scale (conversations end with the sandbox); bound it (skip contexts older than the card, or keep a
-  time pre-filter) if conversations ever last. (Phase 5 phase review.)
-- **A person recorded as their own manager is half handled.** PTO for them is now refused with
-  `no-approver`, but the summary still names them as their own manager and their requests count as
-  waiting for themselves. Exclude the person wherever manager links are resolved. The seed never
-  makes such a row; it would be a data error. (Phase 5 phase review.)
-
-- **The Approvals reads load each person's facts one at a time.** `_managed_view` loads each
-  direct report's facts and requests in turn for the waiting list and every single-request read,
-  and coverage now loads each colleague's schedule too. Batch the loads per set of people. (Phase 5
-  phase review.)
-- **The request form checks the preview on every change.** Each hours keystroke, stepper press, and
-  the first click of a range sends `POST /time-off/check`; stale answers are dropped, so it's only
-  wasted requests. A short debounce, or no check while a range is half picked, would cut them.
-  (Phase 5 phase review.)
-- **Small duplications the phase review left.** Weekday and month names and the long-date format
-  live in `proposals.py`, `scripted.py`, and `context.py`; the confirm card's executed lines repeat
-  the pages' toast texts; `balances`, `pto_available_minutes`, and `_evaluate_own` gather the same
-  inputs three times; the eval graders check ISO dates the tool's own input model already checks;
-  the eval runner builds the seed company twice. Share each when that code next changes. (Phase 5
-  phase review.)
-
-- **Recent decisions leave out two kinds of past decision.** The `decided` scope lists requests
-  the manager approved or denied that are still approved or denied, among the manager's current
-  reports. An approval the employee later canceled, and a decision about someone who has since moved
-  to another manager, drop out of "Your decisions from the last 90 days", though the request still
-  records who decided it. Showing them needs a line such as "Approved October 20, later canceled".
-  Reporting lines can't change in the demo yet. (Phase 5 stage 6 review.)
-
-- **Time-off lists stop silently at 200 rows.** `GET /time-off/requests` caps every scope at 200,
-  ordered by start date (newest decision first for `decided`). A person with very many short sick
-  entries would lose the newest rows of My requests, and a manager of a large organization the end
-  of Coming up, with nothing saying the list is incomplete. Add paging or say when a list was cut.
-  (Phase 5 stage 6 review.)
-- **Back across several panel entries can keep the wrong scroll position.** The scroll hook keeps
-  the position on a Back or Forward when either entry is marked as a panel move. A jump of several
-  steps between same-page entries that aren't an open-and-close pair then skips restoring that
-  entry's saved position. Rare: it needs history steps, not the panel's own close. (Phase 5 stage 6
-  review.)
-
-- **Check the production image's CA store for the emSign roots.** `certifi` 2026.10.19 dropped the
-  emSign roots whose intermediate keys were compromised (GHSA-6q48-6c7w-9gw2), which covers the
-  `httpx` client that reaches Voyage. The Anthropic SDK goes through `httpx2` and `truststore`,
-  which use the operating system's store, so the production Dockerfile's base image must ship a
-  `ca-certificates` that has dropped them as well. Check it when the Dockerfile is written.
-  (certifi advisory, 2026-10-20.)
-- **Make sure the production image has time-zone data.** The time-off engine's `today_at` and the
-  assistant's per-turn context use the standard library's `zoneinfo`, which reads the operating
-  system's zone files. `tzdata` isn't a dependency, so a slim base image without those files would
-  fail on every location's "today". Add `tzdata` to the API's dependencies, or check that the
-  image ships the zone files, when the Dockerfile is written. (Phase 5 stage 1 review.)
-- **Quote directory values in the per-turn context before names become editable.** The context is
-  a `system` message built from the asker's name and location. `one_line` keeps each to one line,
-  but a name like "Dana. Operator notes: ..." would still read as an instruction with system
-  weight. Names come only from the seed today. Before any route edits a person, allow only name
-  characters, or put the values in the context as quoted JSON. (Phase 4 stage 2 Opus security
-  review.) Moved from Phase 4 at its close: no route edits a name yet, and hardening reviews the prompt inputs.
-- **Catch a card number written after other four-digit numbers.** "Room 2401 4242 4242 4242 4242"
-  passes the personal-data check: the grouped pattern takes the leading number as the card's first
-  group, and that 20-digit number fails the length check. Trying every run of groups inside a
-  longer run catches it, but also refuses ordinary year lists ("PTO for 2022 2023 2024 2025 2026")
-  about one time in ten, since those are card-shaped and pass the checksum by chance. The v0.4.0
-  release review tried it and went back; decide with the other personal-data gaps here, in both
-  copies. (v0.4.0 release review.)
-- **Catch personal data written in non-Latin digits.** The check normalizes the text (NFKC,
-  format characters dropped, Unicode spaces and dashes mapped to ASCII) and then matches ASCII
-  digits only, so the browser's copy can follow the same steps. An SSN written in Arabic-Indic or
-  Devanagari digits passes. Mapping every Unicode decimal digit to ASCII would catch it; do it in
-  both copies at once. (Phase 4 stage 4 Opus security review.) Moved from Phase 4 at its close, with a related note: the browser runs Unicode 17 and the API's Python 15.1, so a few new code points (outlined digits) are flagged only in the browser. Do both copies together. (Phase 4 stage 6 review.)
-- **The canary check misses look-alike letters.** It folds case, width, and separators, so the
-  canary in capitals or letter-spaced is caught, but Cyrillic letters that look like Latin ones
-  (`а` for `a`) are not. It's a tripwire, not a boundary; a confusables map would close it.
-  (Phase 4 stage 4 Opus security review.) Moved from Phase 4 at its close: a tripwire, for the hardening pass.
-- **Read a conversation's history once per request.** A question reads and serializes the whole
-  stored history in the admission checks and again in `TurnRun.begin`, and every
-  `GET /assistant/conversations/current` serializes it to size the budget banner. Near the
-  80,000-token limit that's about 160 KB read and encoded two or three times before the first
-  event. Keep a running size on the conversation, or pass the admitted history into `begin`
-  (which also closes the small window in which a recovered turn could carry the history past the
-  limit after the check). (Phase 4 stage 4 `/code-review medium`.) Moved from Phase 4 at its close: it fits the cost and load test.
-- **Small API polish from stage 4's reviews:** a `Retry-After` header on the budget 429s; problem
-  `type` values are bare codes (`turn-running`), a relative URI reference that RFC 9457 allows but
-  that a full URI would make unambiguous; there's no limit on how many conversations one person
-  starts (sandbox expiry cleans them up). (Phase 4 stage 4 reviews.) Moved from Phase 4 at its close: for the hardening pass.
-- **Small web polish from Phase 4 stage 6:** the shared passage panel puts Close before its title in
-  the DOM, so Tab goes from the title to the passage text rather than to Close as screen 07's notes
-  say; a second tab that starts a new conversation leaves this tab asking in the old one; and a
-  malformed stored search source would fail the conversation `GET` (only the API writes them).
-  For the accessibility audit and the hardening pass. (Phase 4 stage 6 reviews.)
-
-- **Keep the crisis panel when a crisis turn's end-of-turn write fails.** The crisis text goes out
-  live, but if `finish_turn` then times out, the stream adds an `internal` error, the row stays
-  `running`, and a reload shows it as abandoned with no escalation, so the 988 and EAP text is gone
-  from the page. It needs the database to fail at that moment. Store the crisis verdict before the
-  escalation goes out, or have the display show a crisis panel for an abandoned turn whose guard
-  said crisis. Do it with the `statement_timeout` item below. (Phase 4 phase review.)
-- **One exit for the canary check, and a cheaper fold.** `turn.py` checks the canary at about seven
-  places (held text, status notes, the take-back, the restore, closing events), each keeping its
-  own tail, so every new event path has needed its own patch. Holding and checking every outgoing
-  string at the one exit in `events()` would cover future paths with one rule. Its `_keep_from`
-  also NFKC-normalizes one character at a time, twice per text delta, on up to 512 characters;
-  measure it in the load test. (Phase 4 phase review.)
-- **End crisis and "can't answer right now" turns with a closing event.** They end with no
-  `turn.completed` and no `error` (a Stage 6 decision), so the web store infers the end from the
-  escalation's kind, and a connection lost right after a crisis panel reads as finished, not
-  stopped. One terminal event for every turn would remove the special case. It changes the stream
-  protocol, so do it with the hardening pass. (Phase 4 phase review.)
-- **Announce the HR panel that appears after a stopped sensitive answer.** Since the Phase 4 phase
-  review, a sensitive question the person stops gets the HR contact panel, but only once the saved
-  turn replaces the live one (the stream is already closed when they press Stop), and a saved
-  panel doesn't announce itself, so a screen-reader user isn't told it appeared. Announce a panel
-  that a settling turn adds. For the accessibility audit. (Phase 4 phase review.)
-- **Say "start a new conversation" when only the conversation is too big for the budget.** The
-  room a question needs is sized with the conversation's whole history, so near the 80,000-token
-  limit (or in an outdated conversation) the banner and the 429 say the sandbox has reached its
-  limit and suggest a new sandbox, when a new conversation would fit. The right message is new
-  fixed text, so it needs the owner's wording and approval first. (v0.4.0 release review.)
-- **Don't re-parse the whole answer on every streamed word.** Each `text.delta` re-runs the
-  marker placement and react-markdown over the full text, and the thread follows the end each
-  time, so the work grows with the square of the answer's length. Batch deltas per animation frame
-  in the store, or memoize finished blocks; measure on a low-end phone first. (v0.4.0 release
-  review.)
-- **Give the app's database login a `statement_timeout`.** The engine sets none, so a hung query
-  waits forever. The assistant's end-of-turn writes are bounded in code (10 seconds), but other
-  requests aren't. A role-level `statement_timeout` (and `idle_in_transaction_session_timeout`)
-  bounds them all. (Phase 4 stage 2 review.)
-- **Delete handbook versions no sandbox uses.** Each `make ingest` of changed text adds a version,
-  and nothing removes old ones. A cleanup step can delete unpublished versions and published ones
-  that are neither the newest nor pinned by any sandbox; the foreign key already refuses to delete
-  a version in use. (Phase 3 spec, Data model.)
-- **Make the directory's counts cheaper.** `GET /people/facets` runs up to five queries one after
-  another (total, matching, the location and department menus, and "My team") on every debounced
-  search. Total and matching can be one `count(*) FILTER (WHERE …)`, and the total doesn't change
-  with the filters. Measure in the load test first. (Phase 2 close-out review.)
-- **Keyboard shortcuts.** Add `/` to focus the composer (never while typing in a field) and ⌘K to
-  jump to a page. Both need screen-reader and conflict checks. (2026-10-06 design brainstorm.)
-- **Notice another tab's session change at once.** If another tab switches persona or signs out,
-  this tab keeps showing what it had loaded, such as HR's view of someone's private details, until
-  it next refetches `/me`: on focus, on navigation, or after a 401. It's the same visitor, and every
-  new read goes out with the new cookie and is refused, so nothing new leaks. Listen for the
-  change and refetch `/me` straight away, for example with a `BroadcastChannel` message from the
-  tab that changed it. (Phase 2 stage 6 security check.)
-- **Make sign-out end a session's replacements too.** If one tab switches persona while another
-  signs out, the switch replaces the session first. The sign-out then finds nothing to end and
-  answers 204, but the new persona's session stays valid until the sandbox expires. Give each
-  session a `family_id` that rotation carries over, and have sign-out delete the whole family.
-  The race needs two tabs acting within milliseconds, in a 24-hour sandbox, and exposes nothing
-  across users. (`/code-review medium` on Phase 1, stage 3.)
-
-- **Cap request body size.** Nothing limits it: a 40 MiB JSON body to `POST /sandboxes` was read
-  and parsed in full, using about 120 MiB of memory. Phase 1 already reads the body before any
-  session check. Cap bodies at about 64 KiB in the ASGI layer or at the proxy, so a few large
-  requests can't exhaust a task's memory. (Stage 3 security review.)
-
-- **Require `APP_ORIGIN` in production.** It defaults to `http://localhost:5173`, so a production
-  deploy that forgets it refuses every state-changing request. That fails closed, but silently.
-  Make settings refuse to start when `APP_ENV=production` and `APP_ORIGIN` is still the default.
-  (Stage 3 security review.)
-- **Trust forwarded client IPs only from the load balancer.** Security events log the client IP
-  that uvicorn reports. Behind the load balancer that depends on `--forwarded-allow-ips`. Setting it
-  to `*` would let a client spoof the logged IP, so list only the load balancer's addresses.
-  (Stage 3 security review.)
-
-- **Data migrations can't see tenant rows on AWS.** With row-level security forced, a table
-  owner that isn't a superuser sees no rows. That is the managed-Postgres case, unlike
-  development and CI, where the owner is a superuser. A migration that changes data must set the
-  tenant context for each tenant, or run under a role made for it. (Stage 1 security review.)
-- **Look up sessions without granting the table.** `od_app` can read every tenant's `sessions`
-  rows, because a session is looked up before the tenant is known. The spec accepts this. A
-  `SECURITY DEFINER` function that returns one session by its token hash would let `od_app` drop
-  its `SELECT` on the table. (Stage 1 security review.) `od_app` can also insert and delete any
-  tenant's sessions, with any expiry: the Phase 1 close-out security review forged an HR session in
-  another tenant from `psql`. No route can do this, since `start_session` builds the row through a
-  tenant-scoped select, but SQL access as `od_app` would become a working login anywhere. Enable
-  row-level security on `sessions`, with an insert policy that requires the current tenant and
-  person, keep the expiry within the tenant's, and test that an insert for another tenant fails.
-- **Keep the owner's database URL out of the API.** The API's settings load
-  `MIGRATION_DATABASE_URL` and `CLEANUP_DATABASE_URL` though it uses neither, so the API process
-  holds the owner's credentials, which bypass row-level security. Give Alembic and the bootstrap
-  script their own settings class, and give the API task only `DATABASE_URL` in the AWS secrets
-  contract. (Phase 1 close-out review.)
-- **One transaction per signed-in request.** `signed_in` looks the session up in one transaction
-  and does the tenant's work in a second, so each request pays two round trips and two pool
-  checkouts, and a session can end between them. Set the tenant context in the lookup's own
-  transaction. (Phase 1 close-out review.)
+- **The KMS key provider,** as [ADR 0015](adr/0015-envelope-encryption.md)'s amendment describes
+  it, and production's refusal of the local keyring. Each list of time-off requests unwraps one
+  key per request with a denial note: cheap with the local keyring, a KMS round trip each in
+  production, so cache or batch the unwraps if the lists get slow. (Phase 8 spec; Stage 3.)
+- **The secrets and settings contract** (`docs/DEPLOY.md`): every setting, which process reads it,
+  the secret store's names, least-privilege roles, and egress to Anthropic, Voyage, and Cloudflare.
+  Production's setup steps (the migrations, the login bootstrap, the handbook load) need none of
+  `TURNSTILE_SITE_KEY`, `TURNSTILE_SECRET_KEY`, `SANDBOX_IP_HASH_KEY`, and `FORWARDED_ALLOW_IPS`;
+  only the API does, and it refuses to start in production without them. The AI limits start from
+  [`CAPACITY.md`](CAPACITY.md): $1 a sandbox, and a daily cap sized to the visits wanted plus
+  headroom for questions in flight (about $12 for 50 tours a day). (Phase 8 spec; Stages 4 and 7.)
+- **ECS task definitions** for the API, the migration, and the cleanup, from the load test's
+  measurements ([`CAPACITY.md`](CAPACITY.md)): the API at 1 vCPU and 2 GB (it peaked at 58% of
+  1 vCPU and 142 MB with 50 visitors at once), one uvicorn process, the default database pool, and
+  two tasks for availability. **The cleanup's hourly schedule** runs `python -m app.jobs.cleanup`
+  as the cleanup login. (Phase 8 spec; Stage 7.)
+- **The deploy workflow** (OIDC, the image to ECR, the migration, the service update), written and
+  enabled together. (Phase 8 spec.)
+- **Set `FORWARDED_ALLOW_IPS` in the task definition.** The image's entrypoint passes it to
+  uvicorn's `--forwarded-allow-ips`, and empty trusts no proxy (Phase 8 stage 2). The Phase 9 task
+  definition must set it to the load balancer's addresses only, never `*`, or the limits and the
+  security log see the load balancer's address for every visitor.
+- **The load balancer's idle timeout: at least 120 seconds, and below the image's keep-alive of
+  130.** The image runs uvicorn with `--timeout-keep-alive 130` so that the load balancer, not the
+  task, closes idle connections; otherwise a request it sends just as the task closes one fails as
+  a 502 (the load test saw that race at uvicorn's default of 5 seconds). If the idle timeout ever
+  goes above 120, raise the keep-alive in `scripts/image/entrypoint.sh` first. (Phase 8 stage 7.)
 - **Postgres 16 or later.** The bootstrap script grants roles `WITH INHERIT TRUE`, which needs
   Postgres 16. Development and CI run 17. The managed Postgres chosen in Phase 9 must be 16 or
   later.
-
-- **One source for tool versions.** The gitleaks version is written in three places: the Security
-  workflow, the `Makefile`, and the pre-commit config. The ruff hook's version separately follows
-  `uv.lock`. Dependabot has a `pre-commit` ecosystem that could keep the hook versions current.
-  Add it with the same 7-day cooldown, and make the `Makefile`'s hand-bumped versions the only
-  manual ones.
-- **The pre-commit hook lives in uv's cache.** `uvx pre-commit install` points the git hook at a
-  cached Python, so `uv cache clean` breaks commits until `make setup` runs again. Installing it
-  with `uv tool install pre-commit` would make the hook durable.
-- **Audit only the app's dependencies.** `uv run --with pip-audit` also audits pip-audit's own
-  dependencies, so an advisory in one of those would fail the Security workflow for a reason
-  unrelated to the app. The lockfile-only form is
-  `uv export --locked --no-emit-project | uvx pip-audit -r - --no-deps --disable-pip`.
-
-- **`ping()` has no hard wall-clock bound.** If canceling the query stalls on the network,
-  closing the connection can take longer than the timeout, because SQLAlchemy shields the close.
-  The orchestrator's own probe timeout covers it; revisit only if health checks need a strict
-  bound.
-- **Hide the API docs in production.** Set `docs_url`, `redoc_url` and `openapi_url` to `None`
-  when `APP_ENV=production`, and keep `app.openapi()` working for the schema export. Also drop
-  the `server: uvicorn` header (`--no-server-header`) and send `Cache-Control: no-store` on
-  health.
-- **Keep probe traffic out of logs and traces.** Filter `/api/v1/health` from `uvicorn.access`,
-  and from OpenTelemetry if it's enabled.
-
-From the Phase 1 review ([the spec's Later phases](specs/2026-10-03-phase-1-tenancy-identity-permissions.md#later-phases)):
-
-- **Rate limits and Turnstile on sandbox creation.** `POST /api/v1/sandboxes` needs no session,
-  and each call seeds 120 people.
-- **The scheduled cleanup job.** The `od_cleanup` role can already delete only expired
-  sandboxes. Nothing runs it on a schedule yet.
-- **Re-test `set_config` under RDS Proxy or PgBouncer.** Row-level security depends on settings
-  scoped to one transaction, and a pooler in transaction mode must not carry them between
-  clients. The reused-connection tests are the model. Background: the pgsql-bugs thread on local
-  settings,
+- **Database TLS with certificate checks, the provider's certificate bundle in the image, and
+  secret rotation** for the three database URLs. (Phase 1 review; Phase 8 spec.)
+- **Backup retention, and deletion from backups.** A sandbox deleted from the database still
+  exists in backups until they expire, and so does the plain-text denial note from before migration
+  0018 in any backup taken before it ran (Phase 9 starts empty, so only a restored older database
+  has one). Set the retention, and document it in the data inventory, or exclude sandbox data from
+  backups. (Phase 1 review; Phase 8 stage 3 security review.)
+- **Data migrations can't see tenant rows on AWS.** With row-level security forced, a table
+  owner that isn't a superuser sees no rows. That is the managed-Postgres case, unlike
+  development and CI, where the owner is a superuser. A migration that changes data must set the
+  tenant context for each tenant, or turn forcing off around its data step as 0018 does, or run
+  under a role made for it. Migration 0017's audit `UPDATE` is a no-op there, which is fine on an
+  empty database. (Phase 8 stage 1 security review; Stage 3.)
+- **Migration 0018's data step needs the keyring when notes exist.** Upgrading a database that
+  already holds denial notes seals them inside the migration, so the migration task needs
+  `ENCRYPTION_KEYRING` (or the KMS provider) in its environment. A fresh database has no notes and
+  needs no key. (Phase 8 stage 3.)
+- **Re-test `set_config` under RDS Proxy or PgBouncer,** if a pooler is used. Row-level security
+  depends on settings scoped to one transaction, and a pooler in transaction mode must not carry
+  them between clients. The reused-connection tests are the model. Background: the pgsql-bugs
+  thread on local settings,
   https://www.postgresql.org/message-id/CA+Q86ij0KDCB0G45G509-8q0DNR611gcKG-sSM83GA1EBL7boA@mail.gmail.com.
-- **Database TLS with certificate checks, and secret rotation** for the three database URLs.
-- **Deletion from backups.** A sandbox deleted from the database still exists in backups until
-  they expire. Document how long, or exclude sandbox data from them.
-- **Check CI's path filters automatically.** Each CI job runs only when its filter's paths change,
-  and the filters list by hand the files outside each app that its tests read (`docs/design/`,
-  the handbook, the personal-data cases, the seed, the `Makefile`). A test that reads would
-  otherwise not run on the PR that breaks it, as happened after #63. A small check could find
-  every path a test reads outside its app and fail if no filter covers it. The theme tokens'
-  test could also check the other way, that every theme token has a source in the design export.
-  (Theme-token fix review, 2026-10-20.)
-
-- **Give the confirm a lock timeout.** A confirm that has passed its expiry check can still wait
-  on the person's time-off lock, held only by short time-off writes, so its overrun past the 15
-  minutes is small but has no stated bound. A `SET LOCAL lock_timeout` in the confirm would make
-  it explicit. (Phase 5 stage 3 security review.)
-
-## Phase 9: deploy to AWS
+  (Phase 1 review.)
 
 - **Don't share a Postgres server between environments that reuse these role names.** Roles
   belong to the whole server, and Postgres lets every role connect to every database by default.
@@ -592,17 +507,10 @@ From the Phase 1 review ([the spec's Later phases](specs/2026-10-03-phase-1-tena
   it, so another database's login granted `od_app` would inherit Open Door's access. Check
   `pg_auth_members` in both directions. (Phase 1 close-out review.)
 
-- **Separate liveness from readiness.** ECS container health checks must not depend on the
-  database, or an RDS failover would restart every task. Add `GET /api/v1/health/live`, which
-  never touches the database, for the container check, and keep `/api/v1/health` as the load
-  balancer's readiness check.
-- **Align the ping and probe timeouts.** The ping and asyncpg connect timeouts are both 5 s, the
-  same as the default load balancer and ECS probe timeouts, so a blackholed database times the
-  probe out instead of returning a clean 503. Use about 2 s for the health ping, or a probe
-  timeout of 6 s or more.
-- **Protect the health endpoint from abuse.** Every call is an unauthenticated database round
-  trip. Cache the result for 1–2 s with a single in-flight check, or rate-limit the path at the
-  load balancer.
+- **Point the probes at the right health path.** Phase 8 stage 1 added `GET /api/v1/health/live`
+  (never touches the database) and kept `GET /api/v1/health` (readiness, with a 2-second ping).
+  The ECS container check must use `/live`, or an RDS failover would restart every task; the load
+  balancer uses `/health` with a probe timeout above 2 seconds.
 
 - **Line up the shutdown timeouts.** uvicorn runs with `--timeout-graceful-shutdown 15`, and the
   app then waits up to 12 seconds for open streams to save, so a container needs about 27
@@ -610,3 +518,21 @@ From the Phase 1 review ([the spec's Later phases](specs/2026-10-03-phase-1-tena
   graceful timeout (to let long answers finish during a deploy), raise `stopTimeout` (at most
   120) and the load balancer's deregistration delay with it, and keep the 12-second drain inside
   the gap. (Phase 4 stage 4.)
+- **Prove Turnstile with the real keys before launch.** Every run so far (development, CI, the
+  image, `make prod-local`, the live check, the recording) used Cloudflare's test keys, which the
+  API answers itself, so the real widget's domain check and `siteverify`'s `hostname` and `action`
+  checks have never run. With the production keys, start a sandbox through the deployed page and
+  confirm the token passes; if the widget refuses the domain under `Referrer-Policy: same-origin`,
+  set the policy per page or allow the domain in Cloudflare. (Phase 8 phase review.)
+- **Mark each answer in a machine-readable way (EU AI Act, Article 50(2)).** Re-read on
+  2026-11-16, the duty covers any provider whose system writes synthetic text, not only published
+  text, so a deployed Open Door must mark its answers as AI-generated in a form a machine can
+  detect. Choose the mark against the Commission's guidance and code of practice as they stand at
+  deploy time, and add it to each answer in the API and the page
+  ([`AI-GOVERNANCE.md`](AI-GOVERNANCE.md#the-disclosure-eu-ai-act-article-50)). (Phase 8, Stage 9.)
+- **`ping()` has no hard wall-clock bound.** If canceling the query stalls on the network,
+  closing the connection can take longer than the timeout, because SQLAlchemy shields the close.
+  The orchestrator's own probe timeout covers it; revisit only if health checks need a strict
+  bound.
+- **Keep probe traffic out of traces.** Phase 8 stage 1 filters both health paths from
+  `uvicorn.access`; if OpenTelemetry is enabled, filter them there too.

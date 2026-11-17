@@ -166,6 +166,16 @@ class ConversationOut(CamelModel):
     history_too_long: bool
     # Pinned to a prompt or tool set that is no longer current: it can't continue.
     outdated: bool
+    # The stored text does not open (a key that no longer unwraps, a damaged row): no turns are
+    # sent, `history_too_long` is true so the page offers a new conversation, and the page shows
+    # the fixed "can't be shown" line.
+    unreadable: bool
+    # For an unreadable conversation, the most serious panel its turns showed: crisis, then
+    # "can't answer right now", then sensitive (invariant 6: the 988 and EAP text, or the HR team,
+    # never vanishes with the words).
+    # The verdict is a plain column, read without the key. Always null for a conversation that
+    # opens: its turns carry their own.
+    escalation: EscalationOut | None = None
 
 
 class AssistantTextsOut(CamelModel):
@@ -174,6 +184,8 @@ class AssistantTextsOut(CamelModel):
 
     personal_data: str
     still_answering: str
+    # What the page shows in place of a conversation whose stored text does not open.
+    unreadable_conversation: str
 
 
 class FeedbackIn(CamelModel):
@@ -192,10 +204,10 @@ class FeedbackGivenOut(CamelModel):
 
 
 class TurnIn(CamelModel):
-    # Trimmed and measured by the route, which answers 422 with its own wording. This limit only
-    # refuses an absurd question early, with the schema's 422, before the route's work (the body
-    # has been read by then). Limiting the body's size is the reverse proxy's job (Phase 8).
-    question: Annotated[str, Field(max_length=20_000)]
+    # Trimmed and measured by the route, which answers 422 with its own wording. This limit, twice
+    # the route's 2,000, only refuses an absurd question early, with the schema's 422, before the
+    # route's work. The body's size is capped at 64 KiB by the body-limit middleware.
+    question: Annotated[str, Field(max_length=4_000)]
 
 
 class ConfirmIn(CamelModel):
@@ -205,5 +217,5 @@ class ConfirmIn(CamelModel):
     model_config = ConfigDict(extra="forbid")
 
     # Checked by the proposal service (at most 300 characters, only for a denial), which answers
-    # 422 with its own wording. This limit only refuses an absurd body early.
-    note: Annotated[str | None, Field(max_length=20_000)] = None
+    # 422 with its own wording. This limit, twice that, only refuses an absurd body early.
+    note: Annotated[str | None, Field(max_length=600)] = None

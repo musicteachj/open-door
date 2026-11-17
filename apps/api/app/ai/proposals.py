@@ -63,6 +63,7 @@ from sqlalchemy import (
     literal_column,
     null,
     select,
+    text,
     update,
 )
 from sqlalchemy import cast as sql_cast
@@ -86,6 +87,7 @@ from app.ai.proposal_cards import (
     stored_json,
 )
 from app.api.schemas import CamelModel
+from app.core.encryption import KeyProvider
 from app.db.errors import constraint_name, has_sqlstate
 from app.db.locks import CONVERSATION_PROPOSALS_NS, database_now, lock_tenant_scoped
 from app.db.models import AiMessage, AiProposal, AiTurn, TimeOffRequest
@@ -93,6 +95,7 @@ from app.db.tenancy import TenantContext, tenant_session
 from app.domain.timeoff.evaluate import NewRequest, overlapping_days
 from app.modules.audit.service import AuditAction, Via, record_event
 from app.modules.timeoff import queries, service
+from app.modules.timeoff.notes import SealedNote, open_note_or_none
 from app.modules.timeoff.service import Refused
 from app.modules.timeoff.texts import REFUSAL_TEXTS, refusal_text
 from app.policy import Actor
@@ -104,6 +107,8 @@ type AutomaticReason = Literal["replaced", "turn-incomplete"]
 PROPOSAL_LIFETIME: ColumnElement[Any] = literal_column("interval '15 minutes'")
 # The SQLSTATE of migration 0009's triggers: a proposal ends once, and never executes after expiry.
 PROPOSAL_TRIGGER_SQLSTATE = "OD003"
+# How long a confirm waits for the proposal's row or the person's time-off lock.
+CONFIRM_LOCK_TIMEOUT = "5s"
 # For a stored failure code nobody recognizes: a fixed sentence, never a stored string.
 UNKNOWN_FAILURE_TEXT = "This card could not be completed."
 # One request per proposal: the unique index on time_off_requests (tenant_id, proposal_id).
@@ -292,7 +297,7 @@ def proposal_out(
 
 
 async def denial_notes(
-    db: AsyncSession, actor: Actor, rows: Sequence[ProposalData]
+    db: AsyncSession, actor: Actor, rows: Sequence[ProposalData], keys: KeyProvider
 ) -> dict[UUID, str]:
     """The note on each executed denial among `rows`, by proposal ID, for the conversation read.
 
@@ -316,15 +321,25 @@ async def denial_notes(
         return {}
     found = (
         await db.execute(
-            select(TimeOffRequest.id, TimeOffRequest.decision_note).where(
+            select(
+                TimeOffRequest.id,
+                TimeOffRequest.note_key_id,
+                TimeOffRequest.note_wrapped_key,
+                TimeOffRequest.note_ciphertext,
+            ).where(
                 TimeOffRequest.id.in_(request_of.values()),
                 TimeOffRequest.decided_by == actor.person_id,
                 TimeOffRequest.status == "denied",
-                TimeOffRequest.decision_note.is_not(None),
+                TimeOffRequest.note_ciphertext.is_not(None),
             )
         )
     ).all()
-    notes = {request_id: note for request_id, note in found if note is not None and note.strip()}
+    notes: dict[UUID, str] = {}
+    for request_id, key_id, wrapped_key, ciphertext in found:
+        sealed = SealedNote.from_columns(key_id, wrapped_key, ciphertext)
+        note = open_note_or_none(keys, actor.tenant_id, request_id, sealed)
+        if note is not None and note.strip():
+            notes[request_id] = note
     return {
         proposal_id: notes[request_id]
         for proposal_id, request_id in request_of.items()
@@ -722,6 +737,7 @@ async def _dispatch(
     payload: Payload,
     note: str | None,
     now: datetime,
+    keys: KeyProvider,
 ) -> service.Created | service.Decided | service.Canceled | Refused:
     """Run the STORED payload through the time-off service, as the assistant, from this proposal."""
     if isinstance(payload, RequestPayload):
@@ -737,6 +753,7 @@ async def _dispatch(
             payload.decision,
             note,
             now,
+            keys=keys,
             via="assistant",
             proposal_id=row.id,
         )
@@ -752,13 +769,14 @@ async def _guarded_dispatch(
     payload: Payload,
     note: str | None,
     now: datetime,
+    keys: KeyProvider,
 ) -> service.Created | service.Decided | service.Canceled | Refused:
     """`_dispatch`, in a savepoint of its own. The time-off tables' trigger shares SQLSTATE OD003
     with the proposal's: if it refuses the service's update, the request has changed under the
     confirm, which is `status-changed`, not a 500. The savepoint undoes anything the service did."""
     try:
         async with db.begin_nested():
-            return await _dispatch(db, actor, row, payload, note, now)
+            return await _dispatch(db, actor, row, payload, note, now, keys)
     except DBAPIError as error:
         if has_sqlstate(error, PROPOSAL_TRIGGER_SQLSTATE):
             return Refused("status-changed")
@@ -789,7 +807,12 @@ async def _turn_state(db: AsyncSession, turn_id: UUID, now: datetime) -> TurnSta
 
 
 async def confirm(
-    db: AsyncSession, actor: Actor, proposal_id: UUID, note: str | None, now: datetime
+    db: AsyncSession,
+    actor: Actor,
+    proposal_id: UUID,
+    note: str | None,
+    now: datetime,
+    keys: KeyProvider,
 ) -> ProposalOut:
     """Confirm the actor's proposal: run its stored payload through the time-off service, once.
 
@@ -803,6 +826,10 @@ async def confirm(
     `note` is a denial's note, the only thing that comes from the client. InvalidNote if it can't be
     stored or isn't for a denial, with nothing written.
     """
+    # A wait for the proposal's row or the person's lock past this fails the confirm (SQLSTATE
+    # 55P03, a 503 "database-busy") and rolls everything back, so the card stays pending and the
+    # person can press Confirm again.
+    await db.execute(text(f"SET LOCAL lock_timeout = '{CONFIRM_LOCK_TIMEOUT}'"))
     # The row first, then the person's lock (the service takes it): see the module's note.
     row = await _lock_proposal(db, proposal_id)
     if row is None or row.person_id != actor.person_id:
@@ -839,7 +866,7 @@ async def confirm(
         # One savepoint around the service's writes and the proposal's ending, so a proposal that
         # turns out to have ended already leaves no request behind.
         async with db.begin_nested():
-            result = await _guarded_dispatch(db, actor, row, payload, note, now)
+            result = await _guarded_dispatch(db, actor, row, payload, note, now, keys)
             if isinstance(result, Refused):
                 await _end(db, row.id, "failed", await _failure(db, actor, payload, result))
                 await _audit(

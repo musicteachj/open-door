@@ -1,3 +1,4 @@
+import { getNonce } from 'get-nonce'
 import { Check, ChevronDown } from 'lucide-react'
 import { Select as SelectPrimitive } from 'radix-ui'
 import type { ComponentProps, ReactNode } from 'react'
@@ -55,7 +56,12 @@ function SelectContent({
         )}
         {...props}
       >
-        <SelectPrimitive.Viewport data-slot="select-viewport" className="flex flex-col gap-0.5">
+        <SelectPrimitive.Viewport
+          data-slot="select-viewport"
+          // The page's nonce, which main.tsx handed to get-nonce before the first render.
+          nonce={getNonce()}
+          className="flex flex-col gap-0.5"
+        >
           {children}
         </SelectPrimitive.Viewport>
       </SelectPrimitive.Content>

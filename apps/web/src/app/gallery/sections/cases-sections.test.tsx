@@ -15,6 +15,7 @@ const IDS = [
   'case-form-send-failed',
   'case-sent-panel',
   'case-limit-panel',
+  'case-cannot-send-panel',
   'case-crisis-offer',
   'case-unavailable-write-to-hr',
   'case-page-form',
@@ -22,6 +23,7 @@ const IDS = [
   'case-page-sent',
   'case-page-sent-crisis',
   'case-page-limit',
+  'case-page-cannot-send',
 ]
 
 const section = (id: string) => within(document.getElementById(id)!.closest('section')!)

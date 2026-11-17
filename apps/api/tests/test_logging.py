@@ -5,7 +5,7 @@ from collections.abc import Iterator
 
 import pytest
 
-from app.core.logging import JsonFormatter, configure_logging
+from app.core.logging import AccessLogFilter, JsonFormatter, configure_logging
 from app.core.request_id import request_id_var
 
 UVICORN_LOGGERS = ("uvicorn", "uvicorn.error", "uvicorn.access")
@@ -109,3 +109,63 @@ def test_structured_fields_are_added_but_never_replace_the_standard_keys() -> No
 
     assert entry["tenantId"] == "t-1"
     assert (entry["message"], entry["level"]) == ("security.csrf_rejected", "INFO")
+
+
+def access_record(path: str) -> logging.LogRecord:
+    """A record shaped like uvicorn's access log: (client, method, path, http version, status)."""
+    return logging.LogRecord(
+        "uvicorn.access",
+        logging.INFO,
+        __file__,
+        1,
+        '%s - "%s %s HTTP/%s" %d',
+        ("10.0.0.1:5000", "GET", path, "1.1", 200),
+        None,
+    )
+
+
+@pytest.mark.parametrize(
+    "path", ["/api/v1/health", "/api/v1/health/live", "/api/v1/health?x=1", "/api/v1/health/live?"]
+)
+def test_the_access_log_drops_both_health_paths(path: str) -> None:
+    assert AccessLogFilter().filter(access_record(path)) is False
+
+
+@pytest.mark.parametrize(
+    "path",
+    ["/api/v1/me", "/api/v1/health/other", "/api/v1/healthz", "/health", "/api/v1/people?q=health"],
+)
+def test_the_access_log_keeps_everything_else(path: str) -> None:
+    assert AccessLogFilter().filter(access_record(path)) is True
+
+
+@pytest.mark.parametrize(
+    ("path", "logged"),
+    [
+        ("/api/v1/handbook/search?q=pregnancy+leave", "/api/v1/handbook/search"),
+        ("/api/v1/people?q=Leo&location=Oakland", "/api/v1/people"),
+        ("/directory?q=Leo", "/directory"),
+        ("/api/v1/me", "/api/v1/me"),
+    ],
+)
+def test_the_access_log_keeps_no_query_string(path: str, logged: str) -> None:
+    """The phase's security review: a search's words (what a person typed) never reach the log,
+    beside their address, as `hide_parameters` keeps them out of the database's errors."""
+    record = access_record(path)
+
+    assert AccessLogFilter().filter(record) is True
+    assert record.getMessage() == f'10.0.0.1:5000 - "GET {logged} HTTP/1.1" 200'
+
+
+def test_other_records_on_the_access_logger_pass() -> None:
+    assert AccessLogFilter().filter(make_record("started")) is True
+
+
+def test_configure_logging_filters_the_uvicorn_access_logger_once(restore_logging: None) -> None:
+    configure_logging("INFO")
+    configure_logging("INFO")
+    access = logging.getLogger("uvicorn.access")
+
+    assert sum(isinstance(f, AccessLogFilter) for f in access.filters) == 1
+    assert not access.filter(access_record("/api/v1/health"))
+    assert access.filter(access_record("/api/v1/me"))

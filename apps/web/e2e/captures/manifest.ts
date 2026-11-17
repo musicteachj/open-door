@@ -134,6 +134,15 @@ export const COMPONENT_ROWS: ComponentRow[] = [
   row('landing', 'persona-card-default'),
   row('landing', 'persona-card-starting'),
   row('landing', 'persona-card-disabled'),
+  row('landing', 'start-refusal-retry', {
+    note: 'Not designed: the existing inline error with Retry, for a failed or unreachable check. The text is the API\'s own',
+  }),
+  row('landing', 'start-refusal-limit', {
+    note: 'Not designed: the existing inline error without Retry, for the two limits. The text is the API\'s own',
+  }),
+  row('landing', 'turnstile-slot-place', {
+    note: 'Not designed: Cloudflare\'s check (a dashed stand-in) directly under the control that started the sandbox. It shows only when Cloudflare asks',
+  }),
 
   row('forms', 'search-field-empty'),
   row('forms', 'search-field-typed'),
@@ -414,6 +423,7 @@ export const SCREEN_FOLDERS = [
   '12-hr-cases',
   '13-ai-ops-console',
   '15-guided-tour',
+  '16-walkthrough',
 ] as const
 
 /** How to reach each state in the build. The capture spec holds the steps for each one; they use
@@ -459,6 +469,9 @@ export type ScreenSetup =
   | 'hr-cases'
   | 'console'
   | 'tour'
+  | 'walkthrough'
+  | 'walkthrough-transcript'
+  | 'walkthrough-poster'
   | 'gallery-parts'
 
 /** The states of screen 08, by the design file's name (desktop-<state>.png). */
@@ -636,7 +649,8 @@ const SCREENS = 'docs/design/screens'
 // the sidebar's foot, and the build leaves it out (the screen notes' build decision).
 const HOW_ITS_BUILT = 'the design\'s screenshot draws the "How it\'s built" link, which the build leaves out'
 // The landing screenshots predate the tour button, which screen 15 designed and Phase 7 ships.
-const TOUR_BUTTON = "the design's landing screenshot predates the tour button, which the build now shows (screen 15)"
+const TOUR_BUTTON =
+  "the design's landing screenshot predates the tour button (screen 15) and the walkthrough link and the Cloudflare line (screen 16), which the build now shows"
 const DIRECTORY_NAV = HOW_ITS_BUILT
 const HANDBOOK_NAV = HOW_ITS_BUILT
 const HOME_NAV = HOW_ITS_BUILT
@@ -1615,6 +1629,43 @@ export const SCREEN_ROWS: ScreenRow[] = [
       'Tour: landing button',
     ],
     note: "The gallery's tour groups, which hold every part and state the card shows. The persona menus, the start dialog, and the toasts open from buttons in the gallery, so they show closed here; the menu, dialog, and toast frames above show them open",
+  },
+
+  // Screen 16: the recorded walkthrough, and the landing's two additions. Until the recording
+  // (Task 45) the video, poster, and transcript are placeholders made from the design's samples.
+  {
+    title: '16 Walkthrough: the landing',
+    designImage: `${SCREENS}/16-walkthrough/desktop-landing.png`,
+    route: '/',
+    setup: 'landing',
+    viewport: { width: 1440, height: 1056 },
+    note: '"Watch the recorded walkthrough" left of the tour button, and the Cloudflare line under the sandbox note',
+  },
+  {
+    title: '16 Walkthrough: the page',
+    designImage: `${SCREENS}/16-walkthrough/desktop-walkthrough.png`,
+    route: '/walkthrough',
+    setup: 'walkthrough',
+    viewport: { width: 1440, height: 2275 },
+    note: 'The top of the page, with the poster and the first steps',
+    differsByDecision:
+      "the frame cuts the transcript after step 2 and shows the footer; the page has all ten steps. The browser draws the video's controls, not the frame's",
+  },
+  {
+    title: '16 Walkthrough: steps 3 to 7',
+    designImage: `${SCREENS}/16-walkthrough/desktop-walkthrough-transcript.png`,
+    route: '/walkthrough',
+    setup: 'walkthrough-transcript',
+    viewport: { width: 1440, height: 2670 },
+    note: 'Scrolled to step 3',
+  },
+  {
+    title: '16 Walkthrough: the poster',
+    designImage: `${SCREENS}/16-walkthrough/poster-sample.png`,
+    route: '/media/walkthrough-poster.jpg',
+    setup: 'walkthrough-poster',
+    differsByDecision:
+      "the design's poster is a sample from screen 15; the build's is a frame of the recording, with nothing important under its center",
   },
 ]
 

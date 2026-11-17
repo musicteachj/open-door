@@ -13,8 +13,8 @@ from pathlib import Path
 
 from app.ai.transport import GUARD_NEW_MESSAGE_TAG
 
-PROMPT_VERSION = "2026-11.3"
-TOOLSET_VERSION = "2026-11.3"
+PROMPT_VERSION = "2026-11.4"
+TOOLSET_VERSION = "2026-11.4"
 GUARD_PROMPT_VERSION = "2026-11.1"
 # The case summary has its own prompt and version; a summary records the version that wrote it.
 CASE_SUMMARY_PROMPT_VERSION = "2026-11.2"

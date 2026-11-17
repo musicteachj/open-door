@@ -11,7 +11,7 @@ from app.modules.identity.actor import load_actor
 from app.modules.identity.cookies import clear_session_cookies, set_session_cookies
 from app.modules.identity.deps import NOT_SIGNED_IN, SignedInDep
 from app.modules.identity.security_log import SecurityEvent, log_security_event
-from app.modules.identity.sessions import SessionGoneError, end_session, rotate_session
+from app.modules.identity.sessions import SessionGoneError, end_session_family, rotate_session
 from app.modules.people.queries import get_me
 from app.modules.people.schemas import Me, PersonaKey
 
@@ -88,7 +88,7 @@ async def switch_persona(
     responses=problem_responses(status.HTTP_401_UNAUTHORIZED, status.HTTP_403_FORBIDDEN),
 )
 async def sign_out(signed_in: SignedInDep, response: Response) -> None:
-    ended = await end_session(signed_in.db, signed_in.session.token_hash)
+    ended = await end_session_family(signed_in.db, signed_in.session)
     # A session that was already gone (ended in another tab) still gets its cookies cleared, but
     # that request ended nothing, so it writes no second `session.ended` event.
     if ended:

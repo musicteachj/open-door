@@ -14,7 +14,7 @@ from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from decimal import Decimal
 from functools import partial
-from typing import Final, Literal
+from typing import Any, Final, Literal
 
 from sqlalchemy.ext.asyncio import AsyncEngine
 
@@ -70,9 +70,9 @@ TOPIC_NOTE = (
 TOPIC_NOTE_HR = (
     "This message touches a subject a person in HR may handle, but it reads as a question. Don't "
     "counsel or judge. If the person wants someone in HR to handle something that happened to "
-    "them, a confidential case is sent from the HR panel's form, and their own cases are "
-    "read-only in the queue. Never say you opened a case or that a message to you reaches HR. "
-    "Don't promise what HR will do."
+    "them, a confidential case is sent from the HR panel's form when it shows, and their own "
+    "cases are read-only in the queue. Never say you opened a case or that a message to you "
+    "reaches HR. Don't promise what HR will do."
 )
 
 
@@ -162,6 +162,17 @@ def escalation_for_verdict(
     if category == "crisis" or kind in CRISIS_KINDS:
         return "crisis"
     return "sensitive" if category == "sensitive" else None
+
+
+def verdict_routes_to_crisis(guard_verdict: Mapping[str, Any] | None) -> bool:
+    """Whether a stored verdict (`GuardOutcome.verdict_json`) routes to crisis, by
+    `escalation_for_verdict`. The page's reload (`escalation_kind`) and the next turn's safety check
+    (`_previous_answer`) both ask this, so a crisis the page shows is never screened without it."""
+    return (
+        guard_verdict is not None
+        and escalation_for_verdict(guard_verdict.get("category"), guard_verdict.get("kind"))
+        == "crisis"
+    )
 
 
 def _unavailable(usage: Usage | None) -> GuardOutcome:

@@ -81,6 +81,37 @@ PERSONAL_DATA_TEXT: Final = (
 )
 STILL_ANSWERING_TEXT: Final = "I'm still answering your last question."
 
+# Shown instead of a conversation whose stored text does not open (a changed key, a damaged row),
+# and sent as the 409's detail when a question is sent to one. The owner approved the words on
+# 2026-11-10. Changing a word means approving it again, and setting its date and hash. Not model
+# text, and not a safety message: it carries no 911 or 988 wording.
+UNREADABLE_CONVERSATION_TEXT: Final = (
+    "This conversation can't be shown. Start a new conversation to keep asking."
+)
+UNREADABLE_CONVERSATION_TEXT_AUTHOR: Final = "James Littlefield (owner)"
+UNREADABLE_CONVERSATION_TEXT_APPROVED_ON: str = "2026-11-10"
+UNREADABLE_CONVERSATION_TEXT_SHA256: str = (
+    "3557a4a7b37470a007ccbc5df317b5f5821927d380aa166d148f66f343333eb3"
+)
+
+# The 429 for a question the conversation's size makes too costly while a new conversation would
+# fit in what is left of the sandbox's budget. The owner approved the words on 2026-11-12.
+# Changing a word means approving it again, and setting its date and hash. Not model text. A
+# budget stop comes before the safety check, so it carries the 911 and 988 wording like the other
+# budget texts. It is the detail of the POST's 429 and also the text of the stream's
+# `budget-conversation` error (a budget that ran out at a later model call while a new conversation
+# would still fit), so it is in ERROR_TEXTS under that code.
+BUDGET_CONVERSATION_TEXT: Final = (
+    "This conversation is too long for what's left of this sandbox's AI budget. Start a new "
+    "conversation to keep asking. If you or someone else is in danger, call 911, or call or text "
+    "988 to reach the 988 Suicide & Crisis Lifeline."
+)
+BUDGET_CONVERSATION_TEXT_AUTHOR: Final = "James Littlefield (owner)"
+BUDGET_CONVERSATION_TEXT_APPROVED_ON: str = "2026-11-12"
+BUDGET_CONVERSATION_TEXT_SHA256: str = (
+    "761982a7756be1c5c58e2efe1bdcbe44e7e05c873588f69e929b086db8ce205b"
+)
+
 ERROR_TEXTS: Final[dict[str, str]] = {
     "refusal": (
         "I can't help with that one. If you need an answer, the HR team can help. "
@@ -92,6 +123,7 @@ ERROR_TEXTS: Final[dict[str, str]] = {
     ),
     "budget-sandbox": BUDGET_SANDBOX_TEXT,
     "budget-daily": BUDGET_DAILY_TEXT,
+    "budget-conversation": BUDGET_CONVERSATION_TEXT,
     # Anthropic's Console spend limit, not the product's own cap. The owner chose to reuse the
     # approved daily text for it, so there are no new words to approve.
     "spend-limit": BUDGET_DAILY_TEXT,

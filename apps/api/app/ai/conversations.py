@@ -14,7 +14,7 @@ one row that changes is a turn, which is added as `running` and finished once (`
 import base64
 import json
 import logging
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import asdict, dataclass, field
 from datetime import date, datetime, timedelta
 from decimal import Decimal
@@ -42,7 +42,14 @@ from app.core.encryption import (
     wrap_aad,
 )
 from app.db.errors import constraint_name, has_sqlstate
-from app.db.models import AiConsoleTurn, AiConversation, AiFeedback, AiMessage, AiTurn
+from app.db.models import (
+    AiConsoleTurn,
+    AiConversation,
+    AiFeedback,
+    AiMessage,
+    AiSpend,
+    AiTurn,
+)
 from app.domain.cases import HQ_TIMEZONE
 from app.policy import Actor
 
@@ -576,6 +583,43 @@ async def finish_turn(
         raise LookupError("no such turn")
 
 
+async def store_crisis_verdict(
+    db: AsyncSession, turn_id: UUID, verdict: Mapping[str, object], conversation_id: UUID
+) -> bool:
+    """Store a crisis turn's verdict on its still-`running` row, ahead of `finish_turn`.
+
+    The crisis panel and its 988 and EAP text come from the stored verdict (see
+    `display.escalation_kind`). `finish_turn` writes it only at the very end, and that write can
+    fail or time out, leaving the row `running` with no verdict: the panel would vanish on reload.
+    This is the same column `finish_turn` writes later (the same value, so the later write changes
+    nothing), limited to the turn's conversation and to a turn that is still running. Returns
+    whether a row was changed.
+    """
+    result = await db.execute(
+        update(AiTurn)
+        .where(
+            AiTurn.id == turn_id,
+            AiTurn.conversation_id == conversation_id,
+            AiTurn.status == "running",
+        )
+        .values(guard_verdict=dict(verdict))
+        .execution_options(synchronize_session=False)
+    )
+    return cast("CursorResult[Any]", result).rowcount == 1
+
+
+async def turn_spend_usd(db: AsyncSession, tenant_id: UUID, turn_id: UUID) -> Decimal:
+    """What the ledger holds for one turn: every `reserve` and `settle` row it wrote, added up.
+    Read in the transaction that writes the turn's console row, so the row has what the ledger held
+    then. The tenant comes first, as in the ledger's (tenant_id, turn_id) index."""
+    total = await db.scalar(
+        select(func.sum(AiSpend.amount_usd)).where(
+            AiSpend.tenant_id == tenant_id, AiSpend.turn_id == turn_id
+        )
+    )
+    return total if total is not None else Decimal(0)
+
+
 async def write_console_row(db: AsyncSession, tenant_id: UUID, row: dict[str, Any]) -> bool:
     """Add a console row (`console_rows.build_console_row`) in the caller's transaction, in a
     savepoint of its own. Returns whether it was written.
@@ -604,9 +648,10 @@ async def recover_abandoned(
 
     Returns the IDs of the turns it marked. The caller cancels their proposals in the same
     transaction (`proposals.recover_abandoned_turns` does both), after this update. Each turn also
-    gets a redacted console row, in a savepoint, dated by when it was asked: it never stored a
-    verdict, so nothing proves it was an ordinary turn. A failed row never fails the person's new
-    question.
+    gets a redacted console row, in a savepoint, dated by when it was asked: its end-of-turn write
+    never happened, so nothing proves it was an ordinary turn (a crisis turn does keep its verdict,
+    stored early by `store_crisis_verdict`, and the page still shows its crisis panel). A failed
+    row never fails the person's new question.
     """
     result = await db.execute(
         update(AiTurn)
@@ -620,9 +665,20 @@ async def recover_abandoned(
         .execution_options(synchronize_session=False)
     )
     recovered = list(result.all())
-    for _, tenant_id, started_at in recovered:
-        # Dated by when the turn was asked, not by when it was recovered.
-        row = build_abandoned_row(occurred_at=started_at, hq_timezone=ZoneInfo(HQ_TIMEZONE))
+    for turn_id, tenant_id, started_at in recovered:
+        # Dated by when the turn was asked, not by when it was recovered. Its cost is what the
+        # dead turn left in the ledger, read in this transaction (a turn that was only slow and
+        # settles later leaves the row at its reservation, above the ledger). A failed read costs
+        # the row nothing but its figure (and never fails the new question).
+        try:
+            async with db.begin_nested():
+                spent_usd = await turn_spend_usd(db, tenant_id, turn_id)
+        except Exception as error:
+            logger.error("Reading an abandoned turn's spend failed (%s)", error_name(error))
+            spent_usd = Decimal(0)
+        row = build_abandoned_row(
+            occurred_at=started_at, hq_timezone=ZoneInfo(HQ_TIMEZONE), cost_usd=spent_usd
+        )
         await write_console_row(db, tenant_id, row)
     return [turn_id for turn_id, _, _ in recovered]
 
@@ -790,3 +846,72 @@ async def add_feedback(
         if constraint_name(error) == FEEDBACK_ONCE_CONSTRAINT:
             raise FeedbackGiven from error
         raise
+
+
+class ConversationUnreadable(Exception):  # noqa: N818  (it names a state, like DecryptionFailed)
+    """A stored value of the conversation does not open. Carries IDs only, never any text."""
+
+    def __init__(self, conversation_id: UUID, turn_id: UUID | None) -> None:
+        super().__init__(f"conversation {conversation_id}")
+        self.conversation_id = conversation_id
+        self.turn_id = turn_id
+
+
+@dataclass(frozen=True)
+class OpenedConversation:
+    """Everything sealed that a conversation shows or sends to the model, opened."""
+
+    cipher: ConversationCipher
+    turns: list[AiTurn]
+    feedback: dict[UUID, AiFeedback]
+    # Each turn's text and its feedback reason (None when there is none), by turn ID.
+    texts: dict[UUID, tuple[TurnText, str | None]]
+    history: list[dict[str, Any]]
+
+
+async def open_conversation(
+    db: AsyncSession, keys: KeyProvider, conversation: AiConversation
+) -> OpenedConversation:
+    """Open the conversation's key, every turn, every feedback reason, and the model's history.
+
+    The one rule for whether a conversation is readable: the page's read and a question's
+    admission both call it (the budget read opens only the history), so the page never calls a
+    conversation unreadable while it still takes questions, or the reverse. A key, turn, or history
+    value that does not open raises `ConversationUnreadable` after one warning line naming the
+    conversation (and the turn, if one was being opened), never text. A feedback reason is
+    optional, so one that does not open is left out, with its own warning, and the conversation
+    stays readable.
+    """
+    turn_id: UUID | None = None
+    try:
+        cipher = conversation_cipher(keys, conversation)
+        turns = await conversation_turns(db, conversation.id)
+        feedback = await turn_feedback(db, conversation.id)
+        texts: dict[UUID, tuple[TurnText, str | None]] = {}
+        for turn in turns:
+            turn_id = turn.id
+            texts[turn.id] = (open_turn(cipher, turn), _reason_or_none(cipher, feedback, turn.id))
+        turn_id = None
+        history = await model_history(db, conversation.id, cipher)
+    except DecryptionFailed:
+        logger.warning(
+            "A conversation could not be opened (conversation %s%s)",
+            conversation.id,
+            f", turn {turn_id}" if turn_id is not None else "",
+        )
+        raise ConversationUnreadable(conversation.id, turn_id) from None
+    return OpenedConversation(cipher, turns, feedback, texts, history)
+
+
+def _reason_or_none(
+    cipher: ConversationCipher, feedback: dict[UUID, AiFeedback], turn_id: UUID
+) -> str | None:
+    """The turn's feedback reason, or None if it has none or it does not open (logged by ID)."""
+    given = feedback.get(turn_id)
+    if given is None:
+        return None
+    try:
+        return open_reason(cipher, given)
+    except DecryptionFailed:
+        logger.warning("A feedback reason could not be opened (feedback %s)", given.id)
+        return None

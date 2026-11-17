@@ -15,11 +15,13 @@ export function useStartTour() {
      */
     blocked: start.busy && !start.isPending,
     failed: start.isError,
+    error: start.error,
     /** Forgets a failure, so the page shows one start error at a time. */
     dismissError: start.reset,
-    start: () => {
+    /** `slot` is the empty `TurnstileSlot` under the control that was pressed. */
+    start: (slot: HTMLElement | null) => {
       // The sandbox mutation refuses while any identity change is in flight (its own included).
-      start.mutate({ data: { persona: 'priya' } })
+      start.mutate({ data: { persona: 'priya' } }, slot)
     },
   }
 }

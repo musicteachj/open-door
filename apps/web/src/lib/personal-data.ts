@@ -1,7 +1,7 @@
-// A check for Social Security and card numbers in a person's message, run before a question is
-// sent so the number never leaves the browser. It is a port of apps/api/app/ai/personal_data.py,
-// and both read evals/assistant/personal-data-cases.json, so they cannot drift. Pure: it never
-// records the text it reads.
+// A check for Social Security and card numbers in a person's message (digits of any script
+// count), run before a question is sent so the number never leaves the browser. It is a port of
+// apps/api/app/ai/personal_data.py, and both read evals/assistant/personal-data-cases.json, so
+// they cannot drift. Pure: it never records the text it reads.
 
 export type PersonalDataKind = 'ssn' | 'card'
 
@@ -31,17 +31,37 @@ const CARD_CANDIDATE = new RegExp(
 const FORMAT = /^\p{Cf}$/u
 const SPACE_SEPARATOR = /^\p{Zs}$/u
 const DASH = /^\p{Pd}$/u
+const DECIMAL_DIGIT = /^\p{Nd}$/u
+
+/**
+ * The value (0 to 9) of a decimal digit (category Nd) of any script. JavaScript has no digit-value
+ * lookup, but Nd digits sit in contiguous runs of whole 0-9 sets (the mathematical digits
+ * U+1D7CE-1D7FF are five sets in a row), so the value is the distance from the start of the run,
+ * modulo 10. The run start is found by stepping back while the previous code point is also Nd.
+ */
+export function digitValue(char: string): number {
+  const codePoint = char.codePointAt(0) as number
+  let runStart = codePoint
+  while (runStart > 0 && DECIMAL_DIGIT.test(String.fromCodePoint(runStart - 1))) runStart -= 1
+  return (codePoint - runStart) % 10
+}
 
 /**
  * The text as the check reads it, in the steps the shared vectors' `about` lists: NFKC, drop
- * format characters (Cf), space separators (Zs) to an ASCII space, and dashes (Pd) to an ASCII
- * hyphen. Digits are then matched as ASCII only.
+ * format characters (Cf), space separators (Zs) to an ASCII space, dashes (Pd) to an ASCII
+ * hyphen, and every decimal digit (Nd) of any script to its ASCII digit. The patterns then match
+ * ASCII digits only. The browser's Unicode tables may be newer than the API's and flag a few code
+ * points the API does not; the API is the authority.
  */
 export function normalized(text: string): string {
   let out = ''
   // Iterating a string yields whole code points, so an astral character is one step.
   for (const char of text.normalize('NFKC')) {
     if (FORMAT.test(char)) continue
+    if (DECIMAL_DIGIT.test(char)) {
+      out += String(digitValue(char))
+      continue
+    }
     out += SPACE_SEPARATOR.test(char) ? ' ' : DASH.test(char) ? '-' : char
   }
   return out

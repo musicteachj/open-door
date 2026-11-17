@@ -120,9 +120,15 @@ PRICES: Mapping[str, Price] = MappingProxyType(
 )
 
 
-# The stream's budget error codes: the sandbox's cap, the day's cap, and the API's own spend limit.
+# The stream's budget error codes: the sandbox's cap, the day's cap, a conversation too long for
+# what is left of the sandbox's cap, and the API's own spend limit.
 # One list for the turn (which sets them and shows their texts) and the console (which labels them).
-BUDGET_ERROR_CODES: Final = ("budget-sandbox", "budget-daily", "spend-limit")
+BUDGET_ERROR_CODES: Final = (
+    "budget-sandbox",
+    "budget-daily",
+    "budget-conversation",
+    "spend-limit",
+)
 
 
 @dataclass(frozen=True)

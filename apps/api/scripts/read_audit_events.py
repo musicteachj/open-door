@@ -16,7 +16,7 @@ from uuid import UUID
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import create_async_engine
 
-from app.core.config import get_settings
+from app.core.owner_settings import DatabaseUrlError, owner_database_url
 
 QUERY = text(
     "SELECT action, via, target_type, target_id::text AS target_id, actor_person_id::text AS actor,"
@@ -25,10 +25,11 @@ QUERY = text(
 
 
 async def main(actor: UUID) -> None:
-    url = get_settings().migration_database_url
-    if url is None:
-        sys.exit("MIGRATION_DATABASE_URL is not set")
-    engine = create_async_engine(str(url), hide_parameters=True)
+    try:
+        url = owner_database_url()
+    except DatabaseUrlError as error:
+        sys.exit(str(error))
+    engine = create_async_engine(url, hide_parameters=True)
     try:
         async with engine.connect() as connection:
             # The first statement of the transaction, so nothing here can write.

@@ -1,4 +1,5 @@
 import { act, screen, waitFor, within } from '@testing-library/react'
+import { conversationCopy } from '@/components/assistant/labels'
 import userEvent from '@testing-library/user-event'
 import { http, HttpResponse } from 'msw'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -20,6 +21,7 @@ import {
 } from '@/test/fake-assistant'
 import { renderApp } from '@/test/render-app'
 import { server } from '@/test/msw'
+import { DUMMY_TURNSTILE_TOKEN } from '@/test/turnstile'
 import { useChatStore } from './store'
 
 // The conversation page at /ask, against the fake API: what the first question does to the home, what
@@ -250,6 +252,133 @@ describe('the home and the conversation', () => {
     renderApp({ at: '/ask' })
     expect(await screen.findByText(/This conversation is getting long/)).toBeInTheDocument()
     expect(screen.getAllByRole('button', { name: 'Start a new conversation' })).toHaveLength(2)
+  })
+
+  it('keeps the new-conversation button after a reload when the last turn stopped for the conversation’s size', async () => {
+    signedInWith(
+      conversationOut({
+        turns: [
+          turnOut({
+            id: 't-1',
+            status: 'failed',
+            answerText: '',
+            error: { code: 'budget-conversation', message: 'This conversation is too long.' },
+          }),
+        ],
+      }),
+    )
+    renderApp({ at: '/ask' })
+    expect(await screen.findByText('This conversation is too long.')).toBeInTheDocument()
+    // The header's button and the notice's, and the notice gives no second reason.
+    expect(screen.getAllByRole('button', { name: 'Start a new conversation' })).toHaveLength(2)
+    expect(screen.queryByText(/This conversation is getting long/)).not.toBeInTheDocument()
+    // Retrying here could only be refused for the same reason.
+    expect(screen.queryByRole('button', { name: 'Retry' })).not.toBeInTheDocument()
+  })
+
+  it('offers no new conversation for a size stop once the sandbox itself is spent', async () => {
+    signedInWith(
+      conversationOut({
+        budget: {
+          sandboxReached: true,
+          dailyReached: false,
+          sandboxRemainingCents: 0,
+          banner: { kind: 'sandbox', message: 'The sandbox budget is used.' },
+        },
+        turns: [
+          turnOut({
+            id: 't-1',
+            status: 'failed',
+            answerText: '',
+            error: { code: 'budget-conversation', message: 'This conversation is too long.' },
+          }),
+        ],
+      }),
+    )
+    renderApp({ at: '/ask' })
+    expect(await screen.findByText('This conversation is too long.')).toBeInTheDocument()
+    // Only the header's button: the banner says why a new conversation won't help.
+    expect(screen.getAllByRole('button', { name: 'Start a new conversation' })).toHaveLength(1)
+  })
+
+  it('shows the approved line and the new-conversation button, and no turns, for an unreadable conversation', async () => {
+    signedInWith(
+      conversationOut({ unreadable: true, historyTooLong: true, longHistory: true, turns: [] }),
+    )
+    renderApp({ at: '/ask' })
+    // The words come from the texts route, not from a copy in the page.
+    expect(await screen.findByText(TEXTS.unreadableConversation)).toBeInTheDocument()
+    expect(screen.getAllByRole('button', { name: 'Start a new conversation' })).toHaveLength(2)
+    expect(screen.queryByText(/This conversation is getting long/)).not.toBeInTheDocument()
+    // Not the home's greeting: this is the conversation's page, with nothing in the thread.
+    expect(screen.queryByRole('heading', { level: 1 })).not.toBeInTheDocument()
+  })
+
+  it.each([
+    ['crisis', 'Reach a person right now', 'Call or text 988.'],
+    ['sensitive', 'A person in HR handles this, not the AI', 'HR can help with this.'],
+    ['unavailable', "Can't answer right now", 'Call 911, or call or text 988.'],
+  ] as const)(
+    'keeps the %s panel of an unreadable conversation, with the approved line',
+    async (kind, region, message) => {
+      signedInWith(
+        conversationOut({
+          unreadable: true,
+          historyTooLong: true,
+          longHistory: true,
+          turns: [],
+          escalation: { kind, message, hrContact: [DANA], offerCase: false },
+        }),
+      )
+      renderApp({ at: '/ask' })
+      expect(await screen.findByText(TEXTS.unreadableConversation)).toBeInTheDocument()
+      const panel = await screen.findByRole('region', { name: region })
+      expect(panel).toHaveTextContent(message)
+      expect(within(panel).queryByRole('button', { name: /confidential case/ })).toBeNull()
+      // The "can't answer" panel keeps its way to HR, as on a turn; the HR panel, whose case
+      // button needs the turn, offers the same form through "Write to HR".
+      expect(within(panel).queryAllByRole('link', { name: 'Write to HR' })).toHaveLength(
+        kind === 'crisis' ? 0 : 1,
+      )
+    },
+  )
+
+  it('shows no panel for an unreadable conversation that had none', async () => {
+    signedInWith(conversationOut({ unreadable: true, historyTooLong: true, turns: [] }))
+    renderApp({ at: '/ask' })
+    await screen.findByText(TEXTS.unreadableConversation)
+    expect(screen.queryByRole('region', { name: 'Reach a person right now' })).toBeNull()
+    expect(
+      screen.queryByRole('region', { name: 'A person in HR handles this, not the AI' }),
+    ).toBeNull()
+  })
+
+  it('starts a new conversation from the unreadable one', async () => {
+    const api = signedInWith(conversationOut({ unreadable: true, historyTooLong: true }))
+    const { user } = renderApp({ at: '/ask' })
+    await screen.findByText(TEXTS.unreadableConversation)
+    await user.click(screen.getAllByRole('button', { name: 'Start a new conversation' })[0])
+    await waitFor(() => expect(api.requests.created).toBe(1))
+    await waitFor(() =>
+      expect(screen.queryByText(TEXTS.unreadableConversation)).not.toBeInTheDocument(),
+    )
+  })
+
+  it('reads the conversation again when a question meets an unreadable one (409), and shows its line, not the long-conversation words', async () => {
+    const api = signedInWith(conversationOut({ turns: [cited()] }))
+    onTurn(() => {
+      api.setCurrent(
+        conversationOut({ unreadable: true, historyTooLong: true, longHistory: true, turns: [] }),
+      )
+      return problemResponse(409, 'conversation-unreadable', TEXTS.unreadableConversation)
+    })
+    const { user } = renderApp({ at: '/ask' })
+    await screen.findByText(/You get 40 hours/)
+    await user.type(await composer(), 'Another question{Enter}')
+    expect(await screen.findByText(TEXTS.unreadableConversation)).toBeInTheDocument()
+    await waitFor(() => expect(screen.queryByText(/You get 40 hours/)).not.toBeInTheDocument())
+    expect(screen.queryByText(/This conversation is getting long/)).not.toBeInTheDocument()
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
   })
 
   it('says nothing on load for an outdated conversation: its words do not fit, and the send explains', async () => {
@@ -500,6 +629,49 @@ describe('a panel’s arrival is announced only when it came down the stream', (
     expect(announceMock).toHaveBeenCalledExactlyOnceWith(SENSITIVE_HEADER, 'polite')
   })
 
+  it('announces a sensitive panel once when Stop closed the stream before it came, and not again', async () => {
+    const api = signedInWith(null)
+    const stream = openStream()
+    onTurn(() => stream.response())
+    const { user } = renderApp({ at: '/ask' })
+    await user.type(await composer(), 'Help{Enter}')
+    stream.push('turn.started', { turnId: 't-1' })
+    stream.push('text.delta', { text: 'I’m sorry' })
+    // The saved copy has the panel the stream never delivered.
+    api.setCurrent(
+      conversationOut({
+        turns: [
+          turnOut({
+            id: 't-1',
+            question: 'Help',
+            status: 'stopped',
+            answerText: 'I’m sorry',
+            escalation: SENSITIVE,
+            guard: { category: 'sensitive' },
+          }),
+        ],
+      }),
+    )
+    await user.click(await screen.findByRole('button', { name: 'Stop' }))
+    await screen.findByRole('region', { name: SENSITIVE_HEADER })
+    await waitFor(() => expect(useChatStore.getState().turn).toBeNull())
+    expect(announceMock).toHaveBeenCalledExactlyOnceWith(SENSITIVE_HEADER, 'polite')
+    // Used up: a later render, or a remount, stays silent.
+    await waitFor(() => expect(useChatStore.getState().panelsToAnnounce).toEqual([]))
+    useChatStore.getState().setDraft('Another thought')
+    await user.click(await composer())
+    expect(announceMock).toHaveBeenCalledTimes(1)
+  })
+
+  it('forgets the turns waiting to announce when the conversation page goes', async () => {
+    signedInWith(conversationOut({ turns: [turnOut({ id: 't-1', answerText: 'Hello.' })] }))
+    const { router } = renderApp({ at: '/ask' })
+    await screen.findByText('Hello.')
+    useChatStore.setState({ panelsToAnnounce: ['t-gone'] })
+    await act(() => router.navigate('/handbook'))
+    await waitFor(() => expect(useChatStore.getState().panelsToAnnounce).toEqual([]))
+  })
+
   it('announces nothing for a panel loaded from the server', async () => {
     signedInWith(
       conversationOut({
@@ -516,6 +688,7 @@ describe('a panel’s arrival is announced only when it came down the stream', (
     renderApp({ at: '/ask' })
     await screen.findByRole('region', { name: SENSITIVE_HEADER })
     expect(announceMock).not.toHaveBeenCalled()
+    expect(useChatStore.getState().panelsToAnnounce).toEqual([])
   })
 
   it.each([
@@ -1013,8 +1186,32 @@ describe('the budget', () => {
     )
     const { user } = renderApp({ at: '/ask' })
     await user.click(await screen.findByRole('button', { name: 'Start a new sandbox' }))
-    await waitFor(() => expect(created).toEqual([{ persona: 'priya' }]))
+    await waitFor(() =>
+      expect(created).toEqual([{ persona: 'priya', turnstileToken: DUMMY_TURNSTILE_TOKEN }]),
+    )
     expect(await screen.findByText("We couldn't start a sandbox.")).toBeInTheDocument()
+  })
+
+  it('shows a start refusal from the banner as the API wrote it, with no Retry for a limit', async () => {
+    signedInWith(conversationOut({ turns: [cited()], budget: sandboxBanner }))
+    server.use(
+      http.post(`${window.location.origin}/api/v1/sandboxes`, () =>
+        HttpResponse.json(
+          {
+            type: 'sandbox-day-limit',
+            title: 'Too many',
+            status: 429,
+            instance: '/api/v1/sandboxes',
+            detail: 'Come back tomorrow.',
+          },
+          { status: 429, headers: { 'Content-Type': 'application/problem+json' } },
+        ),
+      ),
+    )
+    const { user } = renderApp({ at: '/ask' })
+    await user.click(await screen.findByRole('button', { name: 'Start a new sandbox' }))
+    expect(await screen.findByText('Come back tomorrow.')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Retry' })).not.toBeInTheDocument()
   })
 
   it('takes the banner from a send the API refused with a budget problem, and says it once', async () => {
@@ -1168,6 +1365,25 @@ describe('the composer', () => {
     expect(await composer()).toHaveValue('More')
     await user.click(screen.getByRole('button', { name: 'Ask' }))
     await waitFor(() => expect(posted).toHaveLength(2))
+  })
+
+  it('offers a new conversation, with the API’s words and no budget banner, when only the conversation’s size is refused', async () => {
+    signedInWith(conversationOut({ turns: [cited()] }))
+    onTurn(() =>
+      problemResponse(429, 'budget-conversation', 'This conversation is too long for the budget.'),
+    )
+    const { user } = renderApp({ at: '/ask' })
+    await user.type(await composer(), 'More{Enter}')
+    expect(await screen.findByText('This conversation is too long for the budget.')).toBeVisible()
+    expect(
+      screen.getAllByRole('button', { name: 'Start a new conversation' }).length,
+    ).toBeGreaterThan(0)
+    // The conversation read has no banner (the sandbox is not at its cap), and the box stays usable.
+    expect(screen.queryByText(/sandbox budget/i)).not.toBeInTheDocument()
+    expect(await composer()).toHaveValue('More')
+    expect(await composer()).toBeEnabled()
+    // The notice gives no second reason: only its button, no long-conversation words.
+    expect(screen.queryByText(conversationCopy.longConversation)).not.toBeInTheDocument()
   })
 })
 

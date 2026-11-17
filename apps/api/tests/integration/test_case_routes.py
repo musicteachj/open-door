@@ -209,7 +209,8 @@ def test_sending_needs_the_csrf_header_and_a_session(browser: Browser) -> None:
     assert browser.client.post(BASE, json=body).status_code == 401
     browser.start_sandbox("priya")
 
-    assert browser.client.post(BASE, json=body).status_code == 403
+    with browser.without_csrf():
+        assert browser.client.post(BASE, json=body).status_code == 403
 
 
 def test_a_summary_is_scheduled_for_a_sensitive_verdict_too(
@@ -268,6 +269,7 @@ async def test_texts_carry_todays_reply_by_date(browser: Browser, app_engine: As
     assert len(body["bullets"]) == 5
     # The waiting-limit line is the API's, so the web app holds no copy that could drift.
     assert body["waitingLimit"] == texts.WAITING_LIMIT_TEXT
+    assert body["cannotSend"] == texts.CANNOT_SEND_TEXT
     assert any(expected.strftime("%A, %B") in bullet for bullet in body["bullets"])
     # The HR team's contacts come with them, for My cases, which has no panel to carry them.
     names = [contact["name"] for contact in body["hrContacts"]]
@@ -514,7 +516,8 @@ async def test_an_audited_read_without_the_header_is_refused_and_leaves_no_trace
     switch(browser, "dana")
 
     for suffix in ("text", "summary"):
-        missing = browser.client.get(f"{BASE}/{case_id}/{suffix}")
+        with browser.without_csrf():
+            missing = browser.client.get(f"{BASE}/{case_id}/{suffix}")
         wrong = browser.client.get(f"{BASE}/{case_id}/{suffix}", headers={"X-CSRF-Token": "wrong"})
         for response in (missing, wrong):
             assert response.status_code == 403
@@ -605,7 +608,8 @@ def test_a_status_change_needs_the_csrf_header(browser: Browser) -> None:
     switch(browser, "dana")
     get(browser, f"/{case_id}/text")
 
-    response = browser.client.post(f"{BASE}/{case_id}/status", json={"to": "closed"})
+    with browser.without_csrf():
+        response = browser.client.post(f"{BASE}/{case_id}/status", json={"to": "closed"})
 
     assert response.status_code == 403
     assert response.json()["detail"] == "The CSRF token is missing or wrong."

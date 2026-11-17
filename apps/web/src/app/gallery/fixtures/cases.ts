@@ -18,6 +18,13 @@ export const CASE_BULLETS = [
 export const WAITING_LIMIT =
   'You have 5 cases waiting for HR. To add to one, contact the HR team directly.'
 
+/** The "can't be sent from here" line, as `GET /cases/texts` serves it (`cannotSend`). */
+export const CANNOT_SEND =
+  "This can't be sent as a case from here. You can see your cases in My cases, or contact the HR team directly."
+
+/** The words-too-long refusal, as `POST /cases` serves it (the problem's `detail`). */
+export const TOO_LONG = '4,000 of 4,000 characters. Shorten it to send.'
+
 /** The sent line in two parts, for a person ("My cases") and for HR ("Cases"). */
 export const SENT_LINE = {
   lead: 'Sent to HR. HR replies by Wednesday, October 28.',

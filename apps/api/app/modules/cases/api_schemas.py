@@ -15,8 +15,9 @@ from app.api.schemas import CamelModel
 from app.modules.cases import texts
 from app.modules.cases.schemas import Category, Status
 
-# Like the assistant's question limit: far above the 4,000 the service allows.
-MAX_BODY_CHARACTERS = 20_000
+# Twice the 4,000 the service allows, like the assistant's question limit. Four-byte characters at
+# this ceiling are about 32 KB as JSON, under the 64 KiB body cap.
+MAX_BODY_CHARACTERS = 8_000
 
 
 class OpenCaseBody(CamelModel):
@@ -78,6 +79,8 @@ class CaseTextsOut(CamelModel):
     reply_by: date
     # The line shown in place of the case button when five cases are waiting.
     waiting_limit: str
+    # Shown in place of the form when a case can't be sent from here and a retry can't help.
+    cannot_send: str
     # The HR team, for My cases: its limit line and a crisis panel have no conversation above them.
     hr_contacts: list[HrContactOut]
 

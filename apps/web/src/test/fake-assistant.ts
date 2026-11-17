@@ -22,6 +22,8 @@ export const TEXTS: AssistantTextsOut = {
   personalData:
     "That looks like a Social Security or card number. Please take it out; I can't take those.",
   stillAnswering: "I'm still answering your last question.",
+  unreadableConversation:
+    "This conversation can't be shown. Start a new conversation to keep asking.",
 }
 
 /** The budget route's answer while neither cap is reached. */
@@ -88,6 +90,7 @@ export function conversationOut(overrides: Partial<ConversationOut> = {}): Conve
     longHistory: false,
     historyTooLong: false,
     outdated: false,
+    unreadable: false,
     ...overrides,
   }
 }

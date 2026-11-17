@@ -1,4 +1,5 @@
-import { expect, test, type Page } from '@playwright/test'
+import { expect, test } from './fixtures'
+import type { Page } from '@playwright/test'
 import { problem, scan, startAs } from './helpers'
 
 // One test per acceptance criterion in docs/design/screens/05-global-states/notes.md. "Matches the

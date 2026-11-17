@@ -26,6 +26,7 @@ an answer, a tool result, or the canary: only IDs, exception types, and timings.
 """
 
 import asyncio
+import contextlib
 import json
 import logging
 import re
@@ -36,6 +37,7 @@ from collections.abc import (
     AsyncIterator,
     Awaitable,
     Callable,
+    Coroutine,
     Iterator,
     Sequence,
 )
@@ -52,7 +54,15 @@ import anyio
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 
-from app.ai.budget import BudgetExceeded, Caps, Reservation, reserve, settle
+from app.ai.budget import (
+    BudgetExceeded,
+    BudgetState,
+    Caps,
+    Reservation,
+    budget_state,
+    reserve,
+    settle,
+)
 from app.ai.case_outcomes import unreported_cases, with_case_sentences
 from app.ai.citations import CitationEvent, CitationMapper
 from app.ai.console_rows import (
@@ -76,6 +86,8 @@ from app.ai.conversations import (
     model_history,
     search_sources,
     start_turn,
+    store_crisis_verdict,
+    turn_spend_usd,
     write_console_row,
 )
 from app.ai.embeddings import Embedder
@@ -95,6 +107,7 @@ from app.ai.guard import (
     notes_for_role,
     offers_case,
     screen,
+    verdict_routes_to_crisis,
 )
 from app.ai.pricing import (
     BUDGET_ERROR_CODES,
@@ -167,6 +180,11 @@ MAX_TOOL_RUNS_PER_TURN = 20
 ONE_CARD_TEXT = "Only one card can be made per answer; this call was not run."
 # The crisis text never waits on the HR lookup longer than this.
 HR_CONTACT_TIMEOUT = timedelta(seconds=2)
+# Nor does it wait on the write that stores the crisis verdict ahead of the end-of-turn writes.
+CRISIS_VERDICT_TIMEOUT = timedelta(seconds=2)
+# A budget stop at a model call reads the ledger once more to word its error; past this it gives
+# the plain budget code rather than keep the person waiting for the stop.
+BUDGET_LOOKUP_TIMEOUT = timedelta(seconds=2)
 # Closing the model's stream, and settling a call, are shielded from cancellation (the first so the
 # upstream request stops and no more billed tokens are generated); this bounds the wait.
 SHIELDED_STEP_TIMEOUT = timedelta(seconds=5)
@@ -179,6 +197,7 @@ ErrorCode = Literal[
     "model-unavailable",
     "budget-sandbox",
     "budget-daily",
+    "budget-conversation",
     "spend-limit",
     "too-many-calls",
     "internal",
@@ -194,6 +213,49 @@ class ConversationNotFound(Exception):  # noqa: N818
 class ConversationOutdated(Exception):  # noqa: N818
     """The conversation was pinned to a prompt or tool set that is no longer current. The route
     answers 409 `conversation-outdated` and offers a new conversation."""
+
+
+# Steps `_bounded` stopped waiting for, kept until they end so they are not collected mid-run.
+_DETACHED: set[asyncio.Future[Any]] = set()
+
+
+def _forget(task: asyncio.Future[Any]) -> None:
+    _DETACHED.discard(task)
+    # Retrieved, so asyncio does not warn that nobody did. A canceled step raises here instead. A
+    # step that failed after the caller stopped waiting is logged by its error's type alone.
+    with contextlib.suppress(asyncio.CancelledError):
+        error = task.exception()
+        if error is not None:
+            logger.warning("A database step given up on later failed (%s)", error_name(error))
+
+
+def _detach(task: asyncio.Future[Any], *, cancel: bool) -> None:
+    if cancel:
+        task.cancel()
+    _DETACHED.add(task)
+    task.add_done_callback(_forget)
+
+
+async def _bounded[T](step: Coroutine[Any, Any, T], limit: timedelta, *, cancel: bool = True) -> T:
+    """Run a database step, waiting no longer than `limit`; raises `TimeoutError` past it.
+
+    `asyncio.timeout` cancels the step at the limit but then waits for the step's cleanup inside
+    the block, and a database that stops answering (a failover, a silent network path) can hold
+    that cleanup for minutes: asyncpg opens a connection to cancel the query, and the pool closes
+    the old one gracefully. Here the caller stops waiting at the limit, and the step is left to
+    end on its own: canceled first (the default), or, with `cancel=False`, still running, so a
+    write that is merely slow can land later (the database's statement timeout still ends it). A
+    caller canceled while waiting does the same."""
+    task = asyncio.ensure_future(step)
+    try:
+        done, _ = await asyncio.wait({task}, timeout=limit.total_seconds())
+    except asyncio.CancelledError:
+        _detach(task, cancel=cancel)
+        raise
+    if task not in done:
+        _detach(task, cancel=cancel)
+        raise TimeoutError
+    return task.result()
 
 
 # --- Events -----------------------------------------------------------------------------------
@@ -539,15 +601,20 @@ def _holds_the_canary(event: TurnEvent) -> bool:
 def _previous_answer(previous: Sequence[Any] | None, cipher: ConversationCipher) -> str | None:
     """What the guard is shown of the turn just before this one. Usually its answer; where it had
     none because the person was sent a fixed text (crisis, the guard down, a budget stop), that
-    text, so a short reply such as "yes, tonight" is screened with its context."""
+    text, so a short reply such as "yes, tonight" is screened with its context.
+
+    A turn whose stored verdict routes to crisis was shown the crisis text whatever its status:
+    the stream stores the verdict before it sends the text, so a turn that was abandoned or failed
+    after that (its end-of-turn write never landed) still counts. The rule is the one the turn
+    display uses (`verdict_routes_to_crisis`)."""
     if previous is None:
         return None
-    turn_id, answer_ciphertext, status, error_code = previous
+    turn_id, answer_ciphertext, status, error_code, guard_verdict = previous
     if answer_ciphertext is not None:
         answer_text = cipher.open_text(answer_ciphertext, "ai_turns", "answer_ciphertext", turn_id)
         if answer_text:
             return answer_text
-    if status == "crisis":
+    if status == "crisis" or verdict_routes_to_crisis(guard_verdict):
         return CRISIS_TEXT
     if status == "guard_unavailable" or error_code == "guard-error":
         return UNAVAILABLE_TEXT
@@ -821,6 +888,7 @@ class TurnRun:
                         AiTurn.answer_ciphertext,
                         AiTurn.status,
                         AiTurn.error_code,
+                        AiTurn.guard_verdict,
                     )
                     .where(AiTurn.conversation_id == conversation.id, AiTurn.id != turn.id)
                     .order_by(AiTurn.started_at.desc(), AiTurn.id.desc())
@@ -1019,6 +1087,63 @@ class TurnRun:
                 raise _DeadlineExceeded from None
             raise
 
+    async def _budget_code_at_call(
+        self, scope: str, model: str, estimated_input_tokens: int, call_usd: Decimal
+    ) -> ErrorCode:
+        """The error code for a model call the ledger refused. The conversation's size is the only
+        problem when the sandbox is out of room for this call but has room for both the same call
+        without the stored history (the earlier turns; this turn's own question and tool results
+        stay in it) and a new conversation's first turn as the question's 429 sizes it
+        (`room_needed_usd` with no history): the person can start a new conversation, and its
+        first question won't be refused, so the code is `budget-conversation`. Where those would
+        fit the sandbox but not what is left of the day, the code is `budget-daily`, as the next
+        question's 429 would be. The scope rule is the 429's (`refusal_scope`). A conversation
+        with no earlier turns has nothing a new one would leave behind, so its stop is the
+        sandbox's, and so is any failure to find out."""
+        if scope != "sandbox" or not self.history:
+            return _budget_code(scope)
+        # Imported here: admission builds the same requests the loop does, so it imports this
+        # module.
+        from app.ai.admission import history_tokens, refusal_scope, room_needed_usd
+
+        history = self.history
+        conversation = self.conversation
+
+        def without_history() -> Decimal:
+            tokens = max(estimated_input_tokens - history_tokens(history), 0)
+            call = reservation_usd(model, estimated_input_tokens=tokens, max_tokens=MAX_TOKENS)
+            first_turn = room_needed_usd(
+                model=conversation.model,
+                guard_model=conversation.guard_model,
+                effort=conversation.effort,
+                history=[],
+                question=self.question,
+                actor_view=self.deps.actor_view,
+                handbook_label=self.deps.handbook_label,
+                now=self.now,
+            )
+            return max(call, first_turn)
+
+        async def read() -> BudgetState:
+            async with tenant_session(self.deps.engine, self.deps.tenant_ctx) as db:
+                return await budget_state(db, self.deps.caps)
+
+        try:
+            state = await _bounded(read(), BUDGET_LOOKUP_TIMEOUT)
+            if state.sandbox_remaining_usd >= call_usd:
+                # Not the sandbox's room: a single call over the ledger's per-row maximum, or room
+                # freed since. The plain code, as before.
+                return _budget_code(scope)
+            refusal = refusal_scope(state, call_usd, without_history)
+        except Exception as error:
+            logger.warning("Sizing the call without the history failed (%s)", error_name(error))
+            return _budget_code(scope)
+        if refusal == "conversation":
+            return "budget-conversation"
+        if refusal == "daily":
+            return "budget-daily"
+        return _budget_code(scope)
+
     async def _reserve(self, amount_usd: Decimal) -> Reservation:
         # A native `task.cancel()` inside `reserve` rolls its transaction back, or, if it lands just
         # after the commit, leaves a reserve row this turn never saw. Either way the ledger is
@@ -1074,15 +1199,42 @@ class TurnRun:
             self.inflight = None
 
     async def _contacts(self) -> tuple[HrContact, ...]:
-        try:
-            async with (
-                asyncio.timeout(HR_CONTACT_TIMEOUT.total_seconds()),
-                tenant_session(self.deps.engine, self.deps.tenant_ctx) as db,
-            ):
+        async def read() -> tuple[HrContact, ...]:
+            async with tenant_session(self.deps.engine, self.deps.tenant_ctx) as db:
                 return tuple(await hr_contact(db))
+
+        try:
+            return await _bounded(read(), HR_CONTACT_TIMEOUT)
         except Exception as error:  # A timeout too: the fixed text goes out without the names.
             logger.warning("Reading the HR contact failed (%s)", error_name(error))
             return ()
+
+    async def _store_crisis_verdict(self) -> None:
+        """Write the crisis verdict on the still-running turn, in a short transaction of its own,
+        so the crisis panel survives an end-of-turn write that fails or hangs (the row would read
+        back as abandoned, with no verdict). Bounded, and it never raises: the crisis text goes
+        out whatever happens here, and `finish_turn` still writes the verdict at the end."""
+        verdict = self.guard_verdict
+        if verdict is None:
+            return
+
+        async def write() -> None:
+            async with tenant_session(self.deps.engine, self.deps.tenant_ctx) as db:
+                stored = await store_crisis_verdict(db, self.turn_id, verdict, self.conversation.id)
+            if not stored:
+                # No running row matched: the turn finished first (a write that was only slow), or
+                # the reload's crisis panel rests on `finish_turn` alone.
+                logger.warning(
+                    "Storing the crisis verdict changed no row (turn %s; it may have finished)",
+                    self.turn_id,
+                )
+
+        try:
+            # Not canceled at the bound: a write that is only slow can still land, harmlessly, as
+            # it changes only a row that is still `running`, to the value `finish_turn` writes.
+            await _bounded(write(), CRISIS_VERDICT_TIMEOUT, cancel=False)
+        except Exception as error:  # A timeout too. Only the type is logged, never the verdict.
+            logger.error("Storing the crisis verdict failed (%s)", error_name(error))
 
     # -- the guard --
 
@@ -1135,7 +1287,10 @@ class TurnRun:
         await self._settle(reservation, guard_cost(outcome, self.conversation.guard_model))
         if outcome.route == "crisis":
             offer = offers_case("crisis", self.guard_verdict)
-            return None, [Escalation("crisis", CRISIS_TEXT, await self._contacts(), offer)]
+            # The verdict is stored alongside the HR lookup, so the text waits for the longer of
+            # two bounded steps, not their sum.
+            _, contacts = await asyncio.gather(self._store_crisis_verdict(), self._contacts())
+            return None, [Escalation("crisis", CRISIS_TEXT, contacts, offer)]
         if outcome.route == "unavailable":
             return None, [Escalation("unavailable", UNAVAILABLE_TEXT, await self._contacts())]
         return outcome, []
@@ -1190,14 +1345,17 @@ class TurnRun:
                 estimate = first_call_input_tokens(request)
             else:
                 estimate = estimate_input_tokens(previous_usage, added_text)
+            call_reservation_usd = reservation_usd(
+                request.model, estimated_input_tokens=estimate, max_tokens=MAX_TOKENS
+            )
             try:
-                reservation = await self._reserve(
-                    reservation_usd(
-                        request.model, estimated_input_tokens=estimate, max_tokens=MAX_TOKENS
+                reservation = await self._reserve(call_reservation_usd)
+            except BudgetExceeded as error:
+                self.fail(
+                    await self._budget_code_at_call(
+                        error.scope, request.model, estimate, call_reservation_usd
                     )
                 )
-            except BudgetExceeded as error:
-                self.fail(_budget_code(error.scope))
                 return
             calls += 1
 
@@ -1599,9 +1757,11 @@ class TurnRun:
 
     async def events(self) -> AsyncGenerator[TurnEvent]:
         """Stream the turn: started, the guard's escalation or the loop's events, then the closing
-        events once the end-of-turn writes are done. Iterate it right away: a turn nobody reads
-        stays `running` until the abandoned-turn rule fails it. A consumer that stops iterating
-        (`aclose()`), or a canceled task, ends the turn as `stopped`."""
+        events once the end-of-turn writes are done: a late escalation if there is one, then the
+        one closing event (`turn.completed` or `error`), always last. Iterate it right away: a turn
+        nobody reads stays `running` until the abandoned-turn rule fails it. A consumer that stops
+        iterating (`aclose()`), or a canceled task, ends the turn as `stopped` and gets nothing
+        after the stop."""
         try:
             yield TurnStarted(self.turn_id)
             loop = self._loop()
@@ -1627,7 +1787,7 @@ class TurnRun:
     # -- the end --
 
     def _late_escalation(self) -> Literal["sensitive", "unavailable"] | None:
-        """The escalation that goes out with the turn's last events, after the answer or the error.
+        """The escalation that goes out with the turn's last events, just before the closing event.
 
         Crisis and "guard unavailable" escalations went out as soon as they were known. A message
         the guard never read gets the "can't answer right now" text (911, 988, HR); a sensitive
@@ -1644,37 +1804,43 @@ class TurnRun:
         return "sensitive" if self.sensitive else None
 
     async def closing_events(self) -> list[TurnEvent]:
-        events = self._closing_events()
+        """The turn's last events: the late escalation, if any, then the one closing event. Every
+        turn read to its end gets exactly one closing event (`turn.completed` or `error`) and it
+        is last, so a consumer knows the stream is over without guessing from what came before."""
+        closing = self._closing_event()
+        events: list[TurnEvent] = []
         kind = self._late_escalation()
-        if kind is not None and events:
-            escalation = Escalation(
-                kind,
-                SENSITIVE_TEXT if kind == "sensitive" else UNAVAILABLE_TEXT,
-                await self._contacts(),
-                offers_case(kind, self.guard_verdict),
+        if kind is not None:
+            events.append(
+                Escalation(
+                    kind,
+                    SENSITIVE_TEXT if kind == "sensitive" else UNAVAILABLE_TEXT,
+                    await self._contacts(),
+                    offers_case(kind, self.guard_verdict),
+                )
             )
-            # After an error; before the completion, so the HR contact follows the answer.
-            if isinstance(events[0], TurnCompleted):
-                events.insert(0, escalation)
-            else:
-                events.append(escalation)
+        events.append(closing)
         return [self._seen(event) for event in events]
 
-    def _closing_events(self) -> list[TurnEvent]:
+    def _closing_event(self) -> TurnCompleted | Error:
         if self.finish_failed:
-            return [Error("internal", ERROR_TEXTS["internal"])]
+            return Error("internal", ERROR_TEXTS["internal"])
         if self.error is not None:
-            return [self.error]
-        if self.status == "completed":
-            return [
-                TurnCompleted(
-                    self.turn_id,
-                    self.last_served_by,
-                    TurnUsage(*self._tokens()),
-                    incomplete=self.incomplete,
-                )
-            ]
-        return []
+            return self.error
+        if self.status in ("completed", "crisis", "guard_unavailable"):
+            # A crisis or an unavailable guard never ran the model: `last_served_by` is empty and
+            # the usage is zero.
+            return TurnCompleted(
+                self.turn_id,
+                self.last_served_by,
+                TurnUsage(*self._tokens()),
+                incomplete=self.incomplete,
+            )
+        # The consumer is still reading, so this is not a stop. No path may end silently.
+        logger.error(
+            "Turn %s reached its end with status %s and no error", self.turn_id, self.status
+        )
+        return Error("internal", ERROR_TEXTS["internal"])
 
     def _tokens(self) -> tuple[int, int]:
         usage = total_usage(self.iterations)
@@ -1756,23 +1922,33 @@ class TurnRun:
         building it nor writing it can fail the turn: an error is logged by its type alone and the
         row is dropped (`write_console_row`)."""
         try:
-            row = build_console_row(self._console_inputs(outcome), turn_id=self.turn_id)
+            # The row's cost is the ledger's figure for this turn, read in the transaction that
+            # writes the row: the ledger is what the caps count, and the turn's own tally can
+            # drift from it (a settle that timed out keeps its reservation in the ledger). A
+            # settle that outlasts its timeout and commits after this read still leaves the row
+            # at the reservation, above the ledger. If the read fails, the tally stands in.
+            try:
+                async with db.begin_nested():
+                    spent_usd = await turn_spend_usd(db, self.deps.actor.tenant_id, self.turn_id)
+            except Exception as error:
+                logger.error("Reading the turn's spend failed (%s)", error_name(error))
+                spent_usd = outcome.cost_usd
+            row = build_console_row(
+                self._console_inputs(outcome, spent_usd=spent_usd), turn_id=self.turn_id
+            )
         except Exception as error:
             logger.error("Building the console row failed (%s)", error_name(error))
             return
         await write_console_row(db, self.deps.actor.tenant_id, row)
 
-    def _console_inputs(self, outcome: TurnOutcome) -> ConsoleInputs:
+    def _console_inputs(self, outcome: TurnOutcome, *, spent_usd: Decimal) -> ConsoleInputs:
         """What the console row is made from. The tool names are checked against the registry's
         (the model writes them), and no input summary, answer text beyond the not-found reading,
         or explanation goes on."""
-        # The outcome's counts are the main model's (already totaled); the safety check's are added.
+        # The main model's iterations and the safety check's call, totaled the one way.
         guard = self.guard_usage or Usage(0, 0, 0, 0)
-        usage = Usage(
-            outcome.input_tokens + guard.input_tokens,
-            outcome.output_tokens + guard.output_tokens,
-            outcome.cache_read_tokens + guard.cache_read_tokens,
-            outcome.cache_write_tokens + guard.cache_write_tokens,
+        usage = total_usage(
+            [*self.iterations, IterationUsage(self.conversation.guard_model, guard)]
         )
         view = self.deps.actor_view
         return ConsoleInputs(
@@ -1806,7 +1982,7 @@ class TurnRun:
             prompt_version=outcome.prompt_version,
             toolset_version=outcome.toolset_version,
             usage=usage,
-            cost_usd=outcome.cost_usd,
+            cost_usd=spent_usd,
             guard_ms=self.guard_ms,
             first_text_ms=self.first_text_ms,
             total_ms=outcome.total_ms,

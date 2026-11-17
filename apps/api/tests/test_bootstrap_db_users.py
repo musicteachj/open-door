@@ -134,3 +134,16 @@ def test_each_verifier_gets_a_fresh_random_salt_and_never_contains_the_password(
     shape = rf"SCRAM-SHA-256\$4096:{base64_part}{{22}}==\${base64_part}{{43}}=:{base64_part}{{43}}="
     assert re.fullmatch(shape, first)
     assert "secret" not in first
+
+
+def test_the_cleanup_login_gets_a_longer_statement_limit_than_the_app_login() -> None:
+    from scripts.bootstrap_db_users import login_settings
+
+    assert dict(login_settings("od_app")) == {
+        "statement_timeout": "10s",
+        "idle_in_transaction_session_timeout": "30s",
+    }
+    assert dict(login_settings("od_cleanup")) == {
+        "statement_timeout": "60s",
+        "idle_in_transaction_session_timeout": "30s",
+    }

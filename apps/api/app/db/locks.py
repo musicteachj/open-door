@@ -8,6 +8,7 @@ namespace so no two can collide. Pick the next free number below for a new use a
     4403  a person's time-off balance         (app/modules/timeoff/queries.py)
     4404  a conversation's proposals          (app/ai/proposals.py)
     4405  a person's waiting cases             (app/modules/cases/queries.py)
+    4406  starting a sandbox, one for all       (app/modules/sandbox/limits.py)
 
 The locks are released at commit or rollback, so they stay correct behind a connection pooler.
 Taking one again in the same transaction does nothing.
@@ -24,6 +25,7 @@ BUDGET_DAY_NS = 4402
 TIMEOFF_PERSON_NS = 4403
 CONVERSATION_PROPOSALS_NS = 4404
 CASE_PERSON_NS = 4405
+SANDBOX_STARTS_NS = 4406
 
 
 async def lock_tenant_scoped(
@@ -42,3 +44,9 @@ async def lock_tenant_scoped(
 async def database_now(db: AsyncSession) -> datetime:
     """The transaction's `now()`, the clock the database's own triggers and defaults use."""
     return (await db.execute(select(func.now()))).scalar_one()
+
+
+async def lock_global(db: AsyncSession, namespace: int) -> None:
+    """Take the one lock of a namespace that has no key, such as the count of sandbox starts."""
+    # The namespace is one of the constants above, never input, so it is written into the text.
+    await db.execute(text(f"SELECT pg_advisory_xact_lock({int(namespace)}, 0)"))

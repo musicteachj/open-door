@@ -34,6 +34,7 @@ export interface ActionCountOut {
 export interface AssistantTextsOut {
   personalData: string
   stillAnswering: string
+  unreadableConversation: string
 }
 
 export interface AudienceOut {
@@ -440,6 +441,7 @@ export interface CaseTextsOut {
   bullets: string[]
   replyBy: string
   waitingLimit: string
+  cannotSend: string
   hrContacts: HrContactOut[]
 }
 
@@ -750,6 +752,8 @@ export interface ConversationOut {
   longHistory: boolean
   historyTooLong: boolean
   outdated: boolean
+  unreadable: boolean
+  escalation?: EscalationOut | null
 }
 
 export interface CountsOut {
@@ -949,6 +953,11 @@ export interface ListPassage {
   items: Inline[][]
 }
 
+export interface LiveResponse {
+  status: 'ok'
+  version: string
+}
+
 export type MeEmploymentType = (typeof MeEmploymentType)[keyof typeof MeEmploymentType]
 
 export const MeEmploymentType = {
@@ -986,12 +995,14 @@ export interface Me {
 
 export interface NewSandboxRequest {
   persona?: PersonaKey
+  /** @maxLength 2048 */
+  turnstileToken: string
 }
 
 export interface OpenCaseBody {
   submissionId: string
   category: Category
-  /** @maxLength 20000 */
+  /** @maxLength 8000 */
   text: string
   turnId?: string | null
 }
@@ -1218,7 +1229,7 @@ export const SummaryRetryOutValue = {
 export type SummaryRetryOut = typeof SummaryRetryOutValue
 
 export interface TurnIn {
-  /** @maxLength 20000 */
+  /** @maxLength 4000 */
   question: string
 }
 
@@ -1243,9 +1254,7 @@ export type GetDirectoryFacetsParams = {
 }
 
 export type SearchHandbookParams = {
-  /**
-   * @maxLength 100
-   */
+  /** @maxLength 100 */
   q: string
 }
 
@@ -1255,13 +1264,9 @@ export type GetTimeOffBalancesParams = {
 
 export type ListTimeOffRequestsParams = {
   scope?: ListTimeOffRequestsScope
-  /**
-   * First day of the window. For `decided` it is the first day a decision was made, by the caller's calendar (default: 90 days ago). For the other scopes it is the first day the leave covers (default: 30 days ago). Ignored for `waiting`.
-   */
+  /** First day of the window. For `decided` it is the first day a decision was made, by the caller's calendar (default: 90 days ago). For the other scopes it is the first day the leave covers (default: 30 days ago). Ignored for `waiting`. */
   from?: string | null
-  /**
-   * Last day of the window, inclusive. For `decided` it is the last day a decision was made (default: today). For the other scopes it is the last day the leave covers (default: 120 days ahead). Ignored for `waiting`.
-   */
+  /** Last day of the window, inclusive. For `decided` it is the last day a decision was made (default: today). For the other scopes it is the last day the leave covers (default: 120 days ahead). Ignored for `waiting`. */
   to?: string | null
 }
 
@@ -1277,9 +1282,7 @@ export const ListTimeOffRequestsScope = {
 
 export type GetTimeOffCalendarParams = {
   to: string
-  /**
-   * First day of the holidays to list. Without it, the earliest day sick time may start, which is as far back as the form's date picker reaches.
-   */
+  /** First day of the holidays to list. Without it, the earliest day sick time may start, which is as far back as the form's date picker reaches. */
   from?: string | null
 }
 
@@ -1307,6 +1310,119 @@ const withQueryKey = <T extends object, K>(query: T, queryKey: K): T & { queryKe
     })
   }
   return result
+}
+
+export const getGetHealthLiveUrl = () => {
+  return `/api/v1/health/live`
+}
+
+/**
+ * @summary Report that the API process is up, without touching the database
+ */
+export const getHealthLive = async (
+  options?: Parameters<typeof apiFetch>[1],
+): Promise<LiveResponse> => {
+  return apiFetch<LiveResponse>(getGetHealthLiveUrl(), {
+    ...options,
+    method: 'GET',
+  })
+}
+
+export const getGetHealthLiveQueryKey = () => {
+  return [`/api/v1/health/live`] as const
+}
+
+export const getGetHealthLiveQueryOptions = <
+  TData = Awaited<ReturnType<typeof getHealthLive>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof getHealthLive>>, TError, TData>>
+  request?: SecondParameter<typeof apiFetch>
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {}
+
+  const queryKey = queryOptions?.queryKey ?? getGetHealthLiveQueryKey()
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getHealthLive>>> = ({ signal }) =>
+    getHealthLive({ signal, ...requestOptions })
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getHealthLive>>,
+    TError,
+    TData
+  > & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type GetHealthLiveQueryResult = NonNullable<Awaited<ReturnType<typeof getHealthLive>>>
+export type GetHealthLiveQueryError = ErrorType<unknown>
+
+export function useGetHealthLive<
+  TData = Awaited<ReturnType<typeof getHealthLive>>,
+  TError = ErrorType<unknown>,
+>(
+  options: {
+    query: Partial<UseQueryOptions<Awaited<ReturnType<typeof getHealthLive>>, TError, TData>> &
+      Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getHealthLive>>,
+          TError,
+          Awaited<ReturnType<typeof getHealthLive>>
+        >,
+        'initialData'
+      >
+    request?: SecondParameter<typeof apiFetch>
+  },
+  queryClient?: QueryClient,
+): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetHealthLive<
+  TData = Awaited<ReturnType<typeof getHealthLive>>,
+  TError = ErrorType<unknown>,
+>(
+  options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof getHealthLive>>, TError, TData>> &
+      Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getHealthLive>>,
+          TError,
+          Awaited<ReturnType<typeof getHealthLive>>
+        >,
+        'initialData'
+      >
+    request?: SecondParameter<typeof apiFetch>
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetHealthLive<
+  TData = Awaited<ReturnType<typeof getHealthLive>>,
+  TError = ErrorType<unknown>,
+>(
+  options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof getHealthLive>>, TError, TData>>
+    request?: SecondParameter<typeof apiFetch>
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary Report that the API process is up, without touching the database
+ */
+
+export function useGetHealthLive<
+  TData = Awaited<ReturnType<typeof getHealthLive>>,
+  TError = ErrorType<unknown>,
+>(
+  options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof getHealthLive>>, TError, TData>>
+    request?: SecondParameter<typeof apiFetch>
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+  const queryOptions = getGetHealthLiveQueryOptions(options)
+
+  const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
+    queryKey: DataTag<QueryKey, TData, TError>
+  }
+
+  return withQueryKey(query, queryOptions.queryKey)
 }
 
 export const getGetHealthUrl = () => {
@@ -1430,7 +1546,7 @@ export const getCreateSandboxUrl = () => {
  * @summary Start a new sandbox company and sign in to it as one of its personas
  */
 export const createSandbox = async (
-  newSandboxRequestNull?: NewSandboxRequest | null,
+  newSandboxRequest: NewSandboxRequest,
   options?: Parameters<typeof apiFetch>[1],
 ): Promise<SandboxCreated> => {
   const getHeaders = (
@@ -1456,7 +1572,7 @@ export const createSandbox = async (
     ...options,
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
-    body: JSON.stringify(newSandboxRequestNull),
+    body: JSON.stringify(newSandboxRequest),
   })
 }
 
@@ -1499,9 +1615,9 @@ export const getCreateSandboxMutationOptions = <
 }
 
 export type CreateSandboxMutationResult = NonNullable<Awaited<ReturnType<typeof createSandbox>>>
-export type CreateSandboxMutationBody = NewSandboxRequest | null | undefined
+export type CreateSandboxMutationBody = NewSandboxRequest
 export type CreateSandboxMutationError = ErrorType<Problem>
-export type CreateSandboxMutationVariables = { data?: NewSandboxRequest | null }
+export type CreateSandboxMutationVariables = { data: NewSandboxRequest }
 
 /**
  * @summary Start a new sandbox company and sign in to it as one of its personas

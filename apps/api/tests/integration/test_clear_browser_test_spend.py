@@ -96,6 +96,52 @@ async def test_rows_from_since_on_are_deleted_and_older_rows_are_kept(
     assert Decimal(said.group(2)) >= Decimal("0.055")
 
 
+async def add_start(owner_engine: AsyncEngine) -> UUID:
+    # A trigger stamps created_at with the database's clock, so "older" means inserted earlier.
+    async with owner_engine.begin() as connection:
+        start_id: UUID = (
+            await connection.execute(
+                text(
+                    "INSERT INTO sandbox_starts (ip_hash) VALUES (decode(repeat('ab', 32), 'hex'))"
+                    " RETURNING id"
+                )
+            )
+        ).scalar_one()
+    return start_id
+
+
+async def starts_still_there(owner_engine: AsyncEngine, ids: Sequence[UUID]) -> set[UUID]:
+    async with owner_engine.connect() as connection:
+        rows = await connection.execute(
+            text("SELECT id FROM sandbox_starts WHERE id = ANY(CAST(:ids AS uuid[]))"),
+            {"ids": list(ids)},
+        )
+        return set(rows.scalars())
+
+
+async def test_sandbox_start_counts_from_since_on_go_too_and_older_ones_stay(
+    owner_engine: AsyncEngine,
+) -> None:
+    # The browser runs start hundreds of sandboxes from one address; their count rows would
+    # otherwise refuse a later `make dev` with the default limits for up to 24 hours.
+    older = await add_start(owner_engine)
+    since = await database_clock(owner_engine)
+    newer = await add_start(owner_engine)
+    try:
+        run = await run_script("--since", since.isoformat())
+
+        assert run.returncode == 0, run.stdout + run.stderr
+        assert await starts_still_there(owner_engine, [older, newer]) == {older}
+        said = re.search(r"Deleted (\d+) sandbox_starts rows", run.stdout)
+        assert said is not None, run.stdout
+        assert int(said.group(1)) >= 1
+    finally:
+        async with owner_engine.begin() as connection:
+            await connection.execute(
+                text("DELETE FROM sandbox_starts WHERE id = :id"), {"id": older}
+            )
+
+
 async def test_it_accepts_a_utc_timestamp_ending_in_z(owner_engine: AsyncEngine) -> None:
     since = await database_clock(owner_engine)
     added = await add_row(owner_engine, "0.044")

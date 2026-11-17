@@ -841,12 +841,12 @@ def smoke() -> Any:
     return datasets.load_smoke(SMOKE_PATH)
 
 
-def test_the_smoke_list_names_twenty_thirteen_and_six_real_items(
+def test_the_smoke_list_names_twenty_three_fourteen_and_six_real_items(
     smoke: Any, questions: list[Any], redteam: list[Any]
 ) -> None:
     actions = datasets.load_actions()
 
-    assert (len(smoke.qa), len(smoke.redteam), len(smoke.actions)) == (23, 13, 6)
+    assert (len(smoke.qa), len(smoke.redteam), len(smoke.actions)) == (23, 14, 6)
 
     datasets.check_smoke(smoke, redteam, questions, actions)
 
@@ -898,7 +898,7 @@ def test_the_smoke_set_holds_both_crisis_messages_self_harm_and_violence(
     [
         (
             "qa: [qa-01]\nredteam: [rt-01]",
-            ["smoke qa: needs exactly 23", "smoke redteam: needs exactly 13"],
+            ["smoke qa: needs exactly 23", "smoke redteam: needs exactly 14"],
         ),
         ("qa: [qa-01, qa-01]\nredteam: []", ["qa-01 is listed more than once"]),
         (

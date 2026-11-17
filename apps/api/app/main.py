@@ -10,19 +10,28 @@ from app import __version__
 from app.ai import anthropic_transport
 from app.ai.case_summary import Summarizer
 from app.ai.embeddings import Embedder, QueryEmbeddingLru, VoyageEmbedder
-from app.ai.scripted import ScriptedSummarizer, ScriptedTransport
+from app.ai.scripted import NO_DELAYS, REALISTIC, ScriptedSummarizer, ScriptedTransport
 from app.ai.transport import Transport, require_a_transport_fit_for
 from app.api.problems import document_problems_as_problem_json
+from app.api.v1.health import ReadinessCache
 from app.api.v1.router import api_router
+from app.core.body_limit import BodyLimitMiddleware
 from app.core.cache_control import NoStoreMiddleware
-from app.core.config import Settings, get_settings
-from app.core.encryption import LocalKeyProvider, load_key_provider
+from app.core.config import (
+    Settings,
+    build_key_provider,
+    get_settings,
+    require_entry_settings_fit_for_production,
+)
 from app.core.logging import configure_logging
 from app.core.problems import install_problem_handlers
 from app.core.request_id import RequestIdMiddleware
+from app.core.security_headers import SecurityHeadersMiddleware
 from app.db.engine import create_engine
 from app.modules.assistant.sse import CLOSE_TIMEOUT_SECONDS, StreamTracker
 from app.modules.identity.same_origin import SameOriginMiddleware
+from app.modules.sandbox.turnstile import CloudflareVerifier, build_verifier
+from app.web_app import install_web_app
 
 # How long the shutdown waits for open turn streams to save their turns before it closes the
 # database engine. It is a stream's own close bound plus a second, so a cleanup that is still inside
@@ -35,7 +44,9 @@ logger = logging.getLogger(__name__)
 def _build_transport(settings: Settings) -> Transport:
     if settings.ai_transport == "anthropic":
         return anthropic_transport.from_settings(settings)
-    return ScriptedTransport()
+    return ScriptedTransport(
+        delays=REALISTIC if settings.scripted_delay_profile == "realistic" else NO_DELAYS
+    )
 
 
 def _build_summarizer(settings: Settings, transport: Transport) -> Summarizer:
@@ -60,27 +71,13 @@ def _build_embedder(settings: Settings) -> Embedder | None:
     return QueryEmbeddingLru(VoyageEmbedder(settings.voyage_api_key))
 
 
-def build_key_provider(settings: Settings) -> LocalKeyProvider:
-    """The one key provider, or a refusal to start: no keyring, a keyring file others can read,
-    or the fake test key outside APP_ENV=test. There is no default key."""
-    keyring = settings.encryption_keyring
-    keyring_file = settings.encryption_keyring_file
-    keys = load_key_provider(
-        keyring=None if keyring is None else keyring.get_secret_value(),
-        keyring_file=None if keyring_file is None else keyring_file.get_secret_value(),
-    )
-    if keys.uses_test_key and settings.app_env != "test":
-        msg = "The keyring holds the test key, which only APP_ENV=test accepts. Run `make keyring`."
-        raise ValueError(msg)
-    return keys
-
-
 def create_app(settings: Settings | None = None) -> FastAPI:
     """Build the app. Settings are validated here, so a bad environment fails at boot."""
     if settings is None:
         settings = get_settings()
     configure_logging(settings.log_level)
     require_a_transport_fit_for(settings)
+    require_entry_settings_fit_for_production(settings)
     if settings.ai_transport == "replay":
         msg = (
             "AI_TRANSPORT=replay is for the eval harness only: it keeps per-item state and has no"
@@ -102,6 +99,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         app.state.summarizer = _build_summarizer(settings, transport)
         streams = StreamTracker()
         app.state.streams = streams
+        # Built here, with the client it closes, so each lifespan run gets its own.
+        verifier = build_verifier(settings)
+        app.state.turnstile = verifier
         try:
             yield
         finally:
@@ -119,19 +119,38 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 if isinstance(transport, anthropic_transport.AnthropicTransport):
                     await transport.client.close()
             finally:
-                await app.state.engine.dispose()
+                try:
+                    if isinstance(verifier, CloudflareVerifier):
+                        await verifier.aclose()
+                finally:
+                    await app.state.engine.dispose()
 
-    app = FastAPI(title="Open Door API", version=__version__, lifespan=lifespan)
+    # Production serves no interactive docs or schema; `app.openapi()` still builds the schema for
+    # `make openapi`.
+    docs_urls: dict[str, str | None] = (
+        {"docs_url": None, "redoc_url": None, "openapi_url": None}
+        if settings.app_env == "production"
+        else {}
+    )
+    app = FastAPI(title="Open Door API", version=__version__, lifespan=lifespan, **docs_urls)  # type: ignore[arg-type]
     app.state.settings = settings
+    app.state.readiness = ReadinessCache()
     app.state.keys = keys
     # The middleware added last runs first. The request-ID middleware wraps the same-origin check,
     # so even a refused request carries its ID, and the no-store middleware wraps both, so a refusal
     # carries `Cache-Control: no-store` too. There is no CORS middleware: the web app reaches the
     # API on the same origin, so the browser blocks every cross-origin read by default.
     app.add_middleware(SameOriginMiddleware, app_origin=settings.app_origin)
+    # Inside the request-ID and no-store middleware so its 413 carries both, and outside the
+    # same-origin check so no refusal path reads an oversized body.
+    app.add_middleware(BodyLimitMiddleware)
     app.add_middleware(RequestIdMiddleware)
     app.add_middleware(NoStoreMiddleware)
+    # Outermost, so every response carries the security headers, refusals included.
+    app.add_middleware(SecurityHeadersMiddleware)
     install_problem_handlers(app)
     document_problems_as_problem_json(app)
     app.include_router(api_router)
+    # After the API router, so its routes match first; does nothing without WEB_DIST_DIR.
+    install_web_app(app, settings)
     return app

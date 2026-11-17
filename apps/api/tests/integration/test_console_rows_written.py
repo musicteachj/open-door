@@ -153,6 +153,133 @@ async def test_the_rows_tokens_include_the_safety_checks_and_its_cost_is_not_cou
     assert row["cost_usd"] == turn.cost_usd == await env.spend_total(turn.id) == expected > 0
 
 
+async def test_the_rows_tokens_are_the_total_usage_of_the_iterations_and_the_safety_check(
+    app_engine: AsyncEngine, seeded_sandbox: SeedCompany
+) -> None:
+    from app.ai.pricing import total_usage
+
+    def two_iterations(request: Any, number: int) -> list[Item]:
+        first = Usage(700, 30, 200, 50)
+        return [
+            ModelText("You get 40 hours."),
+            TextBlockEnd(()),
+            finished(
+                [{"type": "text", "text": "You get 40 hours."}],
+                iterations=(IterationUsage(OPUS, first), IterationUsage(OPUS, MODEL_USAGE)),
+            ),
+        ]
+
+    transport = PlanTransport(two_iterations, guard_result=priced_guard)
+    env = await make_env(app_engine, seeded_sandbox, transport=transport)
+    await env.ask()
+
+    row = await only_row(env)
+    expected = total_usage(
+        (
+            IterationUsage(OPUS, Usage(700, 30, 200, 50)),
+            IterationUsage(OPUS, MODEL_USAGE),
+            IterationUsage(HAIKU, PRICED_GUARD_USAGE),
+        )
+    )
+    assert (
+        row["input_tokens"],
+        row["output_tokens"],
+        row["cache_read_tokens"],
+        row["cache_write_tokens"],
+    ) == (
+        expected.input_tokens,
+        expected.output_tokens,
+        expected.cache_read_tokens,
+        expected.cache_write_tokens,
+    )
+
+
+async def test_a_row_whose_reservations_were_kept_costs_what_the_ledger_holds(
+    app_engine: AsyncEngine, seeded_sandbox: SeedCompany, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    async def hang(*args: Any, **kwargs: Any) -> None:
+        await asyncio.sleep(3600)
+
+    monkeypatch.setattr(turn_module, "settle", hang)
+    monkeypatch.setattr(turn_module, "SHIELDED_STEP_TIMEOUT", timedelta(seconds=0.3))
+    env = await make_env(app_engine, seeded_sandbox)
+    async with asyncio.timeout(10):
+        await env.ask()
+
+    turn = await env.last_turn()
+    spent = await env.spend_total(turn.id)
+    assert (await only_row(env))["cost_usd"] == spent > 0
+
+
+async def test_a_settle_that_committed_but_timed_out_still_costs_its_ledger_amount(
+    app_engine: AsyncEngine, seeded_sandbox: SeedCompany, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # The drift case: the settle row is in the ledger, but the turn gave up waiting and kept the
+    # reservation at its full amount. The row follows the ledger, not the turn's tally.
+    async def commits_then_hangs(*args: Any, **kwargs: Any) -> None:
+        await budget_settle(*args, **kwargs)
+        await asyncio.sleep(3600)
+
+    monkeypatch.setattr(turn_module, "settle", commits_then_hangs)
+    monkeypatch.setattr(turn_module, "SHIELDED_STEP_TIMEOUT", timedelta(seconds=0.3))
+    transport = PlanTransport(priced_text_plan, guard_result=priced_guard)
+    env = await make_env(app_engine, seeded_sandbox, transport=transport)
+    async with asyncio.timeout(10):
+        await env.ask()
+
+    turn = await env.last_turn()
+    spent = await env.spend_total(turn.id)
+    assert turn.cost_usd != spent
+    assert (await only_row(env))["cost_usd"] == spent
+
+
+async def test_a_fallback_row_costs_what_the_ledger_holds(
+    app_engine: AsyncEngine, seeded_sandbox: SeedCompany
+) -> None:
+    def priced_fallback(request: Any, number: int) -> list[Item]:
+        return [
+            ModelText("You get 40 hours."),
+            TextBlockEnd(()),
+            finished(
+                [{"type": "text", "text": "You get 40 hours."}],
+                fell_back=True,
+                iterations=(
+                    IterationUsage(OPUS, Usage(500, 0, 0, 0)),
+                    IterationUsage(HAIKU, MODEL_USAGE),
+                ),
+            ),
+        ]
+
+    transport = PlanTransport(priced_fallback, guard_result=priced_guard)
+    env = await make_env(app_engine, seeded_sandbox, transport=transport)
+    await env.ask()
+
+    turn = await env.last_turn()
+    row = await only_row(env)
+    assert row["fallback"] is True
+    assert row["cost_usd"] == await env.spend_total(turn.id) > 0
+
+
+async def test_an_abandoned_turns_row_costs_what_the_dead_turn_spent(
+    app_engine: AsyncEngine, owner_engine: AsyncEngine, seeded_sandbox: SeedCompany
+) -> None:
+    from app.ai.budget import reserve
+    from tests.integration.test_turn import LOTS
+
+    env = await make_env(app_engine, seeded_sandbox)
+    run = await start_turn_run(env.deps, conversation=env.conversation, question="x", now=NOW)
+    await reserve(
+        env.engine, env.ctx, turn_id=run.turn_id, amount_usd=Decimal("0.123456"), caps=LOTS
+    )
+    await _age(owner_engine, run.turn_id, ABANDONED_AFTER + timedelta(minutes=1))
+    await env.ask()
+
+    abandoned = next(row for row in await console_rows(env) if row["flagged"])
+    assert abandoned["cost_usd"] == Decimal("0.123456")
+    assert abandoned["input_tokens"] == 0
+    assert abandoned["served_by"] == []
+
+
 async def test_a_manager_and_hr_are_labeled_by_their_role(
     app_engine: AsyncEngine, seeded_sandbox: SeedCompany
 ) -> None:
@@ -393,7 +520,7 @@ async def test_an_abandoned_turn_gets_a_redacted_row_when_it_is_recovered(
     abandoned, answered = sorted(await console_rows(env), key=lambda row: not row["flagged"])
     assert_only_the_date_and_the_counts(abandoned)
     assert abandoned["served_by"] == []
-    assert (abandoned["input_tokens"], abandoned["cost_usd"]) == (0, 0)
+    assert (abandoned["input_tokens"], abandoned["cost_usd"]) == (0, 0)  # it spent nothing
     assert (abandoned["guard_ms"], abandoned["first_text_ms"], abandoned["total_ms"]) == (
         None,
         None,

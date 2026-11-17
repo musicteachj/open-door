@@ -7,10 +7,15 @@ import { resolve } from 'node:path'
 // day past the real $3 cap and then fails the API's own tests. This is the run's global setup:
 // it notes the time, and returns the global teardown, which deletes the rows made since.
 //
+// The same script also deletes the run's `sandbox_starts` rows: a run starts hundreds of sandboxes
+// from 127.0.0.1, and left behind they would refuse a later `make dev` (20 starts a day per
+// address, 500 in all) for up to 24 hours. This covers both targets, the host API and the image.
+//
 // The time is the DATABASE's clock (the script's `--now`), not this machine's: `created_at` is set
 // by the database, and a Docker host's clock can differ from the machine's by more than a run.
 //
-// Skipped on CI, whose database is made fresh for each job and thrown away. A cleanup that fails
+// Skipped on CI, whose database is made fresh for each job and thrown away (so the starts, which
+// nothing there will count again, go with it). A cleanup that fails
 // only warns: it must never turn a green run red. Rows from anything else using the same database
 // during the run go too, which is fine for a local test database (see the script).
 

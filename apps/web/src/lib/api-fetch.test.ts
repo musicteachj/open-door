@@ -1,7 +1,7 @@
 import { http, HttpResponse } from 'msw'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { server } from '@/test/msw'
-import { ApiError, apiFetch } from './api-fetch'
+import { ApiError, apiFetch, isSignedOutError } from './api-fetch'
 
 // Node's fetch needs an absolute URL. The app itself passes a path such as "/api/health".
 const url = (path: string) => `${window.location.origin}${path}`
@@ -287,5 +287,27 @@ describe('apiFetch errors', () => {
   it('gives problem null for an empty error body', async () => {
     server.use(http.get(url('/api/thing'), () => new HttpResponse(null, { status: 502 })))
     expect(await failure('/api/thing')).toMatchObject({ status: 502, problem: null })
+  })
+})
+
+describe('isSignedOutError', () => {
+  const problem = (type: string, status: number) => ({
+    type,
+    title: 'x',
+    status,
+    instance: '/x',
+  })
+
+  it('is true for a 401 and for the CSRF refusal', () => {
+    expect(isSignedOutError(new ApiError(401, null, null))).toBe(true)
+    expect(isSignedOutError(new ApiError(403, problem('csrf-rejected', 403), null))).toBe(true)
+  })
+
+  it('is false for a plain 403, other statuses, and things that are not ApiErrors', () => {
+    expect(isSignedOutError(new ApiError(403, null, null))).toBe(false)
+    expect(isSignedOutError(new ApiError(403, problem('about:blank', 403), null))).toBe(false)
+    expect(isSignedOutError(new ApiError(500, problem('csrf-rejected', 500), null))).toBe(false)
+    expect(isSignedOutError(new TypeError('Failed to fetch'))).toBe(false)
+    expect(isSignedOutError(null)).toBe(false)
   })
 })

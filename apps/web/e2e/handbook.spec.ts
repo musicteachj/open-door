@@ -1,4 +1,5 @@
-import { expect, test, type Page } from '@playwright/test'
+import { expect, test } from './fixtures'
+import type { Page } from '@playwright/test'
 import { hasVisibleFocus } from './directory-helpers'
 import { holdRequests, scan, startAs, type FirstName } from './helpers'
 
@@ -236,7 +237,12 @@ test.describe('the handbook home', () => {
 async function countEveryone(page: Page) {
   // From the full list: the rows that apply to everyone.
   return await page.evaluate(async () => {
-    const body = (await (await fetch('/api/v1/handbook')).json()) as {
+    const csrf = {
+      headers: {
+        'X-CSRF-Token': /(?:^|; )__Host-od_csrf=([^;]*)/.exec(document.cookie)?.[1] ?? '',
+      },
+    }
+    const body = (await (await fetch('/api/v1/handbook', csrf)).json()) as {
       sections: { appliesToMe: boolean; kind: string; audienceLabel: string }[]
     }
     return body.sections.filter((s) => s.appliesToMe && s.audienceLabel === 'Everyone').length

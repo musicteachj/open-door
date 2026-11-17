@@ -44,6 +44,8 @@ type ComposerProps = {
   warning?: string
   /** Shows the long-conversation notice above the box. */
   longConversation?: boolean
+  /** The words of that notice, when they are not the long-conversation ones. */
+  noticeText?: string
   /** The notice's "Start a new conversation" button. */
   onNewConversation?: () => void
   /**
@@ -191,6 +193,7 @@ function Composer({
   disabledReason,
   warning,
   longConversation = false,
+  noticeText,
   onNewConversation,
   variant = 'default',
   className,
@@ -344,8 +347,10 @@ function Composer({
           className="flex items-center gap-3 rounded-md border border-border bg-surface-sunken py-2 pr-2 pl-4 max-sm:flex-wrap"
         >
           <Info aria-hidden="true" className="size-4 shrink-0 text-ink-muted" />
+          {/* An empty `noticeText` is a notice whose words have not arrived: say nothing, not the
+              long-conversation words. */}
           <span className="min-w-48 flex-1 text-ui text-pretty text-ink">
-            {conversationCopy.longConversation}
+            {noticeText ?? conversationCopy.longConversation}
           </span>
           {onNewConversation && (
             <Button variant="secondary" size="sm" onClick={onNewConversation} className="shrink-0">

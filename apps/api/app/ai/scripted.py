@@ -63,6 +63,7 @@ GUARD_BEHAVIORS: Final = (
 # The behaviors that call the time-off tools (the real engine, proposals, and cards run).
 TIME_OFF_BEHAVIORS: Final = (
     "book_friday",
+    "book_this_friday",
     "sick_tomorrow",
     "show_balance",
     "waiting_on_me",
@@ -329,6 +330,15 @@ def next_friday(today: date) -> date:
     return next_monday + timedelta(days=_FRIDAY)
 
 
+def this_friday(today: date) -> date:
+    """ "This Friday" for the scripted model: the coming Friday, today on a Friday. On a weekend it
+    is the Friday ahead, as people say it then."""
+    return today + timedelta(days=(_FRIDAY - today.weekday()) % 7)
+
+
+_BOOK_FRIDAY: Final = {"book_friday": next_friday, "book_this_friday": this_friday}
+
+
 def _day_name(day: date) -> str:
     return f"{_WEEKDAY_NAMES[day.weekday()]}, {_MONTH_NAMES[day.month - 1]} {day.day}"
 
@@ -576,8 +586,8 @@ def _time_off_first_call(
         return _tool_call("list_time_off_requests", arguments, question, messages)
     if today is None:
         return None
-    if behavior == "book_friday":
-        return _request_call(question, messages, next_friday(today), "pto")
+    if behavior in _BOOK_FRIDAY:
+        return _request_call(question, messages, _BOOK_FRIDAY[behavior](today), "pto")
     return _request_call(question, messages, today + timedelta(days=1), "sick")
 
 
@@ -592,7 +602,7 @@ def _time_off_next(
     """What follows a successful tool result: the next call, or the closing words."""
     if data is None:
         return "I couldn't read what the tool sent back."
-    if behavior in ("book_friday", "sick_tomorrow"):
+    if behavior in (*_BOOK_FRIDAY, "sick_tomorrow"):
         return _request_words(behavior, today, data)
     if behavior == "show_balance":
         return _balance_words(data)
@@ -687,10 +697,12 @@ def _case_words(behavior: str, result: Any) -> str:
 def _request_words(behavior: str, today: date | None, data: Any) -> str:
     day = None
     if today is not None:
-        day = next_friday(today) if behavior == "book_friday" else today + timedelta(days=1)
+        friday = _BOOK_FRIDAY.get(behavior)
+        day = friday(today) if friday is not None else today + timedelta(days=1)
+    booking = behavior in _BOOK_FRIDAY
     amount = data.get("amountLabel") if isinstance(data, dict) else None
-    what = "book PTO" if behavior == "book_friday" else "record sick time"
-    done = "booked" if behavior == "book_friday" else "recorded"
+    what = "book PTO" if booking else "record sick time"
+    done = "booked" if booking else "recorded"
     when = "" if day is None else f" for {_day_name(day)}"
     figure = f": {amount}" if isinstance(amount, str) else ""
     return f"I've prepared a card to {what}{when}{figure}. Nothing is {done} until you confirm."
@@ -779,10 +791,41 @@ def _cancel_words(data: Any) -> str:
     )
 
 
+@dataclass(frozen=True)
+class DelayProfile:
+    """How long the scripted model waits, so a load test sees the real model's pace (Phase 8,
+    stage 7). The guard waits `guard_seconds` before its result. Each model call waits
+    `first_text_seconds` before its first event (a status note or a tool call included). Each text
+    chunk waits its length over `characters_per_second` before it is yielded. A
+    `characters_per_second` of 0 means the text is not paced."""
+
+    guard_seconds: float
+    first_text_seconds: float
+    characters_per_second: float
+
+
+# The default: no waits at all (not even a zero-second sleep).
+NO_DELAYS: Final = DelayProfile(0, 0, 0)
+# Measured from the full eval run of 2026-11-12 (the current prompt), whose local, gitignored
+# traces file is evals/assistant/runs/20261112T223644Z-full-traces.json (570 guard calls, 1,246
+# model calls). The traces hold each call's whole duration, not its time to first text, so:
+# - guard_seconds is the guard's median duration, 1.06 s.
+# - first_text_seconds and the pace come from a median-based line (Theil-Sen) fitting each model
+#   call's duration against its output tokens. The slope is 7.77 ms a token (129 tokens a second)
+#   and the intercept, 1.36 s, stands for the time before the first text. (Calls with 60 output
+#   tokens or fewer have a median of 1.83 s, which agrees.)
+# - characters_per_second is 129 tokens a second times 2.55 shown characters per output token
+#   (the median over 129 single-call answers), 330.
+REALISTIC: Final = DelayProfile(
+    guard_seconds=1.06, first_text_seconds=1.36, characters_per_second=330
+)
+
+
 class ScriptedTransport:
     """`silence_seconds` and `slow_guard_seconds` are what the silence and slow-guard scenarios
     wait (the slow guard waits 2 seconds past the guard's limit); tests shorten them.
-    `delta_delay_seconds` paces the text, for watching it stream."""
+    `delta_delay_seconds` paces the text, for watching it stream. `delays` is the profile the load
+    test uses to wait like the real model (the default makes no wait at all)."""
 
     def __init__(
         self,
@@ -791,13 +834,17 @@ class ScriptedTransport:
         slow_guard_seconds: float = GUARD_TIMEOUT_SECONDS + 2,
         delta_delay_seconds: float = 0,
         scenarios: Sequence[Scenario] | None = None,
+        delays: DelayProfile = NO_DELAYS,
     ) -> None:
+        self.delays = delays
         self.silence_seconds = silence_seconds
         self.slow_guard_seconds = slow_guard_seconds
         self.delta_delay_seconds = delta_delay_seconds
         self._scenarios = tuple(scenarios) if scenarios is not None else load_scenarios()
 
     async def stream(self, request: ModelRequest) -> AsyncIterator[ModelEvent]:
+        if self.delays.first_text_seconds:
+            await asyncio.sleep(self.delays.first_text_seconds)
         messages = request.messages
         question = _question(messages)
         scenario = _first_match(question, self._scenarios, MODEL_BEHAVIORS)
@@ -948,6 +995,8 @@ class ScriptedTransport:
             for chunk in _chunks(text):
                 if self.delta_delay_seconds:
                     await asyncio.sleep(self.delta_delay_seconds)
+                if self.delays.characters_per_second:
+                    await asyncio.sleep(len(chunk) / self.delays.characters_per_second)
                 yield TextDelta(chunk)
             yield TextBlockEnd((citation,) if citation else ())
             block: dict[str, Any] = {"type": "text", "text": text}
@@ -962,6 +1011,8 @@ class ScriptedTransport:
 
     async def classify(self, request: GuardRequest) -> GuardResult:
         text = _guard_text(request.messages)
+        if self.delays.guard_seconds:
+            await asyncio.sleep(self.delays.guard_seconds)
         if self._triggered(text, "slow_guard"):
             # It does not enforce the guard's time limit itself: the caller's timeout is what
             # is tested.

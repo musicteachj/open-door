@@ -1,7 +1,13 @@
 import { delay, http, HttpResponse } from 'msw'
 import { act, screen, within } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { MY_CASES, SENT_LINE, WAITING_LIMIT } from '@/app/gallery/fixtures/cases'
+import {
+  CANNOT_SEND,
+  MY_CASES,
+  SENT_LINE,
+  TOO_LONG,
+  WAITING_LIMIT,
+} from '@/app/gallery/fixtures/cases'
 import { installFakeApi } from '@/test/fake-api'
 import { installFakeCases, statusView } from '@/test/fake-cases'
 import { server } from '@/test/msw'
@@ -139,6 +145,71 @@ describe('My cases: the page', () => {
     await user.click(send())
     expect(await screen.findByText(/Social Security or card number/)).toBeVisible()
     expect(fake.calls.posts).toEqual([])
+  })
+
+  it('shows the server’s too-long words on the words box and keeps the form open', async () => {
+    const { user } = open({
+      mine: [],
+      openProblem: { status: 422, type: 'case-words-too-long', detail: TOO_LONG },
+    })
+    await user.click(await openButton())
+    await user.click(await screen.findByRole('radio', { name: 'Pay concern' }))
+    await user.type(screen.getByRole('textbox', { name: 'Your words' }), 'Some words.')
+    await user.click(send())
+    expect(await screen.findByText(TOO_LONG)).toBeVisible()
+    expect(screen.getByRole('button', { name: 'Send to HR' })).toBeVisible()
+  })
+
+  it.each([
+    ['the validation 422', 422, 'about:blank'],
+    ['case-invalid', 422, 'case-invalid'],
+    ['case-not-found', 404, 'case-not-found'],
+  ])(
+    'closes the form and shows the can’t-send words with no Try again after %s',
+    async (_n, status, type) => {
+      const { user } = open({ mine: [], openProblem: { status, type, detail: 'Refused.' } })
+      await user.click(await openButton())
+      await user.click(await screen.findByRole('radio', { name: 'Pay concern' }))
+      await user.type(screen.getByRole('textbox', { name: 'Your words' }), 'Some words.')
+      await user.click(send())
+      const line = await screen.findByText(CANNOT_SEND)
+      expect(line.closest('output')).toHaveFocus()
+      expect(screen.queryByRole('textbox', { name: 'Your words' })).toBeNull()
+      expect(screen.queryByRole('button', { name: 'Try again' })).toBeNull()
+      // The page is My cases already: no link to itself, and the HR contacts under the line.
+      expect(screen.queryByRole('link', { name: /your cases/i })).toBeNull()
+      expect(screen.getByText('Dana Whitfield')).toBeVisible()
+      // With no cases yet, the empty list and its button are still there, and open the form again.
+      await user.click(await openButton())
+      expect(await screen.findByRole('textbox', { name: 'Your words' })).toHaveValue('')
+      expect(screen.queryByText(CANNOT_SEND)).toBeNull()
+    },
+  )
+
+  it('keeps the open button beside the can’t-send words when there are cases', async () => {
+    const { user } = open({
+      openProblem: { status: 422, type: 'case-invalid', detail: 'Refused.' },
+    })
+    await user.click(await openButton())
+    await user.click(await screen.findByRole('radio', { name: 'Pay concern' }))
+    await user.type(screen.getByRole('textbox', { name: 'Your words' }), 'Some words.')
+    await user.click(send())
+    expect(await screen.findByText(CANNOT_SEND)).toBeVisible()
+    await user.click(await openButton())
+    expect(await screen.findByRole('textbox', { name: 'Your words' })).toBeVisible()
+  })
+
+  it('keeps Try again for a server error', async () => {
+    const { user } = open({
+      mine: [],
+      openProblem: { status: 500, type: 'about:blank', detail: 'Broke.' },
+    })
+    await user.click(await openButton())
+    await user.click(await screen.findByRole('radio', { name: 'Pay concern' }))
+    await user.type(screen.getByRole('textbox', { name: 'Your words' }), 'Some words.')
+    await user.click(send())
+    expect(await screen.findByRole('button', { name: 'Try again' })).toBeVisible()
+    expect(screen.queryByText(CANNOT_SEND)).toBeNull()
   })
 
   it('shows the server’s personal-data refusal on the words too', async () => {

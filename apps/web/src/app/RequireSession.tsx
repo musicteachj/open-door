@@ -3,7 +3,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import { Navigate, Outlet } from 'react-router'
 import { requestIdOf } from '@/features/global-states/errors'
 import { SessionExpired, SomethingWentWrong } from '@/features/global-states/pages'
-import { ApiError } from '@/lib/api-fetch'
+import { isSignedOutError } from '@/lib/api-fetch'
 import { rememberPerson, useSessionStatus } from './session-status'
 import { signInAs, useMe } from './useMe'
 
@@ -22,7 +22,9 @@ function Session() {
   const me = useMe()
   const queryClient = useQueryClient()
   const { expiredAt, personId } = useSessionStatus()
-  const unauthorized = me.error instanceof ApiError && me.error.status === 401
+  // A 401, or the CSRF refusal (the CSRF cookie is gone while the session cookie remains), counts
+  // as signed out: the landing page's start sets both cookies again.
+  const unauthorized = isSignedOutError(me.error)
 
   // Another tab changed who is signed in (a switch, or a new sandbox) and /me now names someone
   // else. This is the one place that notices: reset as a switch here would, which remounts this

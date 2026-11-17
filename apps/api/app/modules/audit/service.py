@@ -35,6 +35,7 @@ type AuditAction = Literal[
     "proposal.canceled",
     "proposal.failed",
     "case.opened",
+    "case.resubmitted",
     "case.summary.written",
     "case.summary.failed",
     "case.summary.retried",
@@ -61,9 +62,9 @@ _PRIVATE_KEYS = frozenset(
     if column.name not in {"person_id", "tenant_id"}
 )
 
-# Text a person wrote, which never belongs in the log: a denial's note (`decision_note` is the
-# column, `note` the field name the service and the routes use), and a case's words, its summary,
-# and any narrative (Phase 6).
+# Text a person wrote, which never belongs in the log: a denial's note (`note` is the field name
+# the service and the routes use, `decisionNote` the API's, and `decision_note` the old column),
+# and a case's words, its summary, and any narrative (Phase 6).
 _FREE_TEXT_KEYS = frozenset({"decisionnote", "note", "text", "summary", "words", "narrative"})
 _REFUSED_KEYS = _PRIVATE_KEYS | _FREE_TEXT_KEYS
 

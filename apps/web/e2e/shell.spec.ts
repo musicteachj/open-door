@@ -1,5 +1,7 @@
-import { expect, test, type Page } from '@playwright/test'
+import { expect, test } from './fixtures'
+import type { Page } from '@playwright/test'
 import {
+  addTestStyle,
   greetingHeading,
   HOUR_MS,
   holdRequests,
@@ -140,7 +142,7 @@ test('switching changes persona with no dialog, empties the composer, shows the 
   await box.fill('How many sick days do I get?')
 
   const release = await holdRequests(page, '**/api/v1/session/persona', 'PUT')
-  await page.addStyleTag({ content: '[data-slot="persona-switcher"] { width: 120px !important; }' })
+  await addTestStyle(page, '[data-slot="persona-switcher"] { width: 120px !important; }')
   await switcher(page).click()
   await page.getByRole('menuitemradio', { name: /^Marcus / }).click()
 

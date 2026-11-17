@@ -16,9 +16,25 @@ logger = logging.getLogger(__name__)
 
 PING_TIMEOUT_SECONDS = 5.0
 
+# Set on every connection the engine opens, and by the bootstrap script on each login (a second
+# line, for a connection the engine did not open). Postgres reads "10s" as ten seconds.
+# The longest legitimate statement is seeding a sandbox, which runs in well under a second per
+# statement; the turn's own end-of-turn writes are bounded at 10 s in code.
+STATEMENT_TIMEOUT = "10s"
+IDLE_IN_TRANSACTION_TIMEOUT = "30s"
 
-def create_engine(database_url: str) -> AsyncEngine:
-    """Create the engine. Connections open lazily, so this never touches the database."""
+
+def create_engine(
+    database_url: str,
+    *,
+    statement_timeout: str = STATEMENT_TIMEOUT,
+    idle_in_transaction_timeout: str = IDLE_IN_TRANSACTION_TIMEOUT,
+) -> AsyncEngine:
+    """Create the engine. Connections open lazily, so this never touches the database.
+
+    Every connection gets a statement timeout and an idle-in-transaction timeout, so a hung query
+    or a request that stalls inside a transaction can't hold a connection or a lock for good.
+    """
     return create_async_engine(
         database_url,
         pool_pre_ping=True,
@@ -26,7 +42,13 @@ def create_engine(database_url: str) -> AsyncEngine:
         # be user-written text (a handbook question, later a conversation).
         hide_parameters=True,
         # asyncpg's connect timeout, in seconds: a dead database fails fast instead of hanging.
-        connect_args={"timeout": 5},
+        connect_args={
+            "timeout": 5,
+            "server_settings": {
+                "statement_timeout": statement_timeout,
+                "idle_in_transaction_session_timeout": idle_in_transaction_timeout,
+            },
+        },
     )
 
 

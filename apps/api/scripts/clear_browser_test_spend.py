@@ -1,8 +1,12 @@
-"""Delete the daily AI ledger rows a browser test run created, so the run leaves none behind.
+"""Delete the daily AI ledger rows and sandbox-start counts a browser test run created, so the run
+leaves none behind.
 
 A stopped or failed turn keeps its model reservation, and `ai_spend_daily` has no tenant, so
 cleaning up a run's sandboxes leaves its reservations in the daily ledger. A full browser run adds
 about $10 of them, which pushes the day past the real $3 cap and then fails the API's own tests.
+The same run starts hundreds of sandboxes from one address, and each start leaves a row in
+`sandbox_starts`: left behind, they would refuse a later `make dev` with the default limits (20 a
+day per address, 500 a day in all) for up to 24 hours. Both tables are cleared in one transaction.
 
     uv run python scripts/clear_browser_test_spend.py --now
     uv run python scripts/clear_browser_test_spend.py --since 2026-10-18T15:04:05.123456+00:00
@@ -31,7 +35,8 @@ from sqlalchemy import text
 from sqlalchemy.exc import DBAPIError
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 
-from app.core.config import get_settings
+from app.core.owner_settings import DatabaseUrlError, owner_database_url
+from app.db.spend_cleanup import delete_starts_since
 
 MAX_AGE = timedelta(hours=24)
 
@@ -77,8 +82,9 @@ async def database_now(engine: AsyncEngine) -> datetime:
     return moment.astimezone(UTC)
 
 
-async def clear_since(engine: AsyncEngine, since: datetime) -> tuple[int, Decimal]:
-    """Delete the rows created at or after `since`. Returns how many, and what they added up to."""
+async def clear_since(engine: AsyncEngine, since: datetime) -> tuple[int, Decimal, int]:
+    """Delete the rows created at or after `since`. Returns how many ledger rows, what they added
+    up to, and how many start counts."""
     now = await database_now(engine)
     if now - since > MAX_AGE:
         raise SystemExit(
@@ -88,23 +94,27 @@ async def clear_since(engine: AsyncEngine, since: datetime) -> tuple[int, Decima
     async with engine.begin() as connection:
         result = await connection.execute(DELETE_SINCE, {"since": since})
         amounts: list[Decimal] = list(result.scalars())
-    return len(amounts), sum(amounts, Decimal(0))
+        # Owner only: the table's row-level security has no owner policy, and the local owner is a
+        # superuser, which it never applies to.
+        starts = await delete_starts_since(connection, since)
+    return len(amounts), sum(amounts, Decimal(0)), starts
 
 
 async def main(arguments: argparse.Namespace) -> None:
-    settings = get_settings()
-    if settings.migration_database_url is None:
-        raise SystemExit("MIGRATION_DATABASE_URL is not set. See apps/api/.env.example.")
+    try:
+        url = owner_database_url()
+    except DatabaseUrlError as error:
+        raise SystemExit(str(error)) from None
     # hide_parameters keeps bound values out of SQLAlchemy's error messages.
-    engine = create_async_engine(str(settings.migration_database_url), hide_parameters=True)
+    engine = create_async_engine(url, hide_parameters=True)
     try:
         if arguments.now:
             print((await database_now(engine)).isoformat())
             return
-        count, total = await clear_since(engine, arguments.since)
+        count, total, starts = await clear_since(engine, arguments.since)
         print(
             f"Deleted {count} ai_spend_daily rows created since {arguments.since.isoformat()}, "
-            f"adding up to ${total:f}."
+            f"adding up to ${total:f}. Deleted {starts} sandbox_starts rows."
         )
     except DBAPIError as error:
         # Name only the error's class: SQLAlchemy's own message includes the statement.

@@ -41,7 +41,7 @@ from app.ai.turn import (
 from app.db.models import AiProposal
 from app.db.tenancy import tenant_session
 from app.modules.sandbox.seed import SeedCompany
-from tests.integration.conftest import audit_events
+from tests.integration.conftest import TEST_KEYS, audit_events
 from tests.integration.test_timeoff_service import acting
 from tests.integration.test_timeoff_tools import put_request
 from tests.integration.test_turn import (
@@ -95,7 +95,7 @@ def canceled_as(row: AiProposal, reason: str) -> bool:
 
 async def confirm_it(env: Env, proposal_id: UUID) -> ProposalOut:
     async with acting(env.engine, env.ctx.tenant_id, env.ctx.person_id) as (db, actor):  # type: ignore[arg-type]
-        return await confirm(db, actor, proposal_id, None, NOW)
+        return await confirm(db, actor, proposal_id, None, NOW, TEST_KEYS)
 
 
 async def turn_ids(env: Env) -> list[UUID]:
@@ -621,7 +621,7 @@ async def test_a_confirm_still_committing_as_the_next_turn_starts_is_not_lost(
     async def confirm_and_wait() -> None:
         # The confirm's transaction is open (its row locked, its time stamped) but not committed.
         async with acting(env.engine, env.ctx.tenant_id, env.ctx.person_id) as (db, actor):  # type: ignore[arg-type]
-            await confirm(db, actor, row.id, None, NOW)
+            await confirm(db, actor, row.id, None, NOW, TEST_KEYS)
             inside.set()
             await release.wait()
 
@@ -730,7 +730,7 @@ async def test_a_confirm_that_began_before_a_turn_but_committed_after_its_read_i
     async with acting(env.engine, env.ctx.tenant_id, env.ctx.person_id) as (db, actor):  # type: ignore[arg-type]
         await db.execute(text("SELECT now()"))
         run = await start_turn_run(env.deps, conversation=env.conversation, question="Hi", now=NOW)
-        confirmed = await confirm(db, actor, row.id, None, NOW)
+        confirmed = await confirm(db, actor, row.id, None, NOW, TEST_KEYS)
     assert confirmed.status == "executed"
     async for _ in run.events():
         pass
@@ -798,7 +798,7 @@ async def test_a_denials_note_never_reaches_the_model_in_a_context_a_result_or_t
     await env.ask("Deny Priya's request for November 9.")
     row = await only_proposal(env)
     async with acting(env.engine, env.ctx.tenant_id, env.ctx.person_id) as (db, actor):  # type: ignore[arg-type]
-        executed = await confirm(db, actor, row.id, note, NOW)
+        executed = await confirm(db, actor, row.id, note, NOW, TEST_KEYS)
     assert executed.status == "executed"
     await env.ask("Show me the team's requests.")
     await env.ask("And now?")
@@ -971,7 +971,7 @@ async def test_a_card_told_as_expired_is_told_again_when_a_confirm_in_flight_exe
         await asyncio.sleep(0.6)
         # ...and the next turn reads it after its time ran out: told as expired.
         run = await start_turn_run(env.deps, conversation=env.conversation, question="Hi", now=NOW)
-        confirmed = await confirm(db, actor, row.id, None, NOW)
+        confirmed = await confirm(db, actor, row.id, None, NOW, TEST_KEYS)
     assert confirmed.status == "executed"
     async for _ in run.events():
         pass

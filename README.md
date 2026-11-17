@@ -7,8 +7,14 @@ and get answers that cite the company handbook. The assistant proposes actions l
 off, and nothing changes until a person confirms. Sensitive topics go to a human, never to the
 model.
 
-> **Status:** planning is complete and the build has not started. See the roadmap for the phase
-> status.
+> **Status:** Phases 1 to 8 are built: the assistant, time off, confidential cases, the AI Ops
+> console, the guided tour, and the hardening for deployment. It runs locally and in a production
+> image; deploying to AWS is Phase 9, held until the owner's portfolio apps deploy together. See
+> the [roadmap](docs/ROADMAP.md).
+
+**Watch it first:** the demo's [recorded walkthrough](apps/web/public/media/walkthrough.mp4) (about 3½
+minutes, no sound) follows the guided tour's ten steps with the live assistant. Its transcript is
+on the app's `/walkthrough` page, which is also offered when the demo's daily AI limit is reached.
 
 ## The rules the assistant never breaks
 
@@ -33,11 +39,11 @@ Three trials per set unless noted.
 | Set | Result | Lowest trial | Other figures |
 |---|---|---|---|
 | Retrieval (Handbook 2026.11.3) | **100%** Hit rate at 5 | No trials: retrieval is exact. | Every negative passed. |
-| Policy Q&A (Full run, Nov 3, 2026) | **99%** Program checks | 97% | Unanswerable 97%, lowest 90% |
-| Answer quality (Nov 3, 2026) | **73%** Judge pass rate | 69% | Target 85%<br>16.3 uncited claims<br>Judge agreement with the hand grades 91.2% |
-| Red team (Nov 3, 2026) | **100%** In every trial | 100% | All six groups at 100%: actions, cases, injection, private details, prompt extraction, routing. |
-| Actions (Nov 3, 2026) | **100%** Pass rate | 100% | Numbers match the engine 100% |
-| Fairness (Nov 3, 2026) | **11 of 12** Groups consistent | Groups are judged across all trials. | 1 identity assumption in the worst trial<br>Judge equivalence 85% (lowest trial 82%)<br>Groups consistent by attribute: name 100%, parent 100%, religion 0%, age 100%, origin 100%, spouse 100%.<br>Graded again from the saved run on 2026-11-03; no new model calls |
+| Policy Q&A (Full run, Nov 12, 2026) | **99%** Program checks | 99% | Unanswerable 97%, lowest 90% |
+| Answer quality (Nov 12, 2026) | **80%** Judge pass rate | 76% | Target 85%<br>11.7 uncited claims<br>Judge agreement with the hand grades 91.2% |
+| Red team (Nov 12, 2026) | **100%** In every trial | 100% | All six groups at 100%: actions, cases, injection, private details, prompt extraction, routing. |
+| Actions (Nov 12, 2026) | **100%** Pass rate | 100% | Numbers match the engine 100% |
+| Fairness (Nov 12, 2026) | **12 of 12** Groups consistent | Groups are judged across all trials. | No identity assumption in any trial<br>Judge equivalence 87% (lowest trial 82%)<br>Groups consistent by attribute: name 100%, parent 100%, religion 100%, age 100%, origin 100%, spouse 100%. |
 | Escalation (Oct 27, 2026) | **100%** Crisis recall | 100% | Sensitive recall 100%<br>Ordinary questions offered no case 100% |
 | Case summary (Oct 30, 2026) | **22 of 22** Passed every check | 22 of 22 | By the judge: 22 of 22 |
 
@@ -50,12 +56,13 @@ Three trials per set unless noted.
 | Oct 29, 2026, 14:23 UTC | `claude-opus-5-5` | 97% | 93% | 100% | 99% | 68% | $10.93 |
 | Nov 3, 2026, 14:00 UTC | `claude-opus-5-5` | 99% | 97% | 100% | 100% | 73% | $15.20 |
 | Nov 3, 2026, 18:45 UTC | `claude-sonnet-5-5` | 98% | 100% | 99% | 97% | 83% | $9.44 |
+| Nov 12, 2026, 22:36 UTC | `claude-opus-5-5` | 99% | 97% | 100% | 100% | 80% | $15.73 |
 
 Actions joined the full set on Oct 25, 2026.
 
 These figures come from recorded eval runs. CI replays the recordings on every change, so it checks the app's handling, not the model.
 
-The sets are small (206 items in the full set), so a single item can move a figure by more than a point.
+The sets are small (207 items in the full set), so a single item can move a figure by more than a point.
 <!-- scoreboard:end -->
 
 ## Documentation
@@ -67,6 +74,10 @@ The sets are small (206 items in the full set), so a single item can move a figu
 | [What this is not](docs/WHAT-THIS-IS-NOT.md) | Scope limits, what the assistant will never do, and what the evidence does not prove |
 | [Decision records](docs/adr/README.md) | The big architecture decisions and what was rejected |
 | [Data inventory](docs/DATA-INVENTORY.md) | Every piece of data stored, why, who can see it, and how long it's kept |
+| [Threat model](docs/THREAT-MODEL.md) | What is protected, who might attack, and the control and test behind each threat |
+| [AI governance](docs/AI-GOVERNANCE.md) | The EU AI Act assessment, the models and their pins, and what reaches each AI vendor |
+| [Accessibility](docs/ACCESSIBILITY.md) | How WCAG 2.2 AA is checked, what the audit found, and the VoiceOver checklist |
+| [Capacity](docs/CAPACITY.md) | The cost and load test: what one task carries, and what a day's AI budget buys |
 | [Design handoff](docs/design/README.md) | How designs from Claude Design become screens |
 | [Initial plan](docs/plans/2026-09-29-open-door-initial-plan.md) | The frozen record of the original planning decisions |
 | [Project rules](CLAUDE.md) | How work is done in this repository |
@@ -86,6 +97,16 @@ You need Node 24, [uv](https://docs.astral.sh/uv/), and Docker Desktop.
 make setup   # install dependencies and create apps/api/.env
 make dev     # start Postgres, migrate, and run the API (:8000) and web app (:5173)
 make check   # run everything CI runs
+```
+
+A few more, each described in [`CLAUDE.md`](CLAUDE.md#commands):
+
+```
+make prod-local   # the production image with production settings on its own empty database (questions are paid)
+make cleanup      # delete expired sandboxes and old ledger rows, as the cleanup login
+make load         # the free cost and load test against the production image
+make live-check   # the production image end to end with the real model (paid; YES=1)
+make walkthrough  # record the walkthrough video again (paid; YES=1)
 ```
 
 `make` on its own lists every command.

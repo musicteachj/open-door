@@ -1,6 +1,8 @@
-import { expect, test, type Page } from '@playwright/test'
+import { expect, guardedContext, test } from './fixtures'
+import type { Page } from '@playwright/test'
 import { PERSONAS } from '../src/features/personas/personas'
 import {
+  addTestStyle,
   focusRing,
   focusedName,
   greetingHeading,
@@ -250,7 +252,7 @@ test('a long persona title truncates and shows its tooltip only when cut off', a
 
   // Squeeze the switcher until the real title is cut off, as a longer title would be.
   await page.mouse.move(700, 400)
-  await page.addStyleTag({ content: '[data-slot="persona-switcher"] { width: 120px !important; }' })
+  await addTestStyle(page, '[data-slot="persona-switcher"] { width: 120px !important; }')
   const title = switcher.getByText('Visual Merchandiser')
   await expect.poll(() => title.evaluate((el) => el.scrollWidth > el.clientWidth)).toBe(true)
   await switcher.hover()
@@ -313,7 +315,7 @@ test.describe("the greeting follows the location's local time, not the browser's
 })
 
 test('Mateo, in Austin, is greeted for 6 am at the same instant', async ({ browser }) => {
-  const context = await browser.newContext({ timezoneId: 'Europe/London' })
+  const context = await guardedContext(browser, { timezoneId: 'Europe/London' })
   const page = await context.newPage()
   try {
     await page.clock.setFixedTime(new Date('2026-10-06T11:00:00Z'))

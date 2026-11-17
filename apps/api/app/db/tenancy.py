@@ -5,8 +5,9 @@ Postgres policies compare each row's tenant_id with app.current_tenant_id(), whi
 and clears `app.is_hr`, as each transaction begins. It uses set_config(..., true), so the values
 end with the transaction and never reach the next user of a pooled connection. A session with no
 context gets empty values, which the policies read as "no tenant", so it sees no rows in any table
-that has row-level security. The exception is `sessions`, which has none by design: a session is
-looked up by its token before the tenant is known, so a context-less session can read it.
+that has row-level security. That includes `sessions` (migration 0017): its rules also match the
+token hash a lookup presents with `app.session_token_hash`, because a session is looked up before
+the tenant is known, so a context-less transaction sees only the one session whose hash it set.
 """
 
 from collections.abc import AsyncIterator
@@ -74,6 +75,20 @@ async def tenant_session(
         session.begin(),
     ):
         yield session
+
+
+async def scope_transaction(session: AsyncSession, context: TenantContext) -> None:
+    """Move the session's open transaction to `context`, and remember it for later ones.
+
+    For the one caller that learns the tenant mid-transaction (the session lookup, which starts
+    with no tenant). Setting `info["tenant"]` too means a transaction the session begins later (if
+    a route ever commits mid-request) starts with the right tenant, and not with none.
+    """
+    await session.execute(
+        SET_CONTEXT,
+        {"tenant_id": _setting(context.tenant_id), "person_id": _setting(context.person_id)},
+    )
+    session.info["tenant"] = context
 
 
 async def set_is_hr(session: AsyncSession, value: bool) -> None:

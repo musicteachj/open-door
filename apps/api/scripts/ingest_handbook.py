@@ -30,6 +30,7 @@ from app.ai.embeddings import (
     VoyageEmbedder,
 )
 from app.core.config import get_settings
+from app.core.owner_settings import DatabaseUrlError, owner_database_url
 from app.domain.handbook.chunks import chunks_for
 from app.domain.handbook.errors import HandbookInvalid
 from app.domain.handbook.models import Handbook
@@ -161,9 +162,11 @@ def main(argv: list[str] | None = None) -> None:
         )
         return
 
-    if settings.migration_database_url is None:
-        raise SystemExit("MIGRATION_DATABASE_URL is not set. See apps/api/.env.example.")
-    print(asyncio.run(run_ingest(HANDBOOK_DIR, CACHE_PATH, str(settings.migration_database_url))))
+    try:
+        owner_url = owner_database_url()
+    except DatabaseUrlError as error:
+        raise SystemExit(str(error)) from None
+    print(asyncio.run(run_ingest(HANDBOOK_DIR, CACHE_PATH, owner_url)))
 
 
 if __name__ == "__main__":

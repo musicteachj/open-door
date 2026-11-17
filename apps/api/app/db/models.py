@@ -179,9 +179,12 @@ class Holiday(Base):
 
 
 class UserSession(Base):
-    """A signed-in visitor. Outside row-level security: it is looked up before the tenant is known.
+    """A signed-in visitor. Under row-level security with rules of its own (migration 0017): a row
+    is visible to a transaction that presented its token hash, or that is scoped to its sandbox.
 
-    Both hashes are SHA-256 digests. The raw tokens live only in the visitor's cookies.
+    Both hashes are SHA-256 digests. The raw tokens live only in the visitor's cookies. The
+    `family_id` is shared by a session and the sessions a persona switch made from it; sign-out
+    ends the whole family.
     """
 
     __tablename__ = "sessions"
@@ -190,6 +193,7 @@ class UserSession(Base):
         CheckConstraint("octet_length(token_hash) = 32", name="token_hash_is_sha256"),
         CheckConstraint("octet_length(csrf_hash) = 32", name="csrf_hash_is_sha256"),
         Index(None, "tenant_id", "person_id"),
+        Index(None, "family_id"),
     )
 
     token_hash: Mapped[bytes] = mapped_column(primary_key=True)
@@ -199,6 +203,7 @@ class UserSession(Base):
     created_at: Mapped[datetime] = mapped_column(server_default=func.now())
     # Copied from the tenant: a session never outlives its sandbox.
     expires_at: Mapped[datetime]
+    family_id: Mapped[uuid.UUID]
 
 
 class AuditEvent(Base):
@@ -240,8 +245,9 @@ class AuditEvent(Base):
     target_type: Mapped[str | None]
     target_id: Mapped[uuid.UUID | None]
     # Directory fields only. A read of private details records the field names, never the values.
-    before: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
-    after: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
+    # None is SQL NULL, not the JSON value null (migration 0017), so `IS NULL` finds it.
+    before: Mapped[dict[str, Any] | None] = mapped_column(JSONB(none_as_null=True))
+    after: Mapped[dict[str, Any] | None] = mapped_column(JSONB(none_as_null=True))
     proposal_id: Mapped[uuid.UUID | None]
     request_id: Mapped[str | None]
 
@@ -599,6 +605,26 @@ class AiSpendDaily(Base):
     created_at: Mapped[datetime] = mapped_column(server_default=func.now())
 
 
+class SandboxStart(Base):
+    """One sandbox started, as a keyed hash of the visitor's address and a time (ADR 0021).
+
+    The API counts these to limit starts per address and per UTC day. No raw address, no tenant.
+    A trigger stamps created_at with the database's clock, so a client can't backdate a start.
+    Insert-only for the API; row-level security lets it count every address.
+    """
+
+    __tablename__ = "sandbox_starts"
+    __table_args__ = (
+        CheckConstraint("octet_length(ip_hash) = 32", name="ip_hash_is_32_bytes"),
+        Index(None, "ip_hash", "created_at"),
+        Index(None, "created_at"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, server_default=func.gen_random_uuid())
+    ip_hash: Mapped[bytes] = mapped_column(LargeBinary)
+    created_at: Mapped[datetime] = mapped_column(server_default=func.now())
+
+
 class AiProposal(Base):
     """Something the assistant wants done, waiting for the person it was made for to confirm.
 
@@ -735,16 +761,21 @@ class TimeOffRequest(Base):
         # the status check.
         CheckConstraint(
             "(status NOT IN ('pending', 'recorded') OR (decided_by IS NULL AND decided_at IS NULL"
-            " AND decision_note IS NULL AND canceled_at IS NULL))"
+            " AND note_key_id IS NULL AND note_wrapped_key IS NULL AND note_ciphertext IS NULL"
+            " AND canceled_at IS NULL))"
             " AND (status NOT IN ('approved', 'denied') OR (decided_by IS NOT NULL"
             " AND decided_at IS NOT NULL AND canceled_at IS NULL))"
             " AND (status <> 'canceled' OR (canceled_at IS NOT NULL"
             " AND (decided_by IS NULL) = (decided_at IS NULL)))",
             name="decision_matches_status",
         ),
+        # A denial's sealed note: all three columns or none, and only on a denied request. The
+        # 300-character limit is the service's (`checked_note`): ciphertext can't hold a CHECK.
         CheckConstraint(
-            "decision_note IS NULL OR (char_length(decision_note) <= 300 AND status = 'denied')",
-            name="decision_note_is_a_short_denial_note",
+            "(note_key_id IS NULL AND note_wrapped_key IS NULL AND note_ciphertext IS NULL)"
+            " OR (note_key_id IS NOT NULL AND note_wrapped_key IS NOT NULL"
+            " AND note_ciphertext IS NOT NULL AND status = 'denied')",
+            name="sealed_note_is_whole_and_denied",
         ),
         CheckConstraint(
             "(proposal_id IS NOT NULL) = (created_via = 'assistant')",
@@ -800,9 +831,12 @@ class TimeOffRequest(Base):
     proposal_id: Mapped[uuid.UUID | None]
     decided_by: Mapped[uuid.UUID | None]
     decided_at: Mapped[datetime | None]
-    # A denial's note, up to 300 characters. Written by a person, shown on pages and cards, and
-    # never sent to a model.
-    decision_note: Mapped[str | None]
+    # A denial's note, up to 300 characters, written by a person, shown on pages and cards, and
+    # never sent to a model. Sealed under a data key of its own (app/modules/timeoff/notes.py):
+    # the key's ID, the wrapped key, and the ciphertext, all set or all null.
+    note_key_id: Mapped[str | None]
+    note_wrapped_key: Mapped[bytes | None] = mapped_column(LargeBinary)
+    note_ciphertext: Mapped[bytes | None] = mapped_column(LargeBinary)
     canceled_at: Mapped[datetime | None]
 
 

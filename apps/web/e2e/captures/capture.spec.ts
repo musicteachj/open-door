@@ -23,6 +23,7 @@ import {
   type ScreenRow,
   type TimeOffState,
 } from './manifest'
+import { fakeTurnstile } from '../fixtures'
 import { holdRequests, problem, setSandboxLeft, startAs } from '../helpers'
 import {
   addDaysTo,
@@ -391,6 +392,16 @@ async function reachScreen(page: Page, row: ScreenRow) {
     case 'tour':
       await reachTour(page, row.state as TourState)
       break
+    case 'walkthrough':
+      await expect(page.getByRole('heading', { level: 1, name: 'The recorded walkthrough' })).toBeVisible()
+      break
+    case 'walkthrough-transcript':
+      // The frame starts at step 3's rule.
+      await page.locator('#step-3').evaluate((step) => step.scrollIntoView())
+      break
+    case 'walkthrough-poster':
+      await expect(page.locator('img')).toBeVisible()
+      break
     case 'home':
     case 'expiry-banner':
       await expect(page.getByRole('heading', { level: 1 })).toBeVisible()
@@ -609,8 +620,10 @@ async function reachApprovals(page: Page, state: ApprovalsState) {
     await switchPersona(page, 'Priya')
     await bookOnPage(page)
     const listed = await page.evaluate(async () => {
+      const csrf = { headers: { 'X-CSRF-Token': /(?:^|; )__Host-od_csrf=([^;]*)/.exec(document.cookie)?.[1] ?? '' } }
       const response = await fetch(
         '/api/v1/time-off/requests?scope=mine&from=2000-01-01&to=2100-01-01',
+        csrf,
       )
       const { items } = (await response.json()) as { items: { status: string }[] }
       return items.find((item) => item.status === 'pending')!
@@ -710,7 +723,8 @@ async function reachConfirmCard(page: Page, state: ConfirmCardState) {
       await askAndWaitForAnswer(page, BOOK)
       // The same day is booked behind the card's back, so Confirm is refused for real.
       const taken = await page.evaluate(async () => {
-        const read = await fetch('/api/v1/assistant/conversations/current')
+        const csrf = { headers: { 'X-CSRF-Token': /(?:^|; )__Host-od_csrf=([^;]*)/.exec(document.cookie)?.[1] ?? '' } }
+        const read = await fetch('/api/v1/assistant/conversations/current', csrf)
         const body = (await read.json()) as {
           turns: { proposals: { card: { startDate: string; endDate: string } }[] }[]
         }
@@ -997,7 +1011,8 @@ async function danaMoves(page: Page, caseId: string, to: 'in_review' | 'closed')
 /** The open cases a filter lists, as Dana's queue reports them. */
 function caseIdsIn(page: Page, status: string): Promise<string[]> {
   return page.evaluate(async (filter) => {
-    const response = await fetch(`/api/v1/cases?status=${filter}`)
+    const csrf = { headers: { 'X-CSRF-Token': /(?:^|; )__Host-od_csrf=([^;]*)/.exec(document.cookie)?.[1] ?? '' } }
+    const response = await fetch(`/api/v1/cases?status=${filter}`, csrf)
     return ((await response.json()) as { items: { id: string }[] }).items.map((item) => item.id)
   }, status)
 }
@@ -1374,7 +1389,7 @@ async function reachTour(page: Page, state: TourState) {
       await startTourFromLanding(page)
       await jumpToTourStep(page, 2, /Book a day off/)
       await tourMark(page, /Book a day off/)
-        .getByRole('button', { name: /^Book next Friday/ })
+        .getByRole('button', { name: /^Book this Friday/ })
         .click()
       await expect(page.locator('[data-slot="confirm-card"]')).toBeVisible()
       await expect(
@@ -1388,7 +1403,7 @@ async function reachTour(page: Page, state: TourState) {
       await expect(composerBox(page)).toBeVisible()
       const stream = await holdNextTurnStream(page)
       await tourMark(page, /Book a day off/)
-        .getByRole('button', { name: /^Book next Friday/ })
+        .getByRole('button', { name: /^Book this Friday/ })
         .click()
       await stream.push('turn.started', { turnId: '00000000-0000-4000-8000-000000000003' })
       await stream.push('text.delta', {
@@ -1482,6 +1497,8 @@ async function photographScreen(browser: Browser, row: ScreenRow): Promise<strin
     baseURL: 'http://localhost:4173',
     viewport: row.viewport ?? { width: 1440, height: 900 },
   })
+  // A start in a captured screen must not reach Cloudflare.
+  await fakeTurnstile(context)
   try {
     const page = await context.newPage()
     // A step that can't be done, such as a click on a state the date makes unreachable (a card for

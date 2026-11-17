@@ -187,6 +187,17 @@ describe('Answer: raw HTML and links', () => {
     },
   )
 
+  it('links nothing for the public walkthrough, not even the handbook or the directory', () => {
+    const { container } = renderAnswer(
+      'See [a](/handbook/4.3) and [b](/directory/abc).',
+      [],
+      false,
+      'public',
+    )
+    expect(container.querySelector('a')).toBeNull()
+    expect(container).toHaveTextContent('See a and b.')
+  })
+
   it.each(['person', 'hr'] as const)(
     'still links the handbook and the directory for %s',
     (viewer) => {

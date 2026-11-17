@@ -6,9 +6,10 @@ from sqlalchemy.ext.asyncio import AsyncEngine
 
 pytestmark = pytest.mark.integration
 
-# `sessions` has a tenant_id, but a session is looked up by its token before the tenant is known,
-# so row-level security can't filter it. It is the only such table.
-NOT_A_TENANT_TABLE = "sessions"
+# `sessions` has a tenant_id and row-level security, but not the plain tenant rule: a session is
+# looked up by its token before the tenant is known, so its rules (migration 0017) also match the
+# presented token hash. They are checked exactly in test_sessions_rls.py. It is the only such table.
+NOT_THE_PLAIN_TENANT_RULE = "sessions"
 
 # The catalog queries below find the tables on their own, so a new table is covered without being
 # listed. These names only stop a broken query from passing by finding nothing.
@@ -115,7 +116,8 @@ async def test_every_tenant_table_has_row_level_security_enabled_and_forced(
 
     assert set(tables) >= KNOWN_TABLES
     unprotected = {name for name, flags in tables.items() if flags != (True, True)}
-    assert unprotected == {NOT_A_TENANT_TABLE}
+    assert unprotected == set()
+    assert NOT_THE_PLAIN_TENANT_RULE in tables
 
 
 async def test_the_global_tables_have_no_tenant_id(app_engine: AsyncEngine) -> None:
@@ -143,7 +145,7 @@ async def test_unique_indexes_on_tenant_tables_start_with_tenant_id(
     async with app_engine.connect() as connection:
         rows = (
             await connection.execute(
-                text(UNIQUE_INDEXES), {"not_a_tenant_table": NOT_A_TENANT_TABLE}
+                text(UNIQUE_INDEXES), {"not_a_tenant_table": NOT_THE_PLAIN_TENANT_RULE}
             )
         ).all()
 
@@ -186,7 +188,7 @@ async def test_the_only_permissive_policy_for_the_api_is_the_tenant_rule(
     async with app_engine.connect() as connection:
         tenant_tables = {
             name for name, *_ in (await connection.execute(text(TABLES_WITH_A_TENANT))).all()
-        } - {NOT_A_TENANT_TABLE}
+        } - {NOT_THE_PLAIN_TENANT_RULE}
         rows = (await connection.execute(text(PERMISSIVE_POLICIES))).all()
     found: dict[str, list[tuple[str, str, str, str]]] = {}
     for table, policy, command, using, with_check in rows:
@@ -198,4 +200,53 @@ async def test_the_only_permissive_policy_for_the_api_is_the_tenant_rule(
     assert tenant_tables >= KNOWN_TABLES
     expected = {table: rule("tenant_isolation", "tenant_id") for table in tenant_tables}
     expected["tenants"] = rule("tenant_self", "id")
+    # Sessions have three rules of their own, no tenant-only one; test_sessions_rls.py pins them.
+    assert sorted(policy for policy, *_ in found.pop("sessions")) == [
+        "session_delete",
+        "session_insert",
+        "session_select",
+    ]
+    # The start counter has no tenant: the API must count every address, so its two rules are
+    # `true`, one for reading and one for adding. Nothing else may apply to it.
+    assert sorted(found.pop("sandbox_starts")) == [
+        ("app_counts_every_start", "r", "true", ""),
+        ("app_records_a_start", "a", "", "true"),
+    ]
+    # The ledger has no tenant either: the budget sums every sandbox, so the API's rules are `true`.
+    assert sorted(found.pop("ai_spend_daily")) == [
+        ("app_reads_the_ledger", "r", "true", ""),
+        ("app_writes_the_ledger", "a", "", "true"),
+    ]
     assert found == expected
+
+
+async def test_the_start_counter_has_row_level_security_enabled_and_forced(
+    app_engine: AsyncEngine,
+) -> None:
+    async with app_engine.connect() as connection:
+        flags = (
+            await connection.execute(
+                text(
+                    "SELECT relrowsecurity, relforcerowsecurity FROM pg_class"
+                    " WHERE relname = 'sandbox_starts'"
+                )
+            )
+        ).one()
+    assert tuple(flags) == (True, True)
+
+
+async def test_the_spend_ledger_has_row_level_security_enabled_but_not_forced(
+    app_engine: AsyncEngine,
+) -> None:
+    """Enabled, so the API's and the cleanup login's rules apply; not forced, so the owner's spend
+    scripts still see every row on a managed database whose owner is not a superuser."""
+    async with app_engine.connect() as connection:
+        flags = (
+            await connection.execute(
+                text(
+                    "SELECT relrowsecurity, relforcerowsecurity FROM pg_class"
+                    " WHERE relname = 'ai_spend_daily'"
+                )
+            )
+        ).one()
+    assert tuple(flags) == (True, False)

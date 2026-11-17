@@ -86,6 +86,16 @@ function PersonaMenu({
       checkedRef.current.focus()
     },
   }
+  // On closing, Radix gives focus back to the switcher a moment after the menu has gone. A row that
+  // put something on the page that took focus in that moment keeps it: the tour's Resume shows its
+  // step, whose title takes focus so a screen reader reads it (the keyboard walk in
+  // e2e/accessibility proves it in a real browser; jsdom closes the menu in another order). Escape,
+  // a click outside (the menu is modal, so the click moves nothing), and a row that moves nothing
+  // leave focus on the page body with the menu gone, and the switcher gets it back.
+  const keepFocusARowMoved = (event: Event) => {
+    const now = document.activeElement
+    if (now !== null && now !== document.body) event.preventDefault()
+  }
 
   return (
     <DropdownMenu open={open && !busy} onOpenChange={(next) => setOpen(next && !busy)}>
@@ -99,6 +109,7 @@ function PersonaMenu({
         aria-describedby={noteId}
         loop
         {...focusChecked}
+        onCloseAutoFocus={keepFocusARowMoved}
       >
         <DropdownMenuLabel id={labelId}>View as</DropdownMenuLabel>
         <DropdownMenuRadioGroup

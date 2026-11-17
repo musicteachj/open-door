@@ -38,6 +38,14 @@ export const routes: RouteObject[] = [
     errorElement: <RootError />,
     children: [
       { path: '/', element: <LandingPage /> },
+      {
+        // Public, like the landing (screen 16). Lazy, so the recording's transcript is in the
+        // page's own chunk.
+        path: '/walkthrough',
+        lazy: async () => ({
+          Component: (await import('@/features/walkthrough/walkthrough-page')).WalkthroughPage,
+        }),
+      },
       ...galleryRoutes,
       {
         element: <RequireSession />,

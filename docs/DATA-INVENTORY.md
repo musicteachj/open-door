@@ -13,10 +13,14 @@ sandbox.
 
 **Everything in a sandbox lives for 24 hours.** `tenants.expires_at` is set to 24 hours after
 creation. Every other row belongs to a tenant and is deleted with it, through the foreign keys'
-`ON DELETE CASCADE`, except the handbook tables and `ai_spend_daily`, which have no tenant (see
-their sections below). A session is refused as soon as it expires, even before its row is deleted.
-The scheduled cleanup job that deletes expired sandboxes arrives in Phase 8. Until then, the
-`od_cleanup` role can delete only expired sandboxes, and tests prove it.
+`ON DELETE CASCADE`, except the handbook tables, `ai_spend_daily`, and `sandbox_starts`, which have
+no tenant (see their sections below). A session is refused as soon as it expires, even before its row is deleted.
+The cleanup job (`make cleanup`, Phase 8) runs as the `od_cleanup` login and enforces every
+retention below: expired sandboxes (24 hours), `ai_spend_daily` rows older than 30 days,
+`sandbox_starts` rows older than a day, and handbook versions no sandbox uses. Each is also a
+row-level policy on that login (or, for handbook versions, a foreign key and a trigger), so the job
+can't delete more than its rules allow, and tests prove it. It writes one log line of counts and no
+row contents. The deployment schedules it (Phase 9).
 
 **The 24-hour delete is a demo choice, not a model for real employee data.** A real deployment
 would keep audit records for at least 4 years, outside the tenant cascade. California requires
@@ -33,8 +37,8 @@ automated-decision systems apply that to the data such systems use and produce.
 ## Who can see what
 
 - **Tenant isolation.** Postgres row-level security shows the API only the rows of the sandbox its
-  transaction belongs to. The API's database login can't skip that rule. The one exception is
-  `sessions`, described below.
+  transaction belongs to. The API's database login can't skip that rule. `sessions` has rules of
+  its own, described below.
 - **Directory fields** are visible to everyone in the same sandbox.
 - **The assistant's conversations** (messages, turns, and feedback) are visible only to the person
   they belong to, with no HR exception. A second, restrictive Postgres rule enforces it.
@@ -135,13 +139,22 @@ Visible to everyone in the sandbox. Deleted with the sandbox.
 | Column | Holds | Why |
 |---|---|---|
 | `token_hash` | The SHA-256 hash of the session token | Finds the session from the cookie. The raw token is only in the visitor's cookie. |
-| `csrf_hash` | The SHA-256 hash of the CSRF token | Checks the `X-CSRF-Token` header on requests that change something. |
+| `csrf_hash` | The SHA-256 hash of the CSRF token | Checks the `X-CSRF-Token` header on every signed-in request, reads included (Phase 8). |
 | `tenant_id`, `person_id` | The sandbox, and the persona signed in | Scopes every request to that sandbox and person. |
 | `created_at`, `expires_at` | When the session started, and the sandbox's expiry | A session never outlives its sandbox. |
+| `family_id` | A random UUID shared by a session and the sessions a persona switch made from it (migration 0017) | Signing out deletes the whole family, so a switch in one tab racing a sign-out in another can't leave the new persona signed in. It names no one and is never sent to the browser. |
 
-Outside row-level security, because a session is looked up before its sandbox is known. The API
-finds a session only by its token hash, and never lists sessions. Switching persona deletes the
-row and creates a new one, and signing out deletes it. Deleted with the sandbox in any case.
+Under row-level security with rules of its own (migration 0017), because a session is looked up
+before its sandbox is known. The lookup presents the token's hash in its transaction
+(`app.session_token_hash`), and the API's login then sees only that row, or the rows of the sandbox
+its transaction is scoped to. A bare `SELECT` with no context sees nothing, so the login can no
+longer list every sandbox's sessions. It may insert a session only for its own sandbox, expiring no
+later than the sandbox, and delete only its own sandbox's sessions or the presented one. (A code
+path can't step outside its transaction's sandbox. Raw SQL as that login can set another sandbox's
+context itself, an accepted risk: the login's password is a full-access secret.) It has no
+`UPDATE`. Switching persona deletes the row and creates a new one in the same family, and signing
+out deletes the family. Deleted with the sandbox in any case (a referential action, which the
+rules don't block).
 
 ### `audit_events`: what happened
 
@@ -150,8 +163,8 @@ row and creates a new one, and signing out deletes it. Deleted with the sandbox 
 | `id`, `tenant_id` | A random UUID, and the sandbox | Random rather than a sequence, so one sandbox can't estimate another's activity. |
 | `occurred_at` | When it happened (UTC) | The record. |
 | `actor_person_id`, `via` | Who acted, and how: `ui`, `assistant`, or `system` | Every action, including the assistant's from Phase 4, is attributed. |
-| `action`, `target_type`, `target_id` | What was done, and to what | Phase 1 records `sandbox.created`, `session.persona_switched`, `session.ended`, and `person_private.read`. Phase 4 adds `escalation.offered` (target `ai_turn`), written when the assistant shows the crisis, sensitive, or "can't answer right now" panel, and when a budget stop ends a turn before the safety check could run (`kind` `unavailable`, `reason` `budget`: the budget message carries 911 and 988 instead of a panel), and `person_private.read` with `via` `assistant` when `get_my_profile` runs. Phase 5 adds `timeoff.requested` (PTO) and `timeoff.recorded` (sick time) when a request is made, `timeoff.approved`, `timeoff.denied`, and `timeoff.canceled` (target `time_off_request`), and `proposal.created`, `proposal.confirmed`, `proposal.canceled`, and `proposal.failed` (target `ai_proposal`). Phase 6 adds the case events, each with target `case`: `case.opened` (`via` `ui`), `case.summary.written` and `case.summary.failed` (`via` `assistant`, no actor when the system wrote it), `case.summary.retried` (`via` `ui`, HR as the actor, written in the retry request's own transaction; `after` holds only `screenFirst`), `case.screened` (`via` `assistant`, HR as the actor, when a retry's screening is written back to the case, either from `unscreened` or raising it to `crisis`; `after` holds only the `screening` label), `case.viewed` (HR read a summary), `case.text.read` (HR read the words), `case.status_changed`, and `case.listed` (`via` `assistant`, HR as the actor, written when the assistant's `list_cases` tool runs; `after` holds the count and the status filter only). |
-| `before`, `after` | Non-private fields only, such as `personaKey`, the names of the private fields read, an escalation's `kind`, or a time-off request's `status`, `type`, `startDate`, and `endDate` | Never private values, so a privacy deletion request never means editing this log. A denial's note (`decisionNote`, `note`) and a case's `text`, `summary`, `words`, or `narrative` are refused here like a private field, at any depth, so text a person wrote can't be logged by mistake. A case event holds only labels: `screening` and `category` (`case.opened`), `model` and `promptVersion` or a failure's `reason` (the summary events), and the status before and after (`case.status_changed`). |
+| `action`, `target_type`, `target_id` | What was done, and to what | Phase 1 records `sandbox.created`, `session.persona_switched`, `session.ended`, and `person_private.read`. Phase 4 adds `escalation.offered` (target `ai_turn`), written when the assistant shows the crisis, sensitive, or "can't answer right now" panel, and when a budget stop ends a turn before the safety check could run (`kind` `unavailable`, `reason` `budget`: the budget message carries 911 and 988 instead of a panel), and `person_private.read` with `via` `assistant` when `get_my_profile` runs. Phase 5 adds `timeoff.requested` (PTO) and `timeoff.recorded` (sick time) when a request is made, `timeoff.approved`, `timeoff.denied`, and `timeoff.canceled` (target `time_off_request`), and `proposal.created`, `proposal.confirmed`, `proposal.canceled`, and `proposal.failed` (target `ai_proposal`). Phase 6 adds the case events, each with target `case`: `case.opened` (`via` `ui`), `case.resubmitted` (`via` `ui`, the person as the actor, written when the same send arrives again and is folded into the earlier case; no `before` or `after`), `case.summary.written` and `case.summary.failed` (`via` `assistant`, no actor when the system wrote it), `case.summary.retried` (`via` `ui`, HR as the actor, written in the retry request's own transaction; `after` holds only `screenFirst`), `case.screened` (`via` `assistant`, HR as the actor, when a retry's screening is written back to the case, either from `unscreened` or raising it to `crisis`; `after` holds only the `screening` label), `case.viewed` (HR read a summary), `case.text.read` (HR read the words), `case.status_changed`, and `case.listed` (`via` `assistant`, HR as the actor, written when the assistant's `list_cases` tool runs; `after` holds the count and the status filter only). |
+| `before`, `after` | Non-private fields only, such as `personaKey`, the names of the private fields read, an escalation's `kind`, or a time-off request's `status`, `type`, `startDate`, and `endDate` | Never private values, so a privacy deletion request never means editing this log. A denial's note (`decisionNote`, `note`) and a case's `text`, `summary`, `words`, or `narrative` are refused here like a private field, at any depth, so text a person wrote can't be logged by mistake. A case event holds only labels: `screening` and `category` (`case.opened`), `model` and `promptVersion` or a failure's `reason` (the summary events), and the status before and after (`case.status_changed`). An absent value is SQL `NULL` (since migration 0017, which converted the JSON `null` that older rows held), so `IS NULL` finds it. |
 | `proposal_id` | The confirmed proposal, from Phase 5. It is a foreign key to `ai_proposals`, within the same sandbox | Ties an executed action to what the person confirmed. |
 | `request_id` | The request's ID | Matches the event with that request's log lines. |
 
@@ -185,7 +198,9 @@ tokens, and costs.
 owner can read it) or in `ENCRYPTION_KEYRING`. The API will not start without one. Neither value is
 ever printed or logged. Tests and CI use a fixed fake key (all zero bytes, ID `test`) that the API
 refuses outside `APP_ENV=test`. Losing the keyring makes every sandbox unreadable, which for
-24-hour demo sandboxes means starting new ones. Phase 8 adds a managed key service.
+24-hour demo sandboxes means starting new ones. A conversation whose stored text does not open is
+shown as unreadable (the page offers a new conversation, a question to it is a 409), never as a
+server error; the log names the conversation and turn IDs only. Phase 8 adds a managed key service.
 
 **Old plaintext may linger briefly.** Migration 0012 deleted every sandbox and dropped the plaintext
 columns, but Postgres keeps the dropped and deleted data in dead rows and in its write-ahead log
@@ -223,7 +238,7 @@ Every ID below is a random UUID, so one sandbox can't estimate another's activit
 |---|---|---|
 | `id`, `tenant_id`, `person_id`, `conversation_id` | IDs: the turn, its sandbox, its owner, and its conversation | Identity and ownership. |
 | `question_ciphertext` | What the person asked, encrypted | Shown after a reload. |
-| `status`, `error_code` | `running`, `completed`, `stopped`, `failed`, `crisis`, or `guard_unavailable`; and a code. A failed turn's code is the one its error event sent (`refusal`, `model-unavailable`, `budget-sandbox`, `budget-daily`, `spend-limit` (Anthropic's Console spend limit), `too-many-calls`, `internal`), or a more exact one the client sees as `internal`: `prompt-leak` (the system prompt's canary was caught and withheld), `guard-error` (the safety check couldn't run), or `abandoned`. A completed turn cut off by the output limit has `max-tokens`. | One turn runs at a time per conversation. The code explains a failure or an incomplete answer. |
+| `status`, `error_code` | `running`, `completed`, `stopped`, `failed`, `crisis`, or `guard_unavailable`; and a code. A failed turn's code is the one its error event sent (`refusal`, `model-unavailable`, `budget-sandbox`, `budget-daily`, `budget-conversation` (a later model call the sandbox's budget refused while a new conversation would still fit), `spend-limit` (Anthropic's Console spend limit), `too-many-calls`, `internal`), or a more exact one the client sees as `internal`: `prompt-leak` (the system prompt's canary was caught and withheld), `guard-error` (the safety check couldn't run), or `abandoned`. A completed turn cut off by the output limit has `max-tokens`. | One turn runs at a time per conversation. The code explains a failure or an incomplete answer. |
 | `started_at`, `ended_at` | When the turn began and ended (UTC) | The record. |
 | `answer_ciphertext` | The answer, encrypted (a stopped turn keeps its partial text). Null until the turn first saves an answer, and read as an empty answer | What the person sees after a reload. |
 | `citations` | The answer's citations as JSON (handbook passages) | What the person sees after a reload. |
@@ -273,10 +288,33 @@ the sandbox's spend and no rows, never a figure per turn.
 `ai_spend_daily` holds amounts only, so it is visible to every sandbox's API session.
 
 **How long.** The first five are deleted with the sandbox, 24 hours after it is created.
-`ai_spend_daily` has no sandbox to be deleted with: its rows older than 30 days are deleted by
-Phase 8's cleanup job. The API can add rows but not change or delete them, except that a turn's
+`ai_spend_daily` has no sandbox to be deleted with: its rows whose UTC day is more than 30 days
+back are deleted by the cleanup job (`make cleanup`). The API can add rows but not change or delete them, except that a turn's
 outcome and trace columns can be updated while it is `running`. Once it ends, a trigger refuses any
 further change.
+
+### `sandbox_starts`: how many sandboxes each address has started
+
+Global: no sandbox, no person, no text. Phase 8, stage 4. One row is added each time a sandbox is
+started, so the API can limit starts (ADR 0021): 5 an hour and 20 a day per address, and 500 a UTC
+day in all.
+
+| Column | Holds | Why |
+|---|---|---|
+| `id` | A random UUID | Identity. |
+| `ip_hash` | 32 bytes: HMAC-SHA256, under the secret `SANDBOX_IP_HASH_KEY`, of the visitor's address. An IPv6 address is first reduced to its /64 network, and an IPv4-mapped IPv6 address counts as its IPv4 address. A start with no readable address is hashed as one shared "unknown" value. | To count one address's starts without storing the address. Without the key the value can't be turned back into an address, though someone holding the key could test a guessed address against it. |
+| `created_at` | When the start happened (UTC), always the database's clock (a trigger sets it, so a client can't backdate a start) | The one-hour, 24-hour, and UTC-day windows. |
+
+**Who sees them.** Every API session can read and add rows: the API must count every address, so its
+row-level security policies for the API's login allow all rows. No route returns them. The raw
+address is never stored in the database or written to the audit log. (It is sent to Cloudflare,
+below.) It does appear in the application log: uvicorn's access log line for each request carries
+the client address, and so does each security event (see the security log, above). Logs are kept
+as long as where they are stored keeps them, which is set at deployment (Phase 9).
+
+**How long.** The API can add rows but not change or delete them. The cleanup job (`make cleanup`)
+deletes rows older than a day, and the cleanup login can see and delete only those. Changing `SANDBOX_IP_HASH_KEY` makes the counter forget earlier
+starts, which is harmless.
 
 ### Time off: `time_off_openings`, `time_off_requests`, `ai_proposals`
 
@@ -305,7 +343,7 @@ stage 3.
 | `created_at`, `created_via` | When (UTC), and `ui` or `assistant` | How it was made. |
 | `proposal_id` | The assistant's proposal that made it, or null for a request made on the page | Ties the request to what the person confirmed. It is always the same person's proposal, and one proposal makes at most one request. |
 | `decided_by`, `decided_at` | Who approved or denied it, and when | The decision's record. They stay when an approved request is canceled. A person never decides their own request: a database check refuses it. |
-| `decision_note` | A manager's reason for a denial, up to 300 characters, or null | Shown to the employee on the page and the card. Also read back to the manager who wrote it, in the conversation read (`deniedNote` on an executed denial's card), so the card can say whether a note was sent after a reload; no other person gets it there, and the stream event and the confirm's own answer never carry it. **User-written text: it is never sent to a model**, in a tool result or anywhere else. |
+| `note_key_id`, `note_wrapped_key`, `note_ciphertext` | A manager's reason for a denial, up to 300 characters, sealed (since migration 0018, which replaced the plaintext `decision_note`): the ID of the key that wrapped this request's data key, the wrapped data key, and the note as ciphertext. All three are set, or all three are null; they are set only on a denied request, and only when a note was given (a blank one is none). | Encrypted with a data key of its own per noted request (ADR 0015's amendment), with the table, the column, the sandbox, and the request in the associated data, so a note copied to another request does not open. The 300-character limit is the service's, since a ciphertext cannot hold the check. Opened only for a row that has one, after the policy check: shown to everyone who may read the request (the employee, the manager, and HR) on the pages and the card. Also read back to the manager who wrote it, in the conversation read (`deniedNote` on an executed denial's card), so the card can say whether a note was sent after a reload; no other person gets it there, and the stream event and the confirm's own answer never carry it. **User-written text: it is never sent to a model**, in a tool result or anywhere else, and never logged or audited. A trigger lets these columns change only when a pending request is decided. |
 | `canceled_at` | When it was canceled, or null | The record. |
 
 Two open requests (pending, approved, or recorded) for one person can't share a day: an exclusion
@@ -332,7 +370,7 @@ the odd recorded sick day per person in the past, all counted by the engine and 
 page (`created_via` `ui`, no proposal). Two requests are fixed: Leo's approved PTO from Wednesday to
 Friday of the week before the anchor's week, and one pending request from Zara Bautista in Marcus's
 queue, about three weeks after the anchor. It is the only pending request. No seeded request is a
-denial, so none has a `decision_note`, and no proposal is seeded.
+denial, so none has a sealed note, and no proposal is seeded.
 
 **Who sees them.** Requests and openings are visible to everyone in the sandbox at the database
 level, and the policy layer limits each read. A proposal is visible only to the person it was made
@@ -436,7 +474,7 @@ process died mid-turn) gets a redacted row too, since no verdict was stored for 
 | `sections_retrieved`, `sections_cited` | Handbook section IDs (`4.3`, `CA-4.3`). **Null on a flagged row** | What search found against what the answer cited. |
 | `card_action` | `timeoff.request`, `timeoff.decide`, or `timeoff.cancel`, when the turn made a confirm card. **Null on a flagged row** | Invariant 3 in numbers. |
 | `served_by`, `fallback`, `effort`, `prompt_version`, `toolset_version` | The model IDs that served the turn, whether another model served some of it (a fallback; false on an abandoned row), and the settings in effect. Empty or null on an abandoned row. Kept on a flagged row: they say what answered, not who asked | What answered, and the "Refusals and fallbacks" tile. |
-| `input_tokens`, `output_tokens`, `cache_read_tokens`, `cache_write_tokens`, `cost_usd` | The turn's tokens, the safety check's included, and its cost at list price | Cost and caching. |
+| `input_tokens`, `output_tokens`, `cache_read_tokens`, `cache_write_tokens`, `cost_usd` | The turn's tokens (`pricing.total_usage` of the model's iterations and the safety check's call), and its cost: the turn's own ledger spend (`ai_spend` rows by turn, read in the transaction that writes the row, so a reservation kept after a failed settle is counted as the ledger holds it). An abandoned row carries the dead turn's ledger spend as its cost and 0 tokens (they were never stored) | Cost and caching. |
 | `guard_ms`, `first_text_ms`, `total_ms` | Milliseconds the safety check took (null if it never ran), to the first word of the answer (null if none), and the whole turn | Latency against the targets. |
 
 **A flagged row is redacted when it is written.** It keeps its date, its counts, its timings, and
@@ -480,7 +518,11 @@ personal data and no sandbox data.
 | `handbook_chunks` | The runs of passages that retrieval searches: their text, a full-text search vector, and a 1024-number embedding | Hybrid (keyword and meaning) search over the handbook. |
 
 The API's login can only read these tables. Ingestion writes them as the database owner. They are
-kept while any sandbox uses their version. Phase 8 deletes versions no sandbox uses.
+kept while any sandbox uses their version. The cleanup job deletes a version that is not the
+newest published one, was created before the newest was published (so one still being loaded
+survives), and that no sandbox is pinned to. The database refuses to delete a pinned version (a
+foreign key) or the newest published one (a trigger), and the job skips a refused one. Sections
+and chunks go with their version.
 
 ## Outside the database
 
@@ -510,6 +552,14 @@ The web app uses no `localStorage`. It keeps four keys in `sessionStorage`:
 Only the person at that browser tab can see it. It is gone when the tab closes, and the API never
 receives it.
 
+### Cross-tab message
+
+When a tab switches persona, signs out, or starts a sandbox, it posts one message on the browser's
+`BroadcastChannel` named `od.session`: `{ kind, from }`, where `kind` is `switch`, `sign-out`, or
+`start`, and `from` is a random ID made when that tab's page loads. It holds no token, name, or
+person's ID, is not stored, never leaves the browser, and the API never receives it. Other tabs of
+the same browser on this origin refetch `/me` when they hear it (Phase 8).
+
 ### Security log
 
 Refused requests are written to the JSON application log under the `app.security` logger, not to
@@ -523,10 +573,38 @@ the audit table. The events are `security.session_invalid`, `security.origin_rej
 - the client's IP address
 - the first 8 characters of the session token's hash
 
+The access log (uvicorn's, one line per request) leaves out the two health paths,
+`/api/v1/health` and `/api/v1/health/live`, which probes call every few seconds, and logs every
+other path without its query string, so a search's words (what a person typed) never reach it
+(Phase 8's security review). A statement or lock
+timeout logs a warning with only the SQLSTATE code (`57014` or `55P03`). A request body over 64 KiB
+is refused with a 413 and logs nothing about its contents.
+
 A request with no session cookie at all, such as a first visit, isn't a refusal worth recording, so
 it logs nothing here (only a DEBUG line with the method and path). A raw token, a cookie value, or a
 private detail is never logged. How long logs are kept is set
 where they are stored, when Open Door is deployed (Phase 9).
+
+### Cloudflare (Turnstile, the check before a sandbox starts)
+
+Cloudflare Turnstile checks that a person, not a script, is starting a sandbox (ADR 0021). It is
+managed and interaction-only: most visitors see nothing.
+
+- **What Cloudflare receives from the browser:** when a visitor presses a start button, the page
+  loads Turnstile's script and widget from `challenges.cloudflare.com`. The browser's request
+  carries the visitor's IP address and the usual request headers, and the widget reads browser
+  signals to decide whether to show a challenge. The script is not loaded on page load, only after
+  that press.
+- **What the API sends to Cloudflare:** the widget's one-use token, the visitor's address (the
+  `remoteip` field, as the client address the server sees), a random idempotency key, and Open
+  Door's secret key, to `challenges.cloudflare.com/turnstile/v0/siteverify`. No name, session, or
+  sandbox ID is sent. Cloudflare answers whether the token is valid, for which hostname, and for
+  which action; the API accepts only `start-sandbox` on its own host.
+- **When Cloudflare can't be reached, nobody starts a sandbox** (the check fails closed).
+- **Tests and local runs call nothing:** Cloudflare's documented test keys are answered inside the
+  API (development, CI, the browser tests, and `make prod-local`).
+- **Cloudflare's own retention and use of this data** are under its terms. This inventory will
+  quote them, with their source and the date read, when the production keys are set up (Phase 9).
 
 ### Voyage (embeddings)
 
@@ -649,3 +727,26 @@ seed generator.
   two fixed warnings with no fields: a client that stopped reading a stream, and streams still
   open at shutdown (with a count). A refused question (too long, or a Social Security or card
   number) is a problem response; the text is never logged, stored, or echoed back.
+
+### The recorded walkthrough (`apps/web/public/media/`, `apps/web/src/features/walkthrough/`)
+
+The video of the guided tour and its transcript, recorded with the live model (Phase 8, Stage 9;
+ADR 0019). No real person's data is involved.
+
+- **What they hold:** the screen at 1440 by 900 (no sound) and, in `walkthrough.json`, each step's
+  coach-mark words, the questions the tour asks, the model's answers (Markdown links dropped), the
+  HR panel's fixed text, and notes written by the recorder. The people, balances, and the case's
+  words all come from the seed of a throwaway sandbox on the recording's own throwaway database,
+  which is deleted when the recording ends.
+- **Who can see them:** anyone. They are committed, and the app serves them at `/walkthrough` with
+  no sign-in.
+- **How long:** until the walkthrough is recorded again (when the tour or the model changes).
+- **What a recording leaves on the owner's machine** (under `/tmp/od-walkthrough/`): each take's
+  raw video, the encoded files, and a ledger of what each take cost. A failed take also keeps each
+  turn's status and error code and the API's log, never a question's or an answer's words.
+- **Who receives what:** Anthropic and Voyage receive the tour's questions and the throwaway
+  sandbox's tool results, as in any live turn. The recording's browser loads Cloudflare's real
+  Turnstile script and widget with the test key, so Cloudflare receives that browser's requests and
+  the owner's address, as for any visitor; the API's check of the test key is answered inside the
+  API and sends Cloudflare nothing. The live check (`scripts/prod-local/live_check.py`) does the
+  same.

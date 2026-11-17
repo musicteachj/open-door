@@ -26,10 +26,11 @@ from typing import Annotated, Literal
 from uuid import UUID
 from zoneinfo import ZoneInfo
 
-from fastapi import APIRouter, HTTPException, Query, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 
-from app.api.deps import Now
+from app.api.deps import Now, get_keys
 from app.api.problems import problem_responses
+from app.core.encryption import KeyProvider
 from app.core.problems import ProblemError
 from app.domain.timeoff.evaluate import SICK_WINDOW_DAYS, NewRequest, request_bounds
 from app.domain.timeoff.labels import hours_label, label
@@ -39,6 +40,7 @@ from app.modules.identity.deps import SignedIn, SignedInDep
 from app.modules.identity.security_log import SecurityEvent, log_security_event
 from app.modules.timeoff import queries, service
 from app.modules.timeoff.coverage import CoverageEntry, CoverageRequest, team_coverage
+from app.modules.timeoff.notes import open_note_or_none
 from app.modules.timeoff.schemas import (
     BalancesOut,
     CalendarOut,
@@ -58,6 +60,8 @@ from app.modules.timeoff.window import DEFAULT_DAYS_AHEAD, DEFAULT_DAYS_BACK
 from app.policy import Action, can
 
 router = APIRouter(prefix="/time-off", tags=["time-off"])
+
+Keys = Annotated[KeyProvider, Depends(get_keys)]
 
 MAX_ROWS = 200
 
@@ -164,8 +168,20 @@ def _can_cancel(signed_in: SignedIn, row: queries.RequestRow, today: date) -> bo
     return can(signed_in.actor, Action.TIMEOFF_CANCEL, service.request_resource(row), today=today)
 
 
+def _open_note(signed_in: SignedIn, keys: KeyProvider, row: queries.RequestRow) -> str | None:
+    """The row's denial note, opened, or None if it has none or it does not open. Called for a row
+    the actor may read (the page's rows are chosen by the policy), and only a row with a note
+    unwraps a key. A note is shown to everyone who may read the request, as it was before it was
+    sealed."""
+    return open_note_or_none(keys, signed_in.actor.tenant_id, row.id, row.sealed_note)
+
+
 async def _managed_view(
-    signed_in: SignedIn, rows: Sequence[queries.RequestRow], now: datetime, today: date
+    signed_in: SignedIn,
+    keys: KeyProvider,
+    rows: Sequence[queries.RequestRow],
+    now: datetime,
+    today: date,
 ) -> list[RequestOut]:
     """Each row as the actor's page shows it. A direct manager's view of a request also carries
     the person's available PTO and team coverage; nobody else's does."""
@@ -200,6 +216,7 @@ async def _managed_view(
         out.append(
             RequestOut.of(
                 row,
+                note=_open_note(signed_in, keys, row),
                 available_after_minutes=after,
                 coverage=entries,
                 can_cancel=_can_cancel(signed_in, row, today),
@@ -209,14 +226,20 @@ async def _managed_view(
 
 
 async def _own_view(
-    signed_in: SignedIn, request_id: UUID, now: datetime, today: date | None = None
+    signed_in: SignedIn,
+    keys: KeyProvider,
+    request_id: UUID,
+    now: datetime,
+    today: date | None = None,
 ) -> RequestOut:
     """The request as a write's answer shows it, with whether it can still be canceled. A write
     that already worked out today at the person's location passes it, so it isn't read again."""
     row = await _one(signed_in, request_id)
     if today is None:
         today = await _today(signed_in, now)
-    return RequestOut.of(row, can_cancel=_can_cancel(signed_in, row, today))
+    return RequestOut.of(
+        row, note=_open_note(signed_in, keys, row), can_cancel=_can_cancel(signed_in, row, today)
+    )
 
 
 DEFAULT_DECISION_DAYS_BACK = 90
@@ -281,6 +304,7 @@ async def get_balances(
 async def list_requests(
     signed_in: SignedInDep,
     now: Now,
+    keys: Keys,
     scope: Annotated[Literal["mine", "team", "waiting", "decided"], Query()] = "mine",
     from_date: Annotated[
         date | None,
@@ -340,9 +364,16 @@ async def list_requests(
         row for row in rows if can(actor, Action.TIMEOFF_READ, service.request_resource(row))
     ]
     items = (
-        await _managed_view(signed_in, readable, now, today)
+        await _managed_view(signed_in, keys, readable, now, today)
         if scope == "waiting"
-        else [RequestOut.of(row, can_cancel=_can_cancel(signed_in, row, today)) for row in readable]
+        else [
+            RequestOut.of(
+                row,
+                note=_open_note(signed_in, keys, row),
+                can_cancel=_can_cancel(signed_in, row, today),
+            )
+            for row in readable
+        ]
     )
     return RequestList(items=items, from_date=first, to_date=last)
 
@@ -354,13 +385,13 @@ async def list_requests(
     response_model=RequestOut,
     responses=READ_ERRORS,
 )
-async def get_request(request_id: UUID, signed_in: SignedInDep, now: Now) -> RequestOut:
+async def get_request(request_id: UUID, signed_in: SignedInDep, now: Now, keys: Keys) -> RequestOut:
     actor = signed_in.actor
     stored = await queries.load_stored_request(signed_in.db, actor.tenant_id, request_id)
     if stored is None or not can(actor, Action.TIMEOFF_READ, service.request_resource(stored)):
         raise _not_found()
     row = await _one(signed_in, request_id, stored)
-    [view] = await _managed_view(signed_in, [row], now, await _today(signed_in, now))
+    [view] = await _managed_view(signed_in, keys, [row], now, await _today(signed_in, now))
     return view
 
 
@@ -437,12 +468,12 @@ async def check_request(body: PossibleRequest, signed_in: SignedInDep, now: Now)
     responses=CHECK_ERRORS | problem_responses(status.HTTP_409_CONFLICT),
 )
 async def create_request(
-    body: PossibleRequest, signed_in: SignedInDep, request: Request, now: Now
+    body: PossibleRequest, signed_in: SignedInDep, request: Request, now: Now, keys: Keys
 ) -> RequestOut:
     result = await service.create(signed_in.db, signed_in.actor, _new(body), now, via="ui")
     if isinstance(result, Refused):
         raise await _refusal(signed_in, request, result, None, "create")
-    return await _own_view(signed_in, result.request_id, now, result.today)
+    return await _own_view(signed_in, keys, result.request_id, now, result.today)
 
 
 @router.post(
@@ -453,15 +484,28 @@ async def create_request(
     responses=WRITE_ERRORS,
 )
 async def decide_request(
-    request_id: UUID, body: DecisionBody, signed_in: SignedInDep, request: Request, now: Now
+    request_id: UUID,
+    body: DecisionBody,
+    signed_in: SignedInDep,
+    request: Request,
+    now: Now,
+    keys: Keys,
 ) -> RequestOut:
     result = await service.decide(
-        signed_in.db, signed_in.actor, request_id, body.decision, body.note, now, via="ui"
+        signed_in.db,
+        signed_in.actor,
+        request_id,
+        body.decision,
+        body.note,
+        now,
+        keys=keys,
+        via="ui",
     )
     if isinstance(result, Refused):
         raise await _refusal(signed_in, request, result, request_id, "decision")
     # A decider can never cancel someone else's request, so there is no Cancel to work out.
-    return RequestOut.of(await _one(signed_in, request_id), can_cancel=False)
+    row = await _one(signed_in, request_id)
+    return RequestOut.of(row, note=_open_note(signed_in, keys, row), can_cancel=False)
 
 
 @router.post(
@@ -472,12 +516,12 @@ async def decide_request(
     responses=WRITE_ERRORS,
 )
 async def cancel_request(
-    request_id: UUID, signed_in: SignedInDep, request: Request, now: Now
+    request_id: UUID, signed_in: SignedInDep, request: Request, now: Now, keys: Keys
 ) -> RequestOut:
     result = await service.cancel(signed_in.db, signed_in.actor, request_id, now, via="ui")
     if isinstance(result, Refused):
         raise await _refusal(signed_in, request, result, request_id, "cancel")
-    return await _own_view(signed_in, request_id, now, result.today)
+    return await _own_view(signed_in, keys, request_id, now, result.today)
 
 
 @router.get(

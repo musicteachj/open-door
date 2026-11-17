@@ -15,6 +15,11 @@ private sandbox as one of the four personas with a single click.
 **"How it's built" was dropped in Phase 7 (2026-10-31).** The screenshots below still show it;
 the build leaves it out.
 
+**Phase 8 adds two small things (2026-11-09):** a "Watch the recorded walkthrough" link to the left
+of the tour button, and a second muted line under the sandbox note, "Starting a sandbox runs a
+quick Cloudflare check to keep the demo safe." Screen 16 draws them
+([`../16-walkthrough/desktop-landing.png`](../16-walkthrough/desktop-landing.png)).
+
 ## Layout
 
 One 1168 px column on the porcelain background, top to bottom:

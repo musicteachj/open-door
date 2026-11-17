@@ -100,7 +100,7 @@ KINDS = (
 ATTRIBUTES = ("name", "parent", "religion", "age", "origin", "spouse")
 
 SMOKE_QA_COUNT = 23
-SMOKE_REDTEAM_COUNT = 13
+SMOKE_REDTEAM_COUNT = 14
 SMOKE_ACTION_COUNT = 6
 
 
@@ -289,11 +289,11 @@ class _Problems:
             self.seen.add(raw)
         return where
 
-    def persona(self, item: dict[str, Any], where: str) -> str | None:
+    def persona(self, item: dict[str, Any], where: str, extra: Collection[str] = ()) -> str | None:
         persona = item.get("asker")
-        if isinstance(persona, str) and persona in PERSONAS:
+        if isinstance(persona, str) and (persona in PERSONAS or persona in extra):
             return str(persona)
-        self.add(where, f"unknown asker {persona!r} (known: {', '.join(PERSONAS)})")
+        self.add(where, f"unknown asker {persona!r} (known: {', '.join([*PERSONAS, *extra])})")
         return None
 
     def words(self, item: dict[str, Any], key: str, where: str) -> str | None:
@@ -309,16 +309,50 @@ class _Problems:
             raise DatasetError("\n".join(self.lines))
 
 
+def _redteam_people(path: Path, problems: _Problems) -> list[CloneSpec]:
+    """The eval-only people the red-team file names under `people:` (same shape as the fairness
+    file's clones). Each is an employee an item can ask as, so a name that reads like an
+    instruction can be tested. They are kept here, not in the fairness file, so they change no
+    fairness item."""
+    try:
+        data = yaml.safe_load(path.read_text(encoding="utf-8"))
+    except (OSError, yaml.YAMLError) as error:
+        raise DatasetError(f"{path.name}: can't be read: {error}") from error
+    raw = data.get("people") if isinstance(data, dict) else None
+    return _clones(raw, problems, "people", "person")
+
+
+def load_redteam_people(path: Path = REDTEAM_PATH) -> list[CloneSpec]:
+    """The eval-only people of the red-team file, who join the fairness clones in every eval
+    sandbox (after them, so the clones' own phone numbers and addresses stay as they were). Raises
+    `DatasetError` listing every problem."""
+    problems = _Problems()
+    people = _redteam_people(path, problems)
+    problems.raise_if_any()
+    return people
+
+
+def check_clone_keys(fairness: Sequence[CloneSpec], redteam: Sequence[CloneSpec]) -> None:
+    """No key is used by both files' people."""
+    shared = sorted({c.key for c in fairness} & {c.key for c in redteam})
+    if shared:
+        raise DatasetError(
+            "\n".join(f"{key}: used by a fairness clone and a red-team person" for key in shared)
+        )
+
+
 def load_redteam(path: Path = REDTEAM_PATH) -> list[RedTeamItem]:
     """The red-team items in `path`. Raises `DatasetError` listing every problem."""
     problems = _Problems()
+    people = _redteam_people(path, problems)
+    people_keys = [person.key for person in people]
     items: list[RedTeamItem] = []
     for index, raw in enumerate(_read_list(path, "items"), start=1):
         if not isinstance(raw, dict):
             problems.add(f"item {index}", "must be a mapping")
             continue
         where = problems.name(raw, index)
-        asker = problems.persona(raw, where)
+        asker = problems.persona(raw, where, people_keys)
         message = problems.words(raw, "message", where)
         group = raw.get("group")
         route = raw.get("route")
@@ -350,6 +384,10 @@ def load_redteam(path: Path = REDTEAM_PATH) -> list[RedTeamItem]:
             items.append(
                 RedTeamItem(where, asker, str(group), message, route, proposal, clarify is True)
             )
+    asked = {item.asker for item in items}
+    problems.lines.extend(
+        f"{key}: no item is asked by this person" for key in people_keys if key not in asked
+    )
     problems.raise_if_any()
     return items
 
@@ -584,20 +622,24 @@ def _reasons(raw: dict[str, Any], where: str, problems: _Problems, group: str) -
 # --- The fairness set -------------------------------------------------------------------------
 
 
-def _clones(raw_clones: Any, problems: _Problems) -> list[CloneSpec]:
+def _clones(
+    raw_clones: Any, problems: _Problems, section: str = "clones", entry: str = "clone"
+) -> list[CloneSpec]:
+    """The eval-only people of a `clones:` (fairness) or `people:` (red team) list. Problems are
+    reported under `section` and `entry`, so each names the file's own key."""
     if raw_clones is None:
         return []
     if not isinstance(raw_clones, list):
-        problems.add("clones", "must be a list")
+        problems.add(section, "must be a list")
         return []
     clones: list[CloneSpec] = []
     keys: set[str] = set()
     for index, raw in enumerate(raw_clones, start=1):
         if not isinstance(raw, dict):
-            problems.add(f"clone {index}", "must be a mapping")
+            problems.add(f"{entry} {index}", "must be a mapping")
             continue
         key = _text(raw.get("key"))
-        where = key or f"clone {index}"
+        where = key or f"{entry} {index}"
         if key is None:
             problems.add(where, "needs a key")
         elif key in PERSONAS:

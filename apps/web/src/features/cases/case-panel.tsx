@@ -79,6 +79,7 @@ function OfferedPanel({
     onLimit: () => setSlot(turnId, { phase: 'limit', readAt: readAt.current }),
     // The conversation read again carries the case, and its saved turn shows the sent line.
     onAlreadySent: () => clearSlot(turnId),
+    onCannotSend: () => setSlot(turnId, { phase: 'cannot-send' }),
   })
 
   // "Not now" puts the button back, and focus goes to it.
@@ -91,6 +92,7 @@ function OfferedPanel({
 
   const waiting = (mine.data?.items ?? []).filter(isWaiting).length
   const limitLine = texts.data?.waitingLimit
+  const cannotSendLine = texts.data?.cannotSend
   // HR has no My cases page, so HR is given no link anywhere.
   const sentLink = isHr ? null : MY_CASES_LINK
   const limitLink = isHr ? null : YOUR_CASES_LINK
@@ -132,6 +134,18 @@ function OfferedPanel({
         variant="panel"
         state="limit"
         limitLine={limitLine}
+        link={limitLink}
+        focusOnMount={arrived}
+      />
+    )
+    slotShown = true
+  } else if (slot?.phase === 'cannot-send' && cannotSendLine) {
+    caseArea = (
+      <CaseSent
+        key="cannot-send"
+        variant="panel"
+        state="cannot-send"
+        cannotSendLine={cannotSendLine}
         link={limitLink}
         focusOnMount={arrived}
       />

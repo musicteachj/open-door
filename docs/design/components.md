@@ -234,3 +234,18 @@ Added by the design system for the guided tour (screen 15, Phase 7). The source 
 
 The persona menu gains an optional slot between the personas and "Sign out" for the tour items.
 No new tokens or icons. Screen 15's notes have the build decisions that change what these show.
+
+## Walkthrough components
+
+Added by the design system for the recorded walkthrough (screen 16, Phase 8), drawn in
+[`system/Walkthrough.dc.html`](system/Walkthrough.dc.html). They reuse existing tokens and icons.
+
+| Component | Variants | States | Designed |
+|---|---|---|---|
+| Walkthrough video | | paused with poster (native controls) | [x] |
+| Transcript step | with exchanges, with a note, without exchanges (steps 8 to 10) | default | [x] |
+| Exchange row | the person, the AI's answer (with a source), the HR panel's fixed text | default | [x] |
+| Landing walkthrough link | | default, hover, focus | [x] |
+
+Screen 16's notes have the build decisions that change what these show.
+

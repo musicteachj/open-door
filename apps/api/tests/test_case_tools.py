@@ -88,7 +88,7 @@ def test_list_cases_says_what_a_cut_list_holds_for_each_status() -> None:
     description = definition("list_cases")["description"]
     assert "a cut 'new' or 'open' list holds the first 20 in the queue's order" in description
     assert (
-        "a cut 'in_review' or 'closed' list holds the newest 20, in the queue's order"
-        in description
+        "a cut 'in_review' or 'closed' list holds the 20 whose status changed most recently, "
+        "in the queue's order" in description
     )
     assert "'truncated' is true" in description

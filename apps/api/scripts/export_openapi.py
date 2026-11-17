@@ -29,8 +29,6 @@ def render_schema() -> str:
         app_env="development",
         log_level="INFO",
         database_url=SCHEMA_ONLY_DATABASE_URL,
-        migration_database_url=None,
-        cleanup_database_url=None,
         app_origin="http://localhost:5173",
         # The app refuses to start without a keyring. This one is random and thrown away: the schema
         # never encrypts anything.

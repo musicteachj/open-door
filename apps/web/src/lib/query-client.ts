@@ -1,6 +1,6 @@
 import { hashKey, MutationCache, QueryCache, QueryClient } from '@tanstack/react-query'
 import { getGetMeQueryKey, getMe } from '@/api/generated'
-import { ApiError } from './api-fetch'
+import { ApiError, isSignedOutError } from './api-fetch'
 
 // The retry rules live only in this file. A per-call `retry` would let a query swallow a 401, so
 // onUnauthorized never runs, or resend a write after a 403. Writes never retry. A test
@@ -28,7 +28,7 @@ function retryOnce(failureCount: number, error: Error): boolean {
  * Mutations never retry, so a write is never sent twice by accident.
  */
 export function createQueryClient({ onUnauthorized, retryDelayMs }: QueryClientOptions) {
-  const isUnauthorized = (error: Error) => error instanceof ApiError && error.status === 401
+  const isUnauthorized = isSignedOutError
   const meHash = hashKey(getGetMeQueryKey())
   const client: QueryClient = new QueryClient({
     // A read in flight at a reset is canceled silently by clear(), so only writes need the time.

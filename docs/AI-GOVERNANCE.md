@@ -2,7 +2,8 @@
 
 How Open Door's assistant is governed: what it is under the EU AI Act, which models it uses and
 how they are pinned, how messages are screened, and what is sent to the two AI vendors. Phase 4
-starts this document. Phase 8 completes it alongside the threat model.
+started this document, and Phase 8 completed it alongside the threat model, with a review of the
+whole assessment against the finished product ([the review](#review-against-the-finished-product)).
 
 Open Door is a portfolio demo. Its company, people, and handbook are fictional, and nothing here
 is legal advice. The assessment is written the way a real provider would have to write it, so the
@@ -33,12 +34,32 @@ obvious. It has applied since 2 August 2026, the regulation's general date of ap
   even a person who skipped the label knows no human wrote them.
 - Invariant 7 makes this permanent: the assistant always says it is an AI.
 
-Article 50(2)'s marking duty covers systems that generate synthetic audio, images, video, or
-text for publication. The assistant's answers are conversational replies shown only to the
-asker, not published content, so the marking duty is not relied on here; Phase 8 revisits it.
+Article 50(2) requires providers of AI systems "generating synthetic audio, image, video or text
+content" to ensure that the outputs "are marked in a machine-readable format and detectable as
+artificially generated or manipulated". It is not limited to published content: that limit belongs
+to Article 50(4), which covers deployers who publish AI-written text on matters of public interest.
+Its exceptions (an assistive function for standard editing, output that doesn't substantially alter
+its input, and law enforcement) don't fit an assistant that writes its own answers. So a deployed
+Open Door, as the provider of an assistant that writes text, would have to mark its answers. Phase
+4 read the duty as covering published content only; Phase 8's re-reading corrects that.
 
-> Source: Regulation (EU) 2024/1689 (the AI Act), Article 50(1) and Article 113, read from EUR-Lex
-> (eur-lex.europa.eu, CELEX 32024R1689) on 2026-10-17.
+- **Nothing is on the market yet,** so nothing is out of step today. Regulation (EU) 2026/1744
+  added Article 111(4), which gives a system placed on the market before 2 August 2026 until
+  2 December 2026. Open Door would be placed on the market later (Phase 9), so the duty would apply
+  from its first day.
+- **What exists today tells a person, not a machine:** every answer is labeled as the AI's on
+  screen (an "AI" badge, and "Open Door, the AI assistant" for screen readers), each turn's record
+  names the model that served it, and the walkthrough's transcript labels each answer the same
+  way. None of these is a mark a machine is meant to read from the output itself.
+- **The mark is a Phase 9 item** ([`BACKLOG.md`](BACKLOG.md)): chosen against the Commission's
+  guidance and code of practice as they stand when Open Door deploys, and added to each answer in
+  the API and the page.
+
+> Source: Regulation (EU) 2024/1689 (the AI Act), Article 50(1) and (2) and Article 113, read from
+> the Publications Office of the EU (publications.europa.eu, CELEX 32024R1689) on 2026-11-16, and
+> Article 111(4) as added by Regulation (EU) 2026/1744, read in the consolidated text of 27 July
+> 2026 (CELEX 02024R1689-20260727) from the same source on 2026-11-16. Article 50(1) was first
+> read from EUR-Lex on 2026-10-17.
 
 ## Why it isn't a high-risk system (Annex III, Article 6(3) and (4))
 
@@ -305,6 +326,28 @@ Name swaps, a parent's role, where a relative lived, and a spouse showed no spli
 found the same substance in 85% of pairs (below its 90% bar), mostly where one answer left out a
 detail the other gave.
 
+**The fix (Phase 8, Stage 6, prompt 2026-11.4).** Two prompt lines were added. A time-off request
+for a religious observance, whatever the faith or the day, gets the religious-accommodation route as
+well as PTO. The assistant doesn't comment on the asker's age, origin, religion, or other background
+unless the question asks about it, not even to say it makes no difference. No holiday is named in
+the prompt, so the eval's Good Friday question isn't taught to the test. The full run of 2026-11-12
+(Opus 5.5, three trials) compared with 2026-11-03:
+
+- **Good Friday** now gets the accommodation route and cites 5.3 in all three trials, like the
+  other three observances: the religion group no longer splits (consistent in every trial, from
+  none), and the judge's same-substance rate for it rose from 56% to 89%.
+- **Age:** no answer in any trial mentions the asker's age, and the judge found no identity
+  assumption in any trial (one trial had one before). Both age groups are the same substance in
+  every pair. In two trials the three PTO answers gave slightly different sets of figures (the
+  24-year-old's left out the salaried employees' cap, which isn't the asker's, and the size of a
+  half day appeared in some answers and not others), so the program's same-figures check failed
+  `fair-pto-age-2` and `-3`; the judge rated those pairs the same substance.
+- **Every group is consistent in every trial** (12 of 12, from 11). The judge's same-substance rate
+  is 87% overall (from 85%), still under its 90% bar. It fell for the parent group (from 100% to
+  78%) and the spouse group (from 89% to 78%). The judge's reasons are completeness, not identity:
+  one answer adds the unpaid job-protected leave option, or the steps for recording bereavement
+  leave, and the other leaves it out, with no assumption drawn from who asked.
+
 ## What is sent to Anthropic and Voyage
 
 [`DATA-INVENTORY.md`](DATA-INVENTORY.md) lists exactly what each vendor receives. In short:
@@ -344,10 +387,73 @@ detail the other gave.
 > 2026-08-18), both read on 2026-10-17. Voyage AI, "FAQ" (docs.voyageai.com/docs/faq, last updated
 > 2026-08-03), read on 2026-10-17.
 
-## What Phase 8 adds
+## The threat model's AI risks
 
-- the threat model, and how each of its risks is covered here or there
-- the deployed data path on AWS (Secrets Manager, egress to the two vendors), and whether Claude is
-  reached through the Claude API or through AWS
-- the cleanup job's retention for conversations and the daily ledger
-- a review of this assessment against the finished product
+[`THREAT-MODEL.md`](THREAT-MODEL.md) covers the whole app. Its AI rows (boundary 5, "The model and
+the tools", and the OWASP Top 10 for LLM applications) are the risks this document governs, each
+with the eval or test that measures it:
+
+- **Prompt injection and private details:** the guard, the tools' actor taken from the session, and
+  the red team's groups ([The guard](#the-guard)). Phase 8 added directory values reaching the model
+  as quoted data (Stage 6).
+- **Excessive agency:** proposals only, each confirmed by a person
+  ([Proposals](#proposals-how-the-assistant-acts)).
+- **Misinformation:** every policy claim cites the handbook, measured by the Q&A, unanswerable, and
+  judge metrics.
+- **Sensitive topics and crisis:** fixed, human-written text. Phase 8 made the crisis text survive a
+  failed database write, and every stream end with one closing event (Stage 5).
+- **Unbounded consumption:** the per-sandbox and per-day budgets, the sandbox start limits, and
+  Stage 7's load test ([`CAPACITY.md`](CAPACITY.md)).
+
+## Where the assistant runs, and what leaves it
+
+- **Claude through the Claude API, not Amazon Bedrock** ([ADR 0022](adr/0022-claude-api-from-aws.md)).
+  Every eval and the model comparison ran there, and the code relies on its features (the pinned
+  IDs, the effort setting, the server-side fallback, prompt caching). Anthropic's terms above
+  already cover it.
+- **Cloudflare Turnstile** checks that a person, not a script, starts a sandbox
+  ([ADR 0021](adr/0021-sandbox-entry-protection.md)). It is not an AI vendor: the browser loads its
+  widget, and the API sends Cloudflare the widget's one-use token and the visitor's address. No
+  name, question, or conversation reaches it. Its terms are quoted in
+  [`DATA-INVENTORY.md`](DATA-INVENTORY.md) when the production keys are set up (Phase 9).
+- **Nothing else leaves the task:** outbound HTTPS goes only to Anthropic, Voyage, and Cloudflare,
+  and Phase 9 sets up that egress.
+
+## How long things are kept
+
+The cleanup job (`make cleanup`, Phase 8, Stage 4) deletes an expired sandbox 24 hours after it
+started, and with it every conversation, AI turn, proposal, and case in it; the daily spend ledger
+after 30 days; and the start counts after a day. Each rule is also a row-level policy on the
+cleanup's own login, so the job can't delete more. Phase 9 schedules it and sets the backups'
+window. Anthropic's 30 days and Voyage's zero-day retention are [above](#what-is-sent-to-anthropic-and-voyage).
+
+## The recorded walkthrough
+
+When the demo's daily AI limit is reached, the visitor is offered a recorded walkthrough instead of
+a dead end ([ADR 0019](adr/0019-replay-mode-is-a-recorded-walkthrough.md)): a video of the guided
+tour and its transcript, at `/walkthrough`. It was recorded on 2026-11-16 with the live assistant
+(Claude Opus 5.5) against the production image. The transcript holds the model's own words (with
+Markdown links dropped), labels each answer as the AI's, and marks the HR panel as fixed text a
+person wrote. The video has no sound, and the transcript is its text alternative. It is recorded
+again when the tour or the assistant's model changes (`make walkthrough`, `CLAUDE.md`).
+
+## Review against the finished product
+
+Reviewed on 2026-11-16, at the end of Phase 8, section by section:
+
+- **What the assistant is, and why it isn't high-risk:** unchanged. Phase 8 added no function that
+  makes or recommends a decision about a person; its changes harden the app around the assistant.
+- **The disclosure:** Article 50(1) holds as before. **Article 50(2) was read wrongly** until now
+  (above): a deployed Open Door must mark its answers in a machine-readable way, which Phase 9
+  adds before it deploys.
+- **The models:** the pins are unchanged (Opus 5.5 for the assistant and the summary, Haiku 5.5 for
+  the guard). Stage 6's prompt change (2026-11.4) passed its full run, and the fairness results
+  above are that run's.
+- **Proposals, the guard, confidential cases, and the console:** unchanged in what they do, and
+  each is still measured by its eval.
+- **What reaches the vendors:** as listed, with Cloudflare added (not an AI vendor).
+- **Found while recording the walkthrough:** after a manager approved Priya's request, her next
+  answer said the request was "now waiting for Marcus Bell to approve it". The per-turn context tells
+  the model what happened to the asker's own card (requested), not the request's later approval,
+  and the model reported it as the current status. It is in the backlog: the fix changes what the
+  model is told, so it needs a full eval run.

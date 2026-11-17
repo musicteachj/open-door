@@ -12,6 +12,7 @@ from app.ai.transport import Transport
 from app.core.config import Settings
 from app.core.encryption import KeyProvider
 from app.modules.assistant.sse import StreamTracker
+from app.modules.sandbox.turnstile import TurnstileVerifier
 
 
 def get_engine(request: Request) -> AsyncEngine:
@@ -87,6 +88,15 @@ def get_keys(request: Request) -> KeyProvider:
         msg = "app.state.keys is not a key provider."
         raise RuntimeError(msg)
     return keys
+
+
+def get_turnstile(request: Request) -> TurnstileVerifier:
+    """The Turnstile verifier the app was built with."""
+    verifier = getattr(request.app.state, "turnstile", None)
+    if verifier is None:
+        msg = "No Turnstile verifier: build the app with create_app() and run its lifespan."
+        raise RuntimeError(msg)
+    return verifier  # type: ignore[no-any-return]
 
 
 def utc_now() -> datetime:

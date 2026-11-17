@@ -2,7 +2,14 @@ import { render, screen } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 import { LandingSections } from './landing-sections'
 
-const IDS = ['persona-card-default', 'persona-card-starting', 'persona-card-disabled']
+const IDS = [
+  'persona-card-default',
+  'persona-card-starting',
+  'persona-card-disabled',
+  'start-refusal-retry',
+  'start-refusal-limit',
+  'turnstile-slot-place',
+]
 
 describe('LandingSections', () => {
   it('has a heading with a stable id for every state', () => {

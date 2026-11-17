@@ -789,6 +789,33 @@ describe('a send that fails', () => {
     },
   )
 
+  it('keeps the draft, reads the conversation again, and offers a new one after conversation-unreadable', async () => {
+    onTurn(() =>
+      problemResponse(409, 'conversation-unreadable', "This conversation can't be shown."),
+    )
+    const deps = makeDeps()
+    state().setDraft('Hello')
+    await state().send('Hello', deps)
+    expect(deps.invalidateConversation).toHaveBeenCalledTimes(1)
+    expect(state().offerNewConversation).toBe(true)
+    // The notice says it, from the conversation read; not under the box as well.
+    expect(state().sendError).toBeNull()
+    expect(state().draft).toBe('Hello')
+  })
+
+  it('reads the conversation again and offers a new one after a 429 budget-conversation', async () => {
+    onTurn(() => problemResponse(429, 'budget-conversation', 'This conversation is too long.'))
+    const deps = makeDeps()
+    state().setDraft('Hello')
+    await state().send('Hello', deps)
+    expect(deps.invalidateConversation).toHaveBeenCalledTimes(1)
+    expect(state().sendError).toBe('This conversation is too long.')
+    expect(state().offerNewConversation).toBe(true)
+    expect(state().offerWithoutNoticeWords).toBe(true)
+    expect(state().draft).toBe('Hello')
+    expect(state().status).toBe('idle')
+  })
+
   it.each(['budget-sandbox', 'budget-daily'])(
     'keeps the draft, asks again, and says the problem’s words under the box (the banner, if it shows, wins there) after a 429 %s',
     async (type) => {
@@ -869,6 +896,51 @@ describe('an error in the middle of an answer', () => {
       expect(state().sendError).toBeNull()
     },
   )
+
+  it('offers a new conversation, without the notice words, after a budget-conversation error, as for its 429', async () => {
+    onTurn(() =>
+      eventStream(started, [
+        'error',
+        { code: 'budget-conversation', message: 'This conversation is too long.', requestId: null },
+      ]),
+    )
+    const deps = makeDeps()
+    await state().send('Sick days?', deps)
+    expect(deps.invalidateConversation).toHaveBeenCalledTimes(1)
+    expect(state().status).toBe('error')
+    // The server's words are the turn's own error; nothing is set under the box as well.
+    expect(state().turn?.error).toEqual({
+      code: 'budget-conversation',
+      message: 'This conversation is too long.',
+    })
+    expect(state().sendError).toBeNull()
+    expect(state().offerNewConversation).toBe(true)
+    expect(state().offerWithoutNoticeWords).toBe(true)
+  })
+
+  it.each(['budget-sandbox', 'budget-daily', 'spend-limit', 'internal'])(
+    'does not offer a new conversation after the %s error',
+    async (code) => {
+      onTurn(() => eventStream(started, ['error', { code, message: 'Words.', requestId: null }]))
+      await state().send('Sick days?', makeDeps())
+      expect(state().offerNewConversation).toBe(false)
+      expect(state().offerWithoutNoticeWords).toBe(false)
+    },
+  )
+
+  it('clears that offer on the next send', async () => {
+    onTurn(() =>
+      eventStream(started, [
+        'error',
+        { code: 'budget-conversation', message: 'Too long.', requestId: null },
+      ]),
+    )
+    await state().send('Sick days?', makeDeps())
+    onTurn(() => eventStream(started, completed))
+    await state().send('Hello', makeDeps())
+    expect(state().offerNewConversation).toBe(false)
+    expect(state().offerWithoutNoticeWords).toBe(false)
+  })
 
   it('lets Retry send the same question again', async () => {
     let calls = 0
@@ -985,16 +1057,16 @@ describe('a connection that drops', () => {
   })
 })
 
-describe('a turn that ends with its escalation and no closing event', () => {
+describe('a turn with an escalation and its closing event', () => {
   const escalation = (kind: string): [string, unknown] => [
     'escalation',
     { kind, message: 'Fixed text.', hrContact: [], offerCase: false },
   ]
 
   it.each(['crisis', 'unavailable'])(
-    'finishes a %s turn like a completed one: not stopped, and the conversation is read again',
+    'finishes a %s turn from its turn.completed: not stopped, and the conversation is read again',
     async (kind) => {
-      onTurn(() => eventStream(started, escalation(kind)))
+      onTurn(() => eventStream(started, escalation(kind), completed))
       const deps = makeDeps()
       await state().send('A hard question', deps)
       expect(state().status).toBe('idle')
@@ -1009,13 +1081,31 @@ describe('a turn that ends with its escalation and no closing event', () => {
     },
   )
 
-  it('still means stopped when the escalation is the sensitive one, which a completed turn follows', async () => {
-    onTurn(() => eventStream(started, escalation('sensitive')))
+  it.each(['crisis', 'unavailable', 'sensitive'])(
+    'means stopped, with the %s escalation kept, when the stream ends with no closing event',
+    async (kind) => {
+      onTurn(() => eventStream(started, escalation(kind)))
+      const deps = makeDeps()
+      await state().send('A hard question', deps)
+      expect(state().status).toBe('stopped')
+      expect(state().turn).toMatchObject({ completed: false, escalation: { kind } })
+      expect(deps.invalidateConversation).toHaveBeenCalledTimes(1)
+    },
+  )
+
+  it('shows both the error and the escalation when the unavailable offer comes before the error', async () => {
+    onTurn(() =>
+      eventStream(started, escalation('unavailable'), [
+        'error',
+        { code: 'internal', message: 'Oops.', requestId: null },
+      ]),
+    )
     await state().send('A question', makeDeps())
-    expect(state().status).toBe('stopped')
+    expect(state().status).toBe('error')
+    expect(state().turn).toMatchObject({ completed: false, escalation: { kind: 'unavailable' } })
   })
 
-  it('still means stopped when an error came with it', async () => {
+  it('still applies an escalation that arrives after the error', async () => {
     onTurn(() =>
       eventStream(
         started,
@@ -1025,10 +1115,10 @@ describe('a turn that ends with its escalation and no closing event', () => {
     )
     await state().send('A question', makeDeps())
     expect(state().status).toBe('error')
-    expect(state().turn?.completed).toBe(false)
+    expect(state().turn).toMatchObject({ completed: false, escalation: { kind: 'unavailable' } })
   })
 
-  it('still means stopped when there is no escalation at all', async () => {
+  it('means stopped when there is no escalation at all', async () => {
     onTurn(() => eventStream(started, ['text.delta', { text: 'Half' }]))
     await state().send('A question', makeDeps())
     expect(state().status).toBe('stopped')
@@ -1085,6 +1175,7 @@ describe('the "still answering" message', () => {
   it('goes away when a crisis answer ends', async () => {
     const { stream, first } = await stillAnswering()
     stream.push('escalation', { kind: 'crisis', message: 'x', hrContact: [], offerCase: false })
+    stream.push(...completed)
     stream.close()
     await first
     expect(state().status).toBe('idle')
@@ -1119,6 +1210,79 @@ describe('settling a finished turn', () => {
     state().settle(TURN_ID)
     expect(state().turn).not.toBeNull()
     stream.close()
+  })
+})
+
+describe('which saved panels are announced', () => {
+  const sensitive: [event: string, data: unknown] = [
+    'escalation',
+    { kind: 'sensitive', message: 'A person handles this.', hrContact: [], offerCase: false },
+  ]
+
+  it('starts with none', () => {
+    expect(state().panelsToAnnounce).toEqual([])
+  })
+
+  it('marks a settled turn whose escalation never came down the stream', async () => {
+    onTurn(() => eventStream(started, ['text.delta', { text: 'Half' }]))
+    await state().send('Hello', makeDeps())
+    state().settle(TURN_ID)
+    expect(state().panelsToAnnounce).toEqual([TURN_ID])
+  })
+
+  it('does not mark a turn whose escalation was live: it was announced already', async () => {
+    onTurn(() => eventStream(started, sensitive, completed))
+    await state().send('Hello', makeDeps())
+    state().settle(TURN_ID)
+    expect(state().turn).toBeNull()
+    expect(state().panelsToAnnounce).toEqual([])
+  })
+
+  it('marks a turn that was waiting behind a newer one', async () => {
+    useChatStore.setState({
+      settling: [
+        {
+          turn: {
+            turnId: TURN_ID,
+            question: 'Hello',
+            text: '',
+            escalation: null,
+          } as never,
+          phase: 'stopped',
+        },
+      ],
+    })
+    state().settle(TURN_ID)
+    expect(state().settling).toEqual([])
+    expect(state().panelsToAnnounce).toEqual([TURN_ID])
+  })
+
+  it('marks nothing for a turn that is still coming', async () => {
+    const stream = openStream()
+    onTurn(() => stream.response())
+    void state().send('Hello', makeDeps())
+    stream.push(...started)
+    await vi.waitFor(() => expect(state().status).toBe('streaming'))
+    state().settle(TURN_ID)
+    expect(state().panelsToAnnounce).toEqual([])
+    stream.close()
+  })
+
+  it('forgets one turn when it is consumed, and the rest stay', () => {
+    useChatStore.setState({ panelsToAnnounce: ['a', 'b'] })
+    state().consumeAnnouncement('a')
+    expect(state().panelsToAnnounce).toEqual(['b'])
+    state().consumeAnnouncement('missing')
+    expect(state().panelsToAnnounce).toEqual(['b'])
+  })
+
+  it('is cleared by a new conversation and by a reset', () => {
+    useChatStore.setState({ panelsToAnnounce: ['a'] })
+    state().beginConversation(NEW_CONVERSATION)
+    expect(state().panelsToAnnounce).toEqual([])
+    useChatStore.setState({ panelsToAnnounce: ['a'] })
+    resetIdentity(new QueryClient())
+    expect(state().panelsToAnnounce).toEqual([])
   })
 })
 

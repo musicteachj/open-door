@@ -74,13 +74,26 @@ async def insert_request(session: AsyncSession, tenant: SampleTenant, **override
     return values["id"]  # type: ignore[no-any-return]
 
 
+# A sealed note's three columns with stand-in bytes: these tests are about the table's rules, not
+# about the cipher (test_denial_note_sealed.py seals a real one).
+SEALED_NOTE: dict[str, Any] = {
+    "note_key_id": "k1",
+    "note_wrapped_key": b"\x01",
+    "note_ciphertext": b"\x02",
+}
+SEALED_NOTE_SQL = (
+    "note_key_id = 'k1', note_wrapped_key = decode('01', 'hex'),"
+    " note_ciphertext = decode('02', 'hex')"
+)
+
+
 # A request in each state a trigger test starts from, with the columns that state needs.
 def state_columns(tenant: SampleTenant, request_type: str, status: str) -> dict[str, Any]:
     columns: dict[str, Any] = {"type": request_type, "status": status}
     if status in ("approved", "denied"):
         columns |= {"decided_by": tenant.hr_id, "decided_at": NOW}
     if status == "denied":
-        columns["decision_note"] = "Coverage is thin that week."
+        columns |= SEALED_NOTE
     if status == "canceled":
         columns["canceled_at"] = NOW
     return columns
@@ -264,7 +277,7 @@ LEGAL_REQUEST_UPDATES = [
         "pto",
         "pending",
         "denied",
-        "status = 'denied', decided_by = :hr, decided_at = now(), decision_note = 'Not that week'",
+        f"status = 'denied', decided_by = :hr, decided_at = now(), {SEALED_NOTE_SQL}",
     ),
     ("pto", "pending", "canceled", "status = 'canceled', canceled_at = now()"),
     ("pto", "approved", "canceled", "status = 'canceled', canceled_at = now()"),
@@ -343,7 +356,7 @@ async def test_a_request_refuses_a_status_that_does_not_exist(
     [
         "decided_by = :other",
         "decided_at = now() + interval '1 day'",
-        "decision_note = 'Changed after the fact'",
+        "note_ciphertext = decode('03', 'hex')",
         "decided_by = NULL, decided_at = NULL",
     ],
 )
@@ -372,7 +385,7 @@ async def test_the_decision_cannot_change_when_an_approved_request_is_canceled(
     "assignments",
     [
         "status = 'approved', decided_by = :employee, decided_at = now()",
-        "status = 'denied', decided_by = :employee, decided_at = now(), decision_note = 'No'",
+        f"status = 'denied', decided_by = :employee, decided_at = now(), {SEALED_NOTE_SQL}",
     ],
 )
 async def test_a_person_cannot_decide_their_own_request(
@@ -612,7 +625,6 @@ async def test_a_proposals_identity_payload_card_and_expiry_can_never_be_updated
 
 # --- The checks --------------------------------------------------------------------------------
 
-LONG_NOTE = "x" * 301
 REQUEST_CHECKS = [
     ("ck_time_off_requests_type", {"type": "vacation"}),
     ("ck_time_off_requests_status", {"status": "archived"}),
@@ -674,12 +686,12 @@ REQUEST_CHECKS = [
         "ck_time_off_requests_decision_matches_status",
         {"type": "sick", "status": "recorded", "decided_by": "hr", "decided_at": NOW},
     ),
-    # A note on a pending request breaks both the decision check and the note check. Postgres
-    # reports one of them (the first by name), so either name will do: the row is refused.
+    # A sealed note on a pending request breaks both the decision check and the note check.
+    # Postgres reports one of them (the first by name), so either name will do: the row is refused.
     (
         "ck_time_off_requests_decision_matches_status|"
-        "ck_time_off_requests_decision_note_is_a_short_denial_note",
-        {"decision_note": "ok"},
+        "ck_time_off_requests_sealed_note_is_whole_and_denied",
+        SEALED_NOTE,
     ),
     # A denial is not a cancellation.
     (
@@ -688,22 +700,32 @@ REQUEST_CHECKS = [
             "status": "denied",
             "decided_by": "hr",
             "decided_at": NOW,
-            "decision_note": "No",
+            **SEALED_NOTE,
             "canceled_at": NOW,
         },
     ),
-    # A note is a denial's alone, and short.
+    # A note is a denial's alone, and whole: all three columns or none.
     (
-        "ck_time_off_requests_decision_note_is_a_short_denial_note",
-        {"status": "approved", "decided_by": "hr", "decided_at": NOW, "decision_note": "ok"},
+        "ck_time_off_requests_sealed_note_is_whole_and_denied",
+        {"status": "approved", "decided_by": "hr", "decided_at": NOW, **SEALED_NOTE},
     ),
     (
-        "ck_time_off_requests_decision_note_is_a_short_denial_note",
-        {"status": "canceled", "canceled_at": NOW, "decision_note": "ok"},
+        "ck_time_off_requests_sealed_note_is_whole_and_denied",
+        {"status": "canceled", "canceled_at": NOW, **SEALED_NOTE},
     ),
     (
-        "ck_time_off_requests_decision_note_is_a_short_denial_note",
-        {"status": "denied", "decided_by": "hr", "decided_at": NOW, "decision_note": LONG_NOTE},
+        "ck_time_off_requests_sealed_note_is_whole_and_denied",
+        {"status": "denied", "decided_by": "hr", "decided_at": NOW, "note_key_id": "k1"},
+    ),
+    (
+        "ck_time_off_requests_sealed_note_is_whole_and_denied",
+        {
+            "status": "denied",
+            "decided_by": "hr",
+            "decided_at": NOW,
+            "note_key_id": "k1",
+            "note_wrapped_key": b"\x01",
+        },
     ),
     # Nobody decides their own request, however the row gets there.
     (
@@ -716,7 +738,7 @@ REQUEST_CHECKS = [
             "status": "denied",
             "decided_by": "employee",
             "decided_at": NOW,
-            "decision_note": "No",
+            **SEALED_NOTE,
         },
     ),
     # The proposal and the way it was made go together.
@@ -762,7 +784,7 @@ async def test_a_good_request_of_every_kind_is_accepted(
                 "status": "denied",
                 "decided_by": tenant.hr_id,
                 "decided_at": NOW,
-                "decision_note": "x" * 300,
+                **SEALED_NOTE,
             },
             {
                 "status": "canceled",

@@ -1,16 +1,19 @@
-import { Info } from 'lucide-react'
+import { useRef } from 'react'
 import { Navigate } from 'react-router'
+import type { PersonaKey } from '@/api/generated'
 import { useMe } from '@/app/useMe'
 import { useStartSandbox } from '@/app/useStartSandbox'
 import { Logo } from '@/components/core/logo'
 import { InlineError } from '@/components/feedback/inline-error'
 import { PersonaCard } from '@/components/landing/persona-card'
+import { PublicFooter } from '@/components/landing/public-footer'
+import { TurnstileSlot } from '@/components/landing/turnstile-slot'
 import { TourStartButton } from '@/components/tour/tour-start-button'
+import { WalkthroughLink } from '@/components/walkthrough/walkthrough-link'
 import { useStartTour } from '@/features/tour/use-start-tour'
 import { PERSONAS } from '@/features/personas/personas'
-import { ApiError } from '@/lib/api-fetch'
-import { AI_DISCLOSURE } from '@/lib/disclosure'
-import { SANDBOX_START_FAILED } from '@/lib/sandbox-copy'
+import { isSignedOutError } from '@/lib/api-fetch'
+import { sandboxStartError } from '@/lib/sandbox-copy'
 
 // From docs/design/screens/01-landing/notes.md. Nothing here is the signed-in person's: the
 // landing page is outside the session guard, so it is not remounted by a reset.
@@ -20,25 +23,36 @@ const PITCH =
   'An AI help desk for HR questions. It answers with citations to the company handbook, proposes actions for a person to confirm, and sends sensitive topics like harassment or medical leave to a human HR partner.'
 const SANDBOX_NOTE =
   'Each visit gets its own private copy of Juniper Row, a fictional company. It resets after 24 hours.'
-const NOTICE =
-  "Juniper Row and everyone in it are fictional. This is a demo, not legal advice. Don't enter real personal information."
+// Approved with screen 16 (2026-11-09).
+const CHECK_NOTE = 'Starting a sandbox runs a quick Cloudflare check to keep the demo safe.'
 
 export function LandingPage() {
   const me = useMe()
   const start = useStartSandbox()
   const tour = useStartTour()
+  // The empty place under each control that starts a sandbox, where Cloudflare's check may show.
+  const cardSlots = useRef<Partial<Record<PersonaKey, HTMLDivElement | null>>>({})
+  const tourSlot = useRef<HTMLDivElement>(null)
 
-  // A signed-in visitor has nothing to choose. Cached data whose latest fetch was a 401 is not a
+  // A signed-in visitor has nothing to choose. Cached data whose latest fetch was a 401 (or the CSRF
+  // refusal, which is the same to the app) is not a
   // signed-in visitor: the sandbox ended, and sending them on would bounce them to the reset page.
-  const unauthorized = me.error instanceof ApiError && me.error.status === 401
+  const unauthorized = isSignedOutError(me.error)
   if (me.data && !unauthorized) return <Navigate to="/ask" replace />
   if (me.isPending) return <output className="sr-only">Loading…</output>
 
   // Either start forgets the other's failure, so only one error is ever shown.
   const startTour = () => {
     start.reset()
-    tour.start()
+    tour.start(tourSlot.current)
   }
+  const startPersona = (persona: PersonaKey) => {
+    tour.dismissError()
+    start.mutate({ data: { persona } }, cardSlots.current[persona] ?? null)
+  }
+  const failedPersona = start.variables?.data?.persona
+  const startFailure = start.isError ? sandboxStartError(start.error) : null
+  const tourFailure = tour.failed ? sandboxStartError(tour.error) : null
   const startingKey = start.isPending ? start.variables?.data?.persona : undefined
   // While the tour's sandbox starts, all four cards are unavailable; while a card's does, the tour
   // button is.
@@ -58,9 +72,9 @@ export function LandingPage() {
           <h2 className="mt-16 mb-5 text-h2">Choose who to be</h2>
           <ul className="m-0 grid list-none grid-cols-[repeat(auto-fill,minmax(15rem,1fr))] gap-4 p-0">
             {PERSONAS.map((persona) => (
-              <li key={persona.key} className="flex">
+              <li key={persona.key} className="flex flex-col">
                 <PersonaCard
-                  className="h-full"
+                  className="flex-1"
                   name={persona.name}
                   role={persona.title}
                   location={persona.location}
@@ -70,39 +84,57 @@ export function LandingPage() {
                   disabled={
                     cardsDisabled || (startingKey !== undefined && startingKey !== persona.key)
                   }
-                  onSelect={() => {
-                    tour.dismissError()
-                    start.mutate({ data: { persona: persona.key } })
+                  onSelect={() => startPersona(persona.key)}
+                />
+                <TurnstileSlot
+                  ref={(element) => {
+                    cardSlots.current[persona.key] = element
                   }}
                 />
               </li>
             ))}
           </ul>
           {/* One error at a time: starting either way forgets the other's failure. */}
-          {start.isError && (
+          {startFailure && (
             <InlineError
-              message={SANDBOX_START_FAILED}
-              onRetry={() => start.mutate(start.variables)}
+              message={startFailure.message}
+              onRetry={
+                startFailure.canRetry && failedPersona
+                  ? () => startPersona(failedPersona)
+                  : undefined
+              }
             />
           )}
-          {tour.failed && <InlineError message={SANDBOX_START_FAILED} onRetry={startTour} />}
+          {tourFailure && (
+            <InlineError
+              message={tourFailure.message}
+              onRetry={tourFailure.canRetry ? startTour : undefined}
+            />
+          )}
 
           <div className="mt-6 flex flex-wrap items-center justify-between gap-x-6 gap-y-4">
-            <p className="m-0 text-small text-ink-muted">{SANDBOX_NOTE}</p>
-            <TourStartButton starting={tour.starting} disabled={tour.blocked} onStart={startTour} />
+            <div className="flex max-w-160 flex-col gap-1">
+              <p className="m-0 text-small text-pretty text-ink-muted">{SANDBOX_NOTE}</p>
+              <p className="m-0 text-small text-pretty text-ink-muted">{CHECK_NOTE}</p>
+            </div>
+            {/* Screen 16: the walkthrough's link left of the tour button, which keeps the row's
+                right edge. On a phone the row wraps and both sit left-aligned under the notes. */}
+            <div className="flex flex-wrap items-center gap-x-6 gap-y-4">
+              <WalkthroughLink />
+              <div>
+                <TourStartButton
+                  starting={tour.starting}
+                  disabled={tour.blocked}
+                  onStart={startTour}
+                />
+                <TurnstileSlot ref={tourSlot} />
+              </div>
+            </div>
           </div>
         </main>
       </div>
 
-      <footer className="mx-auto mt-16 w-full max-w-292">
-        <div className="flex flex-col gap-1 border-t border-border py-6 text-small text-ink-muted">
-          <p className="m-0 flex items-center gap-2">
-            <Info aria-hidden="true" className="size-4 shrink-0" />
-            {AI_DISCLOSURE}
-          </p>
-          <p className="m-0 pl-6">{NOTICE}</p>
-        </div>
-      </footer>
+      <PublicFooter />
     </div>
   )
 }

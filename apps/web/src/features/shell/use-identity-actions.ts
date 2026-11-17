@@ -6,6 +6,7 @@ import { useIdentityBusy, useIdentityBusyNow } from '@/app/useIdentityBusy'
 import { signInAs } from '@/app/useMe'
 import { PERSONAS, personaFor } from '@/features/personas/personas'
 import { resetIdentity } from '@/lib/identity'
+import { announceSessionChange } from '@/lib/session-channel'
 import { useTourStore } from '@/features/tour/store'
 import { useShellToast } from './toast-store'
 
@@ -31,6 +32,7 @@ export function useIdentityActions() {
     mutation: {
       onSuccess: (me) => {
         signInAs(queryClient, me, 'switch')
+        announceSessionChange('switch')
         // signInAs has reset everything, the toast too, so this one is the only message left.
         useShellToast.getState().show(`Now viewing as ${me.givenName} ${me.familyName}.`, me.id)
         void navigate(destination.current)
@@ -45,6 +47,7 @@ export function useIdentityActions() {
     mutation: {
       onSuccess: () => {
         resetIdentity(queryClient)
+        announceSessionChange('sign-out')
         void navigate('/')
       },
     },

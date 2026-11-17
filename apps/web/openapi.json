@@ -5,6 +5,27 @@
     "version": "0.0.0"
   },
   "paths": {
+    "/api/v1/health/live": {
+      "get": {
+        "tags": [
+          "health"
+        ],
+        "summary": "Report that the API process is up, without touching the database",
+        "operationId": "getHealthLive",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LiveResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/health": {
       "get": {
         "tags": [
@@ -47,18 +68,11 @@
           "content": {
             "application/json": {
               "schema": {
-                "anyOf": [
-                  {
-                    "$ref": "#/components/schemas/NewSandboxRequest"
-                  },
-                  {
-                    "type": "null"
-                  }
-                ],
-                "title": "Body"
+                "$ref": "#/components/schemas/NewSandboxRequest"
               }
             }
-          }
+          },
+          "required": true
         },
         "responses": {
           "201": {
@@ -83,6 +97,16 @@
           },
           "422": {
             "description": "Unprocessable Content",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too Many Requests",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -2912,12 +2936,17 @@
           "stillAnswering": {
             "type": "string",
             "title": "Stillanswering"
+          },
+          "unreadableConversation": {
+            "type": "string",
+            "title": "Unreadableconversation"
           }
         },
         "type": "object",
         "required": [
           "personalData",
-          "stillAnswering"
+          "stillAnswering",
+          "unreadableConversation"
         ],
         "title": "AssistantTextsOut",
         "description": "The fixed refusals the composer shows before a request is sent, so the web app holds no\ncopy of the words."
@@ -3647,6 +3676,10 @@
             "type": "string",
             "title": "Waitinglimit"
           },
+          "cannotSend": {
+            "type": "string",
+            "title": "Cannotsend"
+          },
           "hrContacts": {
             "items": {
               "$ref": "#/components/schemas/HrContactOut"
@@ -3660,6 +3693,7 @@
           "bullets",
           "replyBy",
           "waitingLimit",
+          "cannotSend",
           "hrContacts"
         ],
         "title": "CaseTextsOut",
@@ -3836,7 +3870,7 @@
             "anyOf": [
               {
                 "type": "string",
-                "maxLength": 20000
+                "maxLength": 600
               },
               {
                 "type": "null"
@@ -4256,6 +4290,20 @@
           "outdated": {
             "type": "boolean",
             "title": "Outdated"
+          },
+          "unreadable": {
+            "type": "boolean",
+            "title": "Unreadable"
+          },
+          "escalation": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/EscalationOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "type": "object",
@@ -4267,7 +4315,8 @@
           "budget",
           "longHistory",
           "historyTooLong",
-          "outdated"
+          "outdated",
+          "unreadable"
         ],
         "title": "ConversationOut"
       },
@@ -5354,6 +5403,25 @@
         ],
         "title": "ListPassage"
       },
+      "LiveResponse": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "const": "ok",
+            "title": "Status"
+          },
+          "version": {
+            "type": "string",
+            "title": "Version"
+          }
+        },
+        "type": "object",
+        "required": [
+          "status",
+          "version"
+        ],
+        "title": "LiveResponse"
+      },
       "LocationCount": {
         "properties": {
           "id": {
@@ -5523,9 +5591,17 @@
           "persona": {
             "$ref": "#/components/schemas/PersonaKey",
             "default": "priya"
+          },
+          "turnstileToken": {
+            "type": "string",
+            "maxLength": 2048,
+            "title": "Turnstiletoken"
           }
         },
         "type": "object",
+        "required": [
+          "turnstileToken"
+        ],
         "title": "NewSandboxRequest"
       },
       "NotFoundTileOut": {
@@ -5571,7 +5647,7 @@
           },
           "text": {
             "type": "string",
-            "maxLength": 20000,
+            "maxLength": 8000,
             "title": "Text"
           },
           "turnId": {
@@ -7428,7 +7504,7 @@
         "properties": {
           "question": {
             "type": "string",
-            "maxLength": 20000,
+            "maxLength": 4000,
             "title": "Question"
           }
         },
