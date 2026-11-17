@@ -61,21 +61,7 @@ describe('exchangesOf: the transcript of a step’s turns', () => {
     })
   })
 
-  it('records the HR panel’s fixed text as the panel’s, never as an answer', () => {
-    const exchanges = exchangesOf([
-      turn({
-        question: 'My manager keeps making comments about my age.',
-        answerText: '',
-        escalation: { kind: 'sensitive', message: 'This sounds like something a person…' },
-      }),
-    ])
-    expect(exchanges[1]).toEqual({
-      speaker: 'hr-panel',
-      text: 'This sounds like something a person…',
-    })
-  })
-
-  it('keeps an answer the panel followed: the answer, then the panel, as the video shows', () => {
+  it('keeps the answer, then the HR panel’s fixed text as the panel’s, never as an answer', () => {
     const exchanges = exchangesOf([
       turn({
         question: 'Why was Leo out last week?',
@@ -85,6 +71,10 @@ describe('exchangesOf: the transcript of a step’s turns', () => {
     ])
     expect(exchanges.map((e) => e.speaker)).toEqual(['person', 'ai', 'hr-panel'])
     expect(exchanges[1]!.text).toBe('Leo was out on approved time off.')
+    expect(exchanges[2]).toEqual({
+      speaker: 'hr-panel',
+      text: 'This sounds like something a person…',
+    })
   })
 
   it.each(['crisis', 'unavailable'])(
@@ -93,11 +83,44 @@ describe('exchangesOf: the transcript of a step’s turns', () => {
       expect(() =>
         exchangesOf([turn({ escalation: { kind, message: 'Call or text 988.' } })]),
       ).toThrow(new RegExp(kind))
+      // As the API stores one: no answer, the panel alone. The panel is still what's named.
+      expect(() =>
+        exchangesOf([
+          turn({ status: kind, answerText: '', escalation: { kind, message: 'Call 988.' } }),
+        ]),
+      ).toThrow(new RegExp(`showed a ${kind} panel`))
+    },
+  )
+
+  it.each(['failed', 'stopped', 'guard_unavailable'])(
+    'refuses a turn that ended %s: its text may be cut short',
+    (status) => {
+      expect(() =>
+        exchangesOf([
+          turn({
+            status,
+            answerText: 'You can take this',
+            escalation: { kind: 'sensitive', message: 'This sounds like something a person…' },
+          }),
+        ]),
+      ).toThrow(new RegExp(`ended ${status}`))
     },
   )
 
   it('refuses a turn with no answer and no panel: the take is not usable', () => {
     expect(() => exchangesOf([turn({ answerText: '  ' })])).toThrow(/no answer/)
+  })
+
+  it('refuses a turn with the HR panel but no answer: the tour’s words promise one', () => {
+    expect(() =>
+      exchangesOf([
+        turn({
+          question: 'My manager keeps making comments about my age.',
+          answerText: '',
+          escalation: { kind: 'sensitive', message: 'This sounds like something a person…' },
+        }),
+      ]),
+    ).toThrow(/no answer/)
   })
 
   it('drops links from an answer: the public page can’t open them', () => {

@@ -31,8 +31,12 @@ the model reads changed after the full run of 2026-11-12.
   sensitive topic goes "to a person, not the AI", but both the live and the scripted model answer
   Priya from the handbook first, then show the HR panel. It now says so; the owner approved the
   words on 2026-11-17, as a change to screen 15's copy.
-- **The recorded walkthrough was recorded again** with the new words (Phase 8 follow-up). The transcript test now
-  accepts a question followed by an answer and then the HR panel, the order the video shows.
+- **The recorded walkthrough was recorded again** with the new words (Phase 8 follow-up). The
+  transcript test now requires an answer after every question, then the HR panel where the safety
+  check sent the turn to a person, the order the video shows; a panel alone fails, since the tour's
+  words promise an answer, and the recorder refuses such a take while recording it. The tour's
+  browser test checks that step 7's answer cites a section and comes before "Open a confidential
+  case".
 
 ### Fixed
 

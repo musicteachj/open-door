@@ -398,7 +398,10 @@ digits is caught (Stage 3), and the cleanup job deletes handbook versions no san
   sends a turn to a person after the answer (the tour's steps 5 and 7 on the live model), the panel
   arrives and the conversation scrolls to it, so the answer is on screen for about a quarter of a
   second in the walkthrough of 2026-11-17; the transcript keeps it. Scrolling to the panel's top, or
-  holding the answer in view, would let a reader see both. (The tour step 5 follow-up's review.)
+  holding the answer in view, would let a reader see both. The recorder also sizes its pause after
+  such a turn by the panel's text alone (`holdMs(last.escalation?.message ?? last.answerText)` in
+  `e2e/walkthrough/record.ts`); count the answer too when this is fixed. (The tour step 5
+  follow-up's review; the v0.8.1 release review.)
 - **The budget poll and the conversation read can disagree on a damaged conversation.** The
   conversation read calls a conversation unreadable when any stored text fails to open and sizes
   its budget with no history; `GET /assistant/budget` ignores only a history that won't open. With

@@ -143,6 +143,8 @@ async function sendChips(page: Page, step: TourStep): Promise<RecordedTurn[]> {
       .toBe(true)
     const turns = await storedTurns(page)
     const last = turns.at(-1)!
+    // A turn the take can't use stops it here, before the step's next question is paid for.
+    exchangesOf([last])
     await pause(
       page,
       Math.min(holdMs(last.escalation?.message ?? last.answerText), ANSWER_HOLD_MAX_MS),
@@ -213,6 +215,10 @@ test('record the walkthrough', async ({ browser }) => {
     await expect(mark(page, step)).toBeVisible({ timeout: 30_000 })
     await pause(page, holdMs(step.body))
     const turns = await sendChips(page, step)
+    // Built now, not when the step ends: a turn the take can't use (one that didn't complete, a
+    // crisis or "can't answer" panel, or no answer) stops the take before this step's actions and
+    // any later step's paid turns. sendChips has already checked each turn as it ended.
+    const exchanges = exchangesOf(turns)
     let note = NOTES[step.id]
 
     if (step.id === 'book-day-off') {
@@ -271,7 +277,7 @@ test('record the walkthrough', async ({ browser }) => {
       title: step.title,
       persona: step.persona,
       words: step.body,
-      exchanges: exchangesOf(turns),
+      exchanges,
       ...(note ? { note } : {}),
     })
     await next(page, step, nextStep)
