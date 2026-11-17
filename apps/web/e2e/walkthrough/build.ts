@@ -45,28 +45,33 @@ function sourcesOf(citations: RecordedTurn['citations']): WalkthroughSource[] {
 
 /**
  * A step's turns as its transcript, as the video shows them: each question, then the answer as
- * stored (with the sections it cited) when there is one, then the HR panel's fixed text when the
- * turn was routed to a person. The tour has no crisis or "can't answer" step, and the transcript
- * would call such a panel the HR panel's, so a take that meets one is refused.
+ * stored (with the sections it cited), then the HR panel's fixed text when the turn was routed to a
+ * person. The tour has no crisis or "can't answer" step, and the transcript would call such a panel
+ * the HR panel's, so a take that meets one is refused. So is a turn that didn't complete, and one
+ * with no answer, panel or not: the tour's words promise an answer at every step. The recorder
+ * builds this as each step's questions end, so a bad turn stops the take there.
  */
 export function exchangesOf(turns: readonly RecordedTurn[]): WalkthroughExchange[] {
   return turns.flatMap((turn): WalkthroughExchange[] => {
-    const exchanges: WalkthroughExchange[] = [{ speaker: 'person', text: turn.question }]
+    if (turn.escalation && turn.escalation.kind !== 'sensitive') {
+      throw new Error(`The turn "${turn.question}" showed a ${turn.escalation.kind} panel.`)
+    }
+    // A turn that didn't complete may hold an answer cut short (a sensitive turn can fail after
+    // part of its answer), so only a completed one is recorded.
+    if (turn.status !== 'completed') {
+      throw new Error(`The turn "${turn.question}" ended ${turn.status}.`)
+    }
     const text = withoutLinks(turn.answerText).trim()
-    if (text !== '') {
-      const sources = sourcesOf(turn.citations)
-      exchanges.push(
-        sources.length > 0 ? { speaker: 'ai', text, sources } : { speaker: 'ai', text },
-      )
-    }
-    if (turn.escalation) {
-      if (turn.escalation.kind !== 'sensitive') {
-        throw new Error(`The turn "${turn.question}" showed a ${turn.escalation.kind} panel.`)
-      }
-      exchanges.push({ speaker: 'hr-panel', text: turn.escalation.message })
-    }
-    if (exchanges.length === 1) {
+    if (text === '') {
       throw new Error(`The turn "${turn.question}" has no answer to record.`)
+    }
+    const sources = sourcesOf(turn.citations)
+    const exchanges: WalkthroughExchange[] = [
+      { speaker: 'person', text: turn.question },
+      sources.length > 0 ? { speaker: 'ai', text, sources } : { speaker: 'ai', text },
+    ]
+    if (turn.escalation) {
+      exchanges.push({ speaker: 'hr-panel', text: turn.escalation.message })
     }
     return exchanges
   })

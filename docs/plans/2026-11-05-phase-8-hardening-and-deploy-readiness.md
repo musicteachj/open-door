@@ -2019,6 +2019,24 @@ The two step 5 items the fix branch's review left open, settled in one PR:
   change had nothing high or medium after its first round; it made that check retry instead of
   holding an element, and cut the script's comment to a pointer to the changelog. In this take
   step 5's answer opens with a line about Priya's approved request before answering about Leo.
+- **The release review** (`/code-review medium` on what `dev` brings to `main`, after #126)
+  reported one medium, that the step 7 browser check could read step 6's answer; it was a false
+  positive (`sendChips` already waits for one answer per question), as the fix branch's own review
+  showed. What it led to, in `fix/tour-step-7-checks` before the release PR: with steps 5 and 7
+  both promising an answer, the transcript test requires one after every question (a panel alone
+  fails), and the recorder now refuses a turn with no answer while the take is recorded, so a paid
+  take can't reach install with a panel alone; the step 7 check looks for any "Open a confidential
+  case" after the answer, not the first on the page, and not one inside the answer. The branch's
+  own review then moved the recorder's transcript build to right after each step's questions, so a
+  turn with no answer stops a paid take before that step's actions and any later step's turns (a
+  free dry run passed with it); its pause after an answer-then-panel turn, sized by the panel's
+  text, joined the backlog's scrolling item. Its third round: the recorder now records only a turn
+  that completed (a sensitive turn can fail after part of its answer, which was recorded as whole),
+  names a crisis or "can't answer" panel before saying a turn has no answer, and the step 7 check
+  compares the answer with the escalation panel itself (mutation-proved). The fourth had nothing
+  high or medium, so the loop stopped; from its lows, the recorder checks each turn as it ends (a
+  bad first question doesn't pay for the second), and the step 7 check polls again. A free dry run
+  passed with the final recorder.
 
 ## Backlog
 

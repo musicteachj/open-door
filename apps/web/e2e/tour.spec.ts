@@ -2,7 +2,13 @@ import { expect, test } from './fixtures'
 import type { Page } from '@playwright/test'
 import { TOUR, type TourStep } from '../src/features/tour/script'
 import { HARASSMENT, openCaseButton, queueRows, sentLine } from './cases-helpers'
-import { assistantMessages, composerBox, stopButton, userMessages } from './conversation-helpers'
+import {
+  assistantMessages,
+  composerBox,
+  panels,
+  stopButton,
+  userMessages,
+} from './conversation-helpers'
 import { holdRequests, startAs, switchTo } from './helpers'
 import {
   cards,
@@ -256,18 +262,19 @@ test.describe('the walk, at 1440 px', () => {
     await expectRingOn(page, step)
     await expect(await targetOf(page, step, 'open-case')).toHaveText(/Open a confidential case/)
     // The coach mark says the assistant answers from the handbook, then shows the HR panel: the
-    // answer cites a section and comes before the panel's "Open a confidential case".
+    // answer cites a section and comes before the panel's "Open a confidential case". sendChips has
+    // waited for one answer per question, so the last is this step's own.
     const sensitiveAnswer = assistantMessages(page).last()
     await expect(sensitiveAnswer.locator('[data-slot="source-chip"]')).not.toHaveCount(0)
+    await expect(panels(page).last()).toBeVisible()
     await expect
       .poll(() =>
         sensitiveAnswer.evaluate((answer) => {
-          const button = [...document.querySelectorAll('button')].find(
-            (b) => b.textContent?.trim() === 'Open a confidential case',
-          )
+          const panel = [...document.querySelectorAll('[data-slot="escalation-panel"]')].at(-1)
           return (
-            button !== undefined &&
-            (answer.compareDocumentPosition(button) & Node.DOCUMENT_POSITION_FOLLOWING) !== 0
+            panel !== undefined &&
+            !answer.contains(panel) &&
+            (answer.compareDocumentPosition(panel) & Node.DOCUMENT_POSITION_FOLLOWING) !== 0
           )
         }),
       )
