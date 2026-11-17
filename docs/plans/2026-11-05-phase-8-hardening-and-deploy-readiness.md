@@ -1999,8 +1999,18 @@ The two step 5 items the fix branch's review left open, settled in one PR:
   there; two of its lows were fixed (a report must carry npm's report version, and the usage line
   names a Python that is new enough). Recorded: the lockfile's `dev` flag can't show that a build
   doesn't bundle a dev dependency; the wiring test reads the workflow and Makefile as text; the
-  three severity lists could be one; CI runs the script on the runner's own `python3` (3.12). The owner agreed to the exception; the safety
-  classifier had refused the workflow edit until then.
+  three severity lists could be one; CI runs the script on the runner's own `python3` (3.12). The
+  owner agreed to the exception; the safety classifier had refused the workflow edit until then.
+- **Merged in #125 and released in `v0.8.1`** (2026-11-17), with no new live run: nothing the
+  model reads changed after the full run of 2026-11-12. The release review found that the report
+  version check (round 4) had made three of the bad-report tests stop before the checks they were
+  written for, so they now carry the version and were mutation-proved again; it also made the
+  script keep an advisory's highest severity when npm reports it more than once, and derived the
+  severity lists from one ordering. Its second round had nothing high or medium; from its lows the
+  report's own total must now match its entries, the wiring test looks for the exit-status check,
+  and the docs say the exception's last day is a UTC day. Step 7's coach mark ("A sensitive topic
+  goes to a person, not the AI") while the live assistant answers before the HR panel went to the
+  owner.
 
 ## Backlog
 

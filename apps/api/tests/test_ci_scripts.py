@@ -407,7 +407,13 @@ def report(*advisories: dict[str, object]) -> dict[str, object]:
             "via": [first],
             "nodes": [f"node_modules/{dependent}"],
         }
-    return {"auditReportVersion": 2, "vulnerabilities": vulnerabilities, "metadata": {}}
+    return recount({"auditReportVersion": 2, "vulnerabilities": vulnerabilities})
+
+
+def recount(audit: dict[str, object]) -> dict[str, object]:
+    """Set the report's own total to its entries, as npm writes it (after a test adds one)."""
+    audit["metadata"] = {"vulnerabilities": {"total": len(audit["vulnerabilities"])}}  # type: ignore[arg-type]
+    return audit
 
 
 def test_a_clean_report_passes() -> None:
@@ -549,6 +555,17 @@ def test_an_advisory_of_unknown_severity_fails(severity: str) -> None:
     assert problems == [f"GHSA-aaaa-bbbb-cccc (vite, {severity}): vite is vulnerable"]
 
 
+def test_an_advisory_reported_twice_keeps_its_highest_severity() -> None:
+    twice = report(advisory("picomatch", PICOMATCH))
+    raised = advisory("picomatch", PICOMATCH, "critical")
+    twice["vulnerabilities"]["fdir"] = {"name": "fdir", "via": [raised], "nodes": []}  # type: ignore[index]
+    recount(twice)
+    problems, _notes = npm_audit.problems_in(twice, BEFORE, ACCEPTED)
+    assert problems == [
+        f"{PICOMATCH} (picomatch, critical): accepted only at high; look at it again"
+    ]
+
+
 def test_an_accepted_advisory_on_another_package_fails() -> None:
     problems, _notes = npm_audit.problems_in(
         report(advisory("micromatch", PICOMATCH)), BEFORE, ACCEPTED
@@ -560,6 +577,7 @@ def test_an_advisory_reached_through_many_packages_is_named_once() -> None:
     item = advisory("picomatch", "GHSA-aaaa-bbbb-cccc")
     twice = report(item)
     twice["vulnerabilities"]["tinyglobby"] = {"name": "tinyglobby", "via": [item, "picomatch"]}  # type: ignore[index]
+    recount(twice)
     problems, _notes = npm_audit.problems_in(twice, BEFORE, ACCEPTED)
     assert problems == ["GHSA-aaaa-bbbb-cccc (picomatch, high): picomatch is vulnerable"]
 
@@ -583,16 +601,40 @@ def test_an_exception_no_longer_needed_is_noted_not_failed(today: date) -> None:
         {"auditReportVersion": 1, "vulnerabilities": {}},
         [],
         None,
-        {"vulnerabilities": {"x": {"name": "x", "severity": "high", "via": None}}},
-        {"vulnerabilities": {"x": {"name": "x", "severity": "high", "via": "picomatch"}}},
+        # Each of these carries npm's report version, so the shape checks are what refuse it.
+        {"auditReportVersion": 2, "vulnerabilities": {"x": {"name": "x", "via": None}}},
+        {"auditReportVersion": 2, "vulnerabilities": {"x": {"name": "x", "via": "picomatch"}}},
         # Cut short: vite came through esbuild, but esbuild's entry (and its advisory) is missing.
-        {"vulnerabilities": {"vite": {"name": "vite", "severity": "high", "via": ["esbuild"]}}},
+        {
+            "auditReportVersion": 2,
+            "vulnerabilities": {"vite": {"name": "vite", "via": ["esbuild"]}},
+        },
     ],
 )
 def test_a_report_that_is_not_an_audit_fails(broken: object) -> None:
     problems, _notes = npm_audit.problems_in(broken, BEFORE, ACCEPTED)
     assert problems
     assert problems[0].startswith("The npm audit report is unusable")
+
+
+@pytest.mark.parametrize(
+    "metadata",
+    [
+        {"vulnerabilities": {"total": None}},
+        {"vulnerabilities": {"total": 0}},
+        {"vulnerabilities": {"total": 2}},
+        {"vulnerabilities": {"total": "1"}},
+        {"vulnerabilities": [1]},
+        None,
+    ],
+)
+def test_a_report_whose_total_disagrees_with_its_entries_fails(metadata: object) -> None:
+    # One entry, quietly missing another the report counted (or no count at all).
+    audit = report(advisory("picomatch", PICOMATCH))
+    del audit["vulnerabilities"]["a-tool-that-depends-on-it"]  # type: ignore[attr-defined]
+    audit["metadata"] = metadata
+    problems, _notes = npm_audit.problems_in(audit, BEFORE, ACCEPTED)
+    assert problems == [npm_audit.UNUSABLE]
 
 
 def test_main_reads_the_report_and_lockfile_and_sets_the_exit_code(tmp_path: Path) -> None:
@@ -630,5 +672,6 @@ def test_ci_and_make_audit_both_go_through_the_script() -> None:
         assert "npm audit --json" in text
         assert "package-lock.json" in text
         assert "npm audit --audit-level" not in text
+        assert "-gt 1" in text
         # An exit status above 1 isn't swallowed (npm's error reports are the script's to refuse).
         assert "|| true" not in text.split("npm audit --json")[1].split("\n")[0]
