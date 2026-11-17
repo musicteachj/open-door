@@ -56,7 +56,7 @@ describe('the tour script', () => {
       'Now you’re Marcus Bell, the Store Manager at the Oakland store and Priya’s manager. Her request is waiting beside one from Zara Bautista. Approve Priya’s on its card; nothing changes until you confirm.',
     )
     expect(TOUR[4]!.body).toBe(
-      'A manager sees when someone on the team was out, never why. Ask about Leo’s absence last week, and the answer says only that it was approved time off.',
+      'A manager sees when someone on the team was out, never why. Ask about Leo’s absence last week: the answer says only that it was approved time off, and an HR panel may follow, since the reason is private.',
     )
     expect(TOUR[7]!.body).toBe(
       'Now you’re Dana Whitfield, the HR Business Partner at Denver HQ. Priya’s case is new in the queue. Open it: the AI wrote a neutral summary, and her own words stay hidden until you choose to read them.',

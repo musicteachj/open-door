@@ -36,11 +36,14 @@ describe('walkthrough.json', () => {
       step.exchanges.filter((e) => e.speaker === 'person').map((e) => e.text),
     )
     expect(asked).toEqual(TOUR.map((tour) => [...(tour.chips ?? [])]))
-    // Question, reply, question, reply: never two of one kind in a row, and never a reply first.
+    // Each question is followed by its reply: the AI's answer, the HR panel, or an answer and then
+    // the HR panel, as the video shows a turn the safety check sent to a person. Never a reply
+    // first, two questions in a row, two answers, or a panel before its answer.
+    const letter = { person: 'Q', ai: 'A', 'hr-panel': 'P' } as const
     const pattern = WALKTHROUGH.steps.map((step) =>
-      step.exchanges.map((e) => (e.speaker === 'person' ? 'Q' : 'R')).join(''),
+      step.exchanges.map((e) => letter[e.speaker]).join(''),
     )
-    expect(pattern.filter((p) => !/^(QR)*$/.test(p))).toEqual([])
+    expect(pattern.filter((p) => !/^(Q(AP|A|P))*$/.test(p))).toEqual([])
   })
 
   it('has words in every exchange, and sources only on the AI’s answers', () => {

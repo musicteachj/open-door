@@ -10,6 +10,23 @@ version (`0.x.y` while the app is being built, `1.0.0` when it is complete).
 
 ## [Unreleased]
 
+### Changed
+
+- **The guided tour's step 5 says what the live assistant does** (Phase 8 follow-up). Asked "Why was
+  Leo out last week?", Marcus gets an answer that Leo had approved time off, and the live safety
+  check then shows the HR panel, since the reason for an absence is private. The coach mark used to
+  promise only the answer; it now says an HR panel may follow (the scripted model shows none). The
+  owner approved the words on 2026-11-17, as a change to screen 15's copy, instead of changing the
+  safety check's prompt.
+- **The recorded walkthrough was recorded again** with the new words. The transcript test now
+  accepts a question followed by an answer and then the HR panel, the order the video shows.
+
+### Fixed
+
+- **The walkthrough's transcript keeps the answers that come before an HR panel** (steps 5 and 7).
+  The take of 2026-11-16 was recorded before the recorder kept such an answer, so its transcript
+  (the video's text alternative) showed only the panel at both steps.
+
 ## [0.8.0] - 2026-11-17
 
 Phase 8: hardening and deploy-readiness. Open Door now builds as one production image that serves

@@ -377,13 +377,6 @@ digits is caught (Stage 3), and the cleanup job deletes handbook versions no san
   The load test's memory parser also maps `MB` and `MiB` both to 1 while `GB` is 1,000 and `GiB`
   1,024 (Docker prints binary units, so the reports are in MiB). (Phase 8 stage 7 review.)
 
-- **The live safety check sends the tour's step 5 to HR.** Asked "Why was Leo out last week?",
-  Marcus got an answer and then the HR panel in the recording of 2026-11-16, while the coach mark
-  says the answer "says only that it was approved time off". Either the guard's prompt treats a
-  manager's question about an absence as sensitive (a `guard.md` change re-records the escalation
-  set), or the coach mark's words should allow for it (approved screen 15 copy, the owner's call).
-  The recorder can't tell a step that should have an answer from one that should go to HR, so it
-  recorded the take. (Phase 8, the fix branch's review.)
 - **The v0.8.0 release review's lows.** The body cap drops a response's remaining messages if the
   cap is crossed after the app has started it, so that response never completes (no route does
   this today); `sandbox-copy.ts` checks a problem type with `in`, which also matches inherited keys
@@ -391,11 +384,11 @@ digits is caught (Stage 3), and the cleanup job deletes handbook versions no san
   middleware that already does; the unreadable and readable conversation reads write out the clock
   query `database_now` already holds; and four settings validators repeat the "blank means unset"
   test. (v0.8.0 release review.)
-- **Record the walkthrough again to fill step 5's answer.** In the take of 2026-11-16, Marcus's
-  answer to "Why was Leo out last week?" came before the HR panel, and the recorder then kept only
-  the panel, so the transcript (the video's text alternative) lacks words the video shows. The
-  recorder is fixed; the next `make walkthrough YES=1` (about $0.25) fills it. (Phase 8, the fix
-  branch's review.)
+- **An answer followed by the HR panel scrolls out of view almost at once.** When the safety check
+  sends a turn to a person after the answer (the tour's steps 5 and 7 on the live model), the panel
+  arrives and the conversation scrolls to it, so the answer is on screen for about a quarter of a
+  second in the walkthrough of 2026-11-17; the transcript keeps it. Scrolling to the panel's top, or
+  holding the answer in view, would let a reader see both. (The tour step 5 follow-up's review.)
 - **The budget poll and the conversation read can disagree on a damaged conversation.** The
   conversation read calls a conversation unreadable when any stored text fails to open and sizes
   its budget with no history; `GET /assistant/budget` ignores only a history that won't open. With

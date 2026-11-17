@@ -1968,6 +1968,22 @@ written out where `database_now` exists; and four "blank means unset" validators
 No new live run: nothing the model reads changed after the full run of 2026-11-12, so the
 scoreboard is unchanged. The phase checklist is closed.
 
+### After the release: tour step 5 (`fix/tour-step-5`, 2026-11-17)
+
+The two step 5 items the fix branch's review left open, settled in one PR:
+- **The coach mark's words.** In both live takes that reached step 5, the live safety check sent
+  "Why was Leo out last week?" to HR after the answer. The owner chose to change the words (screen
+  15's approved copy) rather than the guard's prompt, which would need a full eval run. Step 5 now
+  reads "... the answer says only that it was approved time off, and an HR panel may follow, since
+  the reason is private." "May" keeps it true on the scripted model, which shows no panel.
+- **The transcript test** required a reply after each question and never two replies in a row, so
+  a turn recorded as an answer and then the HR panel (what `exchangesOf` writes since #122) failed
+  it. It now accepts an answer, a panel, or an answer then a panel (mutation-proved).
+- **The walkthrough was recorded again** (one take, $0.21; the recording has now spent $1.22 of its
+  $2 cap) so the transcript has the new words and the answers before an HR panel, at step 5 and
+  also at step 7, where the old recorder had dropped Priya's answer too. The answer still scrolls
+  past in about a quarter of a second in the video, as the HR panel arrives; the transcript holds it.
+
 ## Backlog
 
 (Low findings from the stages' reviews, with their reasons.)
