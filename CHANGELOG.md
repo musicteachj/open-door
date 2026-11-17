@@ -12,6 +12,17 @@ version (`0.x.y` while the app is being built, `1.0.0` when it is complete).
 
 ### Changed
 
+- **The tour's step 3 asks for "this Friday", not "next Friday"** (Phase 8, stage 9). On many days
+  the live model asked which Friday "next Friday" meant (this week's or the next), so the step
+  often ended with a question instead of the card it is there to show. The chip is now "Book this
+  Friday off." and the hint "Ask for this Friday."; the scripted model and the load test follow.
+- **The AI governance assessment is complete** (Phase 8, stage 9, Task 47). Article 50(2) of the
+  EU AI Act, re-read from the official text, covers any provider whose system writes text, not only
+  published text, so a deployed Open Door must mark its answers in a machine-readable way; that is
+  now a Phase 9 item. The document adds the threat model's AI risks, the Claude API over Bedrock,
+  Cloudflare, retention, the walkthrough, and a review of the whole assessment against the finished
+  product. The backlog closes four items Phase 8 fixed and moves the rest out of Phase 8.
+
 - **The deploy's to-do list is in one place** (Phase 8, stage 7, Task 39). The backlog's Phase 9
   section now holds every item the Phase 8 spec moved there (the KMS provider, the secrets and
   settings contract, the task definitions with the load test's sizes, the cleanup's schedule, the
@@ -235,6 +246,12 @@ version (`0.x.y` while the app is being built, `1.0.0` when it is complete).
 
 ### Fixed
 
+- **A missing file under `/media/` is a 404, not the app's page** (Phase 8, stage 9). The
+  production image answered any unknown path with the page, so a video element pointed at a
+  missing file was handed HTML and failed without a word. The video is served with range requests
+  (206), which Safari needs to play it; tests now pin that. The video and poster are asked for again
+  on each visit (`no-cache`, answered 304 while unchanged), so a recording made again never shows
+  beside the transcript of the one before; every file at the site's root now gets its 304.
 - **A control that takes focus on the conversation page is never hidden behind the composer**
   (Phase 8, stage 8, the accessibility audit, WCAG 2.4.11). Tab could land on the HR panel's
   contact links, the "How confidential HR cases work" link, or a confirm card's Confirm while each
@@ -336,6 +353,29 @@ version (`0.x.y` while the app is being built, `1.0.0` when it is complete).
 
 ### Added
 
+- **The recorded walkthrough** (Phase 8, stage 9, Task 44; screen 16, ADR 0019). A public page at
+  `/walkthrough`, with no sign-in, shows the guided tour recorded once with the live assistant:
+  the video with the browser's own controls (never autoplaying, and downloading nothing until it is
+  played), when and with which model it was recorded, and a transcript of all ten steps as text,
+  which is the video's text alternative. Answers carry the AI label; the HR panel's fixed text
+  never does. "Back to the demo" returns to the page the visitor came from, or to the landing. The
+  landing links it beside the tour button and says that starting a sandbox runs a Cloudflare
+  check. When the demo's daily AI limit is reached, the banner links it under its text; the
+  sandbox's own limit doesn't, since a new sandbox is the way on. The transcript is checked
+  against the tour's own script, so a change to the tour fails the tests until the video is
+  recorded again. The page is in the accessibility audit, with a keyboard walk of its own. The
+  video was recorded on 2026-11-16 with Claude Opus 5.5 (3 minutes 36 seconds, Task 45).
+- **`make walkthrough` records the walkthrough again, and a live check proves the production image
+  end to end** (Phase 8, stage 9, Tasks 45 and 46). Both are paid, local, and run only with the
+  owner's OK. The recorder drives the tour's own ten steps against the production image on a
+  throwaway database, at reading pace with a visible cursor, and writes the video (H.264, under
+  8 MB), its poster (step 3's confirm card), and the transcript from the page's own answers. One
+  cap covers all of a recording's takes, enforced by the app's own AI budget; a free dry run uses
+  the scripted model, and a failed take keeps each turn's status and the API's log. The live check
+  starts a sandbox, gets a cited answer, books a day off and confirms it, then checks the database:
+  tokens, cost, cache reads, and the serving model on every turn, every question sealed, no
+  plaintext anywhere, and no content-security-policy violation in the browser. Its first run passed
+  ($0.12). `make live-check YES=1` builds the image first, so it checks what will ship.
 - **An accessibility audit that runs with the browser tests** (Phase 8, stage 8, Tasks 41 and 42).
   New checks for what axe doesn't measure: reflow at 320 px (WCAG 1.4.10), text spacing (1.4.12),
   reduced motion, target size (2.5.8), focus not hidden behind the sticky parts (2.4.11), and a

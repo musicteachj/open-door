@@ -392,6 +392,16 @@ async function reachScreen(page: Page, row: ScreenRow) {
     case 'tour':
       await reachTour(page, row.state as TourState)
       break
+    case 'walkthrough':
+      await expect(page.getByRole('heading', { level: 1, name: 'The recorded walkthrough' })).toBeVisible()
+      break
+    case 'walkthrough-transcript':
+      // The frame starts at step 3's rule.
+      await page.locator('#step-3').evaluate((step) => step.scrollIntoView())
+      break
+    case 'walkthrough-poster':
+      await expect(page.locator('img')).toBeVisible()
+      break
     case 'home':
     case 'expiry-banner':
       await expect(page.getByRole('heading', { level: 1 })).toBeVisible()
@@ -1379,7 +1389,7 @@ async function reachTour(page: Page, state: TourState) {
       await startTourFromLanding(page)
       await jumpToTourStep(page, 2, /Book a day off/)
       await tourMark(page, /Book a day off/)
-        .getByRole('button', { name: /^Book next Friday/ })
+        .getByRole('button', { name: /^Book this Friday/ })
         .click()
       await expect(page.locator('[data-slot="confirm-card"]')).toBeVisible()
       await expect(
@@ -1393,7 +1403,7 @@ async function reachTour(page: Page, state: TourState) {
       await expect(composerBox(page)).toBeVisible()
       const stream = await holdNextTurnStream(page)
       await tourMark(page, /Book a day off/)
-        .getByRole('button', { name: /^Book next Friday/ })
+        .getByRole('button', { name: /^Book this Friday/ })
         .click()
       await stream.push('turn.started', { turnId: '00000000-0000-4000-8000-000000000003' })
       await stream.push('text.delta', {

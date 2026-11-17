@@ -3,6 +3,7 @@ import { Button } from '@/components/ui/button'
 import { useMediaQuery } from '@/hooks/use-media-query'
 import { cn } from '@/lib/utils'
 import { PHONE_MAX_WIDTH } from './place-coach-mark'
+import { TOUR_END_SUMMARY } from './end-card-copy'
 import { useTourEscape } from './use-tour-escape'
 
 type TourEndCardProps = {
@@ -74,11 +75,7 @@ function TourEndCard({
         <span className="sr-only">{'Step 10 of 10: '}</span>
         That’s the tour
       </h2>
-      <p className="m-0 text-body text-pretty">
-        You’ve seen answers that change by state and always cite the handbook, a day off requested
-        and approved on cards a person confirmed, private details kept private, a sensitive concern
-        sent to HR in the person’s own words, and a record of everything the AI did.
-      </p>
+      <p className="m-0 text-body text-pretty">{TOUR_END_SUMMARY}</p>
       <p className="m-0 text-body text-pretty text-ink-muted">
         This sandbox stays for 24 hours, so keep exploring.
       </p>

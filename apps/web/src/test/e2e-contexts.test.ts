@@ -11,9 +11,12 @@ const ALLOWED = new Set(['fixtures.ts', 'csp-guard.spec.ts'])
 it('no browser test makes a bare context', () => {
   // Recursive: Playwright finds specs in subfolders too. `captures/` is `make captures`'s own
   // config (playwright.captures.config.ts), which the browser suite ignores and CI never runs.
+  // `walkthrough/` is `make walkthrough`'s recorder (playwright.walkthrough.config.ts), likewise
+  // never in the suite or CI: it opens its own context to record video, against the real
+  // Turnstile script the guard's fake would replace, and fails a take on any CSP violation itself.
   const offenders = readdirSync(e2eDir, { recursive: true, encoding: 'utf8' })
     .filter((name) => name.endsWith('.ts') && !ALLOWED.has(name))
-    .filter((name) => !name.startsWith('captures/'))
+    .filter((name) => !name.startsWith('captures/') && !name.startsWith('walkthrough/'))
     .filter((name) =>
       /\.newContext\(|\bbrowser\.newPage\(/.test(readFileSync(join(e2eDir, name), 'utf8')),
     )

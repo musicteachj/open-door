@@ -103,7 +103,7 @@ class Ask:
 
 
 SICK_DAYS = "How many sick days do I get?"
-BOOK_FRIDAY = "Book next Friday off."
+BOOK_FRIDAY = "Book this Friday off."
 WAITING_ON_ME = "Anything waiting on me?"
 APPROVE_PRIYA = "Approve Priya\u2019s request."
 LEO_OUT = "Why was Leo out last week?"

@@ -10,13 +10,13 @@ import {
   toast,
   workdays,
 } from '../time-off-helpers'
-import { step, tabTo } from './checks'
+import { focusRingShows, step, tabTo } from './checks'
 
 // The audit's keyboard walks (Phase 8, Stage 8): each main flow done with the keyboard alone (Tab,
 // Shift+Tab, the arrow keys, Enter, Space, and Escape; no clicks). Every stop on the way is checked
 // for a visible focus ring and for not being hidden behind the sticky header, the composer, or the
 // coach mark (2.4.11); each step asserts where focus is. A stop that shows only in part is noted on
-// the test as a "partly covered" annotation, a low finding. The walkthrough page joins in Stage 9.
+// the test as a "partly covered" annotation, a low finding.
 
 test.use({ viewport: { width: 1280, height: 800 } })
 
@@ -269,4 +269,76 @@ test('the tour: start, a step across personas, leave, and resume', async ({ page
   // And it stays there: the closing menu must not take it back to the switcher a moment later.
   await page.waitForTimeout(250)
   expect(await title.evaluate((el) => el === document.activeElement)).toBe(true)
+})
+
+test('watch the recorded walkthrough from the landing, and come back', async ({ page }) => {
+  await page.goto('/')
+  await focusPageStart(page)
+  await tabTo(page, 'Watch the recorded walkthrough')
+  await page.keyboard.press('Enter')
+  await expect(page).toHaveURL('/walkthrough')
+  await expect(
+    page.getByRole('heading', { level: 1, name: 'The recorded walkthrough' }),
+  ).toBeVisible()
+  // The logo, Back, then the video's own controls. The transcript is text: nothing in it takes
+  // focus (sources are plain text, not links), so the next Tab leaves the page.
+  await focusPageStart(page)
+  await step(page, 'Tab', 'Open Door home')
+  await step(page, 'Tab', 'Back to the demo')
+  // The video itself is the first stop. It draws the app's focus ring, and nothing around it
+  // clips the ring away (a rounded frame with overflow hidden would).
+  await page.keyboard.press('Tab')
+  await expect(page.locator('video')).toBeFocused()
+  expect(await focusRingShows(page), 'the video shows its focus ring').toBe(true)
+  expect(
+    await page.locator('video').evaluate((video) => {
+      const style = getComputedStyle(video)
+      const reach = parseFloat(style.outlineWidth) + parseFloat(style.outlineOffset)
+      const box = video.getBoundingClientRect()
+      const clipped: string[] = []
+      for (let up = video.parentElement; up && up !== document.body; up = up.parentElement) {
+        const { overflowX, overflowY } = getComputedStyle(up)
+        if (overflowX === 'visible' && overflowY === 'visible') continue
+        const frame = up.getBoundingClientRect()
+        if (
+          frame.left > box.left - reach ||
+          frame.top > box.top - reach ||
+          frame.right < box.right + reach ||
+          frame.bottom < box.bottom + reach
+        )
+          clipped.push(up.outerHTML.slice(0, 60))
+      }
+      return clipped
+    }),
+    'no frame clips the video’s ring',
+  ).toEqual([])
+  // The browser's own controls are Tab stops inside the video (play, the timeline, the volume, full
+  // screen), so focus stays on the video for a few presses, then leaves the page.
+  const isOn = () =>
+    page.evaluate(() =>
+      document.activeElement === document.body
+        ? 'the end of the page'
+        : document.activeElement?.tagName === 'VIDEO'
+          ? 'the video'
+          : (document.activeElement?.outerHTML.slice(0, 80) ?? ''),
+    )
+  const stops: string[] = []
+  for (let presses = 0; presses < 12; presses += 1) {
+    await page.keyboard.press('Tab')
+    const now = await isOn()
+    stops.push(now)
+    if (now !== 'the video') break
+  }
+  expect(stops.at(-1)).toBe('the end of the page')
+  expect(stops.filter((stop) => stop !== 'the video' && stop !== 'the end of the page')).toEqual([])
+  // Back from the end: through the video's controls, then "Back to the demo", which returns to the
+  // landing.
+  for (let presses = 0; presses < 12; presses += 1) {
+    await page.keyboard.press('Shift+Tab')
+    if ((await isOn()) !== 'the video') break
+  }
+  await step(page, '', 'Back to the demo')
+  await page.keyboard.press('Enter')
+  await expect(page).toHaveURL('/')
+  await expect(page.getByRole('link', { name: 'Watch the recorded walkthrough' })).toBeVisible()
 })

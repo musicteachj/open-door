@@ -7,8 +7,14 @@ and get answers that cite the company handbook. The assistant proposes actions l
 off, and nothing changes until a person confirms. Sensitive topics go to a human, never to the
 model.
 
-> **Status:** planning is complete and the build has not started. See the roadmap for the phase
-> status.
+> **Status:** Phases 1 to 8 are built: the assistant, time off, confidential cases, the AI Ops
+> console, the guided tour, and the hardening for deployment. It runs locally and in a production
+> image; deploying to AWS is Phase 9, held until the owner's portfolio apps deploy together. See
+> the [roadmap](docs/ROADMAP.md).
+
+**Watch it first:** the demo's [recorded walkthrough](apps/web/public/media/walkthrough.mp4) (about 3½
+minutes, no sound) follows the guided tour's ten steps with the live assistant. Its transcript is
+on the app's `/walkthrough` page, which is also offered when the demo's daily AI limit is reached.
 
 ## The rules the assistant never breaks
 
@@ -69,6 +75,9 @@ The sets are small (207 items in the full set), so a single item can move a figu
 | [Decision records](docs/adr/README.md) | The big architecture decisions and what was rejected |
 | [Data inventory](docs/DATA-INVENTORY.md) | Every piece of data stored, why, who can see it, and how long it's kept |
 | [Threat model](docs/THREAT-MODEL.md) | What is protected, who might attack, and the control and test behind each threat |
+| [AI governance](docs/AI-GOVERNANCE.md) | The EU AI Act assessment, the models and their pins, and what reaches each AI vendor |
+| [Accessibility](docs/ACCESSIBILITY.md) | How WCAG 2.2 AA is checked, what the audit found, and the VoiceOver checklist |
+| [Capacity](docs/CAPACITY.md) | The cost and load test: what one task carries, and what a day's AI budget buys |
 | [Design handoff](docs/design/README.md) | How designs from Claude Design become screens |
 | [Initial plan](docs/plans/2026-09-29-open-door-initial-plan.md) | The frozen record of the original planning decisions |
 | [Project rules](CLAUDE.md) | How work is done in this repository |
@@ -88,6 +97,16 @@ You need Node 24, [uv](https://docs.astral.sh/uv/), and Docker Desktop.
 make setup   # install dependencies and create apps/api/.env
 make dev     # start Postgres, migrate, and run the API (:8000) and web app (:5173)
 make check   # run everything CI runs
+```
+
+A few more, each described in [`CLAUDE.md`](CLAUDE.md#commands):
+
+```
+make prod-local   # the production image with production settings on its own empty database (questions are paid)
+make cleanup      # delete expired sandboxes and old ledger rows, as the cleanup login
+make load         # the free cost and load test against the production image
+make live-check   # the production image end to end with the real model (paid; YES=1)
+make walkthrough  # record the walkthrough video again (paid; YES=1)
 ```
 
 `make` on its own lists every command.

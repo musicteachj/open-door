@@ -17,9 +17,9 @@ from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.responses import FileResponse, HTMLResponse, Response
-from starlette.datastructures import MutableHeaders
+from starlette.datastructures import Headers, MutableHeaders
 from starlette.exceptions import HTTPException
-from starlette.staticfiles import StaticFiles
+from starlette.staticfiles import NotModifiedResponse, StaticFiles
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 from app.core.api_paths import API_PREFIX, is_api_request, route_path
@@ -30,6 +30,12 @@ from app.core.security_headers import content_security_policy
 ASSET_CACHE_CONTROL = "public, max-age=31536000, immutable"
 FILE_CACHE_CONTROL = "public, max-age=3600"
 INDEX_NAME = "index.html"
+# Files the page loads by URL (the walkthrough's video and poster). A path under it is a file or a
+# 404, never the page: a video element handed HTML fails without a word.
+MEDIA_PREFIX = "media/"
+# The walkthrough's video and poster keep their names when recorded again, while its transcript
+# ships in the page's hashed code, so they are asked for again on each visit (a 304 if unchanged).
+MEDIA_CACHE_CONTROL = "no-cache"
 NONCE_BYTES = 16
 
 # The two placeholders `apps/web/index.html` carries, empty, which Vite's build keeps.
@@ -159,6 +165,12 @@ def install_web_app(app: FastAPI, settings: Settings) -> None:
             await fallback(scope, receive, send)
             return
         response = respond(route_path(scope).lstrip("/"))
+        # A root file the browser already holds is a 304, as StaticFiles answers its own:
+        # FileResponse alone would send it again, and the media's `no-cache` asks on every visit.
+        if isinstance(response, FileResponse) and files.is_not_modified(
+            response.headers, Headers(scope=scope)
+        ):
+            response = NotModifiedResponse(response.headers)
         await response(scope, receive, send)
 
     def respond(full_path: str) -> Response:
@@ -168,7 +180,17 @@ def install_web_app(app: FastAPI, settings: Settings) -> None:
             return not_found()
         found = _file_inside(root, full_path)
         if found is not None:
-            return FileResponse(found, headers={CACHE_CONTROL_HEADER: FILE_CACHE_CONTROL})
+            # FileResponse answers a Range request with 206 (or 416), which Safari needs to play
+            # the walkthrough's video.
+            cache = (
+                MEDIA_CACHE_CONTROL if full_path.startswith(MEDIA_PREFIX) else FILE_CACHE_CONTROL
+            )
+            # The file's stat now, so its ETag and Last-Modified are known before it is sent.
+            return FileResponse(
+                found, stat_result=found.stat(), headers={CACHE_CONTROL_HEADER: cache}
+            )
+        if full_path.startswith(MEDIA_PREFIX):
+            return not_found()
         return page()
 
     app.router.default = web_app

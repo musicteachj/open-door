@@ -27,6 +27,7 @@ from app.ai.scripted import (
     _time_off_first_call,
     load_scenarios,
     next_friday,
+    this_friday,
     today_from_context,
 )
 from app.ai.transport import (
@@ -633,6 +634,22 @@ def test_next_friday_is_the_friday_of_the_following_week(today: date, expected: 
     assert expected.weekday() == 4
 
 
+@pytest.mark.parametrize(
+    ("today", "expected"),
+    [
+        (date(2026, 10, 12), date(2026, 10, 16)),  # Monday
+        (date(2026, 10, 15), date(2026, 10, 16)),  # Thursday
+        (date(2026, 10, 16), date(2026, 10, 16)),  # Friday: today
+        (date(2026, 10, 17), date(2026, 10, 23)),  # Saturday: the coming one
+        (date(2026, 10, 18), date(2026, 10, 23)),  # Sunday
+        (date(2026, 12, 26), date(2027, 1, 1)),  # across the new year
+    ],
+)
+def test_this_friday_is_the_coming_friday(today: date, expected: date) -> None:
+    assert this_friday(today) == expected
+    assert expected.weekday() == 4
+
+
 def test_today_is_read_from_the_last_system_message() -> None:
     older = context_message(date(2026, 9, 1))
     messages = [user("a"), older, user("b"), context_message(date(2026, 10, 15))]
@@ -657,6 +674,16 @@ async def check_book_friday(transport: ScriptedTransport, question: str) -> None
     assert (call.name, call.input) == (
         "propose_time_off_request",
         book_input(date(2026, 10, 23)),
+    )
+    assert finished_of(first).stop_reason == "tool_use"
+
+
+async def check_book_this_friday(transport: ScriptedTransport, question: str) -> None:
+    first = await collect(transport, a_request(*with_context(question)))
+    call = the_call(first)
+    assert (call.name, call.input) == (
+        "propose_time_off_request",
+        book_input(date(2026, 10, 16)),
     )
     assert finished_of(first).stop_reason == "tool_use"
 
@@ -749,6 +776,7 @@ CHECKS: dict[str, Check] = {
     "open_cases": check_open_cases,
     "cases_due": check_cases_due,
     "book_friday": check_book_friday,
+    "book_this_friday": check_book_this_friday,
     "sick_tomorrow": check_sick_tomorrow,
     "show_balance": check_show_balance,
     "waiting_on_me": check_waiting_on_me,
@@ -1089,6 +1117,24 @@ async def test_book_next_friday_asks_for_a_card_then_says_nothing_is_booked_yet(
     )
     assert finished_of(second).stop_reason == "end_turn"
     assert all(event.citations == () for event in second if isinstance(event, TextBlockEnd))
+
+
+async def test_book_this_friday_asks_for_a_card_for_this_weeks_friday() -> None:
+    """The tour's step 3 chip: "this Friday" is the coming Friday; "next Friday" is a week on."""
+    transport = ScriptedTransport()
+    messages = with_context("Book this Friday off.")
+    first = await collect(transport, a_request(*messages))
+
+    call = the_call(first)
+    assert call.name == "propose_time_off_request"
+    assert call.input == book_input(date(2026, 10, 16))
+
+    card = {"ok": True, "amountLabel": "8 hours (1 day)", "countedDays": ["2026-10-16"]}
+    second = await collect(transport, a_request(*messages, *tool_round(first, result=card)))
+    assert text_of(second) == (
+        "I've prepared a card to book PTO for Friday, October 16: 8 hours (1 day). "
+        "Nothing is booked until you confirm."
+    )
 
 
 async def test_im_sick_tomorrow_asks_for_a_sick_card() -> None:
@@ -1598,6 +1644,7 @@ CHECKS_TIME_OFF = {
     "approve_named",
     "absence_of",
     "book_friday",
+    "book_this_friday",
     "sick_tomorrow",
     "show_balance",
     "waiting_on_me",

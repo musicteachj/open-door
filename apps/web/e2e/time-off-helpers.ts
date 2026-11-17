@@ -254,21 +254,23 @@ export async function settledScan(
 /**
  * The scripted model's two date-dependent turns work out their day from today, and a day that does
  * not count (a company holiday, or off the person's schedule) makes a refusal instead of a card.
- * "book next friday" is the Friday of the following Monday-to-Sunday week; "I'm sick tomorrow" is
- * the day after today. A test that needs a card calls this and skips, with the reason, on a date
+ * "book next friday" is the Friday of the following Monday-to-Sunday week; "book this friday" (the
+ * tour's step 3) is the coming Friday, today on a Friday; "I'm sick tomorrow" is the day after today. A test that needs a card calls this and skips, with the reason, on a date
  * when the day does not count. The model is not changed.
  */
 export async function skipUnlessScriptedDayCounts(
   test: { skip: (condition: boolean, description: string) => void },
   page: Page,
-  turn: 'book next friday' | "I'm sick tomorrow",
+  turn: 'book next friday' | 'book this friday' | "I'm sick tomorrow",
 ) {
   const facts = await factsOf(page)
   const weekday = new Date(Date.parse(facts.today)).getUTCDay() || 7
-  const day =
-    turn === 'book next friday'
-      ? addDaysTo(facts.today, 8 - weekday + 4)
-      : addDaysTo(facts.today, 1)
+  const offset = {
+    'book next friday': 8 - weekday + 4,
+    'book this friday': (5 - weekday + 7) % 7,
+    "I'm sick tomorrow": 1,
+  }[turn]
+  const day = addDaysTo(facts.today, offset)
   const dayOfWeek = new Date(Date.parse(day)).getUTCDay() || 7
   const counts = facts.weekdays.includes(dayOfWeek) && !facts.holidays.includes(day)
   test.skip(

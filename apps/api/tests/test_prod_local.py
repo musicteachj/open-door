@@ -354,3 +354,89 @@ def test_a_ctrl_c_before_the_api_container_exists_still_stops_it(
 
     assert code == 0
     assert len(stops) >= 3
+
+
+# --- Phase 8 Task 45 and 46: the recording and the live check reuse the launcher ---------------
+
+
+def test_the_scripted_mode_runs_the_image_as_a_test_with_no_model_key() -> None:
+    # The free dry run of the recording and the live check: production refuses the scripted model,
+    # so the same image runs with APP_ENV=test, paced like the real model, and holds no API key.
+    env = api_env(scripted=True)
+
+    assert env["APP_ENV"] == "test"
+    assert env["AI_TRANSPORT"] == "scripted"
+    assert env["SCRIPTED_DELAY_PROFILE"] == "realistic"
+    assert "ANTHROPIC_API_KEY" not in env
+    assert env["APP_ORIGIN"] == "http://localhost:8300"
+
+
+def test_a_run_can_lower_the_ai_budgets_for_a_capped_paid_run() -> None:
+    env = api_env(budgets_usd={"daily": "0.66", "sandbox": "0.66"})
+
+    assert env["AI_DAILY_BUDGET_USD"] == "0.66"
+    assert env["AI_SANDBOX_BUDGET_USD"] == "0.66"
+    assert env["APP_ENV"] == "production"
+
+
+@pytest.mark.parametrize("bad", ["0", "-1", "abc", "1e3", "NaN"])
+def test_a_budget_must_be_a_positive_dollar_amount(bad: str) -> None:
+    with pytest.raises(start.LaunchError, match="budget"):
+        api_env(budgets_usd={"daily": bad})
+
+
+def test_only_the_two_budgets_can_be_set() -> None:
+    with pytest.raises(start.LaunchError, match="budget"):
+        api_env(budgets_usd={"monthly": "1"})
+
+
+def test_the_database_query_runs_as_the_owner_inside_its_container() -> None:
+    args = start.query_args("SELECT 1")
+
+    assert args[:3] == ["docker", "exec", start.DB_NAME]
+    assert args[args.index("-U") + 1] == start.DB_OWNER
+    assert args[args.index("-d") + 1] == start.DB_DATABASE
+    assert args[-2:] == ["-c", "SELECT 1"]
+    assert "-At" in args
+
+
+def test_running_stops_everything_when_the_body_fails(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: list[str] = []
+    monkeypatch.setattr(start, "bring_up", lambda *_a, **_k: (True, {"PORT": "8300"}))
+    monkeypatch.setattr(start.container, "run", lambda *_a, **_k: calls.append("run"))
+    monkeypatch.setattr(start, "wait_until_ready", lambda _base: calls.append("ready"))
+    monkeypatch.setattr(
+        start, "cleanup", lambda *, made_network: calls.append(f"cleanup {made_network}")
+    )
+
+    def body() -> None:
+        with start.running(object(), 8300) as base:
+            calls.append(base)
+            raise RuntimeError
+
+    with pytest.raises(RuntimeError):
+        body()
+
+    assert calls == ["run", "ready", "http://localhost:8300", "cleanup True"]
+
+
+def test_running_passes_the_mode_and_budgets_to_the_settings(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    seen: dict[str, object] = {}
+
+    def fake_bring_up(
+        _secrets: object, _port: int, **options: object
+    ) -> tuple[bool, dict[str, str]]:
+        seen.update(options)
+        return False, {}
+
+    monkeypatch.setattr(start, "bring_up", fake_bring_up)
+    monkeypatch.setattr(start.container, "run", lambda *_a, **_k: None)
+    monkeypatch.setattr(start, "wait_until_ready", lambda _base: None)
+    monkeypatch.setattr(start, "cleanup", lambda *, made_network: None)
+
+    with start.running(object(), 8300, scripted=True, budgets_usd={"daily": "1"}):
+        pass
+
+    assert seen == {"scripted": True, "budgets_usd": {"daily": "1"}}

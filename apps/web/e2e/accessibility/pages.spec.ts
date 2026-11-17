@@ -1,7 +1,14 @@
 import { expect, test } from '../fixtures'
 import type { Page } from '@playwright/test'
 import { CRISIS_WORDS, SENSITIVE_QUESTION, openCaseButton, queueRows } from '../cases-helpers'
-import { QUESTIONS, ask, askAndWaitForAnswer, assistantMessage } from '../conversation-helpers'
+import {
+  BUDGET_DAILY_TEXT,
+  QUESTIONS,
+  ask,
+  askAndWaitForAnswer,
+  assistantMessage,
+  stubConversation,
+} from '../conversation-helpers'
 import { startAs } from '../helpers'
 import {
   cards,
@@ -21,7 +28,7 @@ import {
 } from './checks'
 
 // The audit's sweep (Phase 8, Stage 8): every page, and the states a person reaches on the main
-// flows, checked for what axe doesn't measure. Axe itself already scans each of these in its own
+// flows (and the recorded walkthrough, added in Stage 9), checked for what axe doesn't measure. Axe itself already scans each of these in its own
 // spec. Each test reaches one state with reduced motion on, then checks, at its desktop width and
 // again at 320 px: nothing moves, every target is big enough or has room, no text is lost under
 // 1.4.12's spacing (apart from the known lows below), and (at 320 px) nothing needs a sideways
@@ -89,6 +96,31 @@ const navLink = (page: Page, name: string | RegExp) => nav(page).getByRole('link
 test('the landing page', async ({ page }) => {
   await page.goto('/')
   await expect(page.getByRole('button', { name: 'Take the 2-minute tour' })).toBeVisible()
+  await audit(page)
+})
+
+test('the recorded walkthrough', async ({ page }) => {
+  await page.goto('/walkthrough')
+  await expect(
+    page.getByRole('heading', { level: 1, name: 'The recorded walkthrough' }),
+  ).toBeVisible()
+  await audit(page)
+})
+
+test('the daily-limit banner with its walkthrough link (STUB: the conversation GET)', async ({
+  page,
+}) => {
+  await startAs(page, 'Priya')
+  await askAndWaitForAnswer(page, QUESTIONS.cited)
+  await stubConversation(page, (body) => {
+    body.budget = {
+      ...body.budget,
+      dailyReached: true,
+      banner: { kind: 'daily', message: BUDGET_DAILY_TEXT },
+    }
+  })
+  await page.reload()
+  await expect(page.getByRole('link', { name: 'Watch the recorded walkthrough' })).toBeVisible()
   await audit(page)
 })
 
