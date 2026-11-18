@@ -34,6 +34,7 @@ import {
   SICK_LEAVE_SENTENCE,
 } from './held-stream'
 import { greetingHeading, problem, scan, startAs, switchTo, themeColor } from './helpers'
+import { railLink } from './time-off-helpers'
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 
@@ -869,6 +870,10 @@ test.describe('the header and the conversation', () => {
   }) => {
     await startAs(page, 'Priya')
     await askAndWaitForAnswer(page, QUESTIONS.cited)
+    // The rail's time-off figures load with their own request, which can still be on its way when
+    // the answer is done. Tabbing before they arrive reads a rail without them.
+    await expect(railLink(page, 'PTO available')).toBeVisible()
+    await expect(railLink(page, 'requests? pending')).toBeVisible()
     await focusPageStart(page)
     const stops = await tabStops(page, 18)
     const source = 'Source 1: Handbook §4.3, Time off'

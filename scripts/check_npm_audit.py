@@ -51,10 +51,11 @@ ACCEPTED: tuple[Accepted, ...] = (
         advisory="GHSA-fc5q-39xc-vjpf",
         package="picomatch",
         severity="high",
-        until=date(2026, 12, 17),
+        until=date(2027, 1, 17),
         reason=(
             "A ReDoS in picomatch's extglob matching. On 2026-11-17 the advisory was widened to "
-            "every version up to 4.0.7, the latest, with no fixed release. Only build and test "
+            "every version up to 4.0.7, the latest, with no fixed release (still none on "
+            "2026-11-17, when the owner extended this to 2027-01-17). Only build and test "
             "tools use picomatch (Vite, Vitest, Orval): the shipped app has none, and the globs "
             "they match come from the repository's own config, not from visitors."
         ),

@@ -6,7 +6,15 @@ import { TOUR, type TourStep } from '../../src/features/tour/script'
 import type { Walkthrough, WalkthroughStep } from '../../src/features/walkthrough/types'
 import { modelDisplayName } from '../../src/lib/models'
 import { watchCsp } from '../fixtures'
-import { exchangesOf, holdMs, localIsoDate, NOTES, summaryNote, type RecordedTurn } from './build'
+import {
+  exchangesOf,
+  holdMs,
+  localIsoDate,
+  NOTES,
+  summaryNote,
+  turnHoldMs,
+  type RecordedTurn,
+} from './build'
 
 // The recording (Phase 8, Task 45): the guided tour's own steps, at a reading pace, with a cursor
 // that moves like a person's, recorded at 1440 by 900. It writes, into WALKTHROUGH_OUT:
@@ -19,7 +27,6 @@ import { exchangesOf, holdMs, localIsoDate, NOTES, summaryNote, type RecordedTur
 
 const OUT = process.env.WALKTHROUGH_OUT ?? '/tmp/od-walkthrough/take'
 const MODEL_ID = process.env.WALKTHROUGH_MODEL_ID ?? 'scripted'
-const ANSWER_HOLD_MAX_MS = 5000
 const TURN_TIMEOUT_MS = 120_000
 const HARASSMENT = 'Harassment or discrimination'
 
@@ -145,10 +152,7 @@ async function sendChips(page: Page, step: TourStep): Promise<RecordedTurn[]> {
     const last = turns.at(-1)!
     // A turn the take can't use stops it here, before the step's next question is paid for.
     exchangesOf([last])
-    await pause(
-      page,
-      Math.min(holdMs(last.escalation?.message ?? last.answerText), ANSWER_HOLD_MAX_MS),
-    )
+    await pause(page, turnHoldMs(last))
   }
   const turns = await storedTurns(page)
   return turns.slice(before)
