@@ -200,7 +200,10 @@ should pick it up. When one is done, delete it here and record it in the changel
   card (requested), not what happened to the request since, and the model words it as the present
   status. Tell the request's current status, or word the line in the past tense; it changes what
   the model is told, so it needs a full eval run, and the walkthrough is recorded again after.
-  (Phase 8, Stage 9.)
+  The takes of 2026-11-17 repeat it at step 6, and the second also opens Marcus's answer about Leo
+  (step 5) with "Priya Raman's PTO for Friday, November 20 is now approved.", a recap of the card
+  he had just confirmed, before answering the question; telling the model not to recap a card the
+  person has already seen would cover both. (Phase 8, Stage 9; the v0.8.1 takes.)
 - **"Book next Friday off" in the personas' "Try asking" lists is ambiguous.** The live model
   asks which Friday is meant on many days (this week's or next week's), so the suggestion often
   gets a question instead of a card. The tour's chip became "Book this Friday off." in Phase 8,
@@ -377,13 +380,6 @@ digits is caught (Stage 3), and the cleanup job deletes handbook versions no san
   The load test's memory parser also maps `MB` and `MiB` both to 1 while `GB` is 1,000 and `GiB`
   1,024 (Docker prints binary units, so the reports are in MiB). (Phase 8 stage 7 review.)
 
-- **The live safety check sends the tour's step 5 to HR.** Asked "Why was Leo out last week?",
-  Marcus got an answer and then the HR panel in the recording of 2026-11-16, while the coach mark
-  says the answer "says only that it was approved time off". Either the guard's prompt treats a
-  manager's question about an absence as sensitive (a `guard.md` change re-records the escalation
-  set), or the coach mark's words should allow for it (approved screen 15 copy, the owner's call).
-  The recorder can't tell a step that should have an answer from one that should go to HR, so it
-  recorded the take. (Phase 8, the fix branch's review.)
 - **The v0.8.0 release review's lows.** The body cap drops a response's remaining messages if the
   cap is crossed after the app has started it, so that response never completes (no route does
   this today); `sandbox-copy.ts` checks a problem type with `in`, which also matches inherited keys
@@ -391,11 +387,21 @@ digits is caught (Stage 3), and the cleanup job deletes handbook versions no san
   middleware that already does; the unreadable and readable conversation reads write out the clock
   query `database_now` already holds; and four settings validators repeat the "blank means unset"
   test. (v0.8.0 release review.)
-- **Record the walkthrough again to fill step 5's answer.** In the take of 2026-11-16, Marcus's
-  answer to "Why was Leo out last week?" came before the HR panel, and the recorder then kept only
-  the panel, so the transcript (the video's text alternative) lacks words the video shows. The
-  recorder is fixed; the next `make walkthrough YES=1` (about $0.25) fills it. (Phase 8, the fix
-  branch's review.)
+- **Remove the npm audit's picomatch exception.** GHSA-fc5q-39xc-vjpf (a ReDoS in picomatch, every
+  version up to 4.0.7, no fix as of 2026-11-17) is accepted at high in `scripts/check_npm_audit.py`
+  through 2026-12-17 in UTC, so it ends during the evening of the 17th in US time zones. After that
+  the audit fails again on every branch, or sooner if the advisory is raised to critical. Once
+  picomatch publishes a fix, update the lockfile and remove the exception (the script notes when
+  the advisory is no longer reported at high or critical; an empty list is fine); if there is still
+  no fix by then, the owner decides whether to extend it. (The tour step 5 follow-up.)
+- **An answer followed by the HR panel scrolls out of view almost at once.** When the safety check
+  sends a turn to a person after the answer (the tour's steps 5 and 7 on the live model), the panel
+  arrives and the conversation scrolls to it, so the answer is on screen for about a quarter of a
+  second in the walkthrough of 2026-11-17; the transcript keeps it. Scrolling to the panel's top, or
+  holding the answer in view, would let a reader see both. The recorder also sizes its pause after
+  such a turn by the panel's text alone (`holdMs(last.escalation?.message ?? last.answerText)` in
+  `e2e/walkthrough/record.ts`); count the answer too when this is fixed. (The tour step 5
+  follow-up's review; the v0.8.1 release review.)
 - **The budget poll and the conversation read can disagree on a damaged conversation.** The
   conversation read calls a conversation unreadable when any stored text fails to open and sizes
   its budget with no history; `GET /assistant/budget` ignores only a history that won't open. With

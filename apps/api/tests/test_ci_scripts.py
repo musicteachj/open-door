@@ -1,12 +1,18 @@
-"""The two CI check scripts: one gitleaks version, and path filters that cover what tests read.
+"""The CI check scripts: one gitleaks version, path filters that cover what tests read, and the
+npm audit with its dated exceptions.
 
 `scripts/check_tool_versions.py` and `scripts/check_path_filters.py` run in the Workflows job and
-in `make check-workflows`. These tests prove their judgment on small fake trees, and that the real
-repository passes both (the same run CI does). No Docker, no network, no database.
+in `make check-workflows`; `scripts/check_npm_audit.py` reads `npm audit --json` in the Security
+workflow and in `make audit`. These tests prove their judgment on small fake inputs, and that the
+real repository passes the first two (the same run CI does). No Docker, no network, no database.
 """
 
 import importlib.util
+import json
+import re
 import sys
+from dataclasses import replace
+from datetime import date
 from pathlib import Path
 from types import ModuleType
 
@@ -28,6 +34,7 @@ def load(name: str) -> ModuleType:
 
 versions = load("check_tool_versions")
 filters = load("check_path_filters")
+npm_audit = load("check_npm_audit")
 
 
 # --- check_tool_versions ------------------------------------------------------------------------
@@ -337,3 +344,334 @@ def test_the_real_repository_filters_cover_every_read() -> None:
     assert any(line.startswith("api: handbook") for line in listing)
     assert any(line.startswith("web: docs/design") for line in listing)
     assert any(line.startswith("e2e: apps/api") for line in listing)
+
+
+# --- check_npm_audit ----------------------------------------------------------------------------
+
+PICOMATCH = "GHSA-fc5q-39xc-vjpf"
+ACCEPTED = (
+    npm_audit.Accepted(
+        advisory=PICOMATCH,
+        package="picomatch",
+        severity="high",
+        until=date(2026, 12, 17),
+        reason="no fixed release",
+        build_only=False,
+    ),
+)
+BUILD_ONLY = (
+    npm_audit.Accepted(
+        advisory=PICOMATCH,
+        package="picomatch",
+        severity="high",
+        until=date(2026, 12, 17),
+        reason="no fixed release; build tools only",
+        build_only=True,
+    ),
+)
+GONE = f"{PICOMATCH} (picomatch): no longer reported at high or critical; remove its exception"
+BEFORE = date(2026, 12, 17)
+AFTER = date(2026, 12, 18)
+
+
+def advisory(package: str, ghsa: str, severity: str = "high") -> dict[str, object]:
+    return {
+        "source": 1,
+        "name": package,
+        "dependency": package,
+        "title": f"{package} is vulnerable",
+        "url": f"https://github.com/advisories/{ghsa}",
+        "severity": severity,
+        "range": "<=4.0.7",
+    }
+
+
+def report(*advisories: dict[str, object]) -> dict[str, object]:
+    """An `npm audit --json` report: each advisory on its own package, and one package that only
+    depends on the first (its `via` names the package, as npm writes it)."""
+    vulnerabilities: dict[str, object] = {}
+    for item in advisories:
+        name = str(item["name"])
+        vulnerabilities[name] = {
+            "name": name,
+            "severity": item["severity"],
+            "via": [item],
+            "nodes": [f"node_modules/{name}"],
+        }
+    if advisories:
+        first = str(advisories[0]["name"])
+        dependent = "a-tool-that-depends-on-it"
+        vulnerabilities[dependent] = {
+            "name": dependent,
+            "severity": "high",
+            "via": [first],
+            "nodes": [f"node_modules/{dependent}"],
+        }
+    return recount({"auditReportVersion": 2, "vulnerabilities": vulnerabilities})
+
+
+def recount(audit: dict[str, object]) -> dict[str, object]:
+    """Set the report's own total to its entries, as npm writes it (after a test adds one)."""
+    audit["metadata"] = {"vulnerabilities": {"total": len(audit["vulnerabilities"])}}  # type: ignore[arg-type]
+    return audit
+
+
+def test_a_clean_report_passes() -> None:
+    assert npm_audit.problems_in(report(), BEFORE, ()) == ([], [])
+
+
+def test_an_accepted_advisory_passes_until_its_date() -> None:
+    problems, notes = npm_audit.problems_in(
+        report(advisory("picomatch", PICOMATCH)), BEFORE, ACCEPTED
+    )
+    assert problems == []
+    assert notes == [f"{PICOMATCH} (picomatch, high): accepted until 2026-12-17"]
+
+
+def test_an_accepted_advisory_still_passes_on_its_last_day() -> None:
+    problems, _notes = npm_audit.problems_in(
+        report(advisory("picomatch", PICOMATCH)), date(2026, 12, 17), ACCEPTED
+    )
+    assert problems == []
+
+
+def test_an_accepted_advisory_fails_after_its_date() -> None:
+    problems, _notes = npm_audit.problems_in(
+        report(advisory("picomatch", PICOMATCH)), AFTER, ACCEPTED
+    )
+    assert problems == [f"{PICOMATCH} (picomatch, high): its exception ended on 2026-12-17"]
+
+
+def test_any_other_high_or_critical_advisory_fails_beside_an_accepted_one() -> None:
+    problems, _notes = npm_audit.problems_in(
+        report(
+            advisory("picomatch", PICOMATCH),
+            advisory("vite", "GHSA-aaaa-bbbb-cccc"),
+            advisory("undici", "GHSA-dddd-eeee-ffff", "critical"),
+        ),
+        BEFORE,
+        ACCEPTED,
+    )
+    assert problems == [
+        "GHSA-aaaa-bbbb-cccc (vite, high): vite is vulnerable",
+        "GHSA-dddd-eeee-ffff (undici, critical): undici is vulnerable",
+    ]
+
+
+def test_moderate_and_low_advisories_pass_as_before() -> None:
+    advisories = (
+        advisory("a", "GHSA-aaaa-aaaa-aaaa", "moderate"),
+        advisory("b", "GHSA-bbbb-bbbb-bbbb", "low"),
+    )
+    assert npm_audit.problems_in(report(*advisories), BEFORE, ()) == ([], [])
+
+
+def test_an_accepted_advisory_raised_above_its_accepted_severity_fails() -> None:
+    problems, _notes = npm_audit.problems_in(
+        report(advisory("picomatch", PICOMATCH, "critical")), BEFORE, ACCEPTED
+    )
+    assert problems == [
+        f"{PICOMATCH} (picomatch, critical): accepted only at high; look at it again"
+    ]
+
+
+@pytest.mark.parametrize("severity", ["moderate", "low"])
+def test_an_accepted_advisory_lowered_below_high_is_noted_for_removal(severity: str) -> None:
+    assert npm_audit.problems_in(
+        report(advisory("picomatch", PICOMATCH, severity)), BEFORE, ACCEPTED
+    ) == (
+        [],
+        [GONE],
+    )
+
+
+def test_advisories_without_a_ghsa_link_or_number_stay_apart() -> None:
+    first = advisory("vite", "x") | {"url": "", "source": None, "title": "first problem"}
+    second = advisory("vite", "x") | {"url": "", "source": None, "title": "second problem"}
+    both = report(first)
+    both["vulnerabilities"]["vite"]["via"].append(second)  # type: ignore[index]
+    problems, _notes = npm_audit.problems_in(both, BEFORE, ())
+    assert problems == [
+        "an npm advisory with no id (vite, high): first problem",
+        "an npm advisory with no id (vite, high): second problem",
+    ]
+
+
+def test_an_advisory_lowered_but_still_failing_keeps_its_exception() -> None:
+    at_critical = (replace(ACCEPTED[0], severity="critical"),)
+    problems, notes = npm_audit.problems_in(
+        report(advisory("picomatch", PICOMATCH, "high")), BEFORE, at_critical
+    )
+    assert problems == []
+    assert notes == [f"{PICOMATCH} (picomatch, high): accepted until 2026-12-17"]
+
+
+def lockfile(**dev: bool | None) -> dict[str, object]:
+    packages: dict[str, object] = {"": {"name": "open-door-web"}}
+    for name, flag in dev.items():
+        packages[f"node_modules/{name}"] = {"version": "1.0.0"} | ({"dev": flag} if flag else {})
+    return {"lockfileVersion": 3, "packages": packages}
+
+
+def test_a_build_only_exception_passes_when_every_copy_is_a_dev_dependency() -> None:
+    problems, _notes = npm_audit.problems_in(
+        report(advisory("picomatch", PICOMATCH)), BEFORE, BUILD_ONLY, lockfile(picomatch=True)
+    )
+    assert problems == []
+
+
+@pytest.mark.parametrize(
+    ("lock", "said"),
+    [
+        (lockfile(picomatch=None), "node_modules/picomatch is not a dev dependency"),
+        (lockfile(), "node_modules/picomatch is not in the lockfile"),
+        (None, "no lockfile to check it against"),
+    ],
+)
+def test_a_build_only_exception_fails_when_the_package_could_ship(
+    lock: dict[str, object] | None, said: str
+) -> None:
+    problems, _notes = npm_audit.problems_in(
+        report(advisory("picomatch", PICOMATCH)), BEFORE, BUILD_ONLY, lock
+    )
+    assert problems == [f"{PICOMATCH} (picomatch, high): accepted for build tools only, but {said}"]
+
+
+def test_a_build_only_exception_needs_the_packages_install_paths() -> None:
+    no_nodes = report(advisory("picomatch", PICOMATCH))
+    del no_nodes["vulnerabilities"]["picomatch"]["nodes"]  # type: ignore[index]
+    problems, _notes = npm_audit.problems_in(no_nodes, BEFORE, BUILD_ONLY, lockfile(picomatch=True))
+    assert problems == [
+        f"{PICOMATCH} (picomatch, high): accepted for build tools only, "
+        "but the report names no install path for it"
+    ]
+
+
+@pytest.mark.parametrize("severity", ["", "urgent"])
+def test_an_advisory_of_unknown_severity_fails(severity: str) -> None:
+    problems, _notes = npm_audit.problems_in(
+        report(advisory("vite", "GHSA-aaaa-bbbb-cccc", severity)), BEFORE, ()
+    )
+    assert problems == [f"GHSA-aaaa-bbbb-cccc (vite, {severity}): vite is vulnerable"]
+
+
+def test_an_advisory_reported_twice_keeps_its_highest_severity() -> None:
+    twice = report(advisory("picomatch", PICOMATCH))
+    raised = advisory("picomatch", PICOMATCH, "critical")
+    twice["vulnerabilities"]["fdir"] = {"name": "fdir", "via": [raised], "nodes": []}  # type: ignore[index]
+    recount(twice)
+    problems, _notes = npm_audit.problems_in(twice, BEFORE, ACCEPTED)
+    assert problems == [
+        f"{PICOMATCH} (picomatch, critical): accepted only at high; look at it again"
+    ]
+
+
+def test_an_accepted_advisory_on_another_package_fails() -> None:
+    problems, _notes = npm_audit.problems_in(
+        report(advisory("micromatch", PICOMATCH)), BEFORE, ACCEPTED
+    )
+    assert problems == [f"{PICOMATCH} (micromatch, high): micromatch is vulnerable"]
+
+
+def test_an_advisory_reached_through_many_packages_is_named_once() -> None:
+    item = advisory("picomatch", "GHSA-aaaa-bbbb-cccc")
+    twice = report(item)
+    twice["vulnerabilities"]["tinyglobby"] = {"name": "tinyglobby", "via": [item, "picomatch"]}  # type: ignore[index]
+    recount(twice)
+    problems, _notes = npm_audit.problems_in(twice, BEFORE, ACCEPTED)
+    assert problems == ["GHSA-aaaa-bbbb-cccc (picomatch, high): picomatch is vulnerable"]
+
+
+@pytest.mark.parametrize("today", [BEFORE, AFTER])
+def test_an_exception_no_longer_needed_is_noted_not_failed(today: date) -> None:
+    assert npm_audit.problems_in(report(), today, ACCEPTED) == (
+        [],
+        [GONE],
+    )
+
+
+@pytest.mark.parametrize(
+    "broken",
+    [
+        {"error": {"code": "ENOTFOUND", "summary": "request to registry failed"}},
+        {"auditReportVersion": 2},
+        {"vulnerabilities": []},
+        # Shaped like an empty audit, but not npm's: no report version.
+        {"vulnerabilities": {}},
+        {"auditReportVersion": 1, "vulnerabilities": {}},
+        [],
+        None,
+        # Each of these carries npm's report version, so the shape checks are what refuse it.
+        {"auditReportVersion": 2, "vulnerabilities": {"x": {"name": "x", "via": None}}},
+        {"auditReportVersion": 2, "vulnerabilities": {"x": {"name": "x", "via": "picomatch"}}},
+        # Cut short: vite came through esbuild, but esbuild's entry (and its advisory) is missing.
+        {
+            "auditReportVersion": 2,
+            "vulnerabilities": {"vite": {"name": "vite", "via": ["esbuild"]}},
+        },
+    ],
+)
+def test_a_report_that_is_not_an_audit_fails(broken: object) -> None:
+    problems, _notes = npm_audit.problems_in(broken, BEFORE, ACCEPTED)
+    assert problems
+    assert problems[0].startswith("The npm audit report is unusable")
+
+
+@pytest.mark.parametrize(
+    "metadata",
+    [
+        {"vulnerabilities": {"total": None}},
+        {"vulnerabilities": {"total": 0}},
+        {"vulnerabilities": {"total": 2}},
+        {"vulnerabilities": {"total": "1"}},
+        {"vulnerabilities": [1]},
+        None,
+    ],
+)
+def test_a_report_whose_total_disagrees_with_its_entries_fails(metadata: object) -> None:
+    # One entry, quietly missing another the report counted (or no count at all).
+    audit = report(advisory("picomatch", PICOMATCH))
+    del audit["vulnerabilities"]["a-tool-that-depends-on-it"]  # type: ignore[attr-defined]
+    audit["metadata"] = metadata
+    problems, _notes = npm_audit.problems_in(audit, BEFORE, ACCEPTED)
+    assert problems == [npm_audit.UNUSABLE]
+
+
+def test_main_reads_the_report_and_lockfile_and_sets_the_exit_code(tmp_path: Path) -> None:
+    clean, bad, garbled = tmp_path / "clean.json", tmp_path / "bad.json", tmp_path / "x.json"
+    lock = tmp_path / "package-lock.json"
+    clean.write_text(json.dumps(report()))
+    bad.write_text(json.dumps(report(advisory("vite", "GHSA-aaaa-bbbb-cccc"))))
+    garbled.write_text("npm ERR! network")
+    lock.write_text(json.dumps(lockfile()))
+    assert npm_audit.main([str(clean), str(lock)]) == 0
+    assert npm_audit.main([str(bad), str(lock)]) == 1
+    assert npm_audit.main([str(garbled), str(lock)]) == 1
+    assert npm_audit.main([str(tmp_path / "missing.json"), str(lock)]) == 1
+    assert npm_audit.main([str(clean), str(tmp_path / "missing-lock.json")]) == 1
+    assert npm_audit.main([str(clean)]) == 2
+
+
+def test_every_exception_names_an_advisory_a_package_a_date_and_a_reason() -> None:
+    # An empty list is fine: the script then fails on every high or critical advisory, as
+    # `npm audit --audit-level=high` did.
+    for entry in npm_audit.ACCEPTED:
+        assert re.fullmatch(r"GHSA(-[0-9a-z]{4}){3}", entry.advisory)
+        assert entry.package
+        assert entry.severity in npm_audit.FAILING
+        assert isinstance(entry.build_only, bool)
+        assert entry.reason.strip()
+        assert isinstance(entry.until, date)
+
+
+def test_ci_and_make_audit_both_go_through_the_script() -> None:
+    workflow = (REPO / ".github/workflows/security.yml").read_text()
+    makefile = (REPO / "Makefile").read_text()
+    for text in (workflow, makefile):
+        assert "scripts/check_npm_audit.py" in text
+        assert "npm audit --json" in text
+        assert "package-lock.json" in text
+        assert "npm audit --audit-level" not in text
+        assert "-gt 1" in text
+        # An exit status above 1 isn't swallowed (npm's error reports are the script's to refuse).
+        assert "|| true" not in text.split("npm audit --json")[1].split("\n")[0]

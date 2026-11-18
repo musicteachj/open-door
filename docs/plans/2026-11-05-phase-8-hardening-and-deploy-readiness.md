@@ -1968,6 +1968,76 @@ written out where `database_now` exists; and four "blank means unset" validators
 No new live run: nothing the model reads changed after the full run of 2026-11-12, so the
 scoreboard is unchanged. The phase checklist is closed.
 
+### After the release: tour step 5 (`fix/tour-step-5`, 2026-11-17)
+
+The two step 5 items the fix branch's review left open, settled in one PR:
+- **The coach mark's words.** In both live takes that reached step 5, the live safety check sent
+  "Why was Leo out last week?" to HR after the answer. The owner chose to change the words (screen
+  15's approved copy) rather than the guard's prompt, which would need a full eval run. Step 5 now
+  reads "... the answer says only that it was approved time off, and an HR panel may follow, since
+  the reason is private." "May" keeps it true on the scripted model, which shows no panel.
+- **The transcript test** required a reply after each question and never two replies in a row, so
+  a turn recorded as an answer and then the HR panel (what `exchangesOf` writes since #122) failed
+  it. It now accepts an answer, a panel, or an answer then a panel (mutation-proved).
+- **The walkthrough was recorded again** (one take, $0.21; the recording has now spent $1.22 of its
+  $2 cap) so the transcript has the new words and the answers before an HR panel, at step 5 and
+  also at step 7, where the old recorder had dropped Priya's answer too. The answer still scrolls
+  past in about a quarter of a second in the video, as the HR panel arrives; the transcript holds it.
+- **The npm audit's first exception.** On the PR (#125), the Security workflow's npm audit failed:
+  GHSA-fc5q-39xc-vjpf, a ReDoS in picomatch, was widened that day to every version up to the latest
+  (4.0.7), with no fix. Only build and test tools use picomatch. `npm audit` has no way to accept
+  one advisory, so CI and `make audit` now pass `npm audit --json` through
+  `scripts/check_npm_audit.py`, which fails on any other high or critical advisory, ends each
+  exception after its last day (this one 2026-12-17) or when its advisory is raised above the
+  agreed severity, notes an exception no longer needed, and fails on a report that isn't an audit
+  (mutation-proved). Its review's first round added the severity, the note for an advisory lowered
+  below high, and kept two advisories with no id apart; the second made the exception hold only
+  while every installed copy of picomatch is a dev dependency in the lockfile, refused a cut-short
+  report and npm's own failure (an exit status above 1), and failed only on a raised severity; the
+  third failed an advisory of missing or unknown severity, and said what the lockfile proves (not a
+  production dependency), not more. The fourth had nothing high or medium, so the loop stopped
+  there; two of its lows were fixed (a report must carry npm's report version, and the usage line
+  names a Python that is new enough). Recorded: the lockfile's `dev` flag can't show that a build
+  doesn't bundle a dev dependency; the wiring test reads the workflow and Makefile as text; the
+  three severity lists could be one; CI runs the script on the runner's own `python3` (3.12). The
+  owner agreed to the exception; the safety classifier had refused the workflow edit until then.
+- **Merged in #125 and released in `v0.8.1`** (2026-11-17), with no new live run: nothing the
+  model reads changed after the full run of 2026-11-12. The release review found that the report
+  version check (round 4) had made three of the bad-report tests stop before the checks they were
+  written for, so they now carry the version and were mutation-proved again; it also made the
+  script keep an advisory's highest severity when npm reports it more than once, and derived the
+  severity lists from one ordering. Its second round had nothing high or medium; from its lows the
+  report's own total must now match its entries, the wiring test looks for the exit-status check,
+  and the docs say the exception's last day is a UTC day. Step 7's coach mark ("A sensitive topic
+  goes to a person, not the AI") while the live assistant answers before the HR panel went to the
+  owner, who approved new words ("A sensitive topic goes to a person. The assistant answers from
+  the handbook, then shows the HR panel, where Priya can send her own words to HR as a
+  confidential case.") and another take, folded into the release-prep PR (#126). That take ($0.22;
+  the recording has spent $1.44 of its $2 cap) shows both models' answer before the panel, citing
+  7.2, 2.3, and 2.2; the tour's browser test now checks that the step 7 answer cites a section and
+  comes before "Open a confidential case" (mutation-proved both ways). The review of the step 7
+  change had nothing high or medium after its first round; it made that check retry instead of
+  holding an element, and cut the script's comment to a pointer to the changelog. In this take
+  step 5's answer opens with a line about Priya's approved request before answering about Leo.
+- **The release review** (`/code-review medium` on what `dev` brings to `main`, after #126)
+  reported one medium, that the step 7 browser check could read step 6's answer; it was a false
+  positive (`sendChips` already waits for one answer per question), as the fix branch's own review
+  showed. What it led to, in `fix/tour-step-7-checks` before the release PR: with steps 5 and 7
+  both promising an answer, the transcript test requires one after every question (a panel alone
+  fails), and the recorder now refuses a turn with no answer while the take is recorded, so a paid
+  take can't reach install with a panel alone; the step 7 check looks for any "Open a confidential
+  case" after the answer, not the first on the page, and not one inside the answer. The branch's
+  own review then moved the recorder's transcript build to right after each step's questions, so a
+  turn with no answer stops a paid take before that step's actions and any later step's turns (a
+  free dry run passed with it); its pause after an answer-then-panel turn, sized by the panel's
+  text, joined the backlog's scrolling item. Its third round: the recorder now records only a turn
+  that completed (a sensitive turn can fail after part of its answer, which was recorded as whole),
+  names a crisis or "can't answer" panel before saying a turn has no answer, and the step 7 check
+  compares the answer with the escalation panel itself (mutation-proved). The fourth had nothing
+  high or medium, so the loop stopped; from its lows, the recorder checks each turn as it ends (a
+  bad first question doesn't pay for the second), and the step 7 check polls again. A free dry run
+  passed with the final recorder.
+
 ## Backlog
 
 (Low findings from the stages' reviews, with their reasons.)

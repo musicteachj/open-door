@@ -51,12 +51,15 @@ describe('the tour script', () => {
     ])
   })
 
-  it('has the approved bodies for steps 4, 5, and 8', () => {
+  it('has the approved bodies for steps 4, 5, 7, and 8', () => {
     expect(TOUR[3]!.body).toBe(
       'Now you’re Marcus Bell, the Store Manager at the Oakland store and Priya’s manager. Her request is waiting beside one from Zara Bautista. Approve Priya’s on its card; nothing changes until you confirm.',
     )
     expect(TOUR[4]!.body).toBe(
-      'A manager sees when someone on the team was out, never why. Ask about Leo’s absence last week, and the answer says only that it was approved time off.',
+      'A manager sees when someone on the team was out, never why. Ask about Leo’s absence last week: the answer says only that it was approved time off, and an HR panel may follow, since the reason is private.',
+    )
+    expect(TOUR[6]!.body).toBe(
+      'A sensitive topic goes to a person. The assistant answers from the handbook, then shows the HR panel, where Priya can send her own words to HR as a confidential case.',
     )
     expect(TOUR[7]!.body).toBe(
       'Now you’re Dana Whitfield, the HR Business Partner at Denver HQ. Priya’s case is new in the queue. Open it: the AI wrote a neutral summary, and her own words stay hidden until you choose to read them.',
