@@ -10,6 +10,32 @@ version (`0.x.y` while the app is being built, `1.0.0` when it is complete).
 
 ## [Unreleased]
 
+### Security
+
+- **The npm audit's picomatch exception now runs through 2027-01-17, UTC** (Phase 8 follow-up).
+  picomatch still has no fixed release, and the exception would otherwise end on 2026-12-17, in
+  the middle of Phase 9. The owner agreed to the extension; the rules are unchanged (build tools
+  only, at high), and the backlog still holds its removal.
+
+### Fixed
+
+- **The walkthrough recorder's pause after a turn counts the answer as well as the HR panel**
+  (Phase 8 follow-up). When a panel followed the answer (the tour's steps 5 and 7 on the live
+  model), the pause was sized by the panel's text alone. It now counts both, each up to five
+  seconds. On its own this doesn't make the answer readable in the video: the page still scrolls
+  past the answer when the panel arrives, which the backlog keeps, so the video wasn't recorded
+  again.
+- **The browser tests against the production image time out less often on a Mac** (Phase 8
+  follow-up). Locally, five browsers shared the image's one API process, behind Docker Desktop's
+  port forwarding both ways (to the container and from it to Postgres), and 3 of 5 `make check`
+  runs on 2026-11-17 failed a different five-second wait each time. The image run now uses two
+  browsers locally; the host run and CI (one) are unchanged. Five runs with two browsers found
+  three tests that read the page too early, now fixed: the keyboard-order test waits for the side
+  rail's time-off links, and the tour's ring checks at steps 4 and 7 wait for the card or the HR
+  panel instead of measuring against the composer. A time-off helper now says what the API
+  returned when a read is refused. One failure remains, which the backlog keeps (a database
+  connection from the container that took five seconds).
+
 ## [0.8.1] - 2026-11-17
 
 A follow-up to Phase 8. The guided tour's steps 5 and 7 now say what the assistant does (an HR

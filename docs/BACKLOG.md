@@ -194,6 +194,15 @@ should pick it up. When one is done, delete it here and record it in the changel
   worker is reported under a later, innocent test (seen with `query-client.test.ts`), so the guard
   needs a way to tell those apart first, or `isolate`d workers. (`/code-review medium` on
   `fix/shell-test-directory-fakes`.)
+- **On a Mac, the image's database connection can take five seconds and fail a request.** In the
+  fifth of five image runs with two browsers (2026-11-18), two reads of the cases list returned
+  500 after 5.04 s, the API's limit on opening a database connection (asyncpg's `timeout` in
+  `app/db/engine.py`). On macOS the container reaches Postgres through `host.docker.internal` and
+  Docker Desktop's forwarding (`database_url_for_container` in `scripts/image/container.py`); idle,
+  400 connections from the image took at most 25 ms, so it shows only under load. CI (Linux, host
+  networking) never hit it. Joining the database's own Docker network on macOS, as
+  `make prod-local` does with its own database, would remove the hop. A failure like it is a
+  rerun, not a bug in the app. (`fix/phase-8-loose-ends`.)
 - **The assistant reports a card's outcome as if it were current.** Recording the walkthrough
   (2026-11-16), Priya's answer after Marcus had approved her request said it was "now waiting for
   Marcus Bell to approve it". The per-turn context tells the model what happened to the asker's own
@@ -204,6 +213,19 @@ should pick it up. When one is done, delete it here and record it in the changel
   (step 5) with "Priya Raman's PTO for Friday, November 20 is now approved.", a recap of the card
   he had just confirmed, before answering the question; telling the model not to recap a card the
   person has already seen would cover both. (Phase 8, Stage 9; the v0.8.1 takes.)
+  Root cause (2026-11-18): the "Since the last message" line is built from the card alone
+  (`unreported_outcomes` and `_after_confirm` in `app/ai/proposals.py`, called from `turn.py`),
+  which says "the request is waiting for" the approver in the present tense and never reads the
+  request, so a line told after Marcus decided is already false; and nothing in `assistant.md`
+  says the person saw each outcome on the card, so the model passes it on as news. A fix is
+  written and tested (not shipped): word the confirmed card in the past tense ("the request was
+  sent to Marcus Bell for approval"), add a fixed "That request has since been approved / denied /
+  canceled." when the request moved on (read as the person, under row-level security), and three
+  prompt lines: don't tell a card's outcome unless asked, and use `list_time_off_requests` for where
+  a request stands now. It bumps the prompt version, so it ships with the next full eval run; no
+  eval item has an outcome line, so the walkthrough take after it is the real check (step 5 must
+  not open with Priya's approval, step 6 must not mention her request). The phase 5 spec quotes
+  the old line and changes with it.
 - **"Book next Friday off" in the personas' "Try asking" lists is ambiguous.** The live model
   asks which Friday is meant on many days (this week's or next week's), so the suggestion often
   gets a question instead of a card. The tour's chip became "Book this Friday off." in Phase 8,
@@ -389,7 +411,8 @@ digits is caught (Stage 3), and the cleanup job deletes handbook versions no san
   test. (v0.8.0 release review.)
 - **Remove the npm audit's picomatch exception.** GHSA-fc5q-39xc-vjpf (a ReDoS in picomatch, every
   version up to 4.0.7, no fix as of 2026-11-17) is accepted at high in `scripts/check_npm_audit.py`
-  through 2026-12-17 in UTC, so it ends during the evening of the 17th in US time zones. After that
+  through 2027-01-17 in UTC (the owner extended it from 2026-12-17 on 2026-11-17, so it doesn't
+  turn CI red during Phase 9), so it ends during the evening of the 17th in US time zones. After that
   the audit fails again on every branch, or sooner if the advisory is raised to critical. Once
   picomatch publishes a fix, update the lockfile and remove the exception (the script notes when
   the advisory is no longer reported at high or critical; an empty list is fine); if there is still
@@ -398,10 +421,9 @@ digits is caught (Stage 3), and the cleanup job deletes handbook versions no san
   sends a turn to a person after the answer (the tour's steps 5 and 7 on the live model), the panel
   arrives and the conversation scrolls to it, so the answer is on screen for about a quarter of a
   second in the walkthrough of 2026-11-17; the transcript keeps it. Scrolling to the panel's top, or
-  holding the answer in view, would let a reader see both. The recorder also sizes its pause after
-  such a turn by the panel's text alone (`holdMs(last.escalation?.message ?? last.answerText)` in
-  `e2e/walkthrough/record.ts`); count the answer too when this is fixed. (The tour step 5
-  follow-up's review; the v0.8.1 release review.)
+  holding the answer in view, would let a reader see both. The recorder's pause after such a turn
+  already counts the answer and the panel (2026-11-18), so a new take only needs the scroll fixed.
+  (The tour step 5 follow-up's review; the v0.8.1 release review.)
 - **The budget poll and the conversation read can disagree on a damaged conversation.** The
   conversation read calls a conversation unreadable when any stored text fails to open and sizes
   its budget with no history; `GET /assistant/budget` ignores only a history that won't open. With

@@ -2038,6 +2038,25 @@ The two step 5 items the fix branch's review left open, settled in one PR:
   bad first question doesn't pay for the second), and the step 7 check polls again. A free dry run
   passed with the final recorder.
 
+### Loose ends before Phase 9 (`fix/phase-8-loose-ends`, 2026-11-18)
+
+Four items left after `v0.8.1`, settled so Phase 9 starts clean, with no paid run:
+- **The npm audit's picomatch exception** now runs through 2027-01-17 (UTC), so it doesn't end in
+  the middle of Phase 9. picomatch still has no fix; the owner agreed to the extension.
+- **The recorder's pause after an answer and the HR panel** counts both (each up to five seconds),
+  in a pure function the unit tests cover (mutation-proved). No new take: the page still scrolls
+  past the answer as the panel arrives, which stays in the backlog.
+- **The image browser tests' local timeouts.** Five local browsers shared the image's one API
+  process behind Docker Desktop's forwarding; the image run now uses two workers locally (host and
+  CI unchanged), and the keyboard-order test waits for the rail's time-off links before tabbing.
+  Five image runs with two browsers: three clean; one with two tests that measured too early (the
+  tour's ring at step 7 against the composer before the HR panel came, now told to wait for it, as
+  at step 4; and a time-off helper's read, which now reports what the API returned); one with a
+  five-second database connection from the container (cases list, 500), which the backlog keeps.
+  The two fixed tests then passed 5 of 5 against the image.
+- **The stale card recap** (steps 5 and 6) has its root cause and a tested fix recorded in the
+  backlog item; it bumps the prompt version, so it waits for the next full eval run.
+
 ## Backlog
 
 (Low findings from the stages' reviews, with their reasons.)
