@@ -21,6 +21,7 @@ from app.core.config import (
     Settings,
     build_key_provider,
     get_settings,
+    require_ai_budget_fit_for_production,
     require_entry_settings_fit_for_production,
 )
 from app.core.logging import configure_logging
@@ -78,6 +79,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     configure_logging(settings.log_level)
     require_a_transport_fit_for(settings)
     require_entry_settings_fit_for_production(settings)
+    require_ai_budget_fit_for_production(settings)
     if settings.ai_transport == "replay":
         msg = (
             "AI_TRANSPORT=replay is for the eval harness only: it keeps per-item state and has no"

@@ -7,6 +7,7 @@ import base64
 import logging
 import os
 import secrets
+from decimal import Decimal
 from pathlib import Path
 
 import pytest
@@ -43,6 +44,7 @@ def production(
         turnstile_site_key="0x4AAAAAAAreal",
         turnstile_secret_key=SecretStr("0x4AAAAAAAreal-secret"),
         sandbox_ip_hash_key=SecretStr("k" * 40),
+        ai_monthly_budget_usd=Decimal(20),
         encryption_keyring=None if keyring is None else SecretStr(keyring),
         encryption_keyring_file=None if keyring_file is None else SecretStr(keyring_file),
     )

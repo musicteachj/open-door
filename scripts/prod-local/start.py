@@ -160,21 +160,30 @@ def setup_env(passwords: Passwords, origin: str) -> dict[str, str]:
 
 
 # The AI budgets a run may lower (the recording's per-take cap, the live check's cap), by name.
-BUDGET_SETTINGS = {"daily": "AI_DAILY_BUDGET_USD", "sandbox": "AI_SANDBOX_BUDGET_USD"}
+BUDGET_SETTINGS = {
+    "daily": "AI_DAILY_BUDGET_USD",
+    "sandbox": "AI_SANDBOX_BUDGET_USD",
+    "monthly": "AI_MONTHLY_BUDGET_USD",
+}
+# What production runs on (Phase 9a): a $20 month and $0.50 a sandbox, unless a run lowers them.
+PORTFOLIO_BUDGETS_USD = {"monthly": "20", "sandbox": "0.50"}
 DOLLARS = re.compile(r"\d{1,4}(\.\d{1,2})?")
 
 
 def budget_env(budgets_usd: Mapping[str, str] | None) -> dict[str, str]:
-    """The AI budget settings for `budgets_usd` ({"daily": "0.66"}): positive dollars only."""
+    """The AI budget settings for `budgets_usd` ({"daily": "0.66"}): positive dollars only, except
+    the monthly budget, where 0 turns live AI off."""
     env: dict[str, str] = {}
     for name, amount in (budgets_usd or {}).items():
         setting = BUDGET_SETTINGS.get(name)
         if setting is None:
-            raise LaunchError(f"Only the daily and sandbox budgets can be set, not {name!r}.")
-        if not DOLLARS.fullmatch(amount) or float(amount) <= 0:
             raise LaunchError(
-                f"The {name} budget must be a positive dollar amount, not {amount!r}."
+                f"Only the daily, sandbox, and monthly budgets can be set, not {name!r}."
             )
+        floor = 0 if name == "monthly" else 1e-9
+        if not DOLLARS.fullmatch(amount) or float(amount) < floor:
+            kind = "non-negative" if name == "monthly" else "positive"
+            raise LaunchError(f"The {name} budget must be a {kind} dollar amount, not {amount!r}.")
         env[setting] = amount
     return env
 
@@ -207,7 +216,7 @@ def api_env(
         "DATABASE_URL": _database_url(APP_LOGIN, passwords.app),
         "ENCRYPTION_KEYRING": keyring,
         **entry_env(passwords),
-        **budget_env(budgets_usd),
+        **budget_env({**PORTFOLIO_BUDGETS_USD, **(budgets_usd or {})}),
     }
     if scripted:
         env["SCRIPTED_DELAY_PROFILE"] = "realistic"

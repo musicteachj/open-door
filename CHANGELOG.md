@@ -10,6 +10,16 @@ version (`0.x.y` while the app is being built, `1.0.0` when it is complete).
 
 ## [Unreleased]
 
+### Added
+
+- **The assistant's spend is a monthly budget, paced by day** (Phase 9a). `AI_MONTHLY_BUDGET_USD`
+  sets the month's money, and each UTC day may spend a multiple (`AI_PACING_MULTIPLIER`, 3) of its
+  even share of what is left, never less than `AI_DAILY_FLOOR_USD` ($1.00) and never more than
+  `AI_DAILY_BUDGET_USD`, which stays as a hard daily ceiling. Production refuses to start without
+  the monthly budget, and `0` turns live AI off. A 429 for a used-up month no longer sends
+  `Retry-After`, since tomorrow does not help. `make prod-local` runs on a $20 month and a $0.50
+  sandbox. ADR 0011 has the formula.
+
 ### Security
 
 - **The npm audit's picomatch exception now runs through 2027-01-17, UTC** (Phase 8 follow-up).

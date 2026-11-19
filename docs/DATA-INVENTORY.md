@@ -273,7 +273,7 @@ Global: no sandbox, no person, no text, and outside row-level security.
 | Column | Holds | Why |
 |---|---|---|
 | `id` | A random UUID | Identity. |
-| `day` | The UTC date the row is added; a settle may instead carry its reservation's day, the day before | The demo's daily cap (`AI_DAILY_BUDGET_USD`) is the sum for a day across all sandboxes. |
+| `day` | The UTC date the row is added; a settle may instead carry its reservation's day, the day before | The demo's daily cap (`AI_DAILY_BUDGET_USD`) is the sum for a day across all sandboxes. It also feeds the monthly budget's pacing (`AI_MONTHLY_BUDGET_USD`): the month's rows are summed by `day`. |
 | `kind`, `amount_usd` | `reserve` or `settle`, and a dollar amount, with the same limits as `ai_spend` | The same reserve-then-settle ledger. |
 | `created_at` | When it was added (UTC), always the server's clock | The record, and what `day` must match. |
 

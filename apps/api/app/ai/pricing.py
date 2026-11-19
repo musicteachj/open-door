@@ -84,8 +84,7 @@ PRICES: Mapping[str, Price] = MappingProxyType(
         "claude-sonnet-5-5": Price(
             input_usd_per_mtok=Decimal("2.00"),
             cache_write_5m_usd_per_mtok=Decimal("2.50"),
-            # $0.10 per the pricing page read on 2026-10-14; the claude-api skill's cached table
-            # says $0.20, which is out of date.
+            # $0.10 per the pricing page read on 2026-10-14.
             cache_read_usd_per_mtok=Decimal("0.10"),
             output_usd_per_mtok=Decimal("10.00"),
         ),

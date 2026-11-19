@@ -855,6 +855,32 @@ def browser(open_browser: OpenBrowser) -> Browser:
     return open_browser()
 
 
+async def insert_dated_spend(
+    owner_engine: AsyncEngine, *, days_ago: int, amount_usd: Decimal = Decimal("0.000001")
+) -> UUID:
+    """A daily-ledger row dated `days_ago` days back (UTC). A trigger stamps created_at, and a
+    check ties `day` to it, so the row is made and then moved, as the owner."""
+    row_id = uuid4()
+    moment = datetime.now(UTC).replace(hour=12, minute=0, second=0, microsecond=0) - timedelta(
+        days=days_ago
+    )
+    async with owner_engine.begin() as connection:
+        await connection.execute(
+            text(
+                "INSERT INTO ai_spend_daily (id, kind, amount_usd) VALUES (:id, 'settle', :amount)"
+            ),
+            {"id": row_id, "amount": amount_usd},
+        )
+        await connection.execute(
+            text(
+                "UPDATE ai_spend_daily SET created_at = :moment,"
+                " day = (CAST(:moment AS timestamptz) AT TIME ZONE 'UTC')::date WHERE id = :id"
+            ),
+            {"id": row_id, "moment": moment},
+        )
+    return row_id
+
+
 @pytest.fixture
 async def daily_ledger_untouched(owner_engine: AsyncEngine) -> AsyncIterator[None]:
     """Leave the demo-wide daily AI ledger as the test found it.

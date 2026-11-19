@@ -253,7 +253,7 @@ browser test with `cd apps/web && npx playwright test e2e/<file>.spec.ts`.
 - [x] **Step 3: Compare with GitHub.** Run `git fetch origin dev` and
   `git rev-parse --short origin/dev`. Expected: `bd2fea3`. If `origin/dev` moved, stop and ask
   whether to start from it instead.
-- [ ] **Step 4: Stop:** propose creating `feat/phase-9a-demo-readiness` from `dev`, and wait for
+- [x] **Step 4: Stop:** propose creating `feat/phase-9a-demo-readiness` from `dev`, and wait for
   James's OK. Then run `git switch -c feat/phase-9a-demo-readiness dev`.
 - [x] **Step 5: Add the status row** above the Phase 9 row (`docs/ROADMAP.md:29`), and append
   "; 9a (local readiness) comes first" to the Phase 9 row's status cell:
@@ -264,7 +264,7 @@ browser test with `cd apps/web && npx playwright test e2e/<file>.spec.ts`.
 
 - [x] **Step 6: Check the docs.** Run `make check-docs`. Expected: passes (spelling, links,
   placeholders, em dashes).
-- [ ] **Step 7: Stop:** show the diff summary and the proposed commit message, and wait for James's
+- [x] **Step 7: Stop:** show the diff summary and the proposed commit message, and wait for James's
   explicit OK before committing.
   Proposed message: subject "Plan Phase 9a: Open Door's demo readiness before the deploy"; body: one
   paragraph saying the plan builds every local change the portfolio deployment design asks of Open
@@ -309,7 +309,7 @@ browser test with `cd apps/web && npx playwright test e2e/<file>.spec.ts`.
   is unset), `ai_pacing_multiplier: Decimal` (default 3, ge 1), `ai_daily_floor_usd: Decimal`
   (default 1.00, ge 0), and `def require_ai_budget_fit_for_production(settings: Settings) -> None`.
 
-- [ ] **Step 1: Write the failing pacing tests** in `apps/api/tests/test_pacing.py`:
+- [x] **Step 1: Write the failing pacing tests** in `apps/api/tests/test_pacing.py`:
 
   ```python
   MONTH = MonthlyBudget(budget_usd=Decimal("20"), multiplier=Decimal("3"), floor_usd=Decimal("1.00"))
@@ -351,9 +351,9 @@ browser test with `cd apps/web && npx playwright test e2e/<file>.spec.ts`.
           day += timedelta(days=1)
   ```
 
-- [ ] **Step 2: Run them.** `cd apps/api && uv run pytest tests/test_pacing.py -q`. Expected: FAIL,
+- [x] **Step 2: Run them.** `cd apps/api && uv run pytest tests/test_pacing.py -q`. Expected: FAIL,
   `ModuleNotFoundError: No module named 'app.ai.pacing'`.
-- [ ] **Step 3: Write `app/ai/pacing.py`.** `days_left_in_month` uses `calendar.monthrange`. The
+- [x] **Step 3: Write `app/ai/pacing.py`.** `days_left_in_month` uses `calendar.monthrange`. The
   allowance, rounded down so it never admits more than the formula:
 
   ```python
@@ -367,8 +367,8 @@ browser test with `cd apps/web && npx playwright test e2e/<file>.spec.ts`.
 
   The module docstring states the formula, that days and months are UTC, and that the caller
   passes the database's date.
-- [ ] **Step 4: Run them.** Same command. Expected: PASS.
-- [ ] **Step 5: Write the failing ledger tests** in `tests/integration/test_budget_pacing.py`.
+- [x] **Step 4: Run them.** Same command. Expected: PASS.
+- [x] **Step 5: Write the failing ledger tests** in `tests/integration/test_budget_pacing.py`.
   First move `insert_spend` from `tests/integration/test_cleanup_job.py:28-50` into
   `tests/integration/conftest.py` as
   `insert_dated_spend(owner_engine, *, days_ago: int, amount_usd: Decimal = Decimal("0.000001")) -> UUID`,
@@ -399,9 +399,9 @@ browser test with `cd apps/web && npx playwright test e2e/<file>.spec.ts`.
   And in `tests/integration/test_cleanup_job.py`:
   `test_the_job_keeps_the_whole_current_month` inserts a row dated the 1st of this month
   (`days_ago=today.day - 1`) and one 31 days back; after `run_cleanup`, the first is kept.
-- [ ] **Step 6: Run them.** `cd apps/api && uv run pytest tests/integration/test_budget_pacing.py tests/integration/test_cleanup_job.py -q`.
+- [x] **Step 6: Run them.** `cd apps/api && uv run pytest tests/integration/test_budget_pacing.py tests/integration/test_cleanup_job.py -q`.
   Expected: FAIL, `TypeError` on `Caps(..., monthly=...)` (the cleanup test passes already).
-- [ ] **Step 7: Change `app/ai/budget.py`.** Add `MONTH_SUMS` (keep `DAY_SUM`, which the eval
+- [x] **Step 7: Change `app/ai/budget.py`.** Add `MONTH_SUMS` (keep `DAY_SUM`, which the eval
   harness reads):
 
   ```sql
@@ -421,9 +421,9 @@ browser test with `cd apps/web && npx playwright test e2e/<file>.spec.ts`.
   `daily_remaining_usd = limit - spent_today` from it. `Caps.from_settings` fills `monthly` when
   `ai_monthly_budget_usd` is set. Update the module docstring with the pacing rule and the
   midnight bound (decision 23).
-- [ ] **Step 8: Run them.** Same command, plus `uv run pytest tests/integration/test_budget.py -q`.
+- [x] **Step 8: Run them.** Same command, plus `uv run pytest tests/integration/test_budget.py -q`.
   Expected: PASS.
-- [ ] **Step 9: Write the failing settings and route tests.**
+- [x] **Step 9: Write the failing settings and route tests.**
   - `tests/test_config.py`: `test_the_monthly_budget_is_unset_by_default`;
     `test_a_zero_monthly_budget_parses` (`"0"` gives `Decimal(0)`);
     `test_a_blank_monthly_budget_is_unset`; `test_the_pacing_settings_refuse_bad_values` (a negative
@@ -440,9 +440,9 @@ browser test with `cd apps/web && npx playwright test e2e/<file>.spec.ts`.
     `test_only_the_monthly_budget_may_be_zero` (`budget_env({"monthly": "0"})` works,
     `{"daily": "0"}` still raises `LaunchError`). Update `test_only_the_two_budgets_can_be_set`
     (`:388`) to the three.
-- [ ] **Step 10: Run them.** `uv run pytest tests/test_config.py tests/test_prod_local.py tests/integration/test_assistant_routes.py -q`.
+- [x] **Step 10: Run them.** `uv run pytest tests/test_config.py tests/test_prod_local.py tests/integration/test_assistant_routes.py -q`.
   Expected: FAIL on the new tests.
-- [ ] **Step 11: Implement.** The three settings, with `ai_monthly_budget_usd` added to a blank-is-
+- [x] **Step 11: Implement.** The three settings, with `ai_monthly_budget_usd` added to a blank-is-
   unset validator; `require_ai_budget_fit_for_production`, called in `create_app` right after
   `require_entry_settings_fit_for_production` (`app/main.py:80`), so tests that build the app with
   `app_env="production"` (`grep -rln 'app_env="production"' apps/api/tests`) now pass
@@ -453,8 +453,8 @@ browser test with `cd apps/web && npx playwright test e2e/<file>.spec.ts`.
   and `api_env` defaults the two portfolio values. In `pricing.py:87-88`, drop the sentence about
   the claude-api skill's table (it now says $0.10 too) and keep "per the pricing page read on
   2026-10-14".
-- [ ] **Step 12: Run them.** Same command. Expected: PASS.
-- [ ] **Step 13: Write the docs that travel with it.**
+- [x] **Step 12: Run them.** Same command. Expected: PASS.
+- [x] **Step 13: Write the docs that travel with it.**
   - `apps/api/.env.example`: commented `AI_MONTHLY_BUDGET_USD=20`, `AI_PACING_MULTIPLIER=3`,
     `AI_DAILY_FLOOR_USD=1.00`, with one line each on what they do and that production requires the
     first (and `0` turns live AI off).
@@ -463,7 +463,7 @@ browser test with `cd apps/web && npx playwright test e2e/<file>.spec.ts`.
     no sweeper (decision 4). Old text is not rewritten.
   - `docs/DATA-INVENTORY.md:276`: the `day` column also feeds the month's pacing.
   - `CHANGELOG.md`, Added: "The assistant's spend is a monthly budget, paced by day (Phase 9a)".
-- [ ] **Step 14: Run the API checks.** `make db && make check-api`, then `make eval-offline`.
+- [x] **Step 14: Run the API checks.** `make db && make check-api`, then `make eval-offline`.
   Expected: both pass; the offline evals are unchanged.
 - [ ] **Step 15: Stop:** show the diff summary and the proposed commit message, and wait for
   James's explicit OK before committing.

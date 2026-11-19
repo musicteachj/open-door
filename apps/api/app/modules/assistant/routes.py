@@ -744,8 +744,9 @@ async def admit_question(
             now=now,
         )
         needed = needed_for(history=history)
+        state = await budget_state(db, caps)
         scope = refusal_scope(
-            await budget_state(db, caps),
+            state,
             needed,
             # The same question in a new conversation, to tell a sandbox that is spent from a
             # conversation that is too long for what is left (sized only when the sandbox is
@@ -754,11 +755,19 @@ async def admit_question(
         )
         if scope is not None:
             code = f"budget-{scope}"
-            # Only the day's limit resets (at the next UTC midnight). A sandbox's own never does,
-            # so it has no `Retry-After`. This 429 is a plain HTTP response: a refusal inside the
-            # turn stream (`spend-limit`, a budget `error` event) can't carry a header.
+            # Only the day's limit resets (at the next UTC midnight), and only when the month still
+            # has room for the question. No header when it has none (on the month's last day this is
+            # conservative, since the next day starts a new month). A
+            # sandbox's own limit never resets, so it has no `Retry-After`. This 429 is a plain
+            # HTTP response: a refusal inside the turn stream (`spend-limit`, a budget `error`
+            # event) can't carry a header.
+            month_has_room = (
+                state.month_remaining_usd is None or state.month_remaining_usd >= needed
+            )
             retry_after = (
-                {"Retry-After": str(seconds_until_next_utc_day(now))} if scope == "daily" else None
+                {"Retry-After": str(seconds_until_next_utc_day(now))}
+                if scope == "daily" and month_has_room
+                else None
             )
             detail = BUDGET_CONVERSATION_TEXT if scope == "conversation" else ERROR_TEXTS[code]
             raise ProblemError(status.HTTP_429_TOO_MANY_REQUESTS, code, detail, headers=retry_after)

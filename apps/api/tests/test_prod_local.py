@@ -385,9 +385,25 @@ def test_a_budget_must_be_a_positive_dollar_amount(bad: str) -> None:
         api_env(budgets_usd={"daily": bad})
 
 
-def test_only_the_two_budgets_can_be_set() -> None:
+def test_only_the_three_budgets_can_be_set() -> None:
     with pytest.raises(start.LaunchError, match="budget"):
-        api_env(budgets_usd={"monthly": "1"})
+        api_env(budgets_usd={"weekly": "1"})
+
+
+def test_production_runs_get_the_portfolio_budgets() -> None:
+    env = api_env()
+    assert env["AI_MONTHLY_BUDGET_USD"] == "20"
+    assert env["AI_SANDBOX_BUDGET_USD"] == "0.50"
+
+    lowered = api_env(budgets_usd={"monthly": "2", "sandbox": "0.66"})
+    assert lowered["AI_MONTHLY_BUDGET_USD"] == "2"
+    assert lowered["AI_SANDBOX_BUDGET_USD"] == "0.66"
+
+
+def test_only_the_monthly_budget_may_be_zero() -> None:
+    assert start.budget_env({"monthly": "0"}) == {"AI_MONTHLY_BUDGET_USD": "0"}
+    with pytest.raises(start.LaunchError, match="budget"):
+        start.budget_env({"daily": "0"})
 
 
 def test_the_database_query_runs_as_the_owner_inside_its_container() -> None:

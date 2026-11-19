@@ -814,6 +814,58 @@ def test_a_day_with_less_than_a_turn_left_is_at_its_cap(
     assert budget["sandboxReached"] is False
 
 
+async def todays_spend_usd(owner_engine: AsyncEngine) -> Decimal:
+    async with owner_engine.connect() as connection:
+        total: Decimal = (
+            await connection.execute(
+                text(
+                    "SELECT coalesce(sum(amount_usd), 0) FROM ai_spend_daily"
+                    " WHERE day = (now() AT TIME ZONE 'UTC')::date"
+                )
+            )
+        ).scalar_one()
+    return total
+
+
+async def test_a_used_month_sends_no_retry_after(open_browser_with: OpenBrowserWith) -> None:
+    # A used-up month does not reset at midnight, so the 429 must not promise tomorrow.
+    browser = open_browser_with(ai_monthly_budget_usd=Decimal(0))
+    sign_in(browser)
+    conversation_id = new_conversation(browser)["id"]
+
+    response = browser.client.post(
+        f"{BASE}/conversations/{conversation_id}/turns",
+        json={"question": "How much paid sick leave do I get?"},
+        headers=browser.csrf,
+    )
+
+    assert response.status_code == 429
+    assert response.json()["type"] == "budget-daily"
+    assert "retry-after" not in response.headers
+
+
+async def test_a_used_day_still_sends_retry_after(
+    open_browser_with: OpenBrowserWith, owner_engine: AsyncEngine
+) -> None:
+    # The daily ceiling is at today's spend and the month has plenty left: tomorrow helps.
+    browser = open_browser_with(
+        ai_monthly_budget_usd=Decimal(100_000),
+        ai_daily_budget_usd=await todays_spend_usd(owner_engine) + Decimal("0.01"),
+    )
+    sign_in(browser)
+    conversation_id = new_conversation(browser)["id"]
+
+    response = browser.client.post(
+        f"{BASE}/conversations/{conversation_id}/turns",
+        json={"question": "How much paid sick leave do I get?"},
+        headers=browser.csrf,
+    )
+
+    assert response.status_code == 429
+    assert response.json()["type"] == "budget-daily"
+    assert 1 <= int(response.headers["retry-after"]) <= 86_400
+
+
 async def add_history(
     engine: AsyncEngine,
     tenant_id: UUID,

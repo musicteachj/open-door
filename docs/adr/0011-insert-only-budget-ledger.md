@@ -33,3 +33,33 @@ The locks last one transaction, so they're safe behind a connection pooler and a
 reservation whose task crashes is never settled and stays counted, which errs toward spending
 less. Summing rows is cheap at sandbox scale. Phase 8's cleanup job deletes daily rows older than
 30 days, and its load test checks the global lock under contention.
+
+## Amendment (2026-11-19): a monthly budget, paced by day
+
+Phase 9a puts the public demo under a hard monthly AI budget (`AI_MONTHLY_BUDGET_USD`, which
+production requires; `0` turns live AI off). The ledger stays insert-only, and a day's room comes
+from the month's rows:
+
+```
+left_this_month = budget - every ledger row dated earlier this month (settled costs and open reservations)
+allowance_today = min(left_this_month, max(multiplier x left_this_month / days_left_including_today, floor))
+admit a reservation if today's rows + reservation <= min(allowance_today, AI_DAILY_BUDGET_USD)
+```
+
+- Days and months are UTC, from the database's clock. The multiplier (`AI_PACING_MULTIPLIER`,
+  default 3) and the floor (`AI_DAILY_FLOOR_USD`, default $1.00) are settings. The allowance is
+  rounded down to the ledger's six places.
+- The shared names: `MonthlyBudget` and `allowance_today_usd` in `app/ai/pacing.py`, and `Caps.monthly`
+  and `day_room` in `app/ai/budget.py`. `reserve`, `budget_state`, and the availability flag
+  read the same `day_room`.
+- `AI_DAILY_BUDGET_USD` stays, as a hard daily ceiling. Production sets it equal to the month so
+  pacing alone governs, and the paid local runs keep using it as their cap.
+- Without a monthly budget (development and the tests) only the daily cap applies, as before.
+- The cleanup job's 30-day retention keeps every row of the current month (a month has at most 31
+  days, and the job keeps rows from the last 30 days plus today), so the month's sum is complete.
+- The day lock stays the only lock. A reservation made just after UTC midnight can miss the
+  reservations still waiting on the previous day's lock (one per request in flight at midnight),
+  each within that day's allowance, so the month's sum can be short by those.
+- There is no sweeper. A reservation that is never settled counts at its full amount for the rest
+  of the month, which is what a sweeper would produce elsewhere.
+- A 429 for a used-up month sends no `Retry-After`: tomorrow does not help.
