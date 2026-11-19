@@ -68,11 +68,15 @@ class SummaryAnswer:
 
 
 class SummaryUnavailable(Exception):  # noqa: N818
-    """The summary call failed. `usage` is None when the cost is unknown."""
+    """The summary call failed. `usage` is None when the cost is unknown. `unbilled` marks a call
+    the provider refused before any work, with zero usage."""
 
-    def __init__(self, message: str = "", *, usage: Usage | None = None) -> None:
+    def __init__(
+        self, message: str = "", *, usage: Usage | None = None, unbilled: bool = False
+    ) -> None:
         super().__init__(message)
         self.usage = usage
+        self.unbilled = unbilled
 
 
 class SummaryRefused(Exception):  # noqa: N818

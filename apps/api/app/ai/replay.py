@@ -286,8 +286,11 @@ RECORDED_ERRORS = (
 def is_transient(error: Exception) -> bool:
     """A failure that says nothing about how the model behaves, so it is never recorded: it would
     replay an outage forever. `InvalidToolInput` and a guard failure that carries usage (the model
-    did answer, unusably) are model behavior."""
-    if isinstance(error, GuardUnavailable | SummaryUnavailable | SummaryRefused):
+    did answer, unusably) are model behavior. A call the provider refused before any work
+    (`unbilled`) is an outage too, even though it carries zero usage."""
+    if isinstance(error, GuardUnavailable | SummaryUnavailable):
+        return error.usage is None or error.unbilled
+    if isinstance(error, SummaryRefused):
         return error.usage is None
     return isinstance(error, ModelUnavailable | SpendLimitReached)
 

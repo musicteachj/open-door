@@ -20,6 +20,16 @@ version (`0.x.y` while the app is being built, `1.0.0` when it is complete).
   `Retry-After`, since tomorrow does not help. `make prod-local` runs on a $20 month and a $0.50
   sandbox. ADR 0011 has the formula.
 
+### Changed
+
+- **The Anthropic workspace, organization, billing, and enforced spend limits all stop the assistant
+  with the spend-limit text** (Phase 9a). A 400 with the Console's usage-limit message (plain,
+  workspace, or organization), a 402, and a 429 carrying `enforced_spend_limit_reached` are all
+  the spend limit, at the assistant's call, the safety check, and the case summary. The SDK's own
+  retries are off, so each call makes one attempt under its reservation; a turn tries once more
+  itself, after one second, when the provider answers an overload (529) or rate limit (429) before
+  doing any work. ADR 0011 has the rules.
+
 ### Security
 
 - **The npm audit's picomatch exception now runs through 2027-01-17, UTC** (Phase 8 follow-up).
@@ -29,6 +39,9 @@ version (`0.x.y` while the app is being built, `1.0.0` when it is complete).
 
 ### Fixed
 
+- **A failed call the provider doesn't bill no longer uses up the day's budget** (Phase 9a). A 401,
+  403, 429, or 529 refusal settles to $0 instead of keeping its full reservation, for the
+  assistant's call, the safety check, and the case summary.
 - **The walkthrough recorder's pause after a turn counts the answer as well as the HR panel**
   (Phase 8 follow-up). When a panel followed the answer (the tour's steps 5 and 7 on the live
   model), the pause was sized by the panel's text alone. It now counts both, each up to five

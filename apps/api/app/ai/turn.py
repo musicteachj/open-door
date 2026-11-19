@@ -188,6 +188,10 @@ BUDGET_LOOKUP_TIMEOUT = timedelta(seconds=2)
 # Closing the model's stream, and settling a call, are shielded from cancellation (the first so the
 # upstream request stops and no more billed tokens are generated); this bounds the wait.
 SHIELDED_STEP_TIMEOUT = timedelta(seconds=5)
+# A call the provider refuses with one of these statuses (an overload or a rate limit) was not
+# billed. The turn tries once more after a short wait, under a new reservation (Phase 9a).
+UNBILLED_RETRY_STATUSES = frozenset({429, 529})
+UNBILLED_RETRY_DELAY = timedelta(seconds=1)
 
 # The most characters of a taken-back working note shown as a status line.
 WORKING_NOTE_MAX_CHARACTERS = 120
@@ -820,6 +824,8 @@ class TurnRun:
         # The guard never ran because of a budget stop. The budget error itself carries 911 and 988,
         # so no escalation event follows it, but the stop is still audited.
         self.budget_stopped = False
+        # The one app-level retry of a call the provider refused as busy (see `UNBILLED_RETRY_*`).
+        self.unbilled_retried = False
         # The turn ended with the answer shown but no storable final message: its rounds are
         # stored, its empty last message is not.
         self.answer_without_final = False
@@ -1430,7 +1436,22 @@ class TurnRun:
                     yield self._seen(TextRetracted())
                 continue
             except ModelUnavailable as error:
-                self._keep(reservation)
+                if error.unbilled:
+                    # Refused before any work: not billed.
+                    await self._settle(reservation, lambda: Decimal(0))
+                    if (
+                        error.status_code in UNBILLED_RETRY_STATUSES
+                        and not self.unbilled_retried
+                        and calls < MAX_MODEL_CALLS
+                        and len(self.shown) == shown_before
+                        and self.deadline_loop_s - _clock() > 1
+                    ):
+                        # The same request goes out again and reserves for itself.
+                        self.unbilled_retried = True
+                        await asyncio.sleep(UNBILLED_RETRY_DELAY.total_seconds())
+                        continue
+                else:
+                    self._keep(reservation)
                 self.fail("model-unavailable", request_id=error.request_id)
                 return
             except SpendLimitReached:

@@ -63,3 +63,25 @@ admit a reservation if today's rows + reservation <= min(allowance_today, AI_DAI
 - There is no sweeper. A reservation that is never settled counts at its full amount for the rest
   of the month, which is what a sweeper would produce elsewhere.
 - A 429 for a used-up month sends no `Retry-After`: tomorrow does not help.
+
+### Unbilled failures settle to zero, and the SDK no longer retries
+
+The reserve-then-settle rule stays: a reservation is made before every model attempt, and a settle
+never fails a call that was already paid for. What a failed call settles to depends on what the
+provider does with it (`classify_status_error` in `app/ai/anthropic_transport.py`):
+
+- **Spend limit** (a 400 with the Console's "You have reached your specified ... API usage limits"
+  message, a 402 `billing_error`, or a 429 whose `error.details.error_code` (or `error.error_code`)
+  is `enforced_spend_limit_reached`): settles to $0 and stops the assistant with the spend-limit
+  text. At the guard it still gives the emergency numbers (911 and 988).
+- **Refused before any work** (a 401, 403, 429 without that code, or any 529 or `overloaded_error`
+  status): the provider doesn't bill it, so it settles to $0. A guard or summary failure of this
+  kind carries zero usage, and the assistant's call settles to $0 in the turn.
+- **Anything else** (a 500, a dropped connection, a timeout, or an `overloaded_error` event inside
+  a 200 stream): the cost is unknown, so the reservation stays at its full amount. Output may have
+  been billed, and so a failure after the person saw text never settles to $0 and is never retried.
+
+The SDK's own retries are off (`MODEL_MAX_RETRIES = 0`): they sent up to three requests under one
+reservation. In their place the turn makes one retry of its own, only for an unbilled 429 or 529
+on the assistant's call, only when nothing was shown yet, after one second, and under a new
+reservation. A recorded eval fixture never holds an unbilled failure (it would replay an outage).

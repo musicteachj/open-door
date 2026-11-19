@@ -32,6 +32,7 @@ from app.ai.replay import (
     encode_guard_result,
     fingerprint,
     guard_fingerprint,
+    is_transient,
     model_fingerprint,
 )
 from app.ai.scripted import ScriptedTransport
@@ -1552,3 +1553,14 @@ async def test_a_model_stream_the_consumer_closes_early_is_not_timed(tmp_path: P
     await read_then_close(recorder.stream(a_request()), 1)
 
     assert recorder.timings == {}
+
+
+def test_an_unbilled_failure_is_never_recorded() -> None:
+    from app.ai.case_summary import SummaryUnavailable
+
+    nothing = Usage(0, 0, 0, 0)
+
+    # A refusal before any work says nothing about the model: recording it would replay an outage.
+    assert is_transient(GuardUnavailable("x", usage=nothing, unbilled=True))
+    assert is_transient(SummaryUnavailable("x", usage=nothing, unbilled=True))
+    assert is_transient(ModelUnavailable("x", status_code=401, unbilled=True))

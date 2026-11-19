@@ -55,11 +55,10 @@ from anthropic import (
     APIError,
     APIStatusError,
     AsyncAnthropic,
-    BadRequestError,
     Timeout,
 )
 
-from app.ai.anthropic_transport import is_spend_limit, usage_from_sdk
+from app.ai.anthropic_transport import classify_status_error, usage_from_sdk
 from app.ai.context import ROLE_LABELS, role_for
 from app.ai.pricing import Usage, cost_usd, is_priced
 from app.ai.replay import (
@@ -638,7 +637,7 @@ def anthropic_caller(client: AsyncAnthropic) -> JudgeCaller:
                 f"the judge could not be reached ({type(error).__name__})"
             ) from error
         except APIStatusError as error:
-            if isinstance(error, BadRequestError) and is_spend_limit(error.body):
+            if classify_status_error(error) == "spend-limit":
                 raise ConsoleSpendLimit from error
             status = error.status_code
             if status in _TRANSIENT_STATUSES or status >= 500:

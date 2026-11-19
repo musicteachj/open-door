@@ -231,6 +231,21 @@ async def test_a_failed_call_writes_failed_with_its_code_and_leaves_the_case_alo
     assert (mine["id"], mine["status"]) == (case.id, "new")
 
 
+@pytest.mark.usefixtures("daily_ledger_untouched")
+async def test_an_unbilled_summary_failure_settles_to_zero(
+    browser: Browser, app_engine: AsyncEngine
+) -> None:
+    use(browser, FakeSummarizer(SummaryUnavailable("busy", usage=Usage(0, 0, 0, 0), unbilled=True)))
+
+    case = sent_by_priya(browser)
+
+    assert summary_of(browser, case.id) == ("failed", "transport")
+    rows = await spend_rows(app_engine, case.tenant, "case_summary")
+    assert [row.kind for row in rows] == ["reserve", "settle"]
+    assert rows[0].amount_usd > 0
+    assert sum(row.amount_usd for row in rows) == 0
+
+
 def test_thirty_seconds_with_no_answer_writes_failed_timeout(
     browser: Browser, monkeypatch: pytest.MonkeyPatch
 ) -> None:

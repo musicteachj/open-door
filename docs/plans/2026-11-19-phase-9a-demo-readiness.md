@@ -465,7 +465,7 @@ browser test with `cd apps/web && npx playwright test e2e/<file>.spec.ts`.
   - `CHANGELOG.md`, Added: "The assistant's spend is a monthly budget, paced by day (Phase 9a)".
 - [x] **Step 14: Run the API checks.** `make db && make check-api`, then `make eval-offline`.
   Expected: both pass; the offline evals are unchanged.
-- [ ] **Step 15: Stop:** show the diff summary and the proposed commit message, and wait for
+- [x] **Step 15: Stop:** show the diff summary and the proposed commit message, and wait for
   James's explicit OK before committing.
   Proposed subject: "Pace the assistant's spend from a monthly budget". Body: the formula in one
   sentence, that production must set `AI_MONTHLY_BUDGET_USD` and `0` turns live AI off, that the
@@ -497,7 +497,7 @@ browser test with `cd apps/web && npx playwright test e2e/<file>.spec.ts`.
   - `MODEL_MAX_RETRIES = 0`; in `turn.py`, `UNBILLED_RETRY_STATUSES = frozenset({429, 529})` and
     `UNBILLED_RETRY_DELAY = timedelta(seconds=1)`.
 
-- [ ] **Step 1: Write the failing classification test,** table-driven, building each
+- [x] **Step 1: Write the failing classification test,** table-driven, building each
   `APIStatusError` the way the file's existing tests do:
 
   | Status | Body | Expected |
@@ -522,16 +522,16 @@ browser test with `cd apps/web && npx playwright test e2e/<file>.spec.ts`.
   529 gives `GuardUnavailable` and `SummaryUnavailable` with `unbilled=True` and zero usage); and
   `test_the_client_makes_one_attempt` (`from_settings(...).client.max_retries == 0`). Update the
   worst-case test (`test_anthropic_transport.py:945-949`) to one attempt.
-- [ ] **Step 2: Run them.** `cd apps/api && uv run pytest tests/test_anthropic_transport.py tests/test_anthropic_summarizer.py -q`.
+- [x] **Step 2: Run them.** `cd apps/api && uv run pytest tests/test_anthropic_transport.py tests/test_anthropic_summarizer.py -q`.
   Expected: FAIL (`classify_status_error` undefined).
-- [ ] **Step 3: Implement the classifier** and use it in all three call paths, in place of
+- [x] **Step 3: Implement the classifier** and use it in all three call paths, in place of
   `is_spend_limit` (keep `is_spend_limit` only if another module imports it). The message pattern:
   `re.compile(r"You have reached your specified (?:(?:workspace|organization) )?API usage limits")`,
   matched at the start. Read the organization message's exact words on Anthropic's errors page
   and record "Source: ..., read on <date>" beside the pattern; adjust it if the words differ. Set
   `MODEL_MAX_RETRIES = 0` and rewrite the comment above it (one attempt per reservation, spec 5.2).
-- [ ] **Step 4: Run them.** Same command. Expected: PASS.
-- [ ] **Step 5: Write the failing ledger tests.**
+- [x] **Step 4: Run them.** Same command. Expected: PASS.
+- [x] **Step 5: Write the failing ledger tests.**
   - `tests/test_replay.py`: `test_an_unbilled_failure_is_never_recorded`
     (`is_transient(GuardUnavailable("x", usage=Usage(0, 0, 0, 0), unbilled=True))` is True, and the
     same for `SummaryUnavailable`).
@@ -552,9 +552,9 @@ browser test with `cd apps/web && npx playwright test e2e/<file>.spec.ts`.
       `SpendLimitReached`; the error is `spend-limit`, its text holds "911" and "988", and the
       guard's reservation nets to 0.
   - `tests/integration/test_case_summary_task.py`: `test_an_unbilled_summary_failure_settles_to_zero`.
-- [ ] **Step 6: Run them.** `uv run pytest tests/test_replay.py tests/test_guard.py tests/integration/test_turn_endings.py tests/integration/test_case_summary_task.py -q`.
+- [x] **Step 6: Run them.** `uv run pytest tests/test_replay.py tests/test_guard.py tests/integration/test_turn_endings.py tests/integration/test_case_summary_task.py -q`.
   Expected: FAIL on the new tests.
-- [ ] **Step 7: Implement.** `is_transient` also returns True for `unbilled`. `guard.screen` turns
+- [x] **Step 7: Implement.** `is_transient` also returns True for `unbilled`. `guard.screen` turns
   an unbilled `GuardUnavailable` into `_unavailable(Usage(0, 0, 0, 0))`. In `turn.py`'s
   `except ModelUnavailable` (`:1432-1435`):
 
@@ -574,13 +574,13 @@ browser test with `cd apps/web && npx playwright test e2e/<file>.spec.ts`.
 
   `unbilled_retried` starts False in `TurnRun.__init__`. The retry goes back to the top of the
   loop, which builds the same request and reserves for it again.
-- [ ] **Step 8: Run them.** Same command, then `uv run pytest tests/integration/test_turn.py -q`.
+- [x] **Step 8: Run them.** Same command, then `uv run pytest tests/integration/test_turn.py -q`.
   Expected: PASS.
-- [ ] **Step 9: Docs.** Add the settle rules and "retries off, one app-level retry" to ADR 0011's
+- [x] **Step 9: Docs.** Add the settle rules and "retries off, one app-level retry" to ADR 0011's
   amendment. `CHANGELOG.md`, Fixed: "A failed call the provider doesn't bill no longer uses up the
   day's budget (Phase 9a)", and Changed: "The Anthropic workspace, organization, billing, and
   enforced spend limits all stop the assistant with the spend-limit text (Phase 9a)".
-- [ ] **Step 10: Run the API checks.** `make check-api && make eval-offline`. Expected: PASS.
+- [x] **Step 10: Run the API checks.** `make check-api && make eval-offline`. Expected: PASS.
 - [ ] **Step 11: Stop:** show the diff summary and the proposed commit message, and wait for
   James's explicit OK before committing.
   Proposed subject: "Settle unbilled model failures to zero and name every spend limit". Body:
