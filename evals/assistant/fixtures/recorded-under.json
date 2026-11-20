@@ -1,0 +1,6 @@
+{
+  "promptVersion": "2026-11.4",
+  "file": "assistant-prompt-2026-11.4.md",
+  "sha256": "f860ec09cd6de4a3b845795f84d809737efa803e2154b5e5dd9c586c83998b27",
+  "why": "Prompt 2026-11.5 shipped without a full eval run (James, 2026-11-18; docs/adr/0023), so these recordings are 2026-11.4's. Offline replay uses the archived 2026-11.4 text as the system prompt. Delete this file, and the archived prompt, after the next full FRESH=1 PRUNE=1 run."
+}

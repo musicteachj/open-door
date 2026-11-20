@@ -125,6 +125,7 @@ from app.ai.proposals import (
     cancel_unreported_proposals_in,
     conversation_proposals,
     recover_abandoned_turns,
+    request_statuses_now,
     unreported_outcomes,
 )
 from app.ai.text import error_name, one_line
@@ -924,8 +925,11 @@ class TurnRun:
             )
             # The database's clock, and the cards whose shown status no stored context has told.
             now_db = (await db.execute(select(func.now()))).scalar_one()
+            untold = await conversation_proposals(db, conversation.id, untold_at=now_db)
+            # Where each confirmed card's request is now, so a request decided since the card is
+            # never told as still waiting.
             outcomes, outcome_entries = unreported_outcomes(
-                await conversation_proposals(db, conversation.id, untold_at=now_db), now_db
+                untold, now_db, await request_statuses_now(db, untold)
             )
             # A case the person opened from this conversation is told the same way, once.
             case_sentences, case_entries = await unreported_cases(

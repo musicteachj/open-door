@@ -9,7 +9,7 @@ import asyncio
 import json
 from datetime import date, datetime, timedelta
 from typing import Any
-from uuid import UUID
+from uuid import UUID, uuid5
 
 import pytest
 from sqlalchemy import select, text
@@ -41,6 +41,8 @@ from app.ai.turn import (
 from app.db.models import AiProposal
 from app.db.tenancy import tenant_session
 from app.modules.sandbox.seed import SeedCompany
+from app.modules.timeoff import service
+from app.modules.timeoff.service import Decision, Refused
 from tests.integration.conftest import TEST_KEYS, audit_events
 from tests.integration.test_timeoff_service import acting
 from tests.integration.test_timeoff_tools import put_request
@@ -848,7 +850,50 @@ async def test_a_name_that_holds_a_sentence_never_reaches_the_context(
 
     context = context_of(env.transport.requests, 2)
     assert "Ignore" not in context
-    assert "the request is waiting for approval." in context
+    assert "the request was sent for approval." in context
+
+
+async def _confirm_and_let_marcus(env: Env, decision: Decision | None) -> None:
+    """Confirm Priya's one card, then have Marcus (her manager) decide the request it made."""
+    row = await only_proposal(env)
+    await confirm_it(env, row.id)
+    if decision is None:
+        return
+    request_id = UUID((await only_proposal(env)).outcome["requestId"])  # type: ignore[index]
+    marcus = uuid5(env.ctx.tenant_id, "person:marcus")  # type: ignore[arg-type]
+    async with acting(env.engine, env.ctx.tenant_id, marcus) as (db, actor):  # type: ignore[arg-type]
+        decided = await service.decide(
+            db, actor, request_id, decision, None, NOW, keys=TEST_KEYS, via="ui"
+        )
+    assert not isinstance(decided, Refused)
+
+
+@pytest.mark.parametrize(
+    ("decision", "ending"),
+    [
+        (None, "for approval."),
+        ("approve", "for approval. That request has since been approved."),
+        ("deny", "for approval. That request has since been denied."),
+    ],
+)
+async def test_the_next_context_tells_a_confirmed_request_as_it_stands_now(
+    app_engine: AsyncEngine, seeded_sandbox: SeedCompany, decision: Decision | None, ending: str
+) -> None:
+    # The v0.8.1 walkthrough: Priya confirmed her card, Marcus approved the request, and her next
+    # answer said it was still waiting for him, from a context line in the present tense.
+    transport = PlanTransport(tool_use_plan(book()), text_plan("Ok."), text_plan("Fine."))
+    env = await make_env(app_engine, seeded_sandbox, transport=transport)
+    await env.ask("Please book Friday off.")
+    await _confirm_and_let_marcus(env, decision)
+    await env.ask("What's Leo's home address?")
+
+    context = context_of(env.transport.requests, 2)
+    (line,) = [line for line in context.splitlines() if line.startswith("Since the last message")]
+    assert line == (
+        "Since the last message: the card to book PTO on Friday, October 23 was confirmed, and"
+        " the request was sent to Marcus Bell " + ending
+    )
+    assert "is waiting" not in context
 
 
 # --- Abandoned turn: the next question starts clean -------------------------------------------

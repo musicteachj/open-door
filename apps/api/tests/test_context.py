@@ -178,7 +178,7 @@ def test_hr_outranks_manager_and_manager_outranks_employee(
 
 OUTCOME = (
     "Since the last message: the card to book PTO on Friday, October 23 was confirmed, and the "
-    "request is waiting for Marcus Bell."
+    "request was sent to Marcus Bell for approval."
 )
 
 

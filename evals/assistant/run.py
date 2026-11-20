@@ -177,6 +177,7 @@ from assistant import (  # noqa: E402
     handgrades,
     judge,
     pairwise,
+    recorded_prompt,
     regrade,
     scoreboard,
 )
@@ -3115,8 +3116,19 @@ async def eval_command(args: argparse.Namespace, env: RunEnv) -> int:
             fresh=args.fresh,
             clones=clones,
         )
+        if live and (args.fixtures_dir / recorded_prompt.PIN_FILE).is_file():
+            print(
+                f"Note: {args.fixtures_dir / recorded_prompt.PIN_FILE} pins an older prompt for"
+                " offline replay. Delete it, and the archived prompt it names, after the next full"
+                " `FRESH=1 PRUNE=1` run records the current prompt."
+            )
         try:
-            result = await run.run()
+            if live:
+                result = await run.run()
+            else:
+                # Offline, the recordings are the pinned prompt's, so replay under it.
+                with recorded_prompt.replaying_under_recorded_prompt(args.fixtures_dir):
+                    result = await run.run()
         except Exception as error:
             # What finished is still worth having: write it, marked aborted, then let the error
             # end the command (exit 2).

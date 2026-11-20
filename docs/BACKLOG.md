@@ -203,29 +203,16 @@ should pick it up. When one is done, delete it here and record it in the changel
   networking) never hit it. Joining the database's own Docker network on macOS, as
   `make prod-local` does with its own database, would remove the hop. A failure like it is a
   rerun, not a bug in the app. (`fix/phase-8-loose-ends`.)
-- **The assistant reports a card's outcome as if it were current.** Recording the walkthrough
-  (2026-11-16), Priya's answer after Marcus had approved her request said it was "now waiting for
-  Marcus Bell to approve it". The per-turn context tells the model what happened to the asker's own
-  card (requested), not what happened to the request since, and the model words it as the present
-  status. Tell the request's current status, or word the line in the past tense; it changes what
-  the model is told, so it needs a full eval run, and the walkthrough is recorded again after.
-  The takes of 2026-11-17 repeat it at step 6, and the second also opens Marcus's answer about Leo
-  (step 5) with "Priya Raman's PTO for Friday, November 20 is now approved.", a recap of the card
-  he had just confirmed, before answering the question; telling the model not to recap a card the
-  person has already seen would cover both. (Phase 8, Stage 9; the v0.8.1 takes.)
-  Root cause (2026-11-18): the "Since the last message" line is built from the card alone
-  (`unreported_outcomes` and `_after_confirm` in `app/ai/proposals.py`, called from `turn.py`),
-  which says "the request is waiting for" the approver in the present tense and never reads the
-  request, so a line told after Marcus decided is already false; and nothing in `assistant.md`
-  says the person saw each outcome on the card, so the model passes it on as news. A fix is
-  written and tested (not shipped): word the confirmed card in the past tense ("the request was
-  sent to Marcus Bell for approval"), add a fixed "That request has since been approved / denied /
-  canceled." when the request moved on (read as the person, under row-level security), and three
-  prompt lines: don't tell a card's outcome unless asked, and use `list_time_off_requests` for where
-  a request stands now. It bumps the prompt version, so it ships with the next full eval run; no
-  eval item has an outcome line, so the walkthrough take after it is the real check (step 5 must
-  not open with Priya's approval, step 6 must not mention her request). The phase 5 spec quotes
-  the old line and changes with it.
+- **After the deploy: check the stale-card fix and delete the eval pin.** The fix for the assistant
+  telling a request's old status as current (found recording the walkthrough, 2026-11-16, where
+  Priya was told her request still waited after Marcus approved it) shipped in prompt 2026-11.5
+  without its full eval run, by the owner's waiver of 2026-11-18 (ADR 0023). The "Since the last
+  message" line is now in the past tense, adds where the request is now, and the prompt says not to
+  retell a card the person saw. Once deployed: run the full set (`make eval-live SET=full FRESH=1
+  PRUNE=1 YES=1`), record the walkthrough again (steps 5 and 6 are the check: step 5 must not open
+  with Priya's approval, and step 6 must not mention her request), and delete the pin
+  (`evals/assistant/fixtures/recorded-under.json` and the archived 2026-11.4 prompt beside it) in
+  the same change as the new recordings. (Phase 9a, Task 7.)
 - **"Book next Friday off" in the personas' "Try asking" lists is ambiguous.** The live model
   asks which Friday is meant on many days (this week's or next week's), so the suggestion often
   gets a question instead of a card. The tour's chip became "Book this Friday off." in Phase 8,

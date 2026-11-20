@@ -61,6 +61,16 @@ version (`0.x.y` while the app is being built, `1.0.0` when it is complete).
 
 ### Fixed
 
+- **The assistant no longer tells a request's old status as current** (Phase 9a, prompt
+  2026-11.5). Priya was told her request still waited for Marcus after he had approved it. The
+  per-turn "Since the last message" line is now in the past tense ("the request was sent to Marcus
+  Bell for approval"), adds "That request has since been approved, denied, or canceled." when the
+  request moved on (read as the signed-in person, under row-level security), and the prompt says
+  not to retell a card the person already saw and to use the list tool for where a request stands
+  now. **Waiver:** this ships with no eval run for 2026-11.5 before launch (James, 2026-11-18), the
+  walkthrough video is recorded again after deployment, and CI replays the 2026-11.4 recordings
+  under an archived copy of the 2026-11.4 prompt (`evals/assistant/fixtures/recorded-under.json`)
+  until the next full run. ADR 0023.
 - **A failed call the provider doesn't bill no longer uses up the day's budget** (Phase 9a). A 401,
   403, 429, or 529 refusal settles to $0 instead of keeping its full reservation, for the
   assistant's call, the safety check, and the case summary.

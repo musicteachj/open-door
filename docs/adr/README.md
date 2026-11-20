@@ -28,6 +28,7 @@ records are never rewritten.
 | [0020](0020-one-image-one-origin.md) | One production image serves the API and the web app from one origin, under a nonce-based CSP | Accepted | 2026-11-05 |
 | [0021](0021-sandbox-entry-protection.md) | Starting a sandbox needs a Turnstile check and is limited per address and per day | Accepted | 2026-11-05 |
 | [0022](0022-claude-api-from-aws.md) | On AWS, the API reaches Claude through the Claude API, not Amazon Bedrock | Accepted | 2026-11-05 |
+| [0023](0023-phase-9-on-the-shared-portfolio-server.md) | Phase 9 deploys to the shared portfolio server, and prompt 2026-11.5 ships without a full eval run | Proposed | 2026-11-20 |
 
 New records copy this shape:
 

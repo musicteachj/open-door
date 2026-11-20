@@ -453,7 +453,9 @@ Reviewed on 2026-11-16, at the end of Phase 8, section by section:
   each is still measured by its eval.
 - **What reaches the vendors:** as listed, with Cloudflare added (not an AI vendor).
 - **Found while recording the walkthrough:** after a manager approved Priya's request, her next
-  answer said the request was "now waiting for Marcus Bell to approve it". The per-turn context tells
+  answer said the request was "now waiting for Marcus Bell to approve it". The per-turn context told
   the model what happened to the asker's own card (requested), not the request's later approval,
-  and the model reported it as the current status. It is in the backlog: the fix changes what the
-  model is told, so it needs a full eval run.
+  and the model reported it as the current status. It is fixed in prompt 2026-11.5, which has had
+  no eval run (the owner waived it for launch, ADR 0023). The published scoreboard is still
+  2026-11.4's, and CI replays the 2026-11.4 recordings under that prompt until a full run records
+  the new one.

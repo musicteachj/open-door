@@ -311,12 +311,9 @@ async def denial_notes(
             continue
         if row.card.get("decision") != "deny":
             continue
-        request_id = (row.outcome or {}).get("requestId")
-        if isinstance(request_id, str):
-            try:
-                request_of[row.id] = UUID(request_id)
-            except ValueError:
-                continue
+        request_id = _request_id(row)
+        if request_id is not None:
+            request_of[row.id] = request_id
     if not request_of:
         return {}
     found = (
@@ -344,6 +341,44 @@ async def denial_notes(
         proposal_id: notes[request_id]
         for proposal_id, request_id in request_of.items()
         if request_id in notes
+    }
+
+
+def _request_id(row: ProposalRow) -> UUID | None:
+    """The request a confirmed card made or acted on, from its outcome's `requestId`."""
+    request_id = (row.outcome or {}).get("requestId")
+    if not isinstance(request_id, str):
+        return None
+    try:
+        return UUID(request_id)
+    except ValueError:
+        return None
+
+
+async def request_statuses_now(db: AsyncSession, rows: Sequence[ProposalData]) -> dict[UUID, str]:
+    """The status now of the request each confirmed card among `rows` made or acted on, by card ID,
+    for the next turn's context (`unreported_outcomes`). One query, and none when no card was
+    confirmed. Read as the signed-in person, so a request they can no longer see has no entry."""
+    request_of = {
+        row.id: request_id
+        for row in rows
+        if row.status == "executed" and (request_id := _request_id(row)) is not None
+    }
+    if not request_of:
+        return {}
+    found = dict(
+        (
+            await db.execute(
+                select(TimeOffRequest.id, TimeOffRequest.status).where(
+                    TimeOffRequest.id.in_(request_of.values())
+                )
+            )
+        ).all()
+    )
+    return {
+        proposal_id: found[request_id]
+        for proposal_id, request_id in request_of.items()
+        if request_id in found
     }
 
 
@@ -1080,10 +1115,36 @@ def _after_confirm(row: OutcomeRow) -> str:
             return "and the time was recorded"
         approver = card.get("approver")
         name = _plain_name(approver.get("name")) if isinstance(approver, Mapping) else None
-        return f"and the request is waiting for {name or 'approval'}"
+        # The past tense: a line stays in the conversation's history after the request moves on.
+        return f"and the request was sent {f'to {name} ' if name else ''}for approval"
     if row.action == "timeoff.decide":
         return f"and the request was {'denied' if card.get('decision') == 'deny' else 'approved'}"
     return "and the request was canceled"
+
+
+def _left_as(row: OutcomeRow) -> str:
+    """The status a confirmed card left its request in."""
+    if row.action == "timeoff.request":
+        return "recorded" if row.card.get("type") == "sick" else "pending"
+    if row.action == "timeoff.decide":
+        return "denied" if row.card.get("decision") == "deny" else "approved"
+    return "canceled"
+
+
+# What a confirmed card's request became after the card, in fixed words. A status that is not in
+# the table, or the one the card left it in, adds nothing.
+_SINCE_ENDINGS = {
+    "approved": "That request has since been approved.",
+    "denied": "That request has since been denied.",
+    "canceled": "That request has since been canceled.",
+}
+
+
+def _since(row: OutcomeRow, status: str, status_now: str | None) -> str:
+    if status != "executed" or status_now is None or status_now == _left_as(row):
+        return ""
+    ending = _SINCE_ENDINGS.get(status_now)
+    return "" if ending is None else f" {ending}"
 
 
 def _predicate(row: OutcomeRow, status: str) -> str:
@@ -1137,7 +1198,9 @@ def join_outcome_sentences(sentences: Sequence[str]) -> str:
 
 
 def unreported_outcomes(
-    rows: Sequence[_Identified], now: datetime
+    rows: Sequence[_Identified],
+    now: datetime,
+    request_statuses: Mapping[UUID, str] | None = None,
 ) -> tuple[tuple[str, ...], tuple[str, ...]]:
     """The next turn's per-turn context line (ADR 0013) for the cards in `rows` that have ended or
     expired by `now`, and the `told_entry` of each card it tells about. No line when nothing
@@ -1156,11 +1219,20 @@ def unreported_outcomes(
     and anything unexpected in a field never reach a line. A pending proposal past its expiry
     counts as expired, at its `expires_at`, as `status_as_of` shows it (pass the database's clock
     as `now`). Nothing is added for a proposal still pending.
+
+    Every sentence is in the past tense, since a stored context stays in the conversation's history
+    after the request moves on. `request_statuses` (`request_statuses_now`, by card ID) adds where
+    a confirmed card's request is now, in fixed words, only when it has moved on from where the
+    card left it: a request Marcus approved after Priya confirmed her card is told to her as
+    approved, never as still waiting for him.
     """
     changes = sorted(_changes(rows, now), key=lambda change: change[0])
     if not changes:
         return (), ()
-    sentences = [sentence for _, _, _, sentence in changes]
+    statuses = request_statuses or {}
+    sentences = [
+        sentence + _since(row, status, statuses.get(row.id)) for _, row, status, sentence in changes
+    ]
     return (OUTCOME_PREFIX + join_outcome_sentences(sentences),), tuple(
         told_entry(row.id, status) for _, row, status, _ in changes
     )

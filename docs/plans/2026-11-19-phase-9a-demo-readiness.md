@@ -824,16 +824,16 @@ browser test with `cd apps/web && npx playwright test e2e/<file>.spec.ts`.
     patches `app.ai.turn.system_prompt` (the one caller, `app/ai/turn.py:729`) to return the pinned
     text for the block, and prints one line naming both versions.
 
-- [ ] **Step 1: Apply the patch.** `git apply --check /Users/jameslittlefield/Documents/github_things/open-door-patches/stale-card-recap.patch`,
+- [x] **Step 1: Apply the patch.** `git apply --check /Users/jameslittlefield/Documents/github_things/open-door-patches/stale-card-recap.patch`,
   then `git apply` it. If the check fails because Task 3 moved lines in `turn.py`, use
   `git apply --3way` and keep both changes; the patch's intent is the authority.
-- [ ] **Step 2: Run the patch's tests.** `cd apps/api && uv run pytest tests/test_prompts.py tests/test_outcomes_window.py tests/test_context.py tests/integration/test_proposals.py tests/integration/test_turn_proposals.py -q`.
+- [x] **Step 2: Run the patch's tests.** `cd apps/api && uv run pytest tests/test_prompts.py tests/test_outcomes_window.py tests/test_context.py tests/integration/test_proposals.py tests/integration/test_turn_proposals.py -q`.
   Expected: PASS.
-- [ ] **Step 3: Confirm the replay breaks, and how.** Run `make eval-offline`. Expected: the full
+- [x] **Step 3: Confirm the replay breaks, and how.** Run `make eval-offline`. Expected: the full
   set FAILS with replay misses only, and the escalation and case-summary sets pass (their prompts
   didn't change). Record the miss count under "Changes made during execution". Any other kind of
   failure: stop and ask James.
-- [ ] **Step 4: Write the failing pin tests** in `apps/api/tests/test_eval_recorded_prompt.py`:
+- [x] **Step 4: Write the failing pin tests** in `apps/api/tests/test_eval_recorded_prompt.py`:
   - `test_the_pin_names_an_older_prompt`: the committed pin's version is not `PROMPT_VERSION`.
   - `test_the_pinned_text_is_its_versions_golden_prompt`: its SHA-256 equals
     `GOLDEN_HASHES[("assistant", pin.prompt_version)]` from `tests/test_prompts.py`.
@@ -842,8 +842,8 @@ browser test with `cd apps/web && npx playwright test e2e/<file>.spec.ts`.
     system text is the pinned text and its tools are unchanged; after it, both are current.
   - `test_no_pin_changes_nothing` and `test_a_pin_with_the_wrong_hash_is_refused` (a temporary
     folder).
-- [ ] **Step 5: Run them.** `uv run pytest tests/test_eval_recorded_prompt.py -q`. Expected: FAIL.
-- [ ] **Step 6: Implement.** Copy the 2026-11.4 prompt out of git, byte for byte:
+- [x] **Step 5: Run them.** `uv run pytest tests/test_eval_recorded_prompt.py -q`. Expected: FAIL.
+- [x] **Step 6: Implement.** Copy the 2026-11.4 prompt out of git, byte for byte:
   `git show dev:apps/api/app/ai/prompts/assistant.md > evals/assistant/fixtures/assistant-prompt-2026-11.4.md`,
   and check it with `shasum -a 256` (expected `f860ec09...c98b27`). Write the JSON and the module.
   In `run.py`, wrap every offline run of the assistant sets (smoke, full, effort; not escalation
@@ -851,9 +851,9 @@ browser test with `cd apps/web && npx playwright test e2e/<file>.spec.ts`.
   (`tests/integration/test_assistant_eval_harness.py`, `test_assistant_eval_runner_db.py`) replay
   committed fixtures through a lower function, apply it there instead. A live run with a pin
   present prints that the pin must be deleted after the next full `FRESH=1 PRUNE=1` run.
-- [ ] **Step 7: Run them.** `uv run pytest tests/test_eval_recorded_prompt.py tests/integration/test_assistant_eval_harness.py -q`,
+- [x] **Step 7: Run them.** `uv run pytest tests/test_eval_recorded_prompt.py tests/integration/test_assistant_eval_harness.py -q`,
   then `make eval-offline`. Expected: PASS, with the pin's line printed once per set it applies to.
-- [ ] **Step 8: Docs.**
+- [x] **Step 8: Docs.**
   - `evals/README.md`: a short section, "Replaying under a recorded prompt": when the pin is
     allowed (an owner's waiver of the full run), what it tests (the plumbing and the graders on the
     old recordings) and what it doesn't (the new prompt), and that the next full run deletes it.
@@ -870,9 +870,9 @@ browser test with `cd apps/web && npx playwright test e2e/<file>.spec.ts`.
   - `CHANGELOG.md`, Fixed: "The assistant no longer tells a request's old status as current
     (Phase 9a, prompt 2026-11.5)", stating the waiver: no eval run for 2026-11.5 before launch, the
     walkthrough video recorded again after deployment, and CI replaying the 2026-11.4 recordings.
-- [ ] **Step 9: Run the checks.** `make check-api && make eval-offline && make check-docs`.
+- [x] **Step 9: Run the checks.** `make check-api && make eval-offline && make check-docs`.
   Expected: PASS.
-- [ ] **Step 10: Stop:** show the diff summary and the proposed commit message, and wait for
+- [x] **Step 10: Stop:** show the diff summary and the proposed commit message, and wait for
   James's explicit OK before committing.
   Proposed subject: "Stop the assistant telling a request's old status as current". Body: the bug
   (Priya told her request still waits after Marcus approved it), the fix, the version bump, the
@@ -1361,6 +1361,8 @@ No tasks here; each is the master plan's.
 ## Changes made during execution
 
 Task 4: the composer's disabled placeholder said 'until tomorrow' too; the owner approved 'The live assistant isn't available right now.' on 2026-11-19.
+
+Task 7: base commit 1e7d27a. The patch applied cleanly. Without the pin, the full set failed on a replay miss only: the runner stops at the first miss (rt-01), so all 207 items would miss, since every request carries the system prompt. The escalation and case-summary sets passed. One change to the saved patch: `request_statuses_now` dropped `.tuples()`, which raised a SQLAlchemy deprecation warning that the test settings turn into an error.
 
 The implementer also records here: the base commit, the replay miss count (Task 7), what
 the read-only root needed (Task 8), whether `vector` needs a superuser (Task 9), the review
