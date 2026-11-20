@@ -296,8 +296,8 @@ further change.
 ### `sandbox_starts`: how many sandboxes each address has started
 
 Global: no sandbox, no person, no text. Phase 8, stage 4. One row is added each time a sandbox is
-started, so the API can limit starts (ADR 0021): 5 an hour and 20 a day per address, and 500 a UTC
-day in all.
+started, so the API can limit starts (ADR 0021): 15 an hour and 50 a day per address, and 1,000 a UTC
+day in all (raised in Phase 9a for shared office addresses).
 
 | Column | Holds | Why |
 |---|---|---|

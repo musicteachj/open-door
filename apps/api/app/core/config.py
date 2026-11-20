@@ -214,9 +214,9 @@ class Settings(KeyringSettings):
     sandbox_ip_hash_key: SecretStr = Field(default=SecretStr(DEVELOPMENT_IP_HASH_KEY), repr=False)
     # How many sandboxes one address may start in an hour and in a rolling 24 hours, and how many
     # all addresses together may start in a UTC day.
-    sandbox_starts_per_hour: int = Field(default=5, ge=1)
-    sandbox_starts_per_day: int = Field(default=20, ge=1)
-    sandbox_starts_daily_total: int = Field(default=500, ge=1)
+    sandbox_starts_per_hour: int = Field(default=15, ge=1)
+    sandbox_starts_per_day: int = Field(default=50, ge=1)
+    sandbox_starts_daily_total: int = Field(default=1000, ge=1)
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR"] = "INFO"
     # `make embed` and the API with AI_TRANSPORT=anthropic use it (the API embeds each handbook
     # question). Without it the search is full-text only. An empty value counts as unset.

@@ -47,3 +47,13 @@ behind a load balancer, so a limit kept in one process's memory wouldn't hold.
 - Development, CI, the browser tests, and the load test use Cloudflare's documented test keys;
   production refuses them unless its origin is a loopback one (the local production run).
 - A Cloudflare outage stops new sandboxes, not existing ones.
+
+## Amendment (2026-11-19): limits sized for a shared office address
+
+The decision above set 5 starts an hour and 20 a day per address, and 500 a day in all. A hiring
+team behind one office address would reach 5 an hour quickly, so Phase 9a raises them to 15 an
+hour and 50 a day per address, and 1,000 a day in all (20 addresses at 50 a day). Nothing else in
+the decision changes: the check, the lock, and the hashed address stay as written. The AI budget
+(ADR 0011) still ends a busy day long before the start limit does. One sandbox measures about
+353 kB in the compacted development database, so a full 1,000 is about 350 MB, under 2% of the
+20 GB data volume ([`CAPACITY.md`](../CAPACITY.md)).

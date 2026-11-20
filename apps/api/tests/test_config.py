@@ -87,6 +87,13 @@ def test_defaults_apply_when_only_the_database_url_is_set() -> None:
     assert settings.app_origin == "http://localhost:5173"
 
 
+def test_the_start_limits_fit_an_office_network() -> None:
+    settings = Settings(_env_file=None, database_url=APP_URL)
+    assert settings.sandbox_starts_per_hour == 15
+    assert settings.sandbox_starts_per_day == 50
+    assert settings.sandbox_starts_daily_total == 1000
+
+
 def test_a_malformed_database_url_does_not_leak_its_password() -> None:
     with pytest.raises(ValidationError) as excinfo:
         Settings(_env_file=None, database_url="postgresql://app:hunter2@db/app")
@@ -925,12 +932,9 @@ def test_the_hash_key_must_be_at_least_32_bytes() -> None:
     Settings(_env_file=None, database_url=APP_URL, sandbox_ip_hash_key="z" * 32)
 
 
-def test_the_development_hash_key_is_long_enough_and_the_limits_default() -> None:
+def test_the_development_hash_key_is_long_enough() -> None:
     settings = Settings(_env_file=None, database_url=APP_URL)
     assert len(settings.sandbox_ip_hash_key.get_secret_value().encode()) >= 32
-    assert settings.sandbox_starts_per_hour == 5
-    assert settings.sandbox_starts_per_day == 20
-    assert settings.sandbox_starts_daily_total == 500
 
 
 @pytest.mark.parametrize(

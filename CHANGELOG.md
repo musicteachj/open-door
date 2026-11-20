@@ -33,6 +33,10 @@ version (`0.x.y` while the app is being built, `1.0.0` when it is complete).
 
 ### Changed
 
+- **The sandbox start limits fit a hiring team behind one office address** (Phase 9a). One address
+  may now start 15 sandboxes an hour and 50 a day (was 5 and 20), and all addresses together 1,000
+  a UTC day (was 500). A full day is about 350 MB, under 2% of the data volume. ADR 0021 has
+  an amendment, and the load test keeps its own values.
 - **Limit and outage messages point to the recorded walkthrough** (Phase 9a, approved by the owner
   on 2026-11-19). The daily, spend-limit, used-month, and live-AI-off text no longer says "try
   again tomorrow", and the model-unavailable text no longer sends visitors to the HR team, which is

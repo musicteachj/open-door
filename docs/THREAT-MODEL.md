@@ -22,7 +22,7 @@ Related: the [spec's security section](specs/2026-11-05-phase-8-hardening-and-de
 | Each sandbox's people data, above all private details (home address, phone, personal email, date of birth) | Fictional, but the product's promise is that only HR sees them, and only with an audit |
 | Conversation text and case text | A person's own words about their job, health, or a complaint; stored only as ciphertext |
 | The system prompt and its canary | Leaking it shows how to steer the assistant; the canary is a tripwire |
-| The AI budget (per sandbox and per day) | The demo is public and free; the owner pays for every model call |
+| The AI budget (per sandbox, per day, and per month) | The demo is public and free; the owner pays for every model call |
 | The encryption keyring | It unwraps every conversation's and case's data key |
 | The owner's accounts: Anthropic, Voyage, Cloudflare, AWS, GitHub | Keys or tokens here cost money or let someone change the code |
 | The audit log and the AI Ops console | They are how a person checks what the assistant and HR did |
@@ -81,8 +81,8 @@ root folder.
 | I | The page loads script or style from somewhere else, or is framed | **Phase 8, Stage 2:** the API serves the built app with a strict CSP and a fresh nonce on every page (`app/web_app.py`), no inline script, `frame-ancestors 'none'`; HSTS, `nosniff`, `Referrer-Policy: same-origin`, a closed `Permissions-Policy`, COOP, and (from Phase 8's review) `Cross-Origin-Resource-Policy: same-origin` on every response, a 500 included (`app/core/security_headers.py`; ADR 0020) | `tests/test_web_app.py`, `tests/test_security_headers.py`; CI runs the browser suite against the image, and any CSP violation fails the test (`apps/web/e2e/fixtures.ts`, proved by `e2e/csp-guard.spec.ts`) |
 | D | A missing file under `/media/` gets the app's page instead, which the walkthrough's `<video>` fails on silently | **Phase 8, Stage 9:** a missing file under `/media/` is a `no-store` 404; the video is served with `Accept-Ranges` and answers a range with 206, or 416 past the end (Safari needs ranges), and is asked for again on each visit (`no-cache`, a 304 while unchanged) so a new recording never sits beside an old transcript; `media-src 'self'` allows it and nothing else | `tests/test_web_app.py`, `apps/web/e2e/walkthrough.spec.ts` |
 | I | API docs reveal every route in production | **Phase 8, Stage 1:** `/docs`, `/redoc`, `/openapi.json` are 404 in production; **Stage 2:** the image runs uvicorn with `--no-server-header` | `tests/test_app_state.py`, `make image-check` |
-| D | A script starts sandboxes in a loop | **Phase 8, Stage 4:** Cloudflare Turnstile on `POST /sandboxes`, checked first; then 5 an hour and 20 a day per address and 500 a UTC day in all, counted in Postgres (`sandbox_starts`, migration 0019) and recorded under one advisory lock in a short transaction of its own, so two starts can't both slip under; 429 with `Retry-After` (ADR 0021, `app/modules/sandbox/limits.py`) | `tests/integration/test_sandbox_limits.py`, `test_sandbox_start.py`, `tests/test_turnstile.py` |
-| D | A script spends the AI budget | Insert-only budget ledger, per-sandbox and per-day caps checked before every call (ADR 0011, `app/ai/budget.py`, `app/ai/admission.py`); a 429 with **Phase 8, Stage 1** `Retry-After` for the daily cap | `tests/integration/test_budget.py`, `tests/test_admission.py`, `tests/integration/test_turn_stream.py` |
+| D | A script starts sandboxes in a loop | **Phase 8, Stage 4:** Cloudflare Turnstile on `POST /sandboxes`, checked first; then 15 an hour and 50 a day per address and 1,000 a UTC day in all (**Phase 9a**, raised for shared office addresses), counted in Postgres (`sandbox_starts`, migration 0019) and recorded under one advisory lock in a short transaction of its own, so two starts can't both slip under; 429 with `Retry-After` (ADR 0021, `app/modules/sandbox/limits.py`) | `tests/integration/test_sandbox_limits.py`, `test_sandbox_start.py`, `tests/test_turnstile.py` |
+| D | A script spends the AI budget | Insert-only budget ledger, per-sandbox and per-day caps checked before every call, and from **Phase 9a** a monthly budget that paces each day's allowance (ADR 0011 and its 2026-11-19 amendment, `app/ai/budget.py`, `app/ai/admission.py`); a 429 with **Phase 8, Stage 1** `Retry-After` for the daily cap | `tests/integration/test_budget.py`, `tests/test_admission.py`, `tests/integration/test_turn_stream.py` |
 | E | Another tab keeps showing HR's private view after this tab signed out | **Phase 8, Stage 1:** a `BroadcastChannel` message makes every tab refetch `/me` at once | `apps/web/src/lib/session-channel.test.ts`, `apps/web/e2e/session.spec.ts` |
 | T | A stream that ends early is taken as finished, so a dropped crisis or "can't answer" stream reads as answered | **Phase 8, Stage 5:** every turn read to its end sends exactly one closing event (`turn.completed` or `error`), last; the chat page treats a stream with no closing event as stopped, for every kind, and the panel still shows | `tests/integration/test_turn_endings.py`, `apps/web/src/features/chat/store.test.ts` |
 
@@ -192,14 +192,15 @@ Each is accepted on purpose, with the reason.
   they forge still can't outlive its sandbox). The API must be able to set the context, so SQL
   can't close this. The login's password is a secret held only by the API process (the API no
   longer holds the owner's or the cleanup login's), and Phase 9 keeps it in the secrets store.
-- **One actor with many addresses can use up the day's sandbox starts.** The 500-a-day total
+- **One actor with many addresses can use up the day's sandbox starts.** The 1,000-a-day total
   bounds what new sandboxes can cost, and each start still needs a solved Turnstile check, but an
-  IPv6 block wider than a /64 is many buckets, and 25 IPv4 addresses at 20 a day reach 500. New
+  IPv6 block wider than a /64 is many buckets, and 20 IPv4 addresses at 50 a day reach 1,000. New
   visitors then see "come back tomorrow" until midnight UTC; existing sandboxes keep working.
-  Stage 7's load test kept the numbers: a start took about 100 ms at p95 on 1 vCPU, and the daily
-  AI cap ends a busy day long before 500 starts do (at $3, about 17 tours get answers; at the
-  $12 [`CAPACITY.md`](CAPACITY.md) suggests for 50 tours, about 65). So an actor who uses up the
-  starts costs the seeding and the cleanup of up to 500 sandboxes, not AI spend. Phase 9 can alert
+  Stage 7's load test kept the numbers: a start took about 100 ms at p95 on 1 vCPU, and the paced
+  monthly AI budget (ADR 0011) ends a busy day long before 1,000 starts do: with $20 a month, a
+  day's allowance is about $2 early in the month, or about a dozen tours (a tour costs $0.16 to
+  $0.18, see [`CAPACITY.md`](CAPACITY.md)). So an actor who uses up the
+  starts costs the seeding and the cleanup of up to 1,000 sandboxes, not AI spend. Phase 9 can alert
   when the total is reached (found by Stage 4's security review).
 - **A signed-in visitor can create rows without limit inside their own sandbox.** New
   conversations, persona switches, and HR's private reads each write a row (or an audit row) with

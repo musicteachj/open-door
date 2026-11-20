@@ -143,10 +143,16 @@ guarding):
     to 20 at once, about **$24**.
   - Phase 9 picks the number. The budget banner and the refusal text already tell a visitor when
     the day's budget is used.
-- **Sandbox starts: keep 5 an hour and 20 a day per address, and 500 a day in all.** The AI cap,
-  not the start limit, is what ends a busy day: at $12 a day, the assistant stops answering long
-  before 500 sandboxes have started. Every start seeds 145 people (about 100 ms at p95 at 1 vCPU),
-  which the run measured as cheap.
+- **Sandbox starts: 15 an hour and 50 a day per address, and 1,000 a day in all** (Phase 9a,
+  raised from 5, 20, and 500). The per-address numbers are sized for a hiring team behind one
+  office address, where several people try the demo in the same hour. The AI budget, not the start
+  limit, is what ends a busy day: the assistant stops answering long before 1,000 sandboxes have
+  started. Size on disk, measured on 2026-11-19 after compacting the
+  development database (`VACUUM FULL`), with 278 seeded sandboxes: about 353 kB a sandbox, so 1,000
+  sandboxes come to about 350 MB, under 2% of the 20 GB data volume. Sandboxes deleted every day
+  leave dead rows, which autovacuum makes reusable but does not return to the disk, so the volume
+  should hold the peak (about 1,000 sandboxes alive at once) plus headroom. Every start
+  seeds 145 people (about 100 ms at p95 at 1 vCPU), which the run measured as cheap.
 
 ## Caveats
 

@@ -769,29 +769,29 @@ browser test with `cd apps/web && npx playwright test e2e/<file>.spec.ts`.
   `docs/DATA-INVENTORY.md:299`, `CHANGELOG.md`
 - Test: `apps/api/tests/test_config.py`
 
-- [ ] **Step 1: Write the failing test.** `test_the_start_limits_fit_an_office_network`: a default
+- [x] **Step 1: Write the failing test.** `test_the_start_limits_fit_an_office_network`: a default
   `Settings` has `sandbox_starts_per_hour == 15`, `sandbox_starts_per_day == 50`, and
   `sandbox_starts_daily_total == 1000`.
-- [ ] **Step 2: Run it.** `cd apps/api && uv run pytest tests/test_config.py -q`. Expected: FAIL.
-- [ ] **Step 3: Change the three defaults** and `.env.example`. The load test keeps its own values
+- [x] **Step 2: Run it.** `cd apps/api && uv run pytest tests/test_config.py -q`. Expected: FAIL.
+- [x] **Step 3: Change the three defaults** and `.env.example`. The load test keeps its own values
   (`scripts/load/drive.py:327-331`), which its measurements used.
-- [ ] **Step 4: Run it,** then `uv run pytest tests/integration/test_sandbox_limits.py tests/integration/test_sandbox_start.py -q`.
+- [x] **Step 4: Run it,** then `uv run pytest tests/integration/test_sandbox_limits.py tests/integration/test_sandbox_start.py -q`.
   Expected: PASS.
-- [ ] **Step 5: Measure one sandbox's size** in the development database, for the 1,000 total:
+- [x] **Step 5: Measure one sandbox's size** in the development database, for the 1,000 total:
   `docker compose exec -T db psql -U opendoor -d opendoor -Atc "SELECT pg_size_pretty(sum(pg_total_relation_size(c.oid)) / greatest((SELECT count(*) FROM tenants), 1)) FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace WHERE n.nspname = 'public' AND c.relkind = 'r'"`
   (the `db` service of `compose.yaml`). Multiply by 1,000 and confirm it is a small share
   of the 20 GB data volume.
-- [ ] **Step 6: Docs.** `CAPACITY.md:146-149`: 15 an hour and 50 a day per address, sized for a
+- [x] **Step 6: Docs.** `CAPACITY.md:146-149`: 15 an hour and 50 a day per address, sized for a
   hiring team behind one address, and 1,000 a day in all, with the measured size. ADR 0021: a
   dated amendment with the new numbers (the decision at `:19-20` is not rewritten).
   `THREAT-MODEL.md:197`: "20 IPv4 addresses at 50 a day reach 1,000", and the AI budget's
   sentence in `:198-201` now names the monthly budget. `DATA-INVENTORY.md:299`: the new numbers.
   `CHANGELOG.md`, Changed.
-- [ ] **Step 7: Run the checks.** `make check-api && make check-docs`. Expected: PASS.
-- [ ] **Step 8: Stop:** show the diff summary and the proposed commit message, and wait for
+- [x] **Step 7: Run the checks.** `make check-api && make check-docs`. Expected: PASS.
+- [x] **Step 8: Stop:** show the diff summary and the proposed commit message, and wait for
   James's explicit OK before committing.
   Proposed subject: "Raise the sandbox start limits for shared office networks".
-- [ ] **Step 9: The PR-size checkpoint.** Count the reviewable lines so far:
+- [x] **Step 9: The PR-size checkpoint.** Count the reviewable lines so far:
   `git diff --shortstat dev...HEAD -- apps/api/app apps/api/migrations apps/api/scripts scripts evals/assistant apps/web/src Makefile Dockerfile ':!*.test.ts' ':!*.test.tsx' ':!apps/web/src/api/generated.ts' ':!evals/assistant/fixtures' ':!*.json'`.
   Over 1,200 inserted lines: **Stop:** propose opening a PR of Tasks 1 to 6 into `dev` first (the
   review and PR steps of Tasks 12 and 13, for this part), and wait for James's decision.
