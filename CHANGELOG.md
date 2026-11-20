@@ -33,6 +33,16 @@ version (`0.x.y` while the app is being built, `1.0.0` when it is complete).
 
 ### Changed
 
+- **The image runs each job from its own entrypoint, and refuses a command it doesn't know**
+  (Phase 9a). The database setup is `/app/setup.sh` and the cleanup job is `/app/cleanup.sh`;
+  `/app/entrypoint.sh` only serves the API and exits 64 when given any argument instead of
+  starting the API anyway. `make prod-local` now runs every container as production will: the API
+  at 512 MiB, the setup at 256 MiB, and the cleanup at 128 MiB, each with a read-only root, a tmpfs
+  `/tmp`, all capabilities dropped, and `no-new-privileges`. Its check also runs the cleanup job,
+  and requires Turnstile in the page's CSP, a boolean assistant-availability flag, and no API
+  schema or Swagger. The image check proves the three scripts are read-only, that a command is
+  refused, and that the rightmost forwarded address wins over a forged leftmost one.
+
 - **The sandbox start limits fit a hiring team behind one office address** (Phase 9a). One address
   may now start 15 sandboxes an hour and 50 a day (was 5 and 20), and all addresses together 1,000
   a UTC day (was 500). A full day is about 350 MB, under 2% of the data volume. ADR 0021 has

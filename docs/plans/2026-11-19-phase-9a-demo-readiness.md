@@ -898,7 +898,7 @@ browser test with `cd apps/web && npx playwright test e2e/<file>.spec.ts`.
   `container.HARDENED_FLAGS = ["--read-only", "--tmpfs", "/tmp", "--cap-drop", "ALL", "--security-opt", "no-new-privileges:true"]`.
   `SETUP_SCRIPT` goes away. `docs/DEPLOY.md` (Task 11) copies the entrypoints and limits.
 
-- [ ] **Step 1: Write the failing tests.**
+- [x] **Step 1: Write the failing tests.**
   - `test_image_container.py`: `test_the_setup_runs_its_own_entrypoint` (`--entrypoint
     /app/setup.sh`, no command after the image, `--memory 256m`, and the hardened flags);
     `test_the_cleanup_runs_its_own_entrypoint_with_one_setting` (`--entrypoint /app/cleanup.sh`,
@@ -915,9 +915,9 @@ browser test with `cd apps/web && npx playwright test e2e/<file>.spec.ts`.
     `test_a_forged_leftmost_address_must_not_win` (`problems_in_forwarding` given a trusted log
     showing `198.51.100.7` for the header `198.51.100.7, 203.0.113.9` is a problem, and one showing
     `203.0.113.9` isn't).
-- [ ] **Step 2: Run them.** `cd apps/api && uv run pytest tests/test_image_container.py tests/test_prod_local.py tests/test_image_check_script.py -q`.
+- [x] **Step 2: Run them.** `cd apps/api && uv run pytest tests/test_image_container.py tests/test_prod_local.py tests/test_image_check_script.py -q`.
   Expected: FAIL.
-- [ ] **Step 3: Write the scripts.** `scripts/image/setup.sh`:
+- [x] **Step 3: Write the scripts.** `scripts/image/setup.sh`:
 
   ```sh
   #!/bin/sh
@@ -943,7 +943,7 @@ browser test with `cd apps/web && npx playwright test e2e/<file>.spec.ts`.
   ```
 
   The `Dockerfile` copies both scripts beside the entrypoint, mode `0555`.
-- [ ] **Step 4: Update the launchers.** `container.py`: the two `*_run_args` and
+- [x] **Step 4: Update the launchers.** `container.py`: the two `*_run_args` and
   `HARDENED_FLAGS`; the load test keeps working through `setup_run_args`. `start.py`: setup with
   its limit and flags; the API with `--memory 512m` and the flags; `--check` also runs the cleanup
   container once and requires exit 0 and its "cleanup finished" line, requires `script-src` and
@@ -954,16 +954,16 @@ browser test with `cd apps/web && npx playwright test e2e/<file>.spec.ts`.
   `check.py`: the job scripts present and `0555`, the entrypoint exiting 64 on an argument
   (`docker run --rm open-door:test serve`), and the forwarded check also sends
   `X-Forwarded-For: 198.51.100.7, 203.0.113.9` from the trusted peer and expects `203.0.113.9`.
-- [ ] **Step 5: Run them.** Same command. Expected: PASS.
-- [ ] **Step 6: Prove it in the image.** `make image-check`, then `make prod-local-check SKIP_BUILD=1`,
+- [x] **Step 5: Run them.** Same command. Expected: PASS.
+- [x] **Step 6: Prove it in the image.** `make image-check`, then `make prod-local-check SKIP_BUILD=1`,
   then `make live-check DRY_RUN=1 SKIP_BUILD=1` (free: the scripted model). Expected: all pass,
   with the API under a read-only root. If something writes outside `/tmp`, find it and either
   stop it writing or give it a tmpfs, and record which under "Changes made during execution".
-- [ ] **Step 7: Docs.** `scripts/prod-local/README.md`: the setup and cleanup containers, the
+- [x] **Step 7: Docs.** `scripts/prod-local/README.md`: the setup and cleanup containers, the
   limits, and the flags. `CHANGELOG.md`, Changed: "The image runs each job from its own
   entrypoint, and refuses a command it doesn't know (Phase 9a)".
-- [ ] **Step 8: Run the checks.** `make check-api && make check-docs`. Expected: PASS.
-- [ ] **Step 9: Stop:** show the diff summary and the proposed commit message, and wait for
+- [x] **Step 8: Run the checks.** `make check-api && make check-docs`. Expected: PASS.
+- [x] **Step 9: Stop:** show the diff summary and the proposed commit message, and wait for
   James's explicit OK before committing.
   Proposed subject: "Give the setup and cleanup jobs their own image entrypoints".
 
@@ -1363,6 +1363,8 @@ No tasks here; each is the master plan's.
 Task 4: the composer's disabled placeholder said 'until tomorrow' too; the owner approved 'The live assistant isn't available right now.' on 2026-11-19.
 
 Task 7: base commit 1e7d27a. The patch applied cleanly. Without the pin, the full set failed on a replay miss only: the runner stops at the first miss (rt-01), so all 207 items would miss, since every request carries the system prompt. The escalation and case-summary sets passed. One change to the saved patch: `request_statuses_now` dropped `.tuples()`, which raised a SQLAlchemy deprecation warning that the test settings turn into an error.
+
+Task 8: under the read-only root, nothing wrote outside `/tmp`. The setup, the cleanup, and the API ran with only a `/tmp` tmpfs.
 
 The implementer also records here: the base commit, the replay miss count (Task 7), what
 the read-only root needed (Task 8), whether `vector` needs a superuser (Task 9), the review

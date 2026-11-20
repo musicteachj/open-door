@@ -175,7 +175,7 @@ def test_the_postgres_tag_matches_composes() -> None:
     assert match.group(1) == start.POSTGRES_IMAGE
 
 
-def test_the_setup_runs_the_deploy_steps_in_order_with_no_keyring_and_no_api_keys() -> None:
+def test_the_setup_runs_its_own_entrypoint_with_no_keyring_and_no_api_keys() -> None:
     p = passwords()
     env = start.setup_env(p, start.origin_for(8300))
     args = start.setup_run_args(env)
@@ -186,11 +186,80 @@ def test_the_setup_runs_the_deploy_steps_in_order_with_no_keyring_and_no_api_key
     # Only the serving API checks the sandbox-entry settings; the setup tasks carry none.
     assert not {"TURNSTILE_SITE_KEY", "TURNSTILE_SECRET_KEY", "SANDBOX_IP_HASH_KEY"} & set(env)
     assert "--rm" in args
-    assert pairs(args, "--entrypoint") == ["sh"]
-    script = args[args.index("-c") + 1]
-    assert script.index("alembic upgrade head") < script.index("bootstrap_db_users.py")
-    assert script.index("bootstrap_db_users.py") < script.index("ingest_handbook.py ingest")
-    assert args[args.index("-c") - 1] == container.PROD_TAG
+    assert pairs(args, "--entrypoint") == ["/app/setup.sh"]
+    assert pairs(args, "--memory") == ["256m"]
+    assert args[-1] == container.PROD_TAG
+
+
+def test_the_cleanup_container_gets_only_its_own_login() -> None:
+    p = passwords()
+    env = start.cleanup_env(p)
+    args = start.cleanup_run_args(env)
+
+    assert set(env) == {"CLEANUP_DATABASE_URL"}
+    assert env["CLEANUP_DATABASE_URL"].startswith("postgresql+asyncpg://od_cleanup_login:")
+    assert pairs(args, "--entrypoint") == ["/app/cleanup.sh"]
+    assert pairs(args, "--memory") == ["128m"]
+    password = env["CLEANUP_DATABASE_URL"].split(":")[2].split("@")[0]
+    assert password not in "\n".join(args)
+
+
+def test_the_api_runs_with_productions_memory_limit_and_flags() -> None:
+    args = start.api_run_args(api_env(), port=8300, detach=True)
+
+    assert pairs(args, "--memory") == ["512m"]
+    for flag in container.HARDENED_FLAGS:
+        assert flag in args
+    assert args[-1] == container.PROD_TAG
+
+
+GOOD_CSP = (
+    "default-src 'self'; script-src 'self' 'nonce-a' https://challenges.cloudflare.com; "
+    "frame-src https://challenges.cloudflare.com; frame-ancestors 'none'"
+)
+SWAGGER = "<html><title>Open Door API - Swagger UI</title></html>"
+SPA = '<html><meta name="csp-nonce" content="a" /></html>'
+
+
+def judge(**changes: object) -> list[str]:
+    seen: dict[str, object] = {
+        "home_status": 200,
+        "csp": GOOD_CSP,
+        "live_status": 200,
+        "health_status": 200,
+        "availability_status": 200,
+        "availability_body": {"available": True},
+        "openapi_content_type": "text/html; charset=utf-8",
+        "openapi_body": SPA,
+        "docs_body": SPA,
+    }
+    seen.update(changes)
+    problems: list[str] = start.problems_in_responses(**seen)
+    return problems
+
+
+def test_a_good_set_of_pages_has_no_problems() -> None:
+    assert judge() == []
+
+
+def test_the_page_check_wants_turnstile_the_flag_and_no_docs() -> None:
+    no_script = GOOD_CSP.replace(
+        "script-src 'self' 'nonce-a' https://challenges.cloudflare.com", "script-src 'self'"
+    )
+    no_frame = GOOD_CSP.replace("frame-src https://challenges.cloudflare.com", "frame-src 'self'")
+    assert judge(csp=no_script)
+    assert judge(csp=no_frame)
+    # Turnstile named only outside script-src and frame-src does not count.
+    assert judge(csp=no_script + "; connect-src https://challenges.cloudflare.com")
+    assert judge(availability_body={"available": "yes"})
+    assert judge(availability_body={})
+    assert judge(availability_status=500)
+    assert judge(health_status=503)
+    assert judge(openapi_content_type="application/json", openapi_body='{"openapi": "3.1.0"}')
+    assert judge(openapi_body='{"openapi": "3.1.0"}', openapi_content_type="application/json")
+    assert judge(docs_body=SWAGGER)
+    # The web app's page answering at these paths is fine.
+    assert judge(openapi_body=SPA, docs_body=SPA) == []
 
 
 def test_each_run_gets_new_passwords() -> None:

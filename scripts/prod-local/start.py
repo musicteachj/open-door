@@ -48,6 +48,7 @@ DB_OWNER = container.DB_OWNER
 DB_DATABASE = container.DB_DATABASE
 APP_LOGIN = container.APP_LOGIN
 CLEANUP_LOGIN = container.CLEANUP_LOGIN
+API_MEMORY = "512m"  # Production's hard limit for the API task.
 DEFAULT_PORT = 8300
 # Production refuses the development default origin, which is this port.
 DEV_PORT = 5173
@@ -166,6 +167,11 @@ def setup_env(passwords: Passwords, origin: str) -> dict[str, str]:
         "MIGRATION_DATABASE_URL": _database_url(DB_OWNER, passwords.owner),
         "CLEANUP_DATABASE_URL": _database_url(CLEANUP_LOGIN, passwords.cleanup),
     }
+
+
+def cleanup_env(passwords: Passwords) -> dict[str, str]:
+    """The cleanup job reads one setting: its own login's URL."""
+    return {"CLEANUP_DATABASE_URL": _database_url(CLEANUP_LOGIN, passwords.cleanup)}
 
 
 # The AI budgets a run may lower (the recording's per-take cap, the live check's cap), by name.
@@ -294,7 +300,12 @@ def setup_run_args(env: dict[str, str]) -> list[str]:
     return container.setup_run_args(f"{API_NAME}-setup", NETWORK, env)
 
 
+def cleanup_run_args(env: dict[str, str]) -> list[str]:
+    return container.cleanup_run_args(f"{API_NAME}-cleanup", NETWORK, env)
+
+
 def api_run_args(env: dict[str, str], *, port: int, detach: bool) -> list[str]:
+    """The API with production's memory limit and hardened flags."""
     return container.run_args(
         API_NAME,
         env,
@@ -302,6 +313,7 @@ def api_run_args(env: dict[str, str], *, port: int, detach: bool) -> list[str]:
         detach=detach,
         image=container.PROD_TAG,
         network=NETWORK,
+        extra_args=["--memory", API_MEMORY, *container.HARDENED_FLAGS],
     )
 
 
@@ -366,6 +378,7 @@ def cleanup(*, made_network: bool) -> None:
     docker("stop", "--time", str(STOP_GRACE_SECONDS), API_NAME, check=False)
     container.remove(API_NAME)
     container.remove(f"{API_NAME}-setup")
+    container.remove(f"{API_NAME}-cleanup")
     docker("stop", "--time", "5", DB_NAME, check=False)
     container.remove(DB_NAME)
     if made_network:
@@ -390,19 +403,118 @@ def wait_until_ready(base: str) -> None:
     )
 
 
-def problems_in_pages(base: str) -> list[str]:
-    """Fetch the home page and one route that needs no session. No model call, no sandbox."""
+TURNSTILE_ORIGIN = "https://challenges.cloudflare.com"
+
+
+def directive_sources(csp: str, name: str) -> list[str]:
+    """The sources a Content-Security-Policy lists for one directive (empty if it has none)."""
+    for directive in csp.split(";"):
+        words = directive.split()
+        if words and words[0] == name:
+            return words[1:]
+    return []
+
+
+def serves_the_schema_or_swagger(content_type: str, body: str) -> bool:
+    """True when a response is the API's schema (JSON) or Swagger's page. The web app's own page
+    answering at the same path is fine."""
+    return "json" in content_type.lower() or "swagger" in body.lower()
+
+
+def problems_in_responses(
+    *,
+    home_status: int,
+    csp: str,
+    live_status: int,
+    health_status: int,
+    availability_status: int,
+    availability_body: object,
+    openapi_content_type: str,
+    openapi_body: str,
+    docs_body: str,
+) -> list[str]:
+    """What the page check concludes from what it saw. Plain data in, problems out."""
     problems: list[str] = []
+    if home_status != 200:
+        problems.append(f"/ answered {home_status}")
+    if "'nonce-" not in csp:
+        problems.append("/ has no Content-Security-Policy with a nonce")
+    for directive in ("script-src", "frame-src"):
+        if TURNSTILE_ORIGIN not in directive_sources(csp, directive):
+            problems.append(f"the Content-Security-Policy's {directive} does not name Turnstile")
+    if live_status != 200:
+        problems.append(f"/api/v1/health/live answered {live_status}")
+    if health_status != 200:
+        problems.append(f"/api/v1/health answered {health_status}")
+    if availability_status != 200:
+        problems.append(f"/api/v1/assistant/availability answered {availability_status}")
+    elif not (
+        isinstance(availability_body, dict) and isinstance(availability_body.get("available"), bool)
+    ):
+        problems.append("/api/v1/assistant/availability has no boolean `available`")
+    if serves_the_schema_or_swagger(openapi_content_type, openapi_body):
+        problems.append("/openapi.json serves the API schema in production")
+    if serves_the_schema_or_swagger("", docs_body):
+        problems.append("/docs serves Swagger in production")
+    return problems
+
+
+def json_or_none(response: httpx.Response) -> object:
+    try:
+        return response.json()
+    except ValueError:
+        return None
+
+
+def problems_in_pages(base: str) -> list[str]:
+    """Fetch the home page and the routes that need no session. No model call, no sandbox."""
     with httpx.Client(base_url=base, timeout=10) as client:
         home = client.get("/", headers={"accept": "text/html"})
-        csp = home.headers.get("content-security-policy", "")
-        if home.status_code != 200:
-            problems.append(f"/ answered {home.status_code}")
-        if "'nonce-" not in csp:
-            problems.append("/ has no Content-Security-Policy with a nonce")
         live = client.get("/api/v1/health/live")
-        if live.status_code != 200:
-            problems.append(f"/api/v1/health/live answered {live.status_code}")
+        health = client.get("/api/v1/health")
+        availability = client.get("/api/v1/assistant/availability")
+        openapi = client.get("/openapi.json")
+        docs = client.get("/docs")
+    return problems_in_responses(
+        home_status=home.status_code,
+        csp=home.headers.get("content-security-policy", ""),
+        live_status=live.status_code,
+        health_status=health.status_code,
+        availability_status=availability.status_code,
+        availability_body=json_or_none(availability),
+        openapi_content_type=openapi.headers.get("content-type", ""),
+        openapi_body=openapi.text,
+        docs_body=docs.text,
+    )
+
+
+CLEANUP_DONE_LINE = "cleanup finished"
+
+
+def problems_in_cleanup(exit_code: int, output: str) -> list[str]:
+    problems = []
+    if exit_code != 0:
+        problems.append(f"the cleanup container exited {exit_code}")
+    if CLEANUP_DONE_LINE not in output:
+        problems.append(f"the cleanup container did not print {CLEANUP_DONE_LINE!r}")
+    return problems
+
+
+def run_cleanup_job(env: dict[str, str]) -> list[str]:
+    """Run the cleanup container once, as the deploy's schedule would, and judge it."""
+    result = subprocess.run(  # noqa: S603
+        cleanup_run_args(env),
+        env=container.client_env(env),
+        capture_output=True,
+        text=True,
+        timeout=120,
+        check=False,
+    )
+    output = result.stdout + result.stderr
+    problems = problems_in_cleanup(result.returncode, output)
+    if problems:
+        tail = "\n".join(output.strip().splitlines()[-LOG_LINES:])
+        problems.append(tail)
     return problems
 
 
@@ -415,14 +527,17 @@ def bring_up(
     *,
     scripted: bool = False,
     budgets_usd: Mapping[str, str] | None = None,
+    passwords: Passwords | None = None,
 ) -> tuple[bool, dict[str, str]]:
     """Start the database and run the setup; returns whether this run made the network and the
-    API's settings. Cleans up after itself if a step fails."""
-    passwords = Passwords.new()
+    API's settings. Cleans up after itself if a step fails. A caller that needs the passwords
+    afterward (the check runs the cleanup job) makes them and passes them in."""
+    passwords = passwords or Passwords.new()
     require_the_image()
     # A stale container of the same name is removed first.
     container.remove(API_NAME)
     container.remove(f"{API_NAME}-setup")
+    container.remove(f"{API_NAME}-cleanup")
     container.remove(DB_NAME)
     made_network = ensure_network()
     try:
@@ -529,12 +644,16 @@ def problems_with_ai_off(base: str, origin: str) -> list[str]:
 def check(secrets_: Secrets, port: int, *, ai_off: bool = False) -> int:
     if ai_off:
         secrets_ = ai_off_secrets(secrets_)
-    made_network, env = bring_up(secrets_, port, budgets_usd=AI_OFF_BUDGETS_USD if ai_off else None)
+    passwords = Passwords.new()
+    made_network, env = bring_up(
+        secrets_, port, budgets_usd=AI_OFF_BUDGETS_USD if ai_off else None, passwords=passwords
+    )
     base = f"http://127.0.0.1:{port}"
     try:
         container.run(*api_run_args(env, port=port, detach=True), env=env)
         wait_until_ready(base)
         problems = problems_in_pages(base)
+        problems += run_cleanup_job(cleanup_env(passwords))
         if ai_off:
             problems += problems_with_ai_off(base, origin_for(port))
         if problems:

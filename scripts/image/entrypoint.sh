@@ -14,7 +14,17 @@
 # timeout (at least 120 seconds, Phase 9), so the load balancer, not uvicorn, closes idle
 # connections. With uvicorn's default of 5 seconds, a request the load balancer sends just as
 # uvicorn closes the connection fails as a 502. Raise it if the idle timeout ever goes above 120.
+#
+# This entrypoint only serves the API, so it takes no command: `docker run open-door serve` used to
+# start the API anyway, which hid a mistyped job. Each job has its own entrypoint, /app/setup.sh and
+# /app/cleanup.sh.
 set -eu
+
+if [ "$#" -gt 0 ]; then
+  echo "This entrypoint serves the API and takes no command (got: $1). Run a job with its own" \
+    "entrypoint: /app/setup.sh or /app/cleanup.sh." >&2
+  exit 64
+fi
 
 PORT="${PORT:-8000}"
 # HOST is the address uvicorn binds (0.0.0.0 when unset, which the deploy and a published port
