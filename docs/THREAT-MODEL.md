@@ -93,7 +93,10 @@ root folder.
 | S | A client forges `X-Forwarded-For` to dodge the limits or poison the security log | **Phase 8:** the `FORWARDED_ALLOW_IPS` setting (Stage 1) feeds uvicorn's `--forwarded-allow-ips` through the image's entrypoint (Stage 2); unset or empty, no proxy is trusted and the peer address is used | `tests/test_config.py`, `tests/test_image_check_script.py`, `make image-check` (a forged header is ignored, and trusted only from the named address); **Stage 4:** production requires the setting unless the origin is loopback, and a forged header from an untrusted peer doesn't change the counted address | `tests/test_config.py`, `tests/test_image_check_script.py`, `make image-check` (a forged header is ignored, and trusted only from the named address), `tests/integration/test_sandbox_limits.py` |
 | I | A raw client address is stored | Only the access log and the security log see an address; **Stage 4:** the limits store an HMAC-SHA256 under `SANDBOX_IP_HASH_KEY` (an IPv6 address as its /64), which production requires and the development value can't fill; Cloudflare receives the address when a sandbox starts (`docs/DATA-INVENTORY.md`) | `tests/test_sandbox_address.py`, `tests/integration/test_sandbox_limits.py`, `tests/test_config.py` |
 | D | Health checks load the database or flood the log | **Phase 8, Stage 1:** `/health/live` never touches the database; `/health` pings with a 2-second limit, cached for 1 second, one check at a time; both kept out of the access log | `tests/test_health.py` |
-| D | The load balancer sends a request on a connection the task is closing, and the visitor gets a 502 | **Phase 8, Stage 7:** the load test found uvicorn closing idle connections after 5 seconds; the image now keeps them 130 seconds, longer than the load balancer's idle timeout (at most 120, Phase 9), so the load balancer closes them first. Only the load balancer connects to a task, so the longer wait holds no visitor's connection | `tests/test_image_check_script.py`, `make load` |
+| D | The load balancer sends a request on a connection the task is closing, and the visitor gets a 502 | **Phase 8, Stage 7:** the load test found uvicorn closing idle connections after 5 seconds; the image now keeps them 130 seconds, longer than the load balancer's idle timeout (120 seconds, `docs/DEPLOY.md`), so the load balancer closes them first. Only the load balancer connects to a task, so the longer wait holds no visitor's connection | `tests/test_image_check_script.py`, `make load` |
+| D | A flood of expensive requests reaches the API | The shared load balancer's WAF rate rules, with a stricter rule for `POST /api/v1/sandboxes` and `POST /api/v1/assistant/conversations/*/turns` (Phase 2 of the deploy; `docs/DEPLOY.md`), on top of the app's own limits | the WAF's own configuration; not testable offline |
+| S | The per-address limits count the load balancer, or a forged address | **Phase 9a:** `FORWARDED_ALLOW_IPS` is the VPC's CIDR, so only the load balancer is trusted; uvicorn takes the rightmost address that is not trusted, so a forged `X-Forwarded-For` entry on the left is ignored | `tests/test_config.py`, `make image-check` |
+| I | The public availability route (`GET /api/v1/assistant/availability`) leaks or is used to hammer the database | **Phase 9a:** it answers one boolean, takes no session, is cached 30 seconds in each process and sent with `Cache-Control: public, max-age=30`, so a flood costs the database one query per process per 30 seconds | `tests/test_availability_cache.py`, `tests/integration/test_assistant_availability.py` |
 
 ### 3. API and Postgres
 
@@ -115,6 +118,7 @@ root folder.
 | D | A database that stops answering (a failover, a silent network path) holds the crisis text past its bound | **Phase 8, Stage 5:** the two database steps before the crisis text (the verdict write and the HR contact lookup) run together and stop waiting at 2 seconds; a step past its bound is canceled and left to finish on its own, since `asyncio.timeout` waited for a canceled query's cleanup (the Opus 5.5 reviewer's frozen-link probe: no text in 120 s before, 2.04 s after) | `tests/integration/test_crisis_survives.py` |
 | E | Sign-out leaves a persona switch's new session alive | **Phase 8, Stage 1:** each session carries a `family_id` that a switch copies, and sign-out deletes the family | `tests/integration/test_sessions_rls.py`, `test_api_sessions.py` |
 | E | The cleanup login deletes more than expired data | **Phase 8, Stage 4:** `SELECT, DELETE` only on `tenants`, `ai_spend_daily`, `sandbox_starts`, and `handbook_versions`, with policies that show it only expired sandboxes, spend rows over 30 days old, and start counts over a day old; a trigger refuses deleting the newest published handbook version, and a pinned one is refused by its foreign key (migration 0019) | `tests/integration/test_cleanup_job.py`, `test_cleanup.py`, `test_grants.py` |
+| E | On the shared Postgres server, another app's login connects to Open Door's database or joins its roles | **Phase 9a (ADR 0023):** `CONNECT` is revoked from `PUBLIC` on the database and granted only to the roles `od_app` and `od_cleanup` (migration 0020), which the two logins inherit; the bootstrap refuses to run when either role has a member other than the configured logins (the owner running it is ignored); the init SQL (`scripts/image/postgres-open-door.sql`) makes a non-superuser owner | `tests/integration/test_database_connect.py`, `make prod-local-check` |
 
 ### 4. API and the vendors
 
@@ -125,6 +129,7 @@ root folder.
 | I | More personal data than needed reaches a vendor | The personal-data check refuses card and ID numbers before a question is sent, written in any script's digits (**Phase 8, Stage 3**); only the needed fields reach the model | `tests/test_personal_data.py`, `apps/web/src/lib/personal-data.test.ts`, `evals/assistant/personal-data-cases.json` |
 | T | A test transport reaches production | Production refuses the scripted and replay transports and the test keyring at start; **Phase 8, Stage 3:** `make prod-local` runs the image with production settings, its own throwaway database, and its secrets passed through the environment only; **Stage 7:** production also refuses the load test's delay profile (`SCRIPTED_DELAY_PROFILE` other than `none`), on its own and with the real transport | `tests/test_transport_startup.py`, `tests/test_app_state.py`, `tests/test_key_provider_settings.py`, `tests/test_prod_local.py`, `make prod-local-check` |
 | D | A vendor outage hangs a turn | Timeouts on every model call; the guard's 10-second limit (ADR 0009) | `tests/integration/test_turn.py`, `tests/test_guard.py` |
+| I | A task reaches any host, or the instance's metadata service | **Phase 9a (ADR 0023):** egress is open per task (bridge mode can't limit it; ADR 0022's per-task limit does not hold on the shared server); the instance blocks the metadata service (hop limit 1 and a host rule), and the task holds no AWS role | the instance's own configuration (Phase 2 of the deploy) |
 
 ### 5. The model and the tools
 
@@ -191,7 +196,7 @@ Each is accepted on purpose, with the reason.
   `od_app_login` can set any sandbox's context and read or write as the API would there (a session
   they forge still can't outlive its sandbox). The API must be able to set the context, so SQL
   can't close this. The login's password is a secret held only by the API process (the API no
-  longer holds the owner's or the cleanup login's), and Phase 9 keeps it in the secrets store.
+  longer holds the owner's or the cleanup login's), and the deploy keeps it in SSM Parameter Store as a SecureString.
 - **One actor with many addresses can use up the day's sandbox starts.** The 1,000-a-day total
   bounds what new sandboxes can cost, and each start still needs a solved Turnstile check, but an
   IPv6 block wider than a /64 is many buckets, and 20 IPv4 addresses at 50 a day reach 1,000. New
@@ -200,7 +205,7 @@ Each is accepted on purpose, with the reason.
   monthly AI budget (ADR 0011) ends a busy day long before 1,000 starts do: with $20 a month, a
   day's allowance is about $2 early in the month, or about a dozen tours (a tour costs $0.16 to
   $0.18, see [`CAPACITY.md`](CAPACITY.md)). So an actor who uses up the
-  starts costs the seeding and the cleanup of up to 1,000 sandboxes, not AI spend. Phase 9 can alert
+  starts costs the seeding and the cleanup of up to 1,000 sandboxes, not AI spend. The deploy can alert
   when the total is reached (found by Stage 4's security review).
 - **A signed-in visitor can create rows without limit inside their own sandbox.** New
   conversations, persona switches, and HR's private reads each write a row (or an audit row) with
@@ -208,17 +213,22 @@ Each is accepted on purpose, with the reason.
   costs one write in the visitor's own sandbox, which the cleanup job deletes 24 hours after it
   started, and a new sandbox needs a solved Turnstile check and the start limits. Phase 9 can add a
   per-sandbox cap if the database's growth shows it is needed.
-- **A deleted sandbox lives in database backups until they expire.** Phase 9's deploy keeps the
-  backup window short and says how long.
+- **A deleted sandbox lives in database backups until they expire.** Daily snapshots of the data
+  volume are kept 7 days (`docs/DATA-INVENTORY.md`). The rows are encrypted, but nothing shreds the
+  keys, so a snapshot restored next to the current keyring can be read; the 7 days is the real
+  bound.
+- **The keyring sits in the task's memory and environment.** Production uses the local key provider
+  with the keyring from SSM (ADR 0015's amendment, ADR 0023): anyone who can read the task's
+  environment, or the SSM parameter, can open the stored text. The data is fictional and deleted
+  within a day, so this is accepted in place of building the KMS provider.
 
 ## Residual risks Phase 9 owns
 
-- The deploy role's permissions, the secrets store, and the KMS key provider (ADR 0015's
-  amendment, ADR 0022).
-- The load balancer's real addresses for `FORWARDED_ALLOW_IPS`, and TLS to the database (the
-  certificate bundle).
-- The cleanup job's schedule; until then `make cleanup` runs it by hand.
-- Backup retention and the managed database's own access rules.
+- The deploy role's permissions and the SSM parameters' access rules (`docs/DEPLOY.md`).
+- The VPC CIDR for `FORWARDED_ALLOW_IPS`, and the WAF's rate rules.
+- The cleanup job's schedule (hourly, EventBridge Scheduler); until it is registered, `make cleanup`
+  runs it by hand.
+- The shared Postgres server's own access rules (who else holds a superuser login).
 
 ---
 

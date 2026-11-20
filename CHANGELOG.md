@@ -12,6 +12,9 @@ version (`0.x.y` while the app is being built, `1.0.0` when it is complete).
 
 ### Added
 
+- **`docs/DEPLOY.md`, the deploy's settings and task contract** (Phase 9a): the three task
+  definitions, every setting and who reads it, the load balancer and shutdown numbers, the database
+  setup on the shared server, and how to turn live AI off.
 - **AI-written answers and case summaries are marked as AI-generated** (Phase 9a). A stored answer
   and a written case summary carry an `aiGenerated` object (the generator, the models that wrote it,
   and the IPTC digital source type), the turn stream's `turn.started` says `"aiGenerated": true`,
@@ -38,6 +41,14 @@ version (`0.x.y` while the app is being built, `1.0.0` when it is complete).
   days, and Anthropic, Voyage, Cloudflare, and AWS as processors.
 
 ### Changed
+
+- **ADR 0023 is complete and accepted, and the docs now describe the shared-server deployment**
+  (Phase 9a). The ADR records ECS on one EC2 instance, Postgres on the instance, SSM, and the local
+  keyring; ADRs 0015 and 0022 are amended (production uses the local key provider, and egress is not
+  limited per task). `CLAUDE.md`, the roadmap, the capacity notes, the data inventory (logs 14 days,
+  snapshots 7 days, AWS us-east-1), the threat model, and the AI governance doc are updated, the
+  Phase 9 backlog is accounted for item by item, and `health.py`'s docstring says readiness is for
+  smoke tests.
 
 - **The image runs each job from its own entrypoint, and refuses a command it doesn't know**
   (Phase 9a). The database setup is `/app/setup.sh` and the cleanup job is `/app/cleanup.sh`;

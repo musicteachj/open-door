@@ -11,7 +11,7 @@
 # because on Linux the container shares the host's network and must not take :8000 from `make dev`.
 #
 # --timeout-keep-alive 130 keeps an idle connection open longer than the load balancer's idle
-# timeout (at least 120 seconds, Phase 9), so the load balancer, not uvicorn, closes idle
+# timeout (the shared load balancer's is 120 seconds, docs/DEPLOY.md), so the load balancer, not uvicorn, closes idle
 # connections. With uvicorn's default of 5 seconds, a request the load balancer sends just as
 # uvicorn closes the connection fails as a 502. Raise it if the idle timeout ever goes above 120.
 #

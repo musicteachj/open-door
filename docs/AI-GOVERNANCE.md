@@ -428,17 +428,42 @@ with the eval or test that measures it:
   ([ADR 0021](adr/0021-sandbox-entry-protection.md)). It is not an AI vendor: the browser loads its
   widget, and the API sends Cloudflare the widget's one-use token and the visitor's address. No
   name, question, or conversation reaches it. Its terms are quoted in
-  [`DATA-INVENTORY.md`](DATA-INVENTORY.md) when the production keys are set up (Phase 9).
-- **Nothing else leaves the task:** outbound HTTPS goes only to Anthropic, Voyage, and Cloudflare,
-  and Phase 9 sets up that egress.
+  [`DATA-INVENTORY.md`](DATA-INVENTORY.md) when the production keys are set up (Phase 3 of the
+  deploy).
+- **Nothing else is sent by the app:** the API calls only Anthropic, Voyage, and Cloudflare. On the
+  shared server the network doesn't enforce that per task (ADR 0023 and the amendment to ADR 0022).
+  The code is what limits the calls, and the instance blocks the metadata service.
+
+### The deployed data path
+
+On AWS (us-east-1, one EC2 server shared with other portfolio apps; ADR 0023), a visitor's question
+travels: browser, the shared load balancer (TLS ends there), the API task, then out over HTTPS to
+Anthropic's Claude API (the guard first, then the assistant) and, for a search, to Voyage. What the
+vendors receive is the same as in
+[what is sent](#what-is-sent-to-anthropic-and-voyage). On AWS itself:
+
+- the question and answer are stored in Postgres on the same server, encrypted in the API (ADR
+  0015), and deleted with the sandbox after 24 hours;
+- application logs (CloudWatch, 14 days) and the load balancer's access logs (S3, 14 days) hold
+  addresses, paths, and IDs, never question or answer text;
+- daily snapshots of the data volume (7 days) can hold a deleted sandbox's rows. They are encrypted
+  at rest, but nothing shreds the keys, so a snapshot restored next to the current keyring can be
+  read, and the 7 days is the real bound;
+- the Anthropic and Voyage keys and the keyring are SSM SecureStrings (`docs/DEPLOY.md`), read into
+  the task's environment.
+
+Live AI has a $20 paced monthly budget, and a switch that turns it off (`AI_MONTHLY_BUDGET_USD=0`),
+after which the landing offers the recorded walkthrough.
 
 ## How long things are kept
 
 The cleanup job (`make cleanup`, Phase 8, Stage 4) deletes an expired sandbox 24 hours after it
 started, and with it every conversation, AI turn, proposal, and case in it; the daily spend ledger
 after 30 days; and the start counts after a day. Each rule is also a row-level policy on the
-cleanup's own login, so the job can't delete more. Phase 9 schedules it and sets the backups'
-window. Anthropic's 30 days and Voyage's zero-day retention are [above](#what-is-sent-to-anthropic-and-voyage).
+cleanup's own login, so the job can't delete more. The deployment runs it hourly, and the data
+volume's snapshots are kept 7 days (see the [deployed data path](#the-deployed-data-path)).
+Anthropic's 30 days and Voyage's zero-day retention
+are [above](#what-is-sent-to-anthropic-and-voyage).
 
 ## The recorded walkthrough
 

@@ -1132,12 +1132,12 @@ browser test with `cd apps/web && npx playwright test e2e/<file>.spec.ts`.
   (the deployed data path), `docs/BACKLOG.md:467-566`, `apps/api/app/api/v1/health.py:1-9`,
   `CHANGELOG.md`
 
-- [ ] **Step 1: Confirm the workflows need nothing** (spec 5.10, item 3).
+- [x] **Step 1: Confirm the workflows need nothing** (spec 5.10, item 3).
   Run: `grep -n "^permissions:" -A 2 .github/workflows/*.yml` and
   `grep -hn "uses:" .github/workflows/*.yml | grep -v "@[0-9a-f]\{40\}"`.
   Expected: every file has `contents: read` at the top, and the second command prints nothing. Then
   `make check-workflows` passes. If a gap shows, fix it here and note it in the changelog.
-- [ ] **Step 2: Write `docs/DEPLOY.md`,** the contract Phase 2 copies:
+- [x] **Step 2: Write `docs/DEPLOY.md`,** the contract Phase 2 copies:
   - **What runs:** the `open-door:prod` image as three task definitions: the API service (one
     task, rolling, minimum 100% and maximum 200%), the setup (a one-off before each service
     update, run with RunTask, which can't override the entrypoint, so it has its own definition),
@@ -1181,7 +1181,7 @@ browser test with `cd apps/web && npx playwright test e2e/<file>.spec.ts`.
   - **Turning live AI off:** `AI_MONTHLY_BUDGET_USD=0` and a restart (the landing then offers the
     walkthrough). Disabling the Anthropic key alone also stops spending, but the landing keeps
     offering the tour.
-- [ ] **Step 3: Complete ADR 0023** and mark it Accepted: Open Door on the shared portfolio server.
+- [x] **Step 3: Complete ADR 0023** and mark it Accepted: Open Door on the shared portfolio server.
   Decisions, each with what it replaces: ECS on one EC2 instance in bridge mode, not Fargate; one
   task at 256/512 MiB, not two at 1 vCPU and 2 GB; Postgres 17 with pgvector as an ECS service on
   the instance, not managed, with the role layout of Task 9; SSM Parameter Store, not Secrets
@@ -1190,13 +1190,13 @@ browser test with `cd apps/web && npx playwright test e2e/<file>.spec.ts`.
   liveness (with the trade-off above); the monthly paced budget and $0.50 per sandbox; the job
   entrypoints; and the stale-card waiver (Task 7). Rejected: Fargate (about $130 a month against
   about $72), RDS, Secrets Manager, building the KMS provider. Add its row to `docs/adr/README.md`.
-- [ ] **Step 4: The amendments.** ADR 0015: a dated amendment: for the portfolio deployment,
+- [x] **Step 4: The amendments.** ADR 0015: a dated amendment: for the portfolio deployment,
   production uses the local provider with `ENCRYPTION_KEYRING` from an SSM SecureString
   (`app/core/encryption.py:251-252`); the KMS provider isn't built, so "production refuses
   `local`" (`:81`) no longer holds; why (fictional data deleted within a day, a key in task memory
   accepted by ADR 0023). ADR 0022: a dated amendment: egress isn't limited per task on the shared
   server (ADR 0023).
-- [ ] **Step 5: The living docs.**
+- [x] **Step 5: The living docs.**
   - `CLAUDE.md:222`: "Open Door deploys to AWS (ECS on the shared portfolio EC2 server, one task
     behind the shared load balancer) as the last step, ..."
   - `docs/ROADMAP.md:98`: Phase 9's scope matches ADR 0023 (the shared server, Postgres on it,
@@ -1219,7 +1219,7 @@ browser test with `cd apps/web && npx playwright test e2e/<file>.spec.ts`.
   - `docs/AI-GOVERNANCE.md`: the deployed data path on AWS, which ADR 0022 left to Phase 9.
   - `apps/api/app/api/v1/health.py:1-9`: the load balancer and ECS use liveness; readiness is for
     the deploy's smoke tests.
-- [ ] **Step 6: Account for the Phase 9 backlog** (`docs/BACKLOG.md:467-566`). Each item moves to
+- [x] **Step 6: Account for the Phase 9 backlog** (`docs/BACKLOG.md:467-566`). Each item moves to
   done, deferred, or closed with its reason:
 
   | Item (lines) | Becomes |
@@ -1244,11 +1244,11 @@ browser test with `cd apps/web && npx playwright test e2e/<file>.spec.ts`.
   | `ping()` bound (561-564) | Closed: no probe uses readiness now; only smoke tests do |
   | Probe traffic in traces (565-566) | Closed: no tracing, and Container Insights is off |
 
-- [ ] **Step 7: Changelog.** Added: "`docs/DEPLOY.md`, the deploy's settings and task contract
+- [x] **Step 7: Changelog.** Added: "`docs/DEPLOY.md`, the deploy's settings and task contract
   (Phase 9a)"; Changed: the ADRs and the docs above, in one entry.
-- [ ] **Step 8: Run the checks.** `make check-docs && make check-api`. Expected: PASS (`health.py`
+- [x] **Step 8: Run the checks.** `make check-docs && make check-api`. Expected: PASS (`health.py`
   changed only in its docstring).
-- [ ] **Step 9: Stop:** show the diff summary and the proposed commit message, and wait for
+- [x] **Step 9: Stop:** show the diff summary and the proposed commit message, and wait for
   James's explicit OK before committing.
   Proposed subject: "Write the deploy contract and update the docs for the shared server".
 

@@ -96,7 +96,7 @@ no build stage starts, backend stages included, until its screens are in `docs/d
 | **6 Cases and escalation** | Minimal case model, guard-driven escalation with a case form the person sends, "My cases", the HR queue and detail, a neutral AI summary written when a case opens, encryption of case and conversation text, audited reads, the escalation eval | A sensitive message becomes a case the person sends, in the HR queue, encrypted, with every read audited and the person's words hidden until HR reveals them |
 | **7 AI Ops console, reviewer experience, model decision** | The console (guard-flagged turns redacted), the scoreboard generator, the guided tour, the fairness eval, and the Opus 5.5 vs. Sonnet 5.5 comparison | Scoreboards are generated for the README and the app; the tour runs end to end; the owner picks the default model |
 | **8 Hardening and deploy-readiness** | Threat model, AI governance doc, CSP and headers, Turnstile and sandbox limits, the cleanup job, replay mode as the recorded walkthrough, the next prompt change and its full run, a cost and load test, an accessibility audit, `/security-review`, and a production Dockerfile; demo video recorded locally. (The secrets contract for AWS and the disabled deploy workflow moved to Phase 9 on 2026-11-09.) | The checklist is closed; the production image runs locally end to end |
-| **9 Deploy to AWS (held)** | ECS Fargate on the shared portfolio cluster, managed Postgres with pgvector, Secrets Manager and the secrets contract, the KMS key provider, ECS task definitions and the cleanup's schedule, a load balancer idle timeout of at least 120 seconds, the OIDC deploy workflow written and enabled, the portfolio entry | Public URL live |
+| **9 Deploy to AWS (held)** | ECS on the shared portfolio EC2 server (one task behind the shared load balancer), Postgres 17 with pgvector as a service on that server, SSM Parameter Store and the settings contract in `docs/DEPLOY.md`, the local key provider with its keyring from SSM (ADR 0023), ECS task definitions and the cleanup's schedule, a load balancer idle timeout of 120 seconds, the OIDC deploy workflow written and enabled, the portfolio entry | Public URL live |
 | **Stretch** | MCP adapter, dark mode, Slack or Teams, onboarding and benefits, SSO and SCIM, a handbook editor, multilingual answers | Optional |
 
 ---
@@ -131,6 +131,6 @@ no build stage starts, backend stages included, until its screens are in `docs/d
 - **GitHub Pro:** required checks and branch protection on a private repository need it. Without
   it, the merge gate is enforced by convention.
 - **The default model:** Opus 5.5 or Sonnet 5.5, decided with Phase 7 eval data.
-- **The managed Postgres host on AWS:** decided in the held Phase 9.
+- **The Postgres host on AWS:** decided: Postgres 17 with pgvector as a service on the shared server (ADR 0023).
 - **The old EMS deployment:** if it is still public, consider taking it offline, since it is being
   retired.

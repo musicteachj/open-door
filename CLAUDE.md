@@ -219,9 +219,9 @@ The handbook is fictional company policy and is labeled as demo content, not leg
 
 ## Deployment
 
-**Held.** Open Door deploys to AWS (ECS Fargate on the shared portfolio cluster) as the very last
-step, when the owner deploys all portfolio apps together. Until then everything is built to be
-deploy-ready, and nothing is deployed.
+**Held.** Open Door deploys to AWS (ECS on the shared portfolio EC2 server, one task behind the
+shared load balancer) as the very last step, when the owner deploys all portfolio apps together.
+Until then everything is built to be deploy-ready, and nothing is deployed.
 
 ---
 
