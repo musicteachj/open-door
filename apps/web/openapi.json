@@ -937,6 +937,38 @@
         }
       }
     },
+    "/api/v1/assistant/availability": {
+      "get": {
+        "tags": [
+          "assistant"
+        ],
+        "summary": "Whether the live assistant has room for a question, for a visitor with no session",
+        "description": "The landing page's flag. It needs no session and reads nothing of anyone's: only the day's\nroom in the shared ledger, so every visitor gets the same answer, cached for 30 seconds here\nand by the browser.",
+        "operationId": "getAssistantAvailability",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AssistantAvailabilityOut"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Service Unavailable",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/assistant/budget": {
       "get": {
         "tags": [
@@ -2926,6 +2958,20 @@
           "count"
         ],
         "title": "ActionCountOut"
+      },
+      "AssistantAvailabilityOut": {
+        "properties": {
+          "available": {
+            "type": "boolean",
+            "title": "Available"
+          }
+        },
+        "type": "object",
+        "required": [
+          "available"
+        ],
+        "title": "AssistantAvailabilityOut",
+        "description": "Whether the live assistant can take a question now, for visitors with no session yet."
       },
       "AssistantTextsOut": {
         "properties": {

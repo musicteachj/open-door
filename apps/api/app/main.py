@@ -29,6 +29,7 @@ from app.core.problems import install_problem_handlers
 from app.core.request_id import RequestIdMiddleware
 from app.core.security_headers import SecurityHeadersMiddleware
 from app.db.engine import create_engine
+from app.modules.assistant.availability import AvailabilityCache
 from app.modules.assistant.sse import CLOSE_TIMEOUT_SECONDS, StreamTracker
 from app.modules.identity.same_origin import SameOriginMiddleware
 from app.modules.sandbox.turnstile import CloudflareVerifier, build_verifier
@@ -137,6 +138,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app = FastAPI(title="Open Door API", version=__version__, lifespan=lifespan, **docs_urls)  # type: ignore[arg-type]
     app.state.settings = settings
     app.state.readiness = ReadinessCache()
+    app.state.availability = AvailabilityCache()
     app.state.keys = keys
     # The middleware added last runs first. The request-ID middleware wraps the same-origin check,
     # so even a refused request carries its ID, and the no-store middleware wraps both, so a refusal

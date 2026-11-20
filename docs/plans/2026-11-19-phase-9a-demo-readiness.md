@@ -661,7 +661,7 @@ browser test with `cd apps/web && npx playwright test e2e/<file>.spec.ts`.
   recorded walkthrough (Phase 9a)", with the approval date and that the HR team (fictional) is no
   longer the fallback.
 - [x] **Step 11: Run the checks.** `make check-api && make eval-offline && make e2e`. Expected: PASS.
-- [ ] **Step 12: Stop:** show the diff summary and the proposed commit message, and wait for
+- [x] **Step 12: Stop:** show the diff summary and the proposed commit message, and wait for
   James's explicit OK before committing.
   Proposed subject: "Point the limit and outage messages to the recorded walkthrough".
 
@@ -700,7 +700,7 @@ browser test with `cd apps/web && npx playwright test e2e/<file>.spec.ts`.
   - Web: `WalkthroughButton` (the walkthrough link with `buttonVariants({ variant: 'secondary' })`
     from `components/ui/button-variants.ts`, the tour button's look).
 
-- [ ] **Step 1: Write the failing API tests.**
+- [x] **Step 1: Write the failing API tests.**
   - `tests/test_availability_cache.py`: `test_a_fresh_answer_is_reused` (a second `get` inside the
     TTL doesn't compute), `test_an_old_answer_is_computed_again` (move the fake clock past 30 s),
     `test_concurrent_callers_compute_once`.
@@ -712,13 +712,13 @@ browser test with `cd apps/web && npx playwright test e2e/<file>.spec.ts`.
     `test_the_landing_room_covers_a_first_question`: `room_needed_usd(...)` for a seeded sandbox's
     Priya, an empty history, `CURRENT_PINS`, and "How many sick days do I get?" is at most
     `LANDING_ROOM_USD` and more than `Decimal("0.15")`, so the threshold stays meaningful.
-- [ ] **Step 2: Run them.** `cd apps/api && uv run pytest tests/test_availability_cache.py tests/integration/test_assistant_availability.py -q`.
+- [x] **Step 2: Run them.** `cd apps/api && uv run pytest tests/test_availability_cache.py tests/integration/test_assistant_availability.py -q`.
   Expected: FAIL.
-- [ ] **Step 3: Implement** the module, the schema, and the route (no `SignedInDep`; the cache
+- [x] **Step 3: Implement** the module, the schema, and the route (no `SignedInDep`; the cache
   from `app.state`, created in `create_app` beside `ReadinessCache`). Then run `make openapi`.
-- [ ] **Step 4: Run them.** Same command, then `uv run python scripts/export_openapi.py --check`.
+- [x] **Step 4: Run them.** Same command, then `uv run python scripts/export_openapi.py --check`.
   Expected: PASS.
-- [ ] **Step 5: Write the failing web tests.**
+- [x] **Step 5: Write the failing web tests.**
   - `landing-page.test.tsx`: with availability `false`, there is no "Take the tour" button and no
     tour Turnstile slot, the walkthrough is a single button-styled link, the approved note shows,
     and the persona cards are enabled; with `true`, while pending, and after a failed read, the
@@ -726,16 +726,16 @@ browser test with `cd apps/web && npx playwright test e2e/<file>.spec.ts`.
   - `public-footer.test.tsx`: the approved retention line shows.
   - `e2e/landing.spec.ts`: one test routes `**/api/v1/assistant/availability` to
     `{"available": false}` and checks that the walkthrough replaces the tour button.
-- [ ] **Step 6: Run them.** `cd apps/web && npx vitest run src/features/landing/landing-page.test.tsx src/components/landing/public-footer.test.tsx`.
+- [x] **Step 6: Run them.** `cd apps/web && npx vitest run src/features/landing/landing-page.test.tsx src/components/landing/public-footer.test.tsx`.
   Expected: FAIL.
-- [ ] **Step 7: Implement.** The landing reads `useGetAssistantAvailability` with
+- [x] **Step 7: Implement.** The landing reads `useGetAssistantAvailability` with
   `staleTime: 30_000` and `retry: false`, and treats anything but `data.available === false` as
   available. When unavailable it renders `LIVE_PAUSED_NOTE` under the sandbox notes and
   `WalkthroughButton` in the tour button's place, and drops the text link and the tour's
   `TurnstileSlot`. `RETENTION_NOTE` joins the footer's notices.
-- [ ] **Step 8: Run them.** Same command, then `npx playwright test e2e/landing.spec.ts` and
+- [x] **Step 8: Run them.** Same command, then `npx playwright test e2e/landing.spec.ts` and
   `make check-web`. Expected: PASS.
-- [ ] **Step 9: The production-image check with live AI off.** Write the failing tests in
+- [x] **Step 9: The production-image check with live AI off.** Write the failing tests in
   `tests/test_prod_local.py`: `test_the_ai_off_check_sets_a_zero_monthly_budget` and
   `test_the_ai_off_check_never_passes_the_real_key` (`api_env` for it holds
   `ANTHROPIC_API_KEY=not-a-real-key-ai-off-check`, so an accidental call fails unbilled, and
@@ -745,17 +745,17 @@ browser test with `cd apps/web && npx playwright test e2e/<file>.spec.ts`.
   and that a question gets 429 `budget-daily` with the approved text and no `Retry-After`. The
   HTTP steps follow `scripts/proxy-check/check.py` (`start_sandbox`, `new_conversation`,
   `turns_url`). In the `Makefile`, `prod-local-check` passes `--ai-off` when `AI_OFF=1`.
-- [ ] **Step 10: Run it.** `uv run pytest tests/test_prod_local.py -q`, then
+- [x] **Step 10: Run it.** `uv run pytest tests/test_prod_local.py -q`, then
   `make prod-local-check AI_OFF=1`. Expected: PASS, and the run prints that no model was called.
-- [ ] **Step 11: Show James the landing.** Take a screenshot of the landing with the flag false
+- [x] **Step 11: Show James the landing.** Take a screenshot of the landing with the flag false
   (from the e2e run's trace, or the gallery). **Stop:** wait for his OK on the look; if he wants a
   Claude Design round, pause this task and follow `CLAUDE.md`, "Design".
-- [ ] **Step 12: Changelog.** Added: "The landing page says when the live assistant is out of
+- [x] **Step 12: Changelog.** Added: "The landing page says when the live assistant is out of
   budget and offers the walkthrough instead of the tour (Phase 9a)", and the footer's retention
   line.
-- [ ] **Step 13: Run the checks.** `make check-api && make check-web && make eval-offline`.
+- [x] **Step 13: Run the checks.** `make check-api && make check-web && make eval-offline`.
   Expected: PASS.
-- [ ] **Step 14: Stop:** show the diff summary and the proposed commit message, and wait for
+- [x] **Step 14: Stop:** show the diff summary and the proposed commit message, and wait for
   James's explicit OK before committing.
   Proposed subject: "Tell visitors on the landing page when the live assistant is out".
 

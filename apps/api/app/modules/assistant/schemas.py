@@ -141,6 +141,12 @@ class BudgetBannerOut(CamelModel):
     message: str
 
 
+class AssistantAvailabilityOut(CamelModel):
+    """Whether the live assistant can take a question now, for visitors with no session yet."""
+
+    available: bool
+
+
 class BudgetOut(CamelModel):
     """Whether a turn can start. A cap counts as reached when it has less than a turn needs left,
     not only at zero (the 429 uses the same measure)."""

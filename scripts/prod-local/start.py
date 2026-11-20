@@ -8,9 +8,12 @@ network; the database is not kept.
 
 Any question asked through it is a paid call: production accepts only the `anthropic` transport.
 `--check` starts everything, looks at the pages, and stops, asking the model nothing.
+`--check --ai-off` starts it with live AI turned off (a $0 monthly budget) and checks what a visitor
+sees then; it needs no model key and is handed a made-up one.
 
     uv run python ../../scripts/prod-local/start.py            # run in the foreground
     uv run python ../../scripts/prod-local/start.py --check    # prove it starts and serves pages
+    uv run python ../../scripts/prod-local/start.py --check --ai-off   # and that live AI off works
 
 Run it from apps/api (the API's settings supply the keys and the keyring). Every secret travels in
 the docker client's environment (`--env KEY`), never on a command line.
@@ -55,6 +58,12 @@ STOP_SIGNALS = (signal.SIGTERM, signal.SIGINT, signal.SIGHUP)
 READY_TIMEOUT_SECONDS = 90
 DB_READY_TIMEOUT_SECONDS = 60
 LOG_LINES = 40
+
+
+# What the live-AI-off check hands the image as its model key. It is not a key: if anything calls
+# the model by mistake, the call is refused unbilled. The real key is never passed to that check.
+AI_OFF_API_KEY = "not-a-real-key-ai-off-check"  # Deliberately not a secret.
+AI_OFF_BUDGETS_USD = {"monthly": "0"}
 
 
 class LaunchError(Exception):
@@ -227,9 +236,16 @@ def api_env(
     return env
 
 
-def read_secrets() -> Secrets:
+def ai_off_secrets(secrets_: Secrets) -> Secrets:
+    """The secrets for the live-AI-off check: the keyring, and made-up model keys (no Voyage key).
+    Nothing the caller read for the model is passed on."""
+    return Secrets(AI_OFF_API_KEY, None, secrets_.keyring)
+
+
+def read_secrets(*, require_key: bool = True) -> Secrets:
     """The keys and the keyring from the API's settings (apps/api/.env, the environment, and the
-    keyring file). Nothing here is printed."""
+    keyring file). Nothing here is printed. With `require_key=False` (the live-AI-off check) a
+    missing Anthropic key is fine, and the Secrets carry an empty one."""
     from app.core.config import Settings  # imported here: needs apps/api on the path.
     from app.core.encryption import load_key_provider, resolve_keyring_path
 
@@ -243,7 +259,10 @@ def read_secrets() -> Secrets:
         )
         raise LaunchError(f"The API's settings are not valid: {reasons}") from None
     anthropic = settings.anthropic_api_key
-    key = require_anthropic_key(None if anthropic is None else anthropic.get_secret_value())
+    if require_key:
+        key = require_anthropic_key(None if anthropic is None else anthropic.get_secret_value())
+    else:
+        key = ""
     ring, ring_file = settings.encryption_keyring, settings.encryption_keyring_file
     try:
         keys = load_key_provider(
@@ -460,18 +479,72 @@ def query(sql: str) -> str:
     return result.stdout.strip()
 
 
-def check(secrets_: Secrets, port: int) -> int:
-    made_network, env = bring_up(secrets_, port)
+def problems_with_ai_off(base: str, origin: str) -> list[str]:
+    """What a visitor meets when live AI is off: the flag says false, a sandbox still starts (with
+    Turnstile's always-pass dummy token), and a question is refused with the daily text and no
+    Retry-After (the month isn't coming back). No model is called: the budget stops it first."""
+    from app.ai.fixed_texts import BUDGET_DAILY_TEXT  # imported here: needs apps/api on the path.
+    from app.modules.sandbox.turnstile import DUMMY_TOKEN
+
+    problems: list[str] = []
+    same_origin = {"Origin": origin, "Sec-Fetch-Site": "same-origin"}
+    with httpx.Client(base_url=base, timeout=30) as client:
+        flag = client.get("/api/v1/assistant/availability")
+        if flag.status_code != 200 or flag.json() != {"available": False}:
+            return [f"the availability flag answered {flag.status_code} {flag.text[:200]}"]
+        # The cookies are set by hand: `__Host-` cookies are Secure, and a client's cookie jar won't
+        # send them over plain http.
+        started = client.post(
+            "/api/v1/sandboxes", json={"turnstileToken": DUMMY_TOKEN}, headers=same_origin
+        )
+        if started.status_code != 201:
+            return [f"starting a sandbox answered {started.status_code} {started.text[:200]}"]
+        session = started.cookies.get("__Host-od_session")
+        csrf = started.cookies.get("__Host-od_csrf")
+        if not session or not csrf:
+            return ["starting a sandbox did not set the session cookies"]
+        headers = {
+            **same_origin,
+            "Cookie": f"__Host-od_session={session}; __Host-od_csrf={csrf}",
+            "X-CSRF-Token": csrf,
+        }
+        conversation = client.post("/api/v1/assistant/conversations", json={}, headers=headers)
+        if conversation.status_code != 201:
+            return [f"a new conversation answered {conversation.status_code}"]
+        asked = client.post(
+            f"/api/v1/assistant/conversations/{conversation.json()['id']}/turns",
+            json={"question": "How many sick days do I get?"},
+            headers=headers,
+        )
+        body = asked.json() if asked.headers.get("content-type", "").endswith("json") else {}
+        if asked.status_code != 429 or body.get("type") != "budget-daily":
+            problems.append(f"a question answered {asked.status_code}, not 429 budget-daily")
+        elif body.get("detail") != BUDGET_DAILY_TEXT:
+            problems.append("the refusal is not the approved daily text")
+        if "retry-after" in asked.headers:
+            problems.append("the refusal promises a retry (Retry-After), but the month is used")
+    return problems
+
+
+def check(secrets_: Secrets, port: int, *, ai_off: bool = False) -> int:
+    if ai_off:
+        secrets_ = ai_off_secrets(secrets_)
+    made_network, env = bring_up(secrets_, port, budgets_usd=AI_OFF_BUDGETS_USD if ai_off else None)
     base = f"http://127.0.0.1:{port}"
     try:
         container.run(*api_run_args(env, port=port, detach=True), env=env)
         wait_until_ready(base)
         problems = problems_in_pages(base)
+        if ai_off:
+            problems += problems_with_ai_off(base, origin_for(port))
         if problems:
             raise LaunchError("\n".join(problems) + "\n" + last_logs(API_NAME))
     finally:
         cleanup(made_network=made_network)
     print(f"prod-local check passed: {container.PROD_TAG} served {base} with production settings")
+    if ai_off:
+        print("With live AI off: the flag said false, a sandbox started, and a question was")
+        print("refused with the daily text. No model was called.")
     return 0
 
 
@@ -535,13 +608,22 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="start everything, fetch the pages, stop; asks the model nothing",
     )
+    parser.add_argument(
+        "--ai-off",
+        action="store_true",
+        help="with --check: run with live AI turned off ($0 monthly budget); no model key needed",
+    )
     options = parser.parse_args(argv)
+    if options.ai_off and not options.check:
+        parser.error("--ai-off goes with --check: serving with live AI off has nothing to ask")
     # Until `serve` takes over, a stop signal unwinds like Ctrl-C, so the cleanup in `bring_up`
     # and `check` runs and no database container or network is left behind.
     for signum in STOP_SIGNALS:
         signal.signal(signum, _interrupt)
     try:
         port = check_port(options.port)
+        if options.ai_off:
+            return check(read_secrets(require_key=False), port, ai_off=True)
         secrets_ = read_secrets()
         return check(secrets_, port) if options.check else serve(secrets_, port)
     except (LaunchError, container.ContainerError) as error:

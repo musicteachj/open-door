@@ -456,3 +456,55 @@ def test_running_passes_the_mode_and_budgets_to_the_settings(
         pass
 
     assert seen == {"scripted": True, "budgets_usd": {"daily": "1"}}
+
+
+# --- the check with live AI off (Phase 9a) ------------------------------------------------------
+
+
+def test_the_ai_off_check_sets_a_zero_monthly_budget() -> None:
+    secrets = start.ai_off_secrets(start.Secrets("", None, KEYRING))
+
+    env = api_env(
+        anthropic_api_key=secrets.anthropic_api_key,
+        voyage_api_key=secrets.voyage_api_key,
+        budgets_usd=start.AI_OFF_BUDGETS_USD,
+    )
+
+    assert env["AI_MONTHLY_BUDGET_USD"] == "0"
+    assert env["APP_ENV"] == "production"
+    assert env["AI_TRANSPORT"] == "anthropic"
+
+
+def test_the_ai_off_check_never_passes_the_real_key(monkeypatch: pytest.MonkeyPatch) -> None:
+    asked: list[dict[str, object]] = []
+    ran: list[bool] = []
+
+    def read_without_a_key(**kwargs: object) -> object:
+        asked.append(kwargs)
+        return start.Secrets("", None, KEYRING)
+
+    def check(secrets_: object, port: int, *, ai_off: bool = False) -> int:
+        ran.append(ai_off)
+        return 0
+
+    monkeypatch.setattr(start, "read_secrets", read_without_a_key)
+    monkeypatch.setattr(start, "check", check)
+
+    assert start.main(["--check", "--ai-off"]) == 0
+
+    # The key is never asked for, and a run that has none still starts.
+    assert asked == [{"require_key": False}]
+    assert ran == [True]
+    # The key the image gets is a made-up one: an accidental model call fails and is never billed.
+    fake = start.ai_off_secrets(start.Secrets("a-real-looking-key", "pa-real", KEYRING))
+    assert fake.anthropic_api_key == "not-a-real-key-ai-off-check"
+    assert fake.voyage_api_key is None
+    assert api_env(anthropic_api_key=fake.anthropic_api_key)["ANTHROPIC_API_KEY"] == (
+        "not-a-real-key-ai-off-check"
+    )
+
+
+def test_the_ai_off_flag_needs_check(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(start, "read_secrets", lambda **_: start.Secrets("", None, KEYRING))
+    with pytest.raises(SystemExit):
+        start.main(["--ai-off"])

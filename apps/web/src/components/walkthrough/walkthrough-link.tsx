@@ -1,4 +1,5 @@
 import { Link, useLocation } from 'react-router'
+import { buttonVariants } from '@/components/ui/button-variants'
 import { cn } from '@/lib/utils'
 import { WALKTHROUGH_PATH, walkthroughState } from '@/lib/walkthrough-back'
 
@@ -19,6 +20,23 @@ export function WalkthroughLink({ className }: { className?: string }) {
       to={WALKTHROUGH_PATH}
       state={walkthroughState(location)}
       className={cn(WALKTHROUGH_LINK_CLASS, className)}
+    >
+      {WALKTHROUGH_LINK_TEXT}
+    </Link>
+  )
+}
+
+/**
+ * The walkthrough as the landing's action when the live assistant is out of room: the same link,
+ * in the tour button's look (a secondary button), so it takes the tour button's place.
+ */
+export function WalkthroughButton({ className }: { className?: string }) {
+  const location = useLocation()
+  return (
+    <Link
+      to={WALKTHROUGH_PATH}
+      state={walkthroughState(location)}
+      className={cn(buttonVariants({ variant: 'secondary' }), className)}
     >
       {WALKTHROUGH_LINK_TEXT}
     </Link>

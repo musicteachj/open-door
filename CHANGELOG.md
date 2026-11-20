@@ -20,6 +20,17 @@ version (`0.x.y` while the app is being built, `1.0.0` when it is complete).
   `Retry-After`, since tomorrow does not help. `make prod-local` runs on a $20 month and a $0.50
   sandbox. ADR 0011 has the formula.
 
+- **The landing page says when the live assistant is out of budget and offers the walkthrough
+  instead of the tour** (Phase 9a). A public, cached flag, `GET /api/v1/assistant/availability`
+  (true when today has at least $0.25 of room, kept 30 seconds), tells the landing page. When it is
+  false the tour button and its Cloudflare check give way to the walkthrough as a button, with one
+  note; the four persona cards stay. If the flag can't be read, the page shows the tour button.
+  `make prod-local-check AI_OFF=1` proves it on the production image with live AI off, with no model
+  key and no model call.
+- **The public pages' footer says how long data is kept and who processes it** (Phase 9a, approved
+  by the owner on 2026-11-19): sandboxes for 24 hours, backups for up to 7 days, server logs for 14
+  days, and Anthropic, Voyage, Cloudflare, and AWS as processors.
+
 ### Changed
 
 - **Limit and outage messages point to the recorded walkthrough** (Phase 9a, approved by the owner

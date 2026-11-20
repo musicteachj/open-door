@@ -16,6 +16,7 @@ stream, as an `error` event.
 
 import asyncio
 import contextlib
+import logging
 from collections.abc import AsyncIterator, Awaitable, Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -24,9 +25,10 @@ from typing import Annotated, Any
 from uuid import UUID
 
 import anyio
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from fastapi.responses import JSONResponse, StreamingResponse
 from sqlalchemy import func, select
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 
 from app.ai.admission import (
@@ -98,6 +100,7 @@ from app.api.contacts import hr_contact_out
 from app.api.deps import (
     Now,
     get_app_settings,
+    get_availability_cache,
     get_embedder,
     get_engine,
     get_keys,
@@ -111,6 +114,7 @@ from app.core.problems import ProblemError, problem_response
 from app.db.models import AiConversation, AiTurn, HandbookVersion
 from app.db.tenancy import TenantContext, set_is_hr, tenant_session
 from app.domain.handbook.applicability import Asker
+from app.modules.assistant.availability import AvailabilityCache, live_assistant_available
 from app.modules.assistant.display import (
     kept_escalation_out,
     needs_hr_contact,
@@ -118,6 +122,7 @@ from app.modules.assistant.display import (
     turn_out,
 )
 from app.modules.assistant.schemas import (
+    AssistantAvailabilityOut,
     AssistantTextsOut,
     BudgetBannerOut,
     BudgetOut,
@@ -142,6 +147,8 @@ from app.modules.identity.deps import (
     current_session,
 )
 from app.modules.people.queries import get_me
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/assistant", tags=["assistant"])
 
@@ -460,6 +467,42 @@ async def get_current_conversation(
     return await conversation_out(
         signed_in.db, signed_in, conversation, Caps.from_settings(settings), datetime.now(UTC), keys
     )
+
+
+AVAILABILITY_ERRORS = problem_responses(status.HTTP_503_SERVICE_UNAVAILABLE)
+AVAILABILITY_UNKNOWN_TEXT = "Whether the live assistant is available could not be read right now."
+
+
+@router.get(
+    "/availability",
+    operation_id="getAssistantAvailability",
+    summary="Whether the live assistant has room for a question, for a visitor with no session",
+    response_model=AssistantAvailabilityOut,
+    responses=AVAILABILITY_ERRORS,
+)
+async def get_assistant_availability(
+    response: Response,
+    engine: Annotated[AsyncEngine, Depends(get_engine)],
+    settings: Annotated[Settings, Depends(get_app_settings)],
+    cache: Annotated[AvailabilityCache, Depends(get_availability_cache)],
+) -> AssistantAvailabilityOut:
+    """The landing page's flag. It needs no session and reads nothing of anyone's: only the day's
+    room in the shared ledger, so every visitor gets the same answer, cached for 30 seconds here
+    and by the browser."""
+    caps = Caps.from_settings(settings)
+
+    async def compute() -> bool:
+        return await live_assistant_available(engine, caps)
+
+    try:
+        available = await cache.get(compute)
+    except SQLAlchemyError:
+        logger.warning("The availability flag could not be read", exc_info=True)
+        raise ProblemError(
+            status.HTTP_503_SERVICE_UNAVAILABLE, "availability-unknown", AVAILABILITY_UNKNOWN_TEXT
+        ) from None
+    response.headers["Cache-Control"] = "public, max-age=30"
+    return AssistantAvailabilityOut(available=available)
 
 
 @router.get(
