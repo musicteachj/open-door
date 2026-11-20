@@ -44,7 +44,10 @@ POSTGRES_IMAGE = container.POSTGRES_IMAGE
 NETWORK = "open-door-prod-local"
 DB_NAME = "open-door-prod-local-db"
 API_NAME = "open-door-prod-local-api"
-DB_OWNER = container.DB_OWNER
+INIT_USER = container.SHARED_INIT_USER
+OPEN_DOOR_OWNER = container.OPEN_DOOR_OWNER
+# The init superuser's setup of Open Door's database, the same file the shared server runs.
+INIT_SQL = Path(__file__).resolve().parents[1] / "image" / "postgres-open-door.sql"
 DB_DATABASE = container.DB_DATABASE
 APP_LOGIN = container.APP_LOGIN
 CLEANUP_LOGIN = container.CLEANUP_LOGIN
@@ -73,9 +76,10 @@ class LaunchError(Exception):
 
 @dataclass(frozen=True)
 class Passwords:
-    """The three database passwords, and the key that hides visitors' addresses, made fresh for
+    """The four database passwords, and the key that hides visitors' addresses, made fresh for
     every run. (Production requires SANDBOX_IP_HASH_KEY and refuses the development value.)"""
 
+    init: str
     owner: str
     app: str
     cleanup: str
@@ -84,6 +88,7 @@ class Passwords:
     @classmethod
     def new(cls) -> "Passwords":
         return cls(
+            init=secrets.token_urlsafe(24),
             owner=secrets.token_urlsafe(24),
             app=secrets.token_urlsafe(24),
             cleanup=secrets.token_urlsafe(24),
@@ -133,11 +138,9 @@ def _database_url(user: str, password: str) -> str:
 
 
 def db_env(passwords: Passwords) -> dict[str, str]:
-    return {
-        "POSTGRES_USER": DB_OWNER,
-        "POSTGRES_PASSWORD": passwords.owner,
-        "POSTGRES_DB": DB_DATABASE,
-    }
+    """The server starts with its init superuser only: the owner and the database are made by
+    `INIT_SQL`, as on the shared portfolio server."""
+    return {"POSTGRES_USER": INIT_USER, "POSTGRES_PASSWORD": passwords.init}
 
 
 def entry_env(passwords: Passwords) -> dict[str, str]:
@@ -164,7 +167,7 @@ def setup_env(passwords: Passwords, origin: str) -> dict[str, str]:
         "APP_ENV": "production",
         "APP_ORIGIN": origin,
         "DATABASE_URL": _database_url(APP_LOGIN, passwords.app),
-        "MIGRATION_DATABASE_URL": _database_url(DB_OWNER, passwords.owner),
+        "MIGRATION_DATABASE_URL": _database_url(OPEN_DOOR_OWNER, passwords.owner),
         "CLEANUP_DATABASE_URL": _database_url(CLEANUP_LOGIN, passwords.cleanup),
     }
 
@@ -341,7 +344,10 @@ def ensure_network() -> bool:
 
 
 def wait_for_postgres() -> None:
-    if not container.postgres_ready(DB_NAME, timeout_seconds=DB_READY_TIMEOUT_SECONDS):
+    ready = container.postgres_ready(
+        DB_NAME, timeout_seconds=DB_READY_TIMEOUT_SECONDS, user=INIT_USER, database="postgres"
+    )
+    if not ready:
         raise LaunchError(
             f"The database did not become ready in {DB_READY_TIMEOUT_SECONDS} seconds.\n"
             + last_logs(DB_NAME)
@@ -353,7 +359,14 @@ def last_logs(name: str) -> str:
     return (result.stdout + result.stderr).strip()
 
 
-def run_setup(env: dict[str, str]) -> None:
+def resets_both_logins(printed: str) -> bool:
+    """Whether a repeated setup reset the app's and the cleanup login's passwords, and created
+    neither (the bootstrap prints one line for each login)."""
+    return printed.count(": password reset, with ") >= 2 and ": created, with " not in printed
+
+
+def run_setup(env: dict[str, str]) -> str:
+    """Run the one-off setup container; returns what it printed."""
     result = subprocess.run(  # noqa: S603
         setup_run_args(env),
         env=container.client_env(env),
@@ -365,12 +378,42 @@ def run_setup(env: dict[str, str]) -> None:
     if result.returncode != 0:
         tail = "\n".join((result.stdout + result.stderr).strip().splitlines()[-LOG_LINES:])
         raise LaunchError(f"The one-off setup (migrations, users, handbook) failed:\n{tail}")
+    return result.stdout
+
+
+def init_sql_args(passwords: Passwords) -> tuple[list[str], dict[str, str]]:
+    """Feed `INIT_SQL` to psql in the database container, as the init superuser. The owner's
+    password goes in as `--env NAME`: its value stays in the docker client's environment (the
+    second item), never on a command line."""
+    env = {"OD_OWNER_PASSWORD": passwords.owner}
+    args = [
+        "docker", "exec", "-i", *container.env_flags(env), DB_NAME,
+        "psql", "-U", INIT_USER, "-d", "postgres", "-X", "-q",
+    ]  # fmt: skip
+    return args, env
+
+
+def run_init_sql(passwords: Passwords) -> None:
+    args, env = init_sql_args(passwords)
+    result = subprocess.run(  # noqa: S603
+        args,
+        input=INIT_SQL.read_text(encoding="utf-8"),
+        env=container.client_env(env),
+        capture_output=True,
+        text=True,
+        timeout=120,
+        check=False,
+    )
+    if result.returncode != 0:
+        tail = "\n".join((result.stdout + result.stderr).strip().splitlines()[-LOG_LINES:])
+        raise LaunchError(f"The init SQL (Open Door's database and its owner) failed:\n{tail}")
 
 
 def start_database(passwords: Passwords) -> None:
     env = db_env(passwords)
     container.run(*db_run_args(env), env=env)
     wait_for_postgres()
+    run_init_sql(passwords)
 
 
 def cleanup(*, made_network: bool) -> None:
@@ -528,10 +571,13 @@ def bring_up(
     scripted: bool = False,
     budgets_usd: Mapping[str, str] | None = None,
     passwords: Passwords | None = None,
+    setup_runs: int = 1,
 ) -> tuple[bool, dict[str, str]]:
     """Start the database and run the setup; returns whether this run made the network and the
     API's settings. Cleans up after itself if a step fails. A caller that needs the passwords
-    afterward (the check runs the cleanup job) makes them and passes them in."""
+    afterward (the check runs the cleanup job) makes them and passes them in. The check runs the
+    setup twice (`setup_runs=2`), as every deploy does, and the later runs must reset the logins'
+    passwords, not create them."""
     passwords = passwords or Passwords.new()
     require_the_image()
     # A stale container of the same name is removed first.
@@ -542,7 +588,13 @@ def bring_up(
     made_network = ensure_network()
     try:
         start_database(passwords)
-        run_setup(setup_env(passwords, origin_for(port)))
+        for run_number in range(setup_runs):
+            printed = run_setup(setup_env(passwords, origin_for(port)))
+            if run_number > 0 and not resets_both_logins(printed):
+                raise LaunchError(
+                    f'Setup number {run_number + 1} should say "password reset" for both logins'
+                    " and create none: it only resets the passwords of logins that exist."
+                )
         env = api_env(
             port=port,
             passwords=passwords,
@@ -579,10 +631,11 @@ def running(
 
 
 def query_args(sql: str) -> list[str]:
-    """`psql` in the run's database container, as the owner, printing bare values."""
+    """`psql` in the run's database container, as the init superuser, printing bare values. The
+    owner is no superuser and sees no tenant rows under forced row-level security."""
     return [
         "docker", "exec", DB_NAME,
-        "psql", "-U", DB_OWNER, "-d", DB_DATABASE, "-v", "ON_ERROR_STOP=1", "-At", "-c", sql,
+        "psql", "-U", INIT_USER, "-d", DB_DATABASE, "-v", "ON_ERROR_STOP=1", "-At", "-c", sql,
     ]  # fmt: skip
 
 
@@ -646,7 +699,11 @@ def check(secrets_: Secrets, port: int, *, ai_off: bool = False) -> int:
         secrets_ = ai_off_secrets(secrets_)
     passwords = Passwords.new()
     made_network, env = bring_up(
-        secrets_, port, budgets_usd=AI_OFF_BUDGETS_USD if ai_off else None, passwords=passwords
+        secrets_,
+        port,
+        budgets_usd=AI_OFF_BUDGETS_USD if ai_off else None,
+        passwords=passwords,
+        setup_runs=2,
     )
     base = f"http://127.0.0.1:{port}"
     try:

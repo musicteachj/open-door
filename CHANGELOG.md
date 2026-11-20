@@ -64,6 +64,14 @@ version (`0.x.y` while the app is being built, `1.0.0` when it is complete).
 
 ### Security
 
+- **Open Door's database admits only its own logins, and the setup refuses a role that would
+  inherit its access** (Phase 9a). Migration 0020 takes `CONNECT` from every role (PUBLIC) and
+  gives it to `od_app` and `od_cleanup`, so another app's logins on a shared Postgres server can't
+  open the database. The login bootstrap stops, changing nothing, if any role other than the
+  configured logins (and the owner running it) holds either role. `scripts/image/postgres-open-door.sql`
+  is the one-time setup of the database on the shared server, and `make prod-local` now uses that
+  layout: an init superuser, a non-superuser owner, and the setup run twice.
+
 - **The npm audit's picomatch exception now runs through 2027-01-17, UTC** (Phase 8 follow-up).
   picomatch still has no fixed release, and the exception would otherwise end on 2026-12-17, in
   the middle of Phase 9. The owner agreed to the extension; the rules are unchanged (build tools

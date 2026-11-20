@@ -34,6 +34,12 @@ TEST_KEYRING = "test:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="
 POSTGRES_IMAGE = "pgvector/pgvector:0.8.7-pg17"
 DB_OWNER = "opendoor"
 DB_DATABASE = "opendoor"
+# The shared portfolio server's layout, which `make prod-local` mirrors: an init superuser (it
+# makes the database and pre-creates `vector`, and is the only role that can see every tenant's
+# rows), and a non-superuser owner with CREATEROLE that the migrations and the login bootstrap run
+# as. The load test keeps its single-superuser database (`DB_OWNER`).
+SHARED_INIT_USER = "postgres_init"
+OPEN_DOOR_OWNER = "opendoor_owner"
 APP_LOGIN = "od_app_login"
 CLEANUP_LOGIN = "od_cleanup_login"
 # What every container runs with, as production does: a read-only root, a tmpfs for /tmp, no
@@ -288,14 +294,16 @@ def database_url(user: str, password: str, host: str) -> str:
     return f"postgresql+asyncpg://{user}:{password}@{host}:5432/{DB_DATABASE}"
 
 
-def postgres_ready(name: str, *, timeout_seconds: float) -> bool:
+def postgres_ready(
+    name: str, *, timeout_seconds: float, user: str = DB_OWNER, database: str = DB_DATABASE
+) -> bool:
     """Wait until the database container accepts connections (over TCP: on a fresh database,
     Postgres first runs a socket-only setup server)."""
     deadline = time.monotonic() + timeout_seconds
     while time.monotonic() < deadline:
         probe = run(
-            "docker", "exec", name, "pg_isready", "-h", "127.0.0.1", "-U", DB_OWNER, "-d",
-            DB_DATABASE,
+            "docker", "exec", name, "pg_isready", "-h", "127.0.0.1", "-U", user, "-d",
+            database,
             check=False,
         )  # fmt: skip
         if probe.returncode == 0:

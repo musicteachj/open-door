@@ -986,7 +986,7 @@ browser test with `cd apps/web && npx playwright test e2e/<file>.spec.ts`.
   in `container.py`, `SHARED_INIT_USER = "postgres_init"` and `OPEN_DOOR_OWNER = "opendoor_owner"`.
   The load test keeps its single-superuser database.
 
-- [ ] **Step 1: Write the failing tests.**
+- [x] **Step 1: Write the failing tests.**
   - `test_database_connect.py`: `test_public_cannot_connect` (no `aclexplode(datacl)` entry for
     grantee 0 with `CONNECT` on `current_database()`); `test_open_doors_roles_can_connect`
     (`has_database_privilege('od_app', current_database(), 'CONNECT')`, and for `od_cleanup`);
@@ -997,9 +997,9 @@ browser test with `cd apps/web && npx playwright test e2e/<file>.spec.ts`.
     `test_the_owners_own_membership_is_not_a_stranger` (grant `od_app_login` to `current_user`
     `WITH ADMIN OPTION, INHERIT FALSE, SET FALSE`, as Postgres 16 does for a `CREATEROLE` creator;
     the bootstrap runs twice and passes; revoke after).
-- [ ] **Step 2: Run them.** `cd apps/api && uv run pytest tests/integration/test_database_connect.py tests/integration/test_bootstrap.py -q`.
+- [x] **Step 2: Run them.** `cd apps/api && uv run pytest tests/integration/test_database_connect.py tests/integration/test_bootstrap.py -q`.
   Expected: FAIL.
-- [ ] **Step 3: Implement.** Migration 0020, as the database owner:
+- [x] **Step 3: Implement.** Migration 0020, as the database owner:
 
   ```python
   def upgrade() -> None:
@@ -1013,10 +1013,10 @@ browser test with `cd apps/web && npx playwright test e2e/<file>.spec.ts`.
   (`pg_auth_members` where the role is `od_app` or `od_cleanup`) other than the configured logins
   and `current_user`, refusing with the role, the members, and "another database's login would
   inherit Open Door's access", before anything changes. Update the module docstring's rules.
-- [ ] **Step 4: Run them,** then `uv run pytest tests/integration/test_grants.py tests/integration/test_role_migration.py -q`
+- [x] **Step 4: Run them,** then `uv run pytest tests/integration/test_grants.py tests/integration/test_role_migration.py -q`
   and `make migrations-roundtrip` (it wipes the development data; run `make db` after). Expected:
   PASS.
-- [ ] **Step 5: Write the shared-server setup** in `scripts/image/postgres-open-door.sql`:
+- [x] **Step 5: Write the shared-server setup** in `scripts/image/postgres-open-door.sql`:
 
   ```sql
   -- Open Door's database on the shared portfolio Postgres server. Run once, as the server's init
@@ -1031,28 +1031,28 @@ browser test with `cd apps/web && npx playwright test e2e/<file>.spec.ts`.
   CREATE EXTENSION IF NOT EXISTS vector;
   ```
 
-- [ ] **Step 6: Write the failing prod-local tests.** `test_the_database_starts_with_an_init_superuser_only`;
+- [x] **Step 6: Write the failing prod-local tests.** `test_the_database_starts_with_an_init_superuser_only`;
   `test_open_doors_database_is_made_by_the_init_sql` (the password travels as `--env`, never on a
   command line); `test_the_setup_connects_as_a_non_superuser_owner`
   (`MIGRATION_DATABASE_URL` names `opendoor_owner`); `test_queries_run_as_the_init_superuser`
   (the owner sees no tenant rows under forced row-level security, so `query` can't use it);
   `test_the_check_runs_the_setup_twice`.
-- [ ] **Step 7: Run them.** `uv run pytest tests/test_prod_local.py -q`. Expected: FAIL.
-- [ ] **Step 8: Implement** in `container.py` and `start.py`: start Postgres with
+- [x] **Step 7: Run them.** `uv run pytest tests/test_prod_local.py -q`. Expected: FAIL.
+- [x] **Step 8: Implement** in `container.py` and `start.py`: start Postgres with
   `POSTGRES_USER=postgres_init`, wait for it, feed the SQL file to
   `docker exec -i -e OD_OWNER_PASSWORD <db> psql -U postgres_init -d postgres`, and connect the
   setup as `opendoor_owner`. `--check` runs the setup twice.
-- [ ] **Step 9: Run them,** then `make prod-local-check SKIP_BUILD=1` and
+- [x] **Step 9: Run them,** then `make prod-local-check SKIP_BUILD=1` and
   `make live-check DRY_RUN=1 SKIP_BUILD=1`. Expected: PASS: migrations run as a non-superuser, the
   second setup says "password reset", and the dry run's database reads still work.
-- [ ] **Step 10: Learn whether `vector` needs a superuser.** In the prod-local database container
+- [x] **Step 10: Learn whether `vector` needs a superuser.** In the prod-local database container
   while a check runs (or a scratch `docker run` of `pgvector/pgvector:0.8.7-pg17`), as
   `opendoor_owner` in a scratch database it owns, run `CREATE EXTENSION vector;`. Record the
   result in "Changes made during execution"; `docs/DEPLOY.md` keeps the pre-creation either way.
-- [ ] **Step 11: Changelog.** Security: "Open Door's database admits only its own logins, and the
+- [x] **Step 11: Changelog.** Security: "Open Door's database admits only its own logins, and the
   setup refuses a role that would inherit its access (Phase 9a)".
-- [ ] **Step 12: Run the checks.** `make check-api && make eval-offline`. Expected: PASS.
-- [ ] **Step 13: Stop:** show the diff summary and the proposed commit message, and wait for
+- [x] **Step 12: Run the checks.** `make check-api && make eval-offline`. Expected: PASS.
+- [x] **Step 13: Stop:** show the diff summary and the proposed commit message, and wait for
   James's explicit OK before committing.
   Proposed subject: "Admit only Open Door's own logins to its database".
 
@@ -1365,6 +1365,8 @@ Task 4: the composer's disabled placeholder said 'until tomorrow' too; the owner
 Task 7: base commit 1e7d27a. The patch applied cleanly. Without the pin, the full set failed on a replay miss only: the runner stops at the first miss (rt-01), so all 207 items would miss, since every request carries the system prompt. The escalation and case-summary sets passed. One change to the saved patch: `request_statuses_now` dropped `.tuples()`, which raised a SQLAlchemy deprecation warning that the test settings turn into an error.
 
 Task 8: under the read-only root, nothing wrote outside `/tmp`. The setup, the cleanup, and the API ran with only a `/tmp` tmpfs.
+
+Task 9: `vector` needs a superuser. As the non-superuser owner, `CREATE EXTENSION vector;` fails with "permission denied to create extension \"vector\"" (hint: "Must be superuser to create this extension."), so the init superuser pre-creates it, as `scripts/image/postgres-open-door.sql` does. The migrations roundtrip needed the development database's sealed test rows cleared first (`TRUNCATE tenants CASCADE`), because migration 0018's downgrade can't decrypt them.
 
 The implementer also records here: the base commit, the replay miss count (Task 7), what
 the read-only root needed (Task 8), whether `vector` needs a superuser (Task 9), the review

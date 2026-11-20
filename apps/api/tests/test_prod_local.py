@@ -475,11 +475,13 @@ def test_only_the_monthly_budget_may_be_zero() -> None:
         start.budget_env({"daily": "0"})
 
 
-def test_the_database_query_runs_as_the_owner_inside_its_container() -> None:
+def test_queries_run_as_the_init_superuser() -> None:
+    # The owner is not a superuser, and forced row-level security hides every tenant row from it,
+    # so a query that counts rows must run as the init superuser.
     args = start.query_args("SELECT 1")
 
     assert args[:3] == ["docker", "exec", start.DB_NAME]
-    assert args[args.index("-U") + 1] == start.DB_OWNER
+    assert args[args.index("-U") + 1] == container.SHARED_INIT_USER == "postgres_init"
     assert args[args.index("-d") + 1] == start.DB_DATABASE
     assert args[-2:] == ["-c", "SELECT 1"]
     assert "-At" in args
@@ -577,3 +579,105 @@ def test_the_ai_off_flag_needs_check(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(start, "read_secrets", lambda **_: start.Secrets("", None, KEYRING))
     with pytest.raises(SystemExit):
         start.main(["--ai-off"])
+
+
+# --- one Postgres server, two apps (Phase 9a, task 9) -----------------------------------------
+
+
+def test_the_database_starts_with_an_init_superuser_only() -> None:
+    p = start.Passwords.new()
+    env = start.db_env(p)
+
+    assert env["POSTGRES_USER"] == container.SHARED_INIT_USER == "postgres_init"
+    assert env["POSTGRES_PASSWORD"] == p.init
+    assert p.init not in (p.owner, p.app, p.cleanup)
+    # The owner's login is made by the init SQL, never by the image's first-start setup.
+    assert p.owner not in env.values()
+    assert start.OPEN_DOOR_OWNER == container.OPEN_DOOR_OWNER == "opendoor_owner"
+
+
+def test_open_doors_database_is_made_by_the_init_sql() -> None:
+    p = start.Passwords.new()
+    args, env = start.init_sql_args(p)
+
+    assert args[:3] == ["docker", "exec", "-i"]
+    # The password travels as `--env NAME` (its value stays in the client's environment).
+    assert pairs(args, "--env") == ["OD_OWNER_PASSWORD"]
+    assert env == {"OD_OWNER_PASSWORD": p.owner}
+    assert p.owner not in "\n".join(args)
+    assert p.init not in "\n".join(args)
+    assert args[args.index("psql") + 1 :][:4] == ["-U", "postgres_init", "-d", "postgres"]
+    assert start.DB_NAME in args
+    sql = start.INIT_SQL.read_text(encoding="utf-8")
+    assert "CREATE ROLE opendoor_owner LOGIN CREATEROLE" in sql
+    assert "REVOKE CONNECT ON DATABASE opendoor FROM PUBLIC" in sql
+    assert "CREATE EXTENSION IF NOT EXISTS vector" in sql
+    assert chr(0x2014) not in sql
+
+
+def test_the_setup_connects_as_a_non_superuser_owner() -> None:
+    p = start.Passwords.new()
+    env = start.setup_env(p, start.origin_for(8300))
+
+    assert env["MIGRATION_DATABASE_URL"].startswith("postgresql+asyncpg://opendoor_owner:")
+    assert f":{p.owner}@" in env["MIGRATION_DATABASE_URL"]
+
+
+CREATED = "a_login: created, with od_app\nb_login: created, with od_cleanup"
+RESET = "a_login: password reset, with od_app\nb_login: password reset, with od_cleanup"
+
+
+class CheckRun:
+    """Stands in for every docker step of `check`, counting the setups."""
+
+    def __init__(self, monkeypatch: pytest.MonkeyPatch, second_output: str) -> None:
+        self.outputs = [CREATED, second_output]
+        self.setups = 0
+        FakeDocker(monkeypatch)
+        monkeypatch.setattr(start, "start_database", lambda _passwords: None)
+        monkeypatch.setattr(start, "run_setup", self.run_setup)
+        monkeypatch.setattr(start.container, "run", lambda *_a, **_k: None)
+        monkeypatch.setattr(start, "wait_until_ready", lambda _base: None)
+        monkeypatch.setattr(start, "problems_in_pages", lambda _base: [])
+        monkeypatch.setattr(start, "run_cleanup_job", lambda _env: [])
+        monkeypatch.setattr(start, "last_logs", lambda _name: "")
+
+    def run_setup(self, _env: dict[str, str]) -> str:
+        output = self.outputs[min(self.setups, 1)]
+        self.setups += 1
+        return output
+
+
+def test_the_check_runs_the_setup_twice(monkeypatch: pytest.MonkeyPatch) -> None:
+    run = CheckRun(monkeypatch, RESET)
+
+    assert start.check(start.Secrets(ANTHROPIC, None, KEYRING), 8300) == 0
+    assert run.setups == 2
+
+
+def test_a_second_setup_that_did_not_reset_the_passwords_fails_the_check(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    CheckRun(monkeypatch, CREATED)
+
+    with pytest.raises(start.LaunchError, match="password reset"):
+        start.check(start.Secrets(ANTHROPIC, None, KEYRING), 8300)
+
+
+def test_a_second_setup_that_reset_one_login_and_created_the_other_fails_the_check(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    mixed = "a_login: password reset, with od_app\nb_login: created, with od_cleanup"
+    CheckRun(monkeypatch, mixed)
+
+    with pytest.raises(start.LaunchError, match="both logins"):
+        start.check(start.Secrets(ANTHROPIC, None, KEYRING), 8300)
+
+
+def test_serving_runs_the_setup_once(monkeypatch: pytest.MonkeyPatch) -> None:
+    run = CheckRun(monkeypatch, "unused")
+    monkeypatch.setattr(start, "api_env", lambda **_k: {})
+
+    start.bring_up(start.Secrets(ANTHROPIC, None, KEYRING), 8300)
+
+    assert run.setups == 1
