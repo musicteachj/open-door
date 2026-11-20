@@ -581,7 +581,7 @@ browser test with `cd apps/web && npx playwright test e2e/<file>.spec.ts`.
   day's budget (Phase 9a)", and Changed: "The Anthropic workspace, organization, billing, and
   enforced spend limits all stop the assistant with the spend-limit text (Phase 9a)".
 - [x] **Step 10: Run the API checks.** `make check-api && make eval-offline`. Expected: PASS.
-- [ ] **Step 11: Stop:** show the diff summary and the proposed commit message, and wait for
+- [x] **Step 11: Stop:** show the diff summary and the proposed commit message, and wait for
   James's explicit OK before committing.
   Proposed subject: "Settle unbilled model failures to zero and name every spend limit". Body:
   which errors now cost $0, which count as the spend limit, that the SDK no longer retries under
@@ -611,7 +611,7 @@ browser test with `cd apps/web && npx playwright test e2e/<file>.spec.ts`.
   prop on the answer's error state.
 - Produces for Task 5: the approved `LIVE_PAUSED_NOTE` and `RETENTION_NOTE` words.
 
-- [ ] **Step 1: Stop:** show James every new visitor-facing string, with a screenshot of the gallery's
+- [x] **Step 1: Stop:** show James every new visitor-facing string, with a screenshot of the gallery's
   daily-limit state, and wait for his approval of the words (he may rewrite them). Proposed:
   - Daily limit (also the Anthropic spend limit, a used month, and live AI off): "The demo's live
     assistant has reached its limit for now. You can still watch the recorded walkthrough. If you
@@ -626,7 +626,7 @@ browser test with `cd apps/web && npx playwright test e2e/<file>.spec.ts`.
     answers), Voyage (handbook search), Cloudflare (the bot check), and AWS (hosting) process
     this data."
   Record the approval date he gives.
-- [ ] **Step 2: Write the failing text tests** in `tests/test_fixed_texts.py`: change
+- [x] **Step 2: Write the failing text tests** in `tests/test_fixed_texts.py`: change
   `test_the_budget_texts_say_which_limit_was_reached` to assert `"tomorrow" not in` and
   `"walkthrough" in ERROR_TEXTS["budget-daily"]`; change `test_the_budget_texts_are_the_approved_words`
   to the approved daily words; add `test_the_daily_text_is_approved` and
@@ -635,32 +635,32 @@ browser test with `cd apps/web && npx playwright test e2e/<file>.spec.ts`.
   `test_the_model_unavailable_text_names_no_fictional_contact` (`"HR team" not in` it,
   `"walkthrough" in` it, `"in a moment" not in` it). `test_each_budget_text_gives_911_and_988`
   stays as it is.
-- [ ] **Step 3: Run them.** `cd apps/api && uv run pytest tests/test_fixed_texts.py -q`. Expected:
+- [x] **Step 3: Run them.** `cd apps/api && uv run pytest tests/test_fixed_texts.py -q`. Expected:
   FAIL.
-- [ ] **Step 4: Change the texts,** then compute each hash:
+- [x] **Step 4: Change the texts,** then compute each hash:
   `cd apps/api && uv run python -c "import hashlib; from app.ai import fixed_texts as f; print(hashlib.sha256(f.BUDGET_DAILY_TEXT.encode()).hexdigest(), hashlib.sha256(f.MODEL_UNAVAILABLE_TEXT.encode()).hexdigest())"`.
   Keep `ERROR_TEXTS["spend-limit"] = BUDGET_DAILY_TEXT`, and update the comment above it.
-- [ ] **Step 5: Run them.** Same command. Expected: PASS.
-- [ ] **Step 6: Write the failing web tests.**
+- [x] **Step 5: Run them.** Same command. Expected: PASS.
+- [x] **Step 6: Write the failing web tests.**
   - `walkthrough-offer.test.ts`: true for `model-unavailable`, `spend-limit`, and `budget-daily`;
     false for `budget-sandbox`, `budget-conversation`, `internal`, `refusal`, and `undefined`.
   - `answer.test.tsx`: "an error that offers the walkthrough shows its link under the text" (the
     link named "Watch the recorded walkthrough" follows the error message), and "an internal error
     shows no walkthrough link".
-- [ ] **Step 7: Run them.** `cd apps/web && npx vitest run src/features/chat/walkthrough-offer.test.ts src/components/assistant/answer.test.tsx`.
+- [x] **Step 7: Run them.** `cd apps/web && npx vitest run src/features/chat/walkthrough-offer.test.ts src/components/assistant/answer.test.tsx`.
   Expected: FAIL.
-- [ ] **Step 8: Implement.** `offersWalkthrough` in `walkthrough-offer.ts`; the answer's error
+- [x] **Step 8: Implement.** `offersWalkthrough` in `walkthrough-offer.ts`; the answer's error
   state renders `<WalkthroughLink />` in a `mt-2 block` span when `offerWalkthrough` is true (the
   spacing `budget-banner.tsx:54-64` uses for WCAG 2.5.8); `turn-view.tsx` passes
   `offerWalkthrough={offersWalkthrough(turn.error?.code)}` for a stored failed turn and the same
   for the live turn's error. Update the gallery fixture, the banner test, and the two e2e files to
   the new daily words (`grep -rn "try again tomorrow\|ask the HR team directly" apps/web/src apps/web/e2e`
   finds them; leave `docs/design/` and ADR 0019 as records).
-- [ ] **Step 9: Run them.** Same command, then `make check-web`. Expected: PASS.
-- [ ] **Step 10: Changelog.** `CHANGELOG.md`, Changed: "Limit and outage messages point to the
+- [x] **Step 9: Run them.** Same command, then `make check-web`. Expected: PASS.
+- [x] **Step 10: Changelog.** `CHANGELOG.md`, Changed: "Limit and outage messages point to the
   recorded walkthrough (Phase 9a)", with the approval date and that the HR team (fictional) is no
   longer the fallback.
-- [ ] **Step 11: Run the checks.** `make check-api && make eval-offline && make e2e`. Expected: PASS.
+- [x] **Step 11: Run the checks.** `make check-api && make eval-offline && make e2e`. Expected: PASS.
 - [ ] **Step 12: Stop:** show the diff summary and the proposed commit message, and wait for
   James's explicit OK before committing.
   Proposed subject: "Point the limit and outage messages to the recorded walkthrough".
@@ -1360,6 +1360,8 @@ No tasks here; each is the master plan's.
 
 ## Changes made during execution
 
-Nothing yet. The implementer records here: the base commit, the replay miss count (Task 7), what
+Task 4: the composer's disabled placeholder said 'until tomorrow' too; the owner approved 'The live assistant isn't available right now.' on 2026-11-19.
+
+The implementer also records here: the base commit, the replay miss count (Task 7), what
 the read-only root needed (Task 8), whether `vector` needs a superuser (Task 9), the review
 findings left unfixed (Task 12), and the verification results (Task 13).

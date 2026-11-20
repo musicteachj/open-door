@@ -22,6 +22,13 @@ version (`0.x.y` while the app is being built, `1.0.0` when it is complete).
 
 ### Changed
 
+- **Limit and outage messages point to the recorded walkthrough** (Phase 9a, approved by the owner
+  on 2026-11-19). The daily, spend-limit, used-month, and live-AI-off text no longer says "try
+  again tomorrow", and the model-unavailable text no longer sends visitors to the HR team, which is
+  fictional. Both now offer the recorded walkthrough, and a failed turn with either shows a "Watch
+  the recorded walkthrough" link under its message. The composer's disabled placeholder at the
+  daily limit says "The live assistant isn't available right now." The daily text has its own
+  approval record and hash.
 - **The Anthropic workspace, organization, billing, and enforced spend limits all stop the assistant
   with the spend-limit text** (Phase 9a). A 400 with the Console's usage-limit message (plain,
   workspace, or organization), a 402, and a 429 carrying `enforced_spend_limit_reached` are all

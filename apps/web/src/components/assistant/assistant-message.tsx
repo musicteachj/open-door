@@ -1,6 +1,7 @@
 import { RotateCcw, Square } from 'lucide-react'
 import type { ReactNode } from 'react'
 import { InlineError } from '@/components/feedback/inline-error'
+import { WalkthroughLink } from '@/components/walkthrough/walkthrough-link'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { Answer, type AnswerProps } from './answer'
@@ -25,6 +26,8 @@ type AssistantMessageBaseProps = {
   steps?: StatusStep[]
   onAskAgain?: () => void
   onRetry?: () => void
+  /** On an error: shows "Watch the recorded walkthrough" under the text (Phase 9a). */
+  offerWalkthrough?: boolean
   /** The source chips. Shown once the answer is finished (`complete` or `incomplete`). */
   sources?: ReactNode
   /** The HR contacts card of a not-found answer, below the text and sources. */
@@ -61,6 +64,7 @@ function AssistantMessage(props: AssistantMessageProps) {
     steps = [],
     onAskAgain,
     onRetry,
+    offerWalkthrough = false,
     sources,
     contacts,
     feedback,
@@ -127,6 +131,12 @@ function AssistantMessage(props: AssistantMessageProps) {
           inline
           className="mt-0 flex-wrap pr-0 pl-0"
         />
+      )}
+      {props.status === 'error' && offerWalkthrough && (
+        // 8 px above, so its 24 px target circle clears the Retry button (WCAG 2.5.8).
+        <span className="mt-2 block">
+          <WalkthroughLink />
+        </span>
       )}
       {finished && sources}
       {finished && contacts}

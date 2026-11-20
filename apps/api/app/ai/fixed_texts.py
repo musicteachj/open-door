@@ -63,15 +63,19 @@ BUDGET_SANDBOX_TEXT: Final = (
     "If you or someone else is in danger, call 911, or call or text 988 to reach the 988 "
     "Suicide & Crisis Lifeline."
 )
+# The daily text is also the words for the Anthropic spend limit, a used month, and live AI turned
+# off. It points to the recorded walkthrough (Phase 9a), so it has its own approval record.
 BUDGET_DAILY_TEXT: Final = (
-    "The demo's daily limit for the assistant has been reached. Please try again tomorrow. "
-    "If you or someone else is in danger, call 911, or call or text 988 to reach the 988 "
-    "Suicide & Crisis Lifeline."
+    "The demo's live assistant has reached its limit for now. You can still watch the recorded "
+    "walkthrough. If you or someone else is in danger, call 911, or call or text 988 to reach "
+    "the 988 Suicide & Crisis Lifeline."
 )
+BUDGET_DAILY_TEXT_AUTHOR: Final = "James Littlefield (owner)"
+BUDGET_DAILY_TEXT_APPROVED_ON: str = "2026-11-19"
+BUDGET_DAILY_TEXT_SHA256: str = "4394826561721af083b013da60c26e9ac88a9a2efcdbe2fd9f835ba46d8eeac5"
 BUDGET_TEXTS_AUTHOR: Final = "James Littlefield (owner)"
 BUDGET_TEXTS_APPROVED_ON: str = "2026-10-15"
 BUDGET_SANDBOX_TEXT_SHA256: str = "6a3fc6f7b20c4e316e2830de9d354baad1ce6b3083a58606363747aa6a7e8635"
-BUDGET_DAILY_TEXT_SHA256: str = "23fa3acad35801765fb94c2999da280328d812b779b011d44fcb5226f3b901fd"
 
 # The two refusals the composer shows before a request is sent (and the API sends as problems),
 # from `GET /assistant/texts`, so the web app holds no copy of them. Not model text, and not a
@@ -112,20 +116,30 @@ BUDGET_CONVERSATION_TEXT_SHA256: str = (
     "761982a7756be1c5c58e2efe1bdcbe44e7e05c873588f69e929b086db8ce205b"
 )
 
+# The guard has already passed the message when the model service can't be reached, so this text
+# carries no crisis wording. It points to the recorded walkthrough (Phase 9a) instead of the
+# fictional HR team.
+MODEL_UNAVAILABLE_TEXT: Final = (
+    "I can't reach the assistant service right now. You can try again later, or watch the "
+    "recorded walkthrough."
+)
+MODEL_UNAVAILABLE_TEXT_AUTHOR: Final = "James Littlefield (owner)"
+MODEL_UNAVAILABLE_TEXT_APPROVED_ON: str = "2026-11-19"
+MODEL_UNAVAILABLE_TEXT_SHA256: str = (
+    "3694f680fd875ad560693f498b35851eb1d75af8ae3a58b18c710b75a26e6c7a"
+)
+
 ERROR_TEXTS: Final[dict[str, str]] = {
     "refusal": (
         "I can't help with that one. If you need an answer, the HR team can help. "
         "You can find them in the directory."
     ),
-    "model-unavailable": (
-        "I can't reach the assistant service right now. Please try again in a moment, or ask "
-        "the HR team directly."
-    ),
+    "model-unavailable": MODEL_UNAVAILABLE_TEXT,
     "budget-sandbox": BUDGET_SANDBOX_TEXT,
     "budget-daily": BUDGET_DAILY_TEXT,
     "budget-conversation": BUDGET_CONVERSATION_TEXT,
     # Anthropic's Console spend limit, not the product's own cap. The owner chose to reuse the
-    # approved daily text for it, so there are no new words to approve.
+    # daily text for it (its words were approved again on 2026-11-19).
     "spend-limit": BUDGET_DAILY_TEXT,
     "too-many-calls": (
         "That question took more steps than I can take in one turn. Try asking it in a "

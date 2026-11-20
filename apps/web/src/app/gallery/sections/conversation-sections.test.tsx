@@ -319,7 +319,7 @@ describe('ConversationSections: what each state shows', () => {
     ['conversation-budget-sandbox', 'This demo sandbox has reached its limit', true],
     [
       'conversation-budget-daily',
-      "The demo's daily limit for the assistant has been reached.",
+      "The demo's live assistant has reached its limit for now.",
       false,
     ],
   ])('shows the %s banner over a disabled composer', (id, text, hasButton) => {
