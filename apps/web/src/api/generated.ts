@@ -28,6 +28,15 @@ export interface ActionCountOut {
 }
 
 /**
+ * The machine-readable mark on text the model wrote (Article 50(2); ADR 0024).
+ */
+export interface AiGeneratedOut {
+  generator: string
+  models: string[]
+  digitalSourceType: string
+}
+
+/**
  * Whether the live assistant can take a question now, for visitors with no session yet.
  */
 export interface AssistantAvailabilityOut {
@@ -428,6 +437,7 @@ export interface CaseSummaryOut {
   model?: string | null
   promptVersion?: string | null
   createdAt?: string | null
+  aiGenerated?: AiGeneratedOut | null
 }
 
 export interface CaseTextOut {
@@ -735,6 +745,7 @@ export interface TurnOut {
   question: string
   status: TurnOutStatus
   answerText: string
+  aiGenerated: AiGeneratedOut | null
   citations: CitationOut[]
   incomplete: boolean
   error: TurnErrorOut | null

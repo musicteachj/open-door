@@ -701,7 +701,8 @@ async def cancel_proposal(
 
 SSE_RESPONSE: dict[int | str, dict[str, Any]] = {
     200: {
-        "description": "The turn as server-sent events: `turn.started`, `status`, `text.delta`,"
+        "description": "The turn as server-sent events: `turn.started` (with `aiGenerated: true`),"
+        " `status`, `text.delta`,"
         " `text.retracted`, `citation`, `tool.started`, `tool.finished`, `proposal`, `escalation`,"
         " `error`, and `turn.completed`, with `: keep-alive` comments between them.",
         "content": {"text/event-stream": {"schema": {"type": "string"}}},

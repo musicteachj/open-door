@@ -479,7 +479,7 @@ async def test_a_plain_question_streams_the_events_in_order_and_is_saved(
     assert headers["content-encoding"] == "identity"
     assert headers["x-request-id"]
     [turn] = await turn_rows(app_engine, tenant_id, person_id)
-    assert events[0] == ("turn.started", {"turnId": str(turn.id)})
+    assert events[0] == ("turn.started", {"turnId": str(turn.id), "aiGenerated": True})
     completed = events[-1][1]
     assert set(completed) == {"turnId", "servedBy", "usage"}
     assert set(completed["usage"]) == {"inputTokens", "outputTokens"}

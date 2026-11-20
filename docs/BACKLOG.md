@@ -539,12 +539,6 @@ found while building Phase 8, or moved here from its backlog because they only m
   checks have never run. With the production keys, start a sandbox through the deployed page and
   confirm the token passes; if the widget refuses the domain under `Referrer-Policy: same-origin`,
   set the policy per page or allow the domain in Cloudflare. (Phase 8 phase review.)
-- **Mark each answer in a machine-readable way (EU AI Act, Article 50(2)).** Re-read on
-  2026-11-16, the duty covers any provider whose system writes synthetic text, not only published
-  text, so a deployed Open Door must mark its answers as AI-generated in a form a machine can
-  detect. Choose the mark against the Commission's guidance and code of practice as they stand at
-  deploy time, and add it to each answer in the API and the page
-  ([`AI-GOVERNANCE.md`](AI-GOVERNANCE.md#the-disclosure-eu-ai-act-article-50)). (Phase 8, Stage 9.)
 - **`ping()` has no hard wall-clock bound.** If canceling the query stalls on the network,
   closing the connection can take longer than the timeout, because SQLAlchemy shields the close.
   The orchestrator's own probe timeout covers it; revisit only if health checks need a strict

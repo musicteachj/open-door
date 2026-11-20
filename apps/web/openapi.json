@@ -1382,7 +1382,7 @@
         },
         "responses": {
           "200": {
-            "description": "The turn as server-sent events: `turn.started`, `status`, `text.delta`, `text.retracted`, `citation`, `tool.started`, `tool.finished`, `proposal`, `escalation`, `error`, and `turn.completed`, with `: keep-alive` comments between them.",
+            "description": "The turn as server-sent events: `turn.started` (with `aiGenerated: true`), `status`, `text.delta`, `text.retracted`, `citation`, `tool.started`, `tool.finished`, `proposal`, `escalation`, `error`, and `turn.completed`, with `: keep-alive` comments between them.",
             "content": {
               "text/event-stream": {
                 "schema": {
@@ -2959,6 +2959,33 @@
         ],
         "title": "ActionCountOut"
       },
+      "AiGeneratedOut": {
+        "properties": {
+          "generator": {
+            "type": "string",
+            "title": "Generator"
+          },
+          "models": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Models"
+          },
+          "digitalSourceType": {
+            "type": "string",
+            "title": "Digitalsourcetype"
+          }
+        },
+        "type": "object",
+        "required": [
+          "generator",
+          "models",
+          "digitalSourceType"
+        ],
+        "title": "AiGeneratedOut",
+        "description": "The machine-readable mark on text the model wrote (Article 50(2); ADR 0024)."
+      },
       "AssistantAvailabilityOut": {
         "properties": {
           "available": {
@@ -3683,6 +3710,16 @@
               }
             ],
             "title": "Createdat"
+          },
+          "aiGenerated": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AiGeneratedOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "type": "object",
@@ -7587,6 +7624,16 @@
             "type": "string",
             "title": "Answertext"
           },
+          "aiGenerated": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AiGeneratedOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "citations": {
             "items": {
               "$ref": "#/components/schemas/CitationOut"
@@ -7697,6 +7744,7 @@
           "question",
           "status",
           "answerText",
+          "aiGenerated",
           "citations",
           "incomplete",
           "error",

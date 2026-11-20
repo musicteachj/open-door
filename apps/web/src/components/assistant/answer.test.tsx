@@ -2,8 +2,12 @@ import { render, screen, within } from '@testing-library/react'
 import { MemoryRouter } from 'react-router'
 import { describe, expect, it, vi } from 'vitest'
 import type { CitationOut } from '@/api/generated'
-import { citation } from '@/test/assistant-fixtures'
+import { citation, DANA } from '@/test/assistant-fixtures'
+import { renderWithRouter } from '@/test/render-with-router'
 import { Answer } from './answer'
+import { AssistantMessage } from './assistant-message'
+import { EscalationPanel } from './escalation-panel'
+import { UserMessage } from './user-message'
 import { AnswerViewerContext, type AnswerViewer } from './answer-viewer'
 import * as linkSpans from './link-spans'
 
@@ -874,5 +878,47 @@ describe('Answer: the caret', () => {
   it('shows no caret by default', () => {
     const { container } = renderAnswer('Done.')
     expect(container.querySelector('[data-slot="caret"]')).toBeNull()
+  })
+})
+
+describe('the AI-generated mark (Article 50(2))', () => {
+  it('is on the element that holds the model text', () => {
+    const { container } = renderAnswer('You get **40 hours**.')
+    const marked = container.querySelectorAll('[data-ai-generated="true"]')
+    expect(marked).toHaveLength(1)
+    expect(marked[0]).toHaveAttribute('data-slot', 'answer')
+    expect(marked[0]).toHaveTextContent('You get 40 hours.')
+  })
+
+  it('is not on an answer with no words yet', () => {
+    const { container } = renderAnswer('')
+    expect(container.querySelector('[data-ai-generated]')).toBeNull()
+  })
+
+  it('is not on an error with no text', () => {
+    const { container } = renderWithRouter(
+      <AssistantMessage
+        status="error"
+        renderMarker={renderMarker}
+        text=""
+        errorMessage="Something broke."
+        citations={[]}
+      />,
+    )
+    expect(container).toHaveTextContent('Something broke.')
+    expect(container.querySelector('[data-ai-generated]')).toBeNull()
+  })
+
+  it('is not on the crisis panel, whose text a person wrote', () => {
+    const { container } = renderWithRouter(
+      <EscalationPanel kind="crisis" message="Call 988." contacts={[DANA]} />,
+    )
+    expect(container).toHaveTextContent('Call 988.')
+    expect(container.querySelector('[data-ai-generated]')).toBeNull()
+  })
+
+  it('is not on the person’s own question', () => {
+    const { container } = render(<UserMessage text="How many sick days do I get?" />)
+    expect(container.querySelector('[data-ai-generated]')).toBeNull()
   })
 })

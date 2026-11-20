@@ -1719,3 +1719,72 @@ async def test_a_feedback_reason_is_sealed_at_rest_and_shown_back_to_its_owner(
     assert reason not in whole_row
     [turn] = browser.client.get(f"{BASE}/conversations/current").json()["turns"]
     assert turn["feedback"] == {"helpful": False, "reason": reason}
+
+
+# --- the AI-generated mark (Article 50(2)) ---
+
+
+IPTC_TERM = "http://cv.iptc.org/newscodes/digitalsourcetype/trainedAlgorithmicMedia"
+
+
+async def test_a_completed_answer_carries_the_mark(
+    browser: Browser, app_engine: AsyncEngine
+) -> None:
+    tenant_id, person_id = sign_in(browser)
+    cid = UUID(new_conversation(browser)["id"])
+    await seed_turn(
+        app_engine,
+        tenant_id,
+        person_id,
+        cid,
+        outcome=completed(served_by_models=["model-a", "model-b", "model-a"]),
+    )
+
+    [turn] = browser.client.get(f"{BASE}/conversations/current").json()["turns"]
+
+    assert turn["aiGenerated"] == {
+        "generator": "Open Door AI assistant",
+        "models": ["model-a", "model-b"],
+        "digitalSourceType": IPTC_TERM,
+    }
+
+
+async def test_a_crisis_turn_carries_no_mark(browser: Browser, app_engine: AsyncEngine) -> None:
+    tenant_id, person_id = sign_in(browser)
+    cid = UUID(new_conversation(browser)["id"])
+    outcome = TurnOutcome(
+        status="crisis", guard_verdict={"category": "crisis", "kind": "self_harm"}
+    )
+    await seed_turn(app_engine, tenant_id, person_id, cid, outcome=outcome)
+
+    [turn] = browser.client.get(f"{BASE}/conversations/current").json()["turns"]
+
+    assert turn["escalation"]["kind"] == "crisis"
+    assert turn["aiGenerated"] is None
+
+
+async def test_a_failed_turn_with_partial_text_is_marked(
+    browser: Browser, app_engine: AsyncEngine
+) -> None:
+    tenant_id, person_id = sign_in(browser)
+    cid = UUID(new_conversation(browser)["id"])
+    outcome = completed(status="failed", error_code="internal", answer_text="You get 40 hou")
+    await seed_turn(app_engine, tenant_id, person_id, cid, outcome=outcome)
+
+    [turn] = browser.client.get(f"{BASE}/conversations/current").json()["turns"]
+
+    assert turn["status"] == "failed"
+    assert turn["aiGenerated"]["models"] == ["claude-opus-5-5"]
+
+
+async def test_a_failed_turn_with_no_text_carries_no_mark(
+    browser: Browser, app_engine: AsyncEngine
+) -> None:
+    tenant_id, person_id = sign_in(browser)
+    cid = UUID(new_conversation(browser)["id"])
+    outcome = TurnOutcome(status="failed", error_code="model-unavailable")
+    await seed_turn(app_engine, tenant_id, person_id, cid, outcome=outcome)
+
+    [turn] = browser.client.get(f"{BASE}/conversations/current").json()["turns"]
+
+    assert turn["aiGenerated"] is None

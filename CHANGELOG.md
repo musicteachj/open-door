@@ -12,6 +12,12 @@ version (`0.x.y` while the app is being built, `1.0.0` when it is complete).
 
 ### Added
 
+- **AI-written answers and case summaries are marked as AI-generated** (Phase 9a). A stored answer
+  and a written case summary carry an `aiGenerated` object (the generator, the models that wrote it,
+  and the IPTC digital source type), the turn stream's `turn.started` says `"aiGenerated": true`,
+  and the page has `data-ai-generated="true"` on the element that holds model text. Fixed texts
+  have no mark. It is a good-faith label, not a compliance claim (ADR 0024).
+
 - **The assistant's spend is a monthly budget, paced by day** (Phase 9a). `AI_MONTHLY_BUDGET_USD`
   sets the month's money, and each UTC day may spend a multiple (`AI_PACING_MULTIPLIER`, 3) of its
   even share of what is left, never less than `AI_DAILY_FLOOR_USD` ($1.00) and never more than

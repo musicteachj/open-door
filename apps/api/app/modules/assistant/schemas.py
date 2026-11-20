@@ -15,6 +15,7 @@ from pydantic import AfterValidator, ConfigDict, Field, StringConstraints
 
 from app.ai.conversations import FEEDBACK_REASON_MAX_CHARACTERS
 from app.ai.proposals import ProposalOut
+from app.ai.provenance import AiGeneratedOut
 from app.api.contacts import HrContactOut
 from app.api.schemas import CamelModel
 from app.modules.cases.api_schemas import SentLineOut
@@ -113,6 +114,9 @@ class TurnOut(CamelModel):
     question: str
     status: Literal["running", "completed", "stopped", "failed", "crisis", "guard_unavailable"]
     answer_text: str
+    # Set when the model wrote any of `answerText`. A fixed text (crisis, budget, unavailable) is
+    # written by a person and has no mark.
+    ai_generated: AiGeneratedOut | None
     citations: list[CitationOut]
     # True when the output limit cut the answer off.
     incomplete: bool

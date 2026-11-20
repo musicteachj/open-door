@@ -1082,40 +1082,40 @@ browser test with `cd apps/web && npx playwright test e2e/<file>.spec.ts`.
   `CaseSummaryOut.ai_generated: AiGeneratedOut | None` (set when `status == "written"`).
 - Produces, on the page: `data-ai-generated="true"` on the element that holds model-written text.
 
-- [ ] **Step 1: Read the guidance first.** Read the European Commission's current guidance and
+- [x] **Step 1: Read the guidance first.** Read the European Commission's current guidance and
   code of practice on marking and labeling AI-generated content, from the Commission's own site,
   and record "Source: ..., read from ... on <date>" for ADR 0024 (`CLAUDE.md`, "Research and
   sources"). If it asks for a different technique for text (a specific metadata standard, for
   example), **Stop:** tell James, and wait for his choice before building.
-- [ ] **Step 2: Write the failing API tests.** `test_a_completed_answer_carries_the_mark` (the
+- [x] **Step 2: Write the failing API tests.** `test_a_completed_answer_carries_the_mark` (the
   conversation read's turn has `aiGenerated` with the generator, the served models, and the IPTC
   term); `test_a_crisis_turn_carries_no_mark` (the fixed text has no mark);
   `test_a_failed_turn_with_partial_text_is_marked`; `test_turn_started_says_its_text_is_ai_generated`
   (`TurnStarted(id).to_json() == {"turnId": str(id), "aiGenerated": True}`);
   `test_a_written_summary_carries_the_mark` and `test_a_failed_summary_carries_none`.
-- [ ] **Step 3: Run them.** `cd apps/api && uv run pytest tests/test_assistant_schemas.py tests/integration/test_assistant_routes.py tests/integration/test_case_routes.py -q`.
+- [x] **Step 3: Run them.** `cd apps/api && uv run pytest tests/test_assistant_schemas.py tests/integration/test_assistant_routes.py tests/integration/test_case_routes.py -q`.
   Expected: FAIL.
-- [ ] **Step 4: Implement,** then `make openapi`.
-- [ ] **Step 5: Run them.** Same command, plus `uv run python scripts/export_openapi.py --check`.
+- [x] **Step 4: Implement,** then `make openapi`.
+- [x] **Step 5: Run them.** Same command, plus `uv run python scripts/export_openapi.py --check`.
   Expected: PASS.
-- [ ] **Step 6: Write the failing web tests.** The answer's model text carries
+- [x] **Step 6: Write the failing web tests.** The answer's model text carries
   `data-ai-generated="true"`, and an error with no text, the crisis panel, and the person's own
   question don't; the case summary block's written summary carries it; each answer in the
   walkthrough transcript carries it and each question doesn't.
-- [ ] **Step 7: Run them.** `cd apps/web && npx vitest run src/components/assistant/answer.test.tsx src/components/cases/case-summary-block.test.tsx src/features/walkthrough/walkthrough-page.test.tsx`.
+- [x] **Step 7: Run them.** `cd apps/web && npx vitest run src/components/assistant/answer.test.tsx src/components/cases/case-summary-block.test.tsx src/features/walkthrough/walkthrough-page.test.tsx`.
   Expected: FAIL.
-- [ ] **Step 8: Implement.** The attribute only; nothing visible changes (each answer is already
+- [x] **Step 8: Implement.** The attribute only; nothing visible changes (each answer is already
   labeled as the AI's on screen).
-- [ ] **Step 9: Run them,** then `make check-web`. Expected: PASS.
-- [ ] **Step 10: Docs.** ADR 0024 (context: Article 50(2) and its source; decision: the three
+- [x] **Step 9: Run them,** then `make check-web`. Expected: PASS.
+- [x] **Step 10: Docs.** ADR 0024 (context: Article 50(2) and its source; decision: the three
   places the mark is, and the IPTC term; rejected: a visible label only, a watermark in the words,
   an HTTP header alone; consequences: the API change, the scoreboard and console unchanged). Add
   its row to `docs/adr/README.md`. `AI-GOVERNANCE.md`: the Article 50(2) section says how answers
   and summaries are marked, with the source line, and the "Phase 9 item" bullet goes. `CHANGELOG.md`,
   Added.
-- [ ] **Step 11: Run the checks.** `make check-api && make check-docs && make eval-offline`.
+- [x] **Step 11: Run the checks.** `make check-api && make check-docs && make eval-offline`.
   Expected: PASS.
-- [ ] **Step 12: Stop:** show the diff summary and the proposed commit message, and wait for
+- [x] **Step 12: Stop:** show the diff summary and the proposed commit message, and wait for
   James's explicit OK before committing.
   Proposed subject: "Mark AI-written answers and summaries as AI-generated".
 

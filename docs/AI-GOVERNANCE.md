@@ -47,14 +47,27 @@ Open Door, as the provider of an assistant that writes text, would have to mark 
   added Article 111(4), which gives a system placed on the market before 2 August 2026 until
   2 December 2026. Open Door would be placed on the market later (Phase 9), so the duty would apply
   from its first day.
-- **What exists today tells a person, not a machine:** every answer is labeled as the AI's on
-  screen (an "AI" badge, and "Open Door, the AI assistant" for screen readers), each turn's record
-  names the model that served it, and the walkthrough's transcript labels each answer the same
-  way. None of these is a mark a machine is meant to read from the output itself.
-- **The mark is a Phase 9 item** ([`BACKLOG.md`](BACKLOG.md)): chosen against the Commission's
-  guidance and code of practice as they stand when Open Door deploys, and added to each answer in
-  the API and the page.
+- **How answers and summaries are marked** ([ADR 0024](adr/0024-ai-written-text-is-marked.md)):
+  every stored answer and every written case summary carries an `aiGenerated` object in the API
+  (the generator, the models that wrote it, and the IPTC digital source type for generative
+  content), the turn stream's first event says `"aiGenerated": true`, and the page carries
+  `data-ai-generated="true"` on the element that holds model text. A fixed text (crisis, budget,
+  "can't answer right now") has no mark, because a person wrote it. On screen, every answer is also
+  labeled as the AI's (an "AI" badge, and "Open Door, the AI assistant" for screen readers).
+- **What the mark is not.** It is a good-faith, machine-readable label, not the Commission's
+  digitally signed metadata or its watermark. Open Door does not sign the code of practice. A text
+  watermark can only come from the model provider, while the model writes, and many answers fall
+  under the code's 200-token "very short text" line anyway. Open Door is a portfolio demo used only
+  by its author and hiring teams, so this is shown practice, not a claim of compliance. A real
+  product offered in the EU would add signed metadata (rejected here: a signing key and a new
+  production secret for no real user) and rely on the model provider's watermark.
 
+> Source: the Code of Practice on Transparency of AI-generated Content (final, published by the
+> European Commission on 10 June 2026), Section 1, Measure 1.1 and its glossary, read from the
+> Commission's site (digital-strategy.ec.europa.eu, and the code's PDF at
+> ec.europa.eu/newsroom/dae/redirection/document/129555) on 2026-11-20, with the Commission's
+> Article 50 FAQ read from the same site on the same day.
+>
 > Source: Regulation (EU) 2024/1689 (the AI Act), Article 50(1) and (2) and Article 113, read from
 > the Publications Office of the EU (publications.europa.eu, CELEX 32024R1689) on 2026-11-16, and
 > Article 111(4) as added by Regulation (EU) 2026/1744, read in the consolidated text of 27 July
@@ -445,7 +458,7 @@ Reviewed on 2026-11-16, at the end of Phase 8, section by section:
   makes or recommends a decision about a person; its changes harden the app around the assistant.
 - **The disclosure:** Article 50(1) holds as before. **Article 50(2) was read wrongly** until now
   (above): a deployed Open Door must mark its answers in a machine-readable way, which Phase 9
-  adds before it deploys.
+  adds before it deploys. (Since done: ADR 0024, Phase 9a.)
 - **The models:** the pins are unchanged (Opus 5.5 for the assistant and the summary, Haiku 5.5 for
   the guard). Stage 6's prompt change (2026-11.4) passed its full run, and the fairness results
   above are that run's.

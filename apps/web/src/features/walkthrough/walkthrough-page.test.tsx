@@ -203,6 +203,16 @@ describe('the transcript', () => {
     )
   })
 
+  it('marks each answer as AI-generated and never a question or the HR panel’s text', () => {
+    renderPage()
+    const exchanges = WALKTHROUGH.steps.flatMap((step) => step.exchanges)
+    const rows = [...document.querySelectorAll('dl > div')]
+    expect(rows).toHaveLength(exchanges.length)
+    expect(
+      rows.map((row) => row.querySelector('dd')!.querySelectorAll('[data-ai-generated]').length),
+    ).toEqual(exchanges.map((exchange) => (exchange.speaker === 'ai' ? 1 : 0)))
+  })
+
   it('renders an answer’s Markdown as the app does: a list stays a list', () => {
     const router = createMemoryRouter(
       [

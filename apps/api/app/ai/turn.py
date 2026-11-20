@@ -272,7 +272,8 @@ class TurnStarted:
     turn_id: UUID
 
     def to_json(self) -> dict[str, Any]:
-        return {"turnId": str(self.turn_id)}
+        # Article 50(2): the words this stream carries are written by a model (ADR 0024).
+        return {"turnId": str(self.turn_id), "aiGenerated": True}
 
 
 @dataclass(frozen=True)
