@@ -125,6 +125,10 @@ version (`0.x.y` while the app is being built, `1.0.0` when it is complete).
   panel instead of measuring against the composer. A time-off helper now says what the API
   returned when a read is refused. One failure remains, which the backlog keeps (a database
   connection from the container that took five seconds).
+- **A recorded case-summary run no longer saves a provider outage as model behavior** (Phase 9a).
+  A summary call the provider refused before any work (a 401, 403, 429, or 529) is now treated as
+  transient and not recorded, as the guard and the assistant already were, so offline replays
+  can't repeat an outage.
 
 ## [0.8.1] - 2026-11-17
 

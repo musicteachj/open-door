@@ -875,7 +875,7 @@ class RecordingSummarizer(_Recorder):
         try:
             answer = await self.inner.summarize(request)
         except SUMMARY_ERRORS as error:
-            if error.usage is None:
+            if is_transient(error):
                 reason = f"transient error ({type(error).__name__}), not recorded"
                 self._skip(key, "summary", occurrence, reason)
             else:
