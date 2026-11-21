@@ -208,8 +208,13 @@ async def check_login(connection: AsyncConnection, login: Login) -> bool:
     return True
 
 
-async def check_strangers(connection: AsyncConnection, logins: list[Login]) -> None:
-    """Refuse, changing nothing, if a role holds od_app or od_cleanup and no URL names it."""
+async def check_strangers(
+    connection: AsyncConnection, logins: list[Login], *, cleanup_url_given: bool = True
+) -> None:
+    """Refuse, changing nothing, if a role holds od_app or od_cleanup and no URL names it.
+
+    The check stays closed when CLEANUP_DATABASE_URL is missing: the cleanup login a first run made
+    then looks like a stranger, so the refusal says that URL is not set."""
     configured = {(login.role, login.user) for login in logins}
     strangers: dict[str, list[str]] = {}
     for role, holder in await connection.execute(ROLE_HOLDERS, {"roles": list(ROLES)}):
@@ -219,10 +224,16 @@ async def check_strangers(connection: AsyncConnection, logins: list[Login]) -> N
         found = "; ".join(
             f"{role} is held by {', '.join(holders)}" for role, holders in strangers.items()
         )
+        hint = ""
+        if not cleanup_url_given and "od_cleanup" in strangers:
+            hint = (
+                " CLEANUP_DATABASE_URL is not set: if the holder of od_cleanup is Open Door's own "
+                "cleanup login, set CLEANUP_DATABASE_URL to its URL and the setup will run."
+            )
         raise SystemExit(
             f"{found}: another database's login would inherit Open Door's access. Nothing was "
             "changed. Revoke the role from each of them, or name each as a login in "
-            "DATABASE_URL or CLEANUP_DATABASE_URL."
+            f"DATABASE_URL or CLEANUP_DATABASE_URL.{hint}"
         )
 
 
@@ -266,7 +277,7 @@ async def main() -> None:
             )
             if set(existing) != set(ROLES):
                 raise SystemExit("The od_app and od_cleanup roles don't exist. Run `make migrate`.")
-            await check_strangers(connection, logins)
+            await check_strangers(connection, logins, cleanup_url_given=cleanup_url is not None)
             # Check every login before changing any, so a refusal leaves the database as it was.
             states = [(login, await check_login(connection, login)) for login in logins]
             messages = [await ensure_login(connection, login, exists) for login, exists in states]

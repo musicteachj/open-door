@@ -132,6 +132,9 @@ version (`0.x.y` while the app is being built, `1.0.0` when it is complete).
 - **The public availability flag answers 503, not 500, when the database can't be reached**
   (Phase 9a). A connection timeout or refusal now gives `availability-unknown`, and a request
   waiting behind a slow read gives up after a bounded wait instead of queuing.
+- **The login setup says what is missing when the cleanup URL isn't set** (Phase 9a). If
+  `CLEANUP_DATABASE_URL` is missing and `od_cleanup` has a member, the refusal names that setting
+  and says to set it if the holder is Open Door's own cleanup login. It still changes nothing.
 
 ## [0.8.1] - 2026-11-17
 

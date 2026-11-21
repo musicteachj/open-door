@@ -364,3 +364,49 @@ async def test_the_owners_own_membership_is_not_a_stranger(
 
     assert f"{user}: password reset, with od_app" in first
     assert f"{user}: password reset, with od_app" in second
+
+
+async def test_without_the_cleanup_url_a_cleanup_login_holder_is_refused_with_a_clear_message(
+    database_settings: Settings,
+    owner_engine: AsyncEngine,
+    owner_url: str,
+    cleanup_url: str,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # The first run (with the cleanup URL) makes the cleanup login hold od_cleanup. A second run
+    # that isn't given the URL must stay fail-closed, and say what is missing.
+    from scripts import bootstrap_db_users as script
+
+    user = "od_test_wanted_cleanup"
+    app_url = url_for(database_settings, user, URL_PASSWORD)
+
+    class Configured:
+        database_url = app_url
+
+    monkeypatch.setattr(script, "get_settings", lambda: Configured())
+    monkeypatch.setattr(script, "owner_database_url", lambda: owner_url)
+    monkeypatch.setattr(script, "optional_cleanup_database_url", lambda: cleanup_url)
+    cleanup_login = make_url(cleanup_url).username
+    assert cleanup_login is not None
+    try:
+        await script.main()
+        assert await is_member(owner_engine, cleanup_login, "od_cleanup")
+
+        monkeypatch.setattr(script, "optional_cleanup_database_url", lambda: None)
+        await drop_role(owner_engine, user)
+        with pytest.raises(SystemExit) as refused:
+            await script.main()
+
+        message = str(refused.value)
+        assert "CLEANUP_DATABASE_URL" in message
+        assert "not set" in message
+        assert cleanup_login in message
+        assert "Nothing was changed" in message
+        async with owner_engine.connect() as connection:
+            created = await connection.scalar(
+                text("SELECT EXISTS (SELECT FROM pg_roles WHERE rolname = :user)"), {"user": user}
+            )
+        assert created is False
+        assert await is_member(owner_engine, cleanup_login, "od_cleanup")
+    finally:
+        await drop_role(owner_engine, user)
