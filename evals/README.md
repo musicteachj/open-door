@@ -322,6 +322,27 @@ changes every item's requests, and a smoke run re-records only the smoke items, 
 until a full run records the rest (the runner estimates $15.50, cap $18; the full run of 2026-10-19 cost
 $8.02). Plan a prompt change's runs with that in mind.
 
+### Replaying under a recorded prompt
+
+Only the owner can waive a full run for a prompt change, and only for a stated reason (prompt
+2026-11.5 shipped this way: ADR 0023). Without the run, the committed recordings belong to the
+previous prompt and every replay would miss. So the fixtures folder can hold a pin,
+`evals/assistant/fixtures/recorded-under.json`, which names the prompt the recordings were made
+with and points to a copy of its text (`assistant-prompt-2026-11.4.md`, checked against the SHA-256
+in the pin and against that version's golden hash in `tests/test_prompts.py`). An offline run of
+the smoke, full, or effort set uses that text as the system prompt, prints one line naming both
+versions, and changes nothing else (the tools and the messages are the current ones).
+
+What this tests: the plumbing and the graders, on the old recordings. What it doesn't: the new
+prompt. Its answers have never been measured, and a green offline run says nothing about them.
+The next full run (`make eval-live SET=full FRESH=1 PRUNE=1 YES=1`) records the current prompt,
+and the same change deletes the pin and the archived prompt. Until then a live run prints a
+reminder. After the next full run the pin still names the older prompt, so nothing refuses it: the
+replay just misses ("no recording for this model request") until the pin is deleted, and the line
+every offline run prints above the misses names the pin. The loader does refuse a pin that names the
+current prompt, which catches one left behind if the version is set back or one rewritten to name
+the current version, and a pin missing a key.
+
 ### Costs and caps
 
 A live run refuses to start without `--yes` (`YES=1` in make; `YES=0` or `YES=no` does not count). Without it, it prints the set, the

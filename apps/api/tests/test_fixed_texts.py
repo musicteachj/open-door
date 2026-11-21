@@ -9,6 +9,8 @@ import pytest
 from app.ai import fixed_texts
 from app.ai.fixed_texts import (
     BUDGET_DAILY_TEXT,
+    BUDGET_DAILY_TEXT_APPROVED_ON,
+    BUDGET_DAILY_TEXT_AUTHOR,
     BUDGET_DAILY_TEXT_SHA256,
     BUDGET_SANDBOX_TEXT,
     BUDGET_SANDBOX_TEXT_SHA256,
@@ -18,6 +20,10 @@ from app.ai.fixed_texts import (
     CRISIS_TEXT_APPROVED_ON,
     CRISIS_TEXT_SHA256,
     ERROR_TEXTS,
+    MODEL_UNAVAILABLE_TEXT,
+    MODEL_UNAVAILABLE_TEXT_APPROVED_ON,
+    MODEL_UNAVAILABLE_TEXT_AUTHOR,
+    MODEL_UNAVAILABLE_TEXT_SHA256,
     SENSITIVE_TEXT,
     SENSITIVE_TEXT_APPROVED_ON,
     SENSITIVE_TEXT_AUTHOR,
@@ -116,7 +122,8 @@ def test_the_sensitive_text_is_the_specs_panel_text() -> None:
 def test_the_budget_texts_say_which_limit_was_reached() -> None:
     assert "sandbox" in ERROR_TEXTS["budget-sandbox"]
     assert "reached its limit" in ERROR_TEXTS["budget-sandbox"]
-    assert "tomorrow" in ERROR_TEXTS["budget-daily"]
+    assert "tomorrow" not in ERROR_TEXTS["budget-daily"]
+    assert "walkthrough" in ERROR_TEXTS["budget-daily"]
 
 
 def test_the_crisis_text_is_approved() -> None:
@@ -149,9 +156,9 @@ def test_the_budget_texts_are_the_approved_words() -> None:
         "Suicide & Crisis Lifeline."
     )
     assert BUDGET_DAILY_TEXT == (
-        "The demo's daily limit for the assistant has been reached. Please try again tomorrow. "
-        "If you or someone else is in danger, call 911, or call or text 988 to reach the 988 "
-        "Suicide & Crisis Lifeline."
+        "The demo's live assistant has reached its limit for now. You can still watch the "
+        "recorded walkthrough. If you or someone else is in danger, call 911, or call or text "
+        "988 to reach the 988 Suicide & Crisis Lifeline."
     )
     assert ERROR_TEXTS["budget-sandbox"] == BUDGET_SANDBOX_TEXT
     assert ERROR_TEXTS["budget-daily"] == BUDGET_DAILY_TEXT
@@ -180,16 +187,36 @@ def test_the_sandbox_budget_text_is_approved() -> None:
     )
 
 
-def test_the_daily_budget_text_is_approved() -> None:
+def test_the_daily_text_is_approved() -> None:
     message = (
         "The daily budget text isn't approved: the owner edits it, then sets "
-        "BUDGET_TEXTS_APPROVED_ON and BUDGET_DAILY_TEXT_SHA256."
+        "BUDGET_DAILY_TEXT_APPROVED_ON and BUDGET_DAILY_TEXT_SHA256."
     )
-    assert BUDGET_TEXTS_AUTHOR
-    date.fromisoformat(BUDGET_TEXTS_APPROVED_ON)
+    assert BUDGET_DAILY_TEXT_AUTHOR == "James Littlefield (owner)"
+    assert BUDGET_DAILY_TEXT_APPROVED_ON == "2026-11-19"
+    date.fromisoformat(BUDGET_DAILY_TEXT_APPROVED_ON)
     assert hashlib.sha256(BUDGET_DAILY_TEXT.encode()).hexdigest() == BUDGET_DAILY_TEXT_SHA256, (
         message
     )
+
+
+def test_the_model_unavailable_text_is_approved() -> None:
+    message = (
+        "The model-unavailable text isn't approved: the owner edits it, then sets "
+        "MODEL_UNAVAILABLE_TEXT_APPROVED_ON and MODEL_UNAVAILABLE_TEXT_SHA256."
+    )
+    assert MODEL_UNAVAILABLE_TEXT_AUTHOR == "James Littlefield (owner)"
+    assert MODEL_UNAVAILABLE_TEXT_APPROVED_ON == "2026-11-19"
+    date.fromisoformat(MODEL_UNAVAILABLE_TEXT_APPROVED_ON)
+    digest = hashlib.sha256(MODEL_UNAVAILABLE_TEXT.encode()).hexdigest()
+    assert digest == MODEL_UNAVAILABLE_TEXT_SHA256, message
+    assert ERROR_TEXTS["model-unavailable"] == MODEL_UNAVAILABLE_TEXT
+
+
+def test_the_model_unavailable_text_names_no_fictional_contact() -> None:
+    assert "HR team" not in MODEL_UNAVAILABLE_TEXT
+    assert "walkthrough" in MODEL_UNAVAILABLE_TEXT
+    assert "in a moment" not in MODEL_UNAVAILABLE_TEXT
 
 
 def test_the_unreadable_conversation_text_is_approved() -> None:

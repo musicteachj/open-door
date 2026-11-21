@@ -116,7 +116,7 @@ def test_client_addresses_are_read_from_the_access_log() -> None:
 
 
 def test_forwarding_judgment_catches_a_trusted_forgery_and_a_failed_control() -> None:
-    forged = check.FORGED_CLIENT
+    forged = check.REAL_CLIENT
     untrusted_ok = (
         'INFO:     172.17.0.1:1 - "GET /x HTTP/1.1" 200 OK\n' * check.LOGGED_REQUESTS_MINIMUM
     )
@@ -128,6 +128,40 @@ def test_forwarding_judgment_catches_a_trusted_forgery_and_a_failed_control() ->
     one_line = 'INFO:     172.17.0.1:1 - "GET /x HTTP/1.1" 200 OK\n'
     assert check.problems_in_forwarding(one_line, trusted_ok, "172.17.0.1")
     assert check.problems_in_forwarding(untrusted_ok, trusted_ok, None)
+
+
+def test_the_job_scripts_must_be_present_and_read_only() -> None:
+    good = {"/app/setup.sh": "555", "/app/cleanup.sh": "555", "/app/entrypoint.sh": "555"}
+    assert check.problems_in_job_scripts(good) == []
+    assert check.problems_in_job_scripts({k: v for k, v in good.items() if k != "/app/setup.sh"})
+    assert check.problems_in_job_scripts({**good, "/app/cleanup.sh": "755"})
+    assert check.problems_in_job_scripts({**good, "/app/setup.sh": "777"})
+    assert check.problems_in_job_scripts({})
+
+
+def test_an_entrypoint_that_takes_a_command_is_a_problem() -> None:
+    assert check.problems_in_command_refusal(64, "takes no command") == []
+    assert check.problems_in_command_refusal(0, "")
+    assert check.problems_in_command_refusal(1, "boom")
+    assert check.problems_in_command_refusal(64, "")
+
+
+def test_a_forged_leftmost_address_must_not_win() -> None:
+    forged = check.REAL_CLIENT
+    left = check.FORGED_LEFTMOST
+    untrusted_ok = (
+        'INFO:     172.17.0.1:1 - "GET /x HTTP/1.1" 200 OK\n' * check.LOGGED_REQUESTS_MINIMUM
+    )
+    trusted_ok = f'INFO:     {forged}:0 - "GET /x HTTP/1.1" 200 OK'
+    trusted_forged = f'INFO:     {left}:0 - "GET /x HTTP/1.1" 200 OK'
+
+    assert check.problems_in_forwarding(untrusted_ok, trusted_ok, "172.17.0.1") == []
+    assert check.problems_in_forwarding(untrusted_ok, trusted_forged, "172.17.0.1")
+    # Both showing is a problem too: the leftmost address must not appear at all.
+    assert check.problems_in_forwarding(
+        untrusted_ok, trusted_ok + "\n" + trusted_forged, "172.17.0.1"
+    )
+    assert left == "198.51.100.7"
 
 
 def test_the_database_host_is_rewritten_only_on_macos() -> None:
@@ -172,6 +206,54 @@ COMMON = (
     "--factory app.main:create_app --host 0.0.0.0 --port 8000 --proxy-headers"
     " --no-server-header --timeout-graceful-shutdown 15 --timeout-keep-alive 130"
 )
+
+
+def test_the_entrypoint_exits_64_on_any_argument(tmp_path: Path) -> None:
+    for argument in ("serve", "sh", "--help"):
+        result = subprocess.run(  # noqa: S603
+            ["/bin/sh", str(ENTRYPOINT), argument],
+            capture_output=True,
+            text=True,
+            env={"PATH": "/usr/bin:/bin"},
+            check=False,
+        )
+        assert result.returncode == 64
+        assert argument in result.stderr
+        assert "/app/setup.sh" in result.stderr
+        assert result.stdout == ""
+
+
+@pytest.mark.parametrize("job", ["setup", "cleanup"])
+def test_a_job_script_exits_64_on_any_argument_before_doing_anything(job: str) -> None:
+    script = REPO / "scripts" / "image" / f"{job}.sh"
+    for argument in ("serve", "sh", "--help"):
+        result = subprocess.run(  # noqa: S603
+            ["/bin/sh", str(script), argument],
+            capture_output=True,
+            text=True,
+            env={"PATH": "/usr/bin:/bin"},
+            check=False,
+        )
+        assert result.returncode == 64
+        assert argument in result.stderr
+        assert result.stdout == ""
+
+
+def test_the_job_scripts_exist_and_run_their_one_command() -> None:
+    setup = (REPO / "scripts" / "image" / "setup.sh").read_text(encoding="utf-8")
+    cleanup = (REPO / "scripts" / "image" / "cleanup.sh").read_text(encoding="utf-8")
+
+    assert setup.startswith("#!/bin/sh\n")
+    assert "set -eu" in setup
+    assert setup.index("alembic upgrade head") < setup.index("bootstrap_db_users.py")
+    assert setup.index("bootstrap_db_users.py") < setup.index(
+        "exec python scripts/ingest_handbook.py ingest"
+    )
+    assert cleanup.startswith("#!/bin/sh\n")
+    assert "exec python -m app.jobs.cleanup" in cleanup
+    for script in (setup, cleanup):
+        assert "cd /app/apps/api" in script
+        assert chr(0x2014) not in script
 
 
 def test_the_entrypoint_is_executable() -> None:

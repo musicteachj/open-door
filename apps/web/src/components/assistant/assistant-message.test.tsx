@@ -365,6 +365,26 @@ describe('AssistantMessage: error', () => {
     expect(screen.getByText('AI')).toBeInTheDocument()
   })
 
+  it('shows the walkthrough link under the error text when it offers one', () => {
+    renderMessage({
+      status: 'error',
+      text: '',
+      errorMessage: 'It broke.',
+      offerWalkthrough: true,
+    })
+    const alert = screen.getByRole('alert')
+    const link = screen.getByRole('link', { name: 'Watch the recorded walkthrough' })
+    expect(alert).toHaveTextContent('It broke.')
+    // The link follows the error message in the page.
+    expect(alert.compareDocumentPosition(link) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(link.parentElement).toHaveClass('mt-2', 'block')
+  })
+
+  it('shows no walkthrough link for an internal error', () => {
+    renderMessage({ status: 'error', text: '', errorMessage: 'It broke.' })
+    expect(screen.queryByRole('link', { name: 'Watch the recorded walkthrough' })).toBeNull()
+  })
+
   it('has no Retry without a handler, and no sources or feedback', () => {
     renderMessage({
       status: 'error',

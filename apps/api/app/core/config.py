@@ -214,9 +214,9 @@ class Settings(KeyringSettings):
     sandbox_ip_hash_key: SecretStr = Field(default=SecretStr(DEVELOPMENT_IP_HASH_KEY), repr=False)
     # How many sandboxes one address may start in an hour and in a rolling 24 hours, and how many
     # all addresses together may start in a UTC day.
-    sandbox_starts_per_hour: int = Field(default=5, ge=1)
-    sandbox_starts_per_day: int = Field(default=20, ge=1)
-    sandbox_starts_daily_total: int = Field(default=500, ge=1)
+    sandbox_starts_per_hour: int = Field(default=15, ge=1)
+    sandbox_starts_per_day: int = Field(default=50, ge=1)
+    sandbox_starts_daily_total: int = Field(default=1000, ge=1)
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR"] = "INFO"
     # `make embed` and the API with AI_TRANSPORT=anthropic use it (the API embeds each handbook
     # question). Without it the search is full-text only. An empty value counts as unset.
@@ -238,9 +238,24 @@ class Settings(KeyringSettings):
     # What one sandbox may spend on the assistant, and what all sandboxes may spend per UTC day.
     ai_sandbox_budget_usd: Decimal = Field(default=Decimal("1.00"), gt=0)
     ai_daily_budget_usd: Decimal = Field(default=Decimal("3.00"), gt=0)
+    # A monthly budget, paced by day (app.ai.pacing). Unset means none, as in development and the
+    # tests; production refuses to start without it (`require_ai_budget_fit_for_production`), and 0
+    # turns live AI off. The multiplier is how many even shares of what is left one day may spend,
+    # and the floor is the least a day may spend while the month has that much left.
+    ai_monthly_budget_usd: Decimal | None = Field(default=None, ge=0)
+    ai_pacing_multiplier: Decimal = Field(default=Decimal(3), ge=1)
+    ai_daily_floor_usd: Decimal = Field(default=Decimal("1.00"), ge=0)
     # Seconds of silence before a stream sends a keep-alive comment. 0 turns it off, which the
     # proxy check uses as its control run.
     ai_heartbeat_seconds: int = Field(default=15, ge=0)
+
+    @field_validator("ai_monthly_budget_usd", mode="before")
+    @classmethod
+    def blank_monthly_budget_is_none(cls, value: object) -> object:
+        # An empty value (a commented-out line left blank) means no monthly budget.
+        if isinstance(value, str) and not value.strip():
+            return None
+        return value
 
     @field_validator(
         "voyage_api_key",
@@ -418,6 +433,16 @@ def require_entry_settings_fit_for_production(settings: Settings) -> None:
             "FORWARDED_ALLOW_IPS must be set in production (the load balancer's addresses): "
             "without it every visitor shares one client address"
         )
+        raise ValueError(msg)
+
+
+def require_ai_budget_fit_for_production(settings: Settings) -> None:
+    """Refuse to start the API in production without a monthly AI budget. `0` is allowed and turns
+    live AI off. Raises ValueError. Called at startup beside
+    `require_entry_settings_fit_for_production`, and not a rule on `Settings`, for the same reason.
+    """
+    if settings.app_env == "production" and settings.ai_monthly_budget_usd is None:
+        msg = "AI_MONTHLY_BUDGET_USD must be set in production (0 turns live AI off)"
         raise ValueError(msg)
 
 

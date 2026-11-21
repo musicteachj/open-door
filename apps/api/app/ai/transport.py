@@ -229,18 +229,27 @@ ModelEvent = StatusNote | TextDelta | TextBlockEnd | ToolCall | Finished
 
 
 class ModelUnavailable(Exception):  # noqa: N818
-    """The model could not be reached or kept failing, after the SDK's own retries.
+    """The model could not be reached or kept failing (one attempt, the SDK does not retry).
 
     No usage is reported with it. The cost is unknown (the call may have been billed before it
     failed), so the caller keeps the reservation and doesn't settle it to zero.
+
+    `unbilled` is True when the provider refused the call before any work (a 401, 403, 429, or 529
+    status), which it doesn't bill: the caller settles that reservation to zero.
     """
 
     def __init__(
-        self, message: str, *, status_code: int | None = None, request_id: str | None = None
+        self,
+        message: str,
+        *,
+        status_code: int | None = None,
+        request_id: str | None = None,
+        unbilled: bool = False,
     ) -> None:
         super().__init__(message)
         self.status_code = status_code
         self.request_id = request_id
+        self.unbilled = unbilled
 
 
 class SpendLimitReached(Exception):  # noqa: N818
@@ -263,11 +272,15 @@ class GuardUnavailable(Exception):  # noqa: N818
 
     `usage` is None when the cost is unknown (an error or a timeout, possibly after the call was
     billed). The caller keeps the reservation and doesn't settle it to zero.
+
+    `unbilled` marks a call the provider refused before any work: its usage is zero, so the
+    reservation settles to $0.
     """
 
-    def __init__(self, message: str, *, usage: Usage | None = None) -> None:
+    def __init__(self, message: str, *, usage: Usage | None = None, unbilled: bool = False) -> None:
         super().__init__(message)
         self.usage = usage
+        self.unbilled = unbilled
 
 
 # --- The guard's answer -----------------------------------------------------------------------

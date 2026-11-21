@@ -441,3 +441,73 @@ describe('the landing page', () => {
     )
   })
 })
+
+describe('the landing page when the live assistant is out of room', () => {
+  const AVAILABILITY = () => `${window.location.origin}/api/v1/assistant/availability`
+  // The words James approved on 2026-11-19 (Phase 9a, Task 4).
+  const PAUSED_NOTE =
+    'The live assistant has reached its limit for now. The recorded walkthrough shows a full tour, and you can still explore a sandbox.'
+  const TOUR = { name: 'Take the 2-minute tour' }
+
+  it('replaces the tour with the walkthrough, adds the note, and keeps the cards', async () => {
+    installFakeApi()
+    server.use(http.get(AVAILABILITY(), () => HttpResponse.json({ available: false })))
+    renderApp({ at: '/' })
+    await screen.findByText(PAUSED_NOTE)
+    expect(screen.queryByRole('button', TOUR)).not.toBeInTheDocument()
+    const links = screen.getAllByRole('link', { name: 'Watch the recorded walkthrough' })
+    expect(links).toHaveLength(1)
+    expect(links[0]).toHaveAttribute('href', '/walkthrough')
+    // Styled as the tour button was, not as a text link.
+    expect(links[0]).toHaveClass('h-control', 'border-border-strong')
+    // Only the four cards keep a place for Cloudflare's check.
+    expect(document.querySelectorAll('[data-slot="turnstile-slot"]')).toHaveLength(PERSONAS.length)
+    expect(cards()).toHaveLength(PERSONAS.length)
+    for (const persona of cards()) expect(persona).toBeEnabled()
+    // The note sits under the sandbox notes.
+    const sandboxNote = screen.getByText(/^Each visit gets its own private copy/)
+    expect(
+      sandboxNote.compareDocumentPosition(screen.getByText(PAUSED_NOTE)) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy()
+  })
+
+  it('shows the tour button as today when the flag says there is room', async () => {
+    installFakeApi()
+    renderApp({ at: '/' })
+    expect(await screen.findByRole('button', TOUR)).toBeEnabled()
+    expect(screen.queryByText(PAUSED_NOTE)).not.toBeInTheDocument()
+  })
+
+  it('shows the tour button while the flag is still being read', async () => {
+    installFakeApi()
+    const held = gate()
+    server.use(
+      http.get(AVAILABILITY(), async () => {
+        await held.promise
+        return HttpResponse.json({ available: false })
+      }),
+    )
+    renderApp({ at: '/' })
+    expect(await screen.findByRole('button', TOUR)).toBeInTheDocument()
+    expect(screen.queryByText(PAUSED_NOTE)).not.toBeInTheDocument()
+    held.resolve()
+    await screen.findByText(PAUSED_NOTE)
+  })
+
+  it('shows the tour button when the flag cannot be read', async () => {
+    installFakeApi()
+    server.use(
+      http.get(AVAILABILITY(), () =>
+        HttpResponse.json(
+          { type: 'availability-unknown', title: 'Unavailable', status: 503, instance: '/x' },
+          { status: 503 },
+        ),
+      ),
+    )
+    renderApp({ at: '/' })
+    await screen.findByRole('heading', { level: 2, name: 'Choose who to be' })
+    await waitFor(() => expect(screen.getByRole('button', TOUR)).toBeEnabled())
+    expect(screen.queryByText(PAUSED_NOTE)).not.toBeInTheDocument()
+  })
+})

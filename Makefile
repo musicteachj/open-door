@@ -225,9 +225,9 @@ prod-local: ## Run the production image on its own empty database at localhost:8
 	$(BUILD_PROD_IMAGE)
 	cd $(API) && uv run python ../../scripts/prod-local/start.py
 
-prod-local-check: ## Start the production image on its own database, fetch the pages, stop; asks the model nothing (needs ANTHROPIC_API_KEY to start, Docker)
+prod-local-check: ## Start the production image on its own database, fetch the pages, stop; asks the model nothing (needs ANTHROPIC_API_KEY to start, Docker; AI_OFF=1 checks live AI off and needs no key)
 	$(BUILD_PROD_IMAGE)
-	cd $(API) && uv run python ../../scripts/prod-local/start.py --check
+	cd $(API) && uv run python ../../scripts/prod-local/start.py --check $(if $(filter 1,$(AI_OFF)),--ai-off)
 
 # The live check (Phase 8, Task 46): the production image on its own throwaway database, built
 # first so it checks what will ship, then a browser pass and the database's rows.

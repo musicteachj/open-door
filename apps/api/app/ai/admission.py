@@ -96,7 +96,10 @@ def room_needed_usd(
         ),
     )
     call = reservation_usd(
-        model, estimated_input_tokens=first_call_input_tokens(request), max_tokens=MAX_TOKENS
+        model,
+        estimated_input_tokens=first_call_input_tokens(request),
+        max_tokens=MAX_TOKENS,
+        fallbacks=request.fallbacks is not None,
     )
     return guard + call
 

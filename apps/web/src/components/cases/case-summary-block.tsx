@@ -77,7 +77,13 @@ function CaseSummaryBlock({
       </div>
       <div className="px-5 pt-4 pb-4.5 text-body">
         {state === 'written' && (
-          <p className="m-0 text-[16px]/6.5 text-pretty whitespace-pre-wrap">{text}</p>
+          <p
+            // The machine-readable mark on model-written text (Article 50(2); ADR 0024).
+            data-ai-generated="true"
+            className="m-0 text-[16px]/6.5 text-pretty whitespace-pre-wrap"
+          >
+            {text}
+          </p>
         )}
         {state === 'pending' && (
           <output className="block">

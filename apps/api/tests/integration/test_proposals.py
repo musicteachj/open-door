@@ -2329,15 +2329,15 @@ PREFIX = "Since the last message: "
     [
         (
             request_row("executed", outcome={"requestId": "x"}),
-            "the card to book PTO on Friday, October 23 was confirmed, and the request is waiting"
-            " for Marcus Bell.",
+            "the card to book PTO on Friday, October 23 was confirmed, and the request was sent"
+            " to Marcus Bell for approval.",
         ),
         (
             request_row(
                 "executed", outcome={"requestId": "x"}, start="2026-10-26", end="2026-10-28"
             ),
             "the card to book PTO on Monday, October 26 to Wednesday, October 28 was confirmed,"
-            " and the request is waiting for Marcus Bell.",
+            " and the request was sent to Marcus Bell for approval.",
         ),
         (
             request_row("executed", outcome={"requestId": "x"}, card_type="sick"),
@@ -2432,9 +2432,9 @@ def test_several_changes_are_joined_under_one_prefix_each_sentence_capitalized()
 
     assert line_of([first, second]) == (
         PREFIX
-        + "the card to book PTO on Friday, October 23 was confirmed, and the request is waiting"
-        " for Marcus Bell. The card to cancel the request for Tuesday, November 3 expired, so"
-        " nothing was changed.",
+        + "the card to book PTO on Friday, October 23 was confirmed, and the request was sent"
+        " to Marcus Bell for approval. The card to cancel the request for Tuesday, November 3"
+        " expired, so nothing was changed.",
     )
 
 
@@ -2474,7 +2474,7 @@ def test_instruction_like_text_in_any_stored_field_never_reaches_the_line() -> N
     assert "<" not in line
     assert line.count(PREFIX) == 1
     # The sentence for a name that is too long or not plain says so in fixed words.
-    assert "and the request is waiting for approval." in line
+    assert "and the request was sent for approval." in line
     assert "from the requester for" in line
 
 
@@ -2501,7 +2501,7 @@ def test_a_name_that_is_not_a_plain_name_is_dropped_from_the_line(name: object) 
 
     (line,) = line_of([approver, requester])
 
-    assert "and the request is waiting for approval. The card to approve" in line
+    assert "and the request was sent for approval. The card to approve" in line
     assert "from the requester for" in line
 
 
@@ -2513,16 +2513,16 @@ def test_a_plain_directory_name_is_used(name: str) -> None:
 
     (line,) = line_of([row])
 
-    assert line.endswith(f"and the request is waiting for {name}.")
+    assert line.endswith(f"and the request was sent to {name} for approval.")
 
 
-def test_a_card_with_no_approver_says_it_is_waiting_for_approval() -> None:
+def test_a_card_with_no_approver_says_it_was_sent_for_approval() -> None:
     row = request_row("executed", outcome={"requestId": "x"})
     row.card["approver"] = None
 
     (line,) = line_of([row])
 
-    assert line.endswith("and the request is waiting for approval.")
+    assert line.endswith("and the request was sent for approval.")
 
 
 def test_the_lines_use_fixed_words_with_no_em_dash() -> None:

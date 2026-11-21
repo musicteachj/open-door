@@ -16,6 +16,7 @@ stream, as an `error` event.
 
 import asyncio
 import contextlib
+import logging
 from collections.abc import AsyncIterator, Awaitable, Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -24,9 +25,10 @@ from typing import Annotated, Any
 from uuid import UUID
 
 import anyio
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from fastapi.responses import JSONResponse, StreamingResponse
 from sqlalchemy import func, select
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 
 from app.ai.admission import (
@@ -98,6 +100,7 @@ from app.api.contacts import hr_contact_out
 from app.api.deps import (
     Now,
     get_app_settings,
+    get_availability_cache,
     get_embedder,
     get_engine,
     get_keys,
@@ -111,6 +114,7 @@ from app.core.problems import ProblemError, problem_response
 from app.db.models import AiConversation, AiTurn, HandbookVersion
 from app.db.tenancy import TenantContext, set_is_hr, tenant_session
 from app.domain.handbook.applicability import Asker
+from app.modules.assistant.availability import AvailabilityCache, live_assistant_available
 from app.modules.assistant.display import (
     kept_escalation_out,
     needs_hr_contact,
@@ -118,6 +122,7 @@ from app.modules.assistant.display import (
     turn_out,
 )
 from app.modules.assistant.schemas import (
+    AssistantAvailabilityOut,
     AssistantTextsOut,
     BudgetBannerOut,
     BudgetOut,
@@ -142,6 +147,8 @@ from app.modules.identity.deps import (
     current_session,
 )
 from app.modules.people.queries import get_me
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/assistant", tags=["assistant"])
 
@@ -462,6 +469,42 @@ async def get_current_conversation(
     )
 
 
+AVAILABILITY_ERRORS = problem_responses(status.HTTP_503_SERVICE_UNAVAILABLE)
+AVAILABILITY_UNKNOWN_TEXT = "Whether the live assistant is available could not be read right now."
+
+
+@router.get(
+    "/availability",
+    operation_id="getAssistantAvailability",
+    summary="Whether the live assistant has room for a question, for a visitor with no session",
+    response_model=AssistantAvailabilityOut,
+    responses=AVAILABILITY_ERRORS,
+)
+async def get_assistant_availability(
+    response: Response,
+    engine: Annotated[AsyncEngine, Depends(get_engine)],
+    settings: Annotated[Settings, Depends(get_app_settings)],
+    cache: Annotated[AvailabilityCache, Depends(get_availability_cache)],
+) -> AssistantAvailabilityOut:
+    """The landing page's flag. It needs no session and reads nothing of anyone's: only the day's
+    room in the shared ledger, so every visitor gets the same answer, cached for 30 seconds here
+    and by the browser."""
+    caps = Caps.from_settings(settings)
+
+    async def compute() -> bool:
+        return await live_assistant_available(engine, caps)
+
+    try:
+        available = await cache.get(compute)
+    except (OSError, TimeoutError, SQLAlchemyError):
+        logger.warning("The availability flag could not be read", exc_info=True)
+        raise ProblemError(
+            status.HTTP_503_SERVICE_UNAVAILABLE, "availability-unknown", AVAILABILITY_UNKNOWN_TEXT
+        ) from None
+    response.headers["Cache-Control"] = "public, max-age=30"
+    return AssistantAvailabilityOut(available=available)
+
+
 @router.get(
     "/budget",
     operation_id="getAssistantBudget",
@@ -658,7 +701,8 @@ async def cancel_proposal(
 
 SSE_RESPONSE: dict[int | str, dict[str, Any]] = {
     200: {
-        "description": "The turn as server-sent events: `turn.started`, `status`, `text.delta`,"
+        "description": "The turn as server-sent events: `turn.started` (with `aiGenerated: true`),"
+        " `status`, `text.delta`,"
         " `text.retracted`, `citation`, `tool.started`, `tool.finished`, `proposal`, `escalation`,"
         " `error`, and `turn.completed`, with `: keep-alive` comments between them.",
         "content": {"text/event-stream": {"schema": {"type": "string"}}},
@@ -744,8 +788,9 @@ async def admit_question(
             now=now,
         )
         needed = needed_for(history=history)
+        state = await budget_state(db, caps)
         scope = refusal_scope(
-            await budget_state(db, caps),
+            state,
             needed,
             # The same question in a new conversation, to tell a sandbox that is spent from a
             # conversation that is too long for what is left (sized only when the sandbox is
@@ -754,11 +799,19 @@ async def admit_question(
         )
         if scope is not None:
             code = f"budget-{scope}"
-            # Only the day's limit resets (at the next UTC midnight). A sandbox's own never does,
-            # so it has no `Retry-After`. This 429 is a plain HTTP response: a refusal inside the
-            # turn stream (`spend-limit`, a budget `error` event) can't carry a header.
+            # Only the day's limit resets (at the next UTC midnight), and only when the month still
+            # has room for the question. No header when it has none (on the month's last day this is
+            # conservative, since the next day starts a new month). A
+            # sandbox's own limit never resets, so it has no `Retry-After`. This 429 is a plain
+            # HTTP response: a refusal inside the turn stream (`spend-limit`, a budget `error`
+            # event) can't carry a header.
+            month_has_room = (
+                state.month_remaining_usd is None or state.month_remaining_usd >= needed
+            )
             retry_after = (
-                {"Retry-After": str(seconds_until_next_utc_day(now))} if scope == "daily" else None
+                {"Retry-After": str(seconds_until_next_utc_day(now))}
+                if scope == "daily" and month_has_room
+                else None
             )
             detail = BUDGET_CONVERSATION_TEXT if scope == "conversation" else ERROR_TEXTS[code]
             raise ProblemError(status.HTTP_429_TOO_MANY_REQUESTS, code, detail, headers=retry_after)

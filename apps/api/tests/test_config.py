@@ -9,6 +9,7 @@ from pydantic import ValidationError
 from app.core.config import (
     Settings,
     is_loopback_origin,
+    require_ai_budget_fit_for_production,
     require_entry_settings_fit_for_production,
 )
 from app.core.owner_settings import (
@@ -41,6 +42,9 @@ def clean_environment(monkeypatch: pytest.MonkeyPatch) -> None:
         "AI_TRANSPORT",
         "AI_SANDBOX_BUDGET_USD",
         "AI_DAILY_BUDGET_USD",
+        "AI_MONTHLY_BUDGET_USD",
+        "AI_PACING_MULTIPLIER",
+        "AI_DAILY_FLOOR_USD",
         "AI_HEARTBEAT_SECONDS",
         "ENCRYPTION_KEYRING",
         "ENCRYPTION_KEYRING_FILE",
@@ -81,6 +85,13 @@ def test_defaults_apply_when_only_the_database_url_is_set() -> None:
     assert settings.app_env == "development"
     assert settings.log_level == "INFO"
     assert settings.app_origin == "http://localhost:5173"
+
+
+def test_the_start_limits_fit_an_office_network() -> None:
+    settings = Settings(_env_file=None, database_url=APP_URL)
+    assert settings.sandbox_starts_per_hour == 15
+    assert settings.sandbox_starts_per_day == 50
+    assert settings.sandbox_starts_daily_total == 1000
 
 
 def test_a_malformed_database_url_does_not_leak_its_password() -> None:
@@ -253,6 +264,53 @@ def test_the_budgets_must_be_positive(field: str, amount: str) -> None:
     budgets: dict[str, Any] = {field: Decimal(amount)}
     with pytest.raises(ValidationError, match=field):
         Settings(_env_file=None, database_url=APP_URL, **budgets)
+
+
+def test_the_monthly_budget_is_unset_by_default() -> None:
+    settings = Settings(_env_file=None, database_url=APP_URL)
+    assert settings.ai_monthly_budget_usd is None
+    assert settings.ai_pacing_multiplier == Decimal(3)
+    assert settings.ai_daily_floor_usd == Decimal("1.00")
+
+
+def test_a_zero_monthly_budget_parses(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("AI_MONTHLY_BUDGET_USD", "0")
+    settings = Settings(_env_file=None, database_url=APP_URL)
+    assert settings.ai_monthly_budget_usd == Decimal(0)
+
+
+@pytest.mark.parametrize("blank", ["", "  "])
+def test_a_blank_monthly_budget_is_unset(blank: str) -> None:
+    settings = Settings(_env_file=None, database_url=APP_URL, ai_monthly_budget_usd=blank)
+    assert settings.ai_monthly_budget_usd is None
+
+
+@pytest.mark.parametrize(
+    ("field", "amount"),
+    [
+        ("ai_monthly_budget_usd", "-1"),
+        ("ai_daily_floor_usd", "-0.01"),
+        ("ai_pacing_multiplier", "0.99"),
+    ],
+)
+def test_the_pacing_settings_refuse_bad_values(field: str, amount: str) -> None:
+    values: dict[str, Any] = {field: Decimal(amount)}
+    with pytest.raises(ValidationError, match=field):
+        Settings(_env_file=None, database_url=APP_URL, **values)
+
+
+def test_production_needs_a_monthly_budget() -> None:
+    production = Settings(
+        _env_file=None, database_url=APP_URL, app_origin=HTTPS_ORIGIN, **PRODUCTION
+    )
+    with pytest.raises(ValueError, match="AI_MONTHLY_BUDGET_USD"):
+        require_ai_budget_fit_for_production(production)
+
+    off = production.model_copy(update={"ai_monthly_budget_usd": Decimal(0)})
+    require_ai_budget_fit_for_production(off)
+
+    development = Settings(_env_file=None, database_url=APP_URL)
+    require_ai_budget_fit_for_production(development)
 
 
 def test_the_heartbeat_can_be_turned_off_but_not_negative() -> None:
@@ -874,12 +932,9 @@ def test_the_hash_key_must_be_at_least_32_bytes() -> None:
     Settings(_env_file=None, database_url=APP_URL, sandbox_ip_hash_key="z" * 32)
 
 
-def test_the_development_hash_key_is_long_enough_and_the_limits_default() -> None:
+def test_the_development_hash_key_is_long_enough() -> None:
     settings = Settings(_env_file=None, database_url=APP_URL)
     assert len(settings.sandbox_ip_hash_key.get_secret_value().encode()) >= 32
-    assert settings.sandbox_starts_per_hour == 5
-    assert settings.sandbox_starts_per_day == 20
-    assert settings.sandbox_starts_daily_total == 500
 
 
 @pytest.mark.parametrize(

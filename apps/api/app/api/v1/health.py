@@ -1,12 +1,13 @@
 """Health: `GET /api/v1/health/live` (is the process up) and `GET /api/v1/health` (can it serve).
 
-**Liveness** never touches the database. It is the container's check, so a database failover
-doesn't get every task restarted.
+**Liveness** never touches the database. It is the check of the container, the load balancer's
+target group, and ECS, so a database failover doesn't get every task restarted or pulled out of the
+load balancer.
 
-**Readiness** is the load balancer's check. It pings the database with a 2-second limit (under the
-probe's own timeout, so a blackholed database answers 503 instead of timing the probe out), keeps
-the answer for 1 second, and runs one check at a time, so a flood of unauthenticated probes costs
-the database one round trip a second. Both answer `Cache-Control: no-store`, and neither is logged.
+**Readiness** is for the deploy's smoke tests, not for any probe. It pings the database with a
+2-second limit (so a blackholed database answers 503 instead of hanging), keeps the answer for 1
+second, and runs one check at a time, so a flood of unauthenticated requests costs the database one
+round trip a second. Both answer `Cache-Control: no-store`, and neither is logged.
 """
 
 import asyncio

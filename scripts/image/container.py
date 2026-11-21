@@ -34,15 +34,25 @@ TEST_KEYRING = "test:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="
 POSTGRES_IMAGE = "pgvector/pgvector:0.8.7-pg17"
 DB_OWNER = "opendoor"
 DB_DATABASE = "opendoor"
+# The shared portfolio server's layout, which `make prod-local` mirrors: an init superuser (it
+# makes the database and pre-creates `vector`, and is the only role that can see every tenant's
+# rows), and a non-superuser owner with CREATEROLE that the migrations and the login bootstrap run
+# as. The load test keeps its single-superuser database (`DB_OWNER`).
+SHARED_INIT_USER = "postgres_init"
+OPEN_DOOR_OWNER = "opendoor_owner"
 APP_LOGIN = "od_app_login"
 CLEANUP_LOGIN = "od_cleanup_login"
-# The one-off setup, as a deploy runs it: migrate, create the login users, load the handbook. Run
-# from the image's working directory (/app/apps/api).
-SETUP_SCRIPT = (
-    "alembic upgrade head"
-    " && python scripts/bootstrap_db_users.py"
-    " && python scripts/ingest_handbook.py ingest"
-)
+# What every container runs with, as production does: a read-only root, a tmpfs for /tmp, no
+# capabilities, and no way to gain privileges.
+HARDENED_FLAGS = [
+    "--read-only",
+    "--tmpfs",
+    "/tmp",  # noqa: S108  # A container path.
+    "--cap-drop",
+    "ALL",
+    "--security-opt",
+    "no-new-privileges:true",
+]
 # The access log is JSON lines, so the request's quotes arrive escaped: `1.2.3.4:5 - \"GET / ...`.
 CLIENT_IN_ACCESS_LOG = re.compile(r'(\d+\.\d+\.\d+\.\d+):\d+ - \\?"(?:GET|HEAD|POST)')
 
@@ -241,9 +251,11 @@ def database_run_args(
     ]
 
 
-def setup_run_args(name: str, network: str, env: dict[str, str]) -> list[str]:
-    """The one-off setup container (migrations, the login users, the handbook) from the
-    production image, on the database's network."""
+def job_run_args(
+    name: str, network: str, env: dict[str, str], *, entrypoint: str, memory: str
+) -> list[str]:
+    """A one-off job container from the production image: its own entrypoint and nothing after
+    the image, production's memory limit for the job, and the hardened flags."""
     return [
         "docker",
         "run",
@@ -252,13 +264,29 @@ def setup_run_args(name: str, network: str, env: dict[str, str]) -> list[str]:
         name,
         "--network",
         network,
+        "--memory",
+        memory,
+        *HARDENED_FLAGS,
         *env_flags(env),
         "--entrypoint",
-        "sh",
+        entrypoint,
         PROD_TAG,
-        "-c",
-        SETUP_SCRIPT,
     ]
+
+
+def setup_run_args(
+    name: str, network: str, env: dict[str, str], *, memory: str = "256m"
+) -> list[str]:
+    """The deploy's one-off setup (migrations, the login users, the handbook), on the database's
+    network."""
+    return job_run_args(name, network, env, entrypoint="/app/setup.sh", memory=memory)
+
+
+def cleanup_run_args(
+    name: str, network: str, env: dict[str, str], *, memory: str = "128m"
+) -> list[str]:
+    """The cleanup job: its own entrypoint, and CLEANUP_DATABASE_URL as its only setting."""
+    return job_run_args(name, network, env, entrypoint="/app/cleanup.sh", memory=memory)
 
 
 def database_url(user: str, password: str, host: str) -> str:
@@ -266,14 +294,16 @@ def database_url(user: str, password: str, host: str) -> str:
     return f"postgresql+asyncpg://{user}:{password}@{host}:5432/{DB_DATABASE}"
 
 
-def postgres_ready(name: str, *, timeout_seconds: float) -> bool:
+def postgres_ready(
+    name: str, *, timeout_seconds: float, user: str = DB_OWNER, database: str = DB_DATABASE
+) -> bool:
     """Wait until the database container accepts connections (over TCP: on a fresh database,
     Postgres first runs a socket-only setup server)."""
     deadline = time.monotonic() + timeout_seconds
     while time.monotonic() < deadline:
         probe = run(
-            "docker", "exec", name, "pg_isready", "-h", "127.0.0.1", "-U", DB_OWNER, "-d",
-            DB_DATABASE,
+            "docker", "exec", name, "pg_isready", "-h", "127.0.0.1", "-U", user, "-d",
+            database,
             check=False,
         )  # fmt: skip
         if probe.returncode == 0:

@@ -33,3 +33,74 @@ The locks last one transaction, so they're safe behind a connection pooler and a
 reservation whose task crashes is never settled and stays counted, which errs toward spending
 less. Summing rows is cheap at sandbox scale. Phase 8's cleanup job deletes daily rows older than
 30 days, and its load test checks the global lock under contention.
+
+## Amendment (2026-11-19): a monthly budget, paced by day
+
+Phase 9a puts the public demo under a hard monthly AI budget (`AI_MONTHLY_BUDGET_USD`, which
+production requires; `0` turns live AI off). The ledger stays insert-only, and a day's room comes
+from the month's rows:
+
+```
+left_this_month = budget - every ledger row dated earlier this month (settled costs and open reservations)
+allowance_today = min(left_this_month, max(multiplier x left_this_month / days_left_including_today, floor))
+admit a reservation if today's rows + reservation <= min(allowance_today, AI_DAILY_BUDGET_USD)
+```
+
+- Days and months are UTC, from the database's clock. The multiplier (`AI_PACING_MULTIPLIER`,
+  default 3) and the floor (`AI_DAILY_FLOOR_USD`, default $1.00) are settings. The allowance is
+  rounded down to the ledger's six places.
+- The shared names: `MonthlyBudget` and `allowance_today_usd` in `app/ai/pacing.py`, and `Caps.monthly`
+  and `day_room` in `app/ai/budget.py`. `reserve`, `budget_state`, and the availability flag
+  read the same `day_room`.
+- `AI_DAILY_BUDGET_USD` stays, as a hard daily ceiling. Production sets it equal to the month so
+  pacing alone governs, and the paid local runs keep using it as their cap.
+- Without a monthly budget (development and the tests) only the daily cap applies, as before.
+- The cleanup job's 30-day retention keeps every row of the current month (a month has at most 31
+  days, and the job keeps rows from the last 30 days plus today), so the month's sum is complete.
+- The day lock stays the only lock. A reservation made just after UTC midnight can miss the
+  reservations still waiting on the previous day's lock (one per request in flight at midnight),
+  each within that day's allowance, so the month's sum can be short by those.
+- There is no sweeper. A reservation that is never settled counts at its full amount for the rest
+  of the month, which is what a sweeper would produce elsewhere.
+- A 429 for a used-up month sends no `Retry-After`: tomorrow does not help.
+
+### Unbilled failures settle to zero, and the SDK no longer retries
+
+The reserve-then-settle rule stays: a reservation is made before every model attempt, and a settle
+never fails a call that was already paid for. What a failed call settles to depends on what the
+provider does with it (`classify_status_error` in `app/ai/anthropic_transport.py`):
+
+- **Spend limit** (a 400 with the Console's "You have reached your specified ... API usage limits"
+  message, a 402 `billing_error`, or a 429 whose `error.details.error_code` (or `error.error_code`)
+  is `enforced_spend_limit_reached`): settles to $0 and stops the assistant with the spend-limit
+  text. At the guard it still gives the emergency numbers (911 and 988).
+- **Refused before any work** (a 401, 403, 429 without that code, or any 529 or `overloaded_error`
+  status): the provider doesn't bill it, so it settles to $0. A guard or summary failure of this
+  kind carries zero usage, and the assistant's call settles to $0 in the turn.
+- **Anything else** (a 500, a dropped connection, a timeout, or an `overloaded_error` event inside
+  a 200 stream): the cost is unknown, so the reservation stays at its full amount. Output may have
+  been billed, and so a failure after the person saw text never settles to $0 and is never retried.
+
+The SDK's own retries are off (`MODEL_MAX_RETRIES = 0`): they sent up to three requests under one
+reservation. In their place the turn makes one retry of its own, only for an unbilled 429 or 529
+on the assistant's call, only when nothing was shown yet, after one second, and under a new
+reservation. A recorded eval fixture never holds an unbilled failure (it would replay an outage).
+The safety check (the guard), the case summarizer, connection errors, and 5xx responses get no
+retry at all, so a single overloaded or dropped call ends that turn with its fixed text (an
+unbilled overload settles to $0; a dropped connection keeps its reservation), which a demo accepts.
+
+### A call that may fall back is reserved at its dearest model
+
+Amended 2026-11-21 (Phase 9a, from the review of PR #130). The assistant's calls are sent with
+`fallbacks: "default"`, so when Opus 5.5 declines one, Opus 5 or Opus 4.8 may serve it, at $5 and
+$25 a million input and output tokens against Opus 5.5's $4 and $20. Their reservation is now
+priced at the dearest of the requested model and its fallback models (`FALLBACK_MODELS` and
+`reservation_usd(..., fallbacks=True)` in `app/ai/pricing.py`), as the portfolio deployment design
+asks. A first question now needs about $0.262 of room, not $0.211, so the landing page's flag
+waits for $0.30 (`LANDING_ROOM_USD`). The guard and the case summary are sent without fallbacks
+and keep their own model's price.
+
+What the declined attempt itself used (its input, and any output before the decline) is billed but
+not reserved: reserving it too would roughly double every reservation for a rare event. Settle
+charges it, so the ledger stays exact after the call, and the Anthropic workspace's $22 monthly
+limit bounds the overshoot.

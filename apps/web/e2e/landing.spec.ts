@@ -261,3 +261,23 @@ test('axe reports no violations on the default and the hover and focus states', 
   await expect(card(page, 'Mateo')).toBeFocused()
   expect((await scan(page)).violations).toEqual([])
 })
+
+test('when the live assistant is out of room, the walkthrough replaces the tour button', async ({
+  page,
+}) => {
+  await page.route('**/api/v1/assistant/availability', (route) =>
+    route.fulfill({ json: { available: false } }),
+  )
+  await page.reload()
+  await expect(
+    page.getByText(
+      'The live assistant has reached its limit for now. The recorded walkthrough shows a full tour, and you can still explore a sandbox.',
+    ),
+  ).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Take the 2-minute tour' })).toHaveCount(0)
+  const walkthrough = page.getByRole('link', { name: 'Watch the recorded walkthrough' })
+  await expect(walkthrough).toHaveCount(1)
+  await expect(walkthrough).toHaveAttribute('href', '/walkthrough')
+  // The persona cards still work.
+  await expect(card(page, 'Priya')).toBeEnabled()
+})

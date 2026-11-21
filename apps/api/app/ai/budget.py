@@ -10,6 +10,16 @@ Two transaction-scoped advisory locks make "sum, then insert" atomic across API 
 key first, then the day's, always in that order so two reservations can't wait on each other. They
 are released at commit or rollback, so they stay correct behind a connection pooler. A session-level
 advisory lock would stay on its pooled connection for the next user, so none is used here.
+
+A monthly budget (`Caps.monthly`, from AI_MONTHLY_BUDGET_USD) paces the daily ledger. Today's room
+is `min(AI_DAILY_BUDGET_USD, allowance_today)`, where the allowance (app/ai/pacing.py) is a share
+of what the month's earlier rows leave. The month's rows are the same insert-only `ai_spend_daily`
+rows, settled costs and open reservations alike, so a reservation that is never settled counts at
+its full amount for the rest of the month. Without a monthly budget only the daily cap applies.
+
+The day lock stays the only lock. A reservation made just after UTC midnight can miss the
+reservations still waiting on the previous day's lock (one per request in flight at midnight), each
+within that day's allowance, so the month's sum can be short by those (ADR 0011).
 """
 
 from dataclasses import dataclass
@@ -19,8 +29,9 @@ from typing import Literal
 from uuid import UUID
 
 from sqlalchemy import insert, text
-from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
+from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine, AsyncSession
 
+from app.ai.pacing import MonthlyBudget, allowance_today_usd
 from app.core.config import Settings
 from app.db.locks import BUDGET_DAY_NS, BUDGET_TENANT_NS
 from app.db.models import AiSpend, AiSpendDaily
@@ -42,6 +53,19 @@ DAY_SUM = text(
     "SELECT coalesce(sum(amount_usd), 0) FROM ai_spend_daily"
     " WHERE day = (now() AT TIME ZONE 'UTC')::date"
 )
+# The month's rows dated before today, and today's, with today's date, all from the database's UTC
+# clock. An empty month still returns one row (the join is on `today`), with zeros.
+MONTH_SUMS = text(
+    """
+    WITH today AS (SELECT (now() AT TIME ZONE 'UTC')::date AS d)
+    SELECT today.d,
+           coalesce(sum(s.amount_usd) FILTER (WHERE s.day < today.d), 0),
+           coalesce(sum(s.amount_usd) FILTER (WHERE s.day = today.d), 0)
+    FROM today LEFT JOIN ai_spend_daily s
+      ON s.day >= date_trunc('month', today.d)::date AND s.day <= today.d
+    GROUP BY today.d
+    """
+)
 
 
 # The most one ledger row may hold: both ledgers check `amount_usd BETWEEN -10 AND 10` (migration
@@ -54,12 +78,48 @@ MAX_RESERVATION_USD = Decimal(10)
 class Caps:
     sandbox_usd: Decimal
     daily_usd: Decimal
+    monthly: MonthlyBudget | None = None
 
     @classmethod
     def from_settings(cls, settings: Settings) -> "Caps":
-        return cls(
-            sandbox_usd=settings.ai_sandbox_budget_usd, daily_usd=settings.ai_daily_budget_usd
+        monthly = (
+            None
+            if settings.ai_monthly_budget_usd is None
+            else MonthlyBudget(
+                budget_usd=settings.ai_monthly_budget_usd,
+                multiplier=settings.ai_pacing_multiplier,
+                floor_usd=settings.ai_daily_floor_usd,
+            )
         )
+        return cls(
+            sandbox_usd=settings.ai_sandbox_budget_usd,
+            daily_usd=settings.ai_daily_budget_usd,
+            monthly=monthly,
+        )
+
+
+@dataclass(frozen=True)
+class DayRoom:
+    """What today's rows may add up to, what they add up to now, and what the month has left."""
+
+    limit_usd: Decimal
+    spent_today_usd: Decimal
+    # None when there is no monthly budget.
+    month_remaining_usd: Decimal | None
+
+
+async def day_room(db: AsyncSession | AsyncConnection, caps: Caps) -> DayRoom:
+    """Read today's room: the one reading `reserve`, `budget_state`, and the availability flag
+    share. The limit is the daily cap, or the paced allowance when that is lower."""
+    today, before_usd, today_usd = (await db.execute(MONTH_SUMS)).one()
+    if caps.monthly is None:
+        return DayRoom(caps.daily_usd, today_usd, None)
+    allowance = allowance_today_usd(caps.monthly, spent_before_today_usd=before_usd, today=today)
+    return DayRoom(
+        limit_usd=min(caps.daily_usd, allowance),
+        spent_today_usd=today_usd,
+        month_remaining_usd=caps.monthly.budget_usd - before_usd - today_usd,
+    )
 
 
 class BudgetExceeded(Exception):  # noqa: N818
@@ -92,6 +152,8 @@ class BudgetState:
 
     sandbox_remaining_usd: Decimal
     daily_remaining_usd: Decimal
+    # None when there is no monthly budget.
+    month_remaining_usd: Decimal | None = None
 
     @property
     def sandbox_reached(self) -> bool:
@@ -132,12 +194,12 @@ async def reserve(
         sandbox_spent: Decimal = (
             await session.execute(SANDBOX_SUM, {"tenant_id": tenant_id})
         ).scalar_one()
-        daily_spent: Decimal = (await session.execute(DAY_SUM)).scalar_one()
+        room = await day_room(session, caps)
         # The sandbox is checked first, so a visitor at their own cap is told so, not that the
         # demo is full.
         if sandbox_spent + amount_usd > caps.sandbox_usd:
             raise BudgetExceeded("sandbox")
-        if daily_spent + amount_usd > caps.daily_usd:
+        if room.spent_today_usd + amount_usd > room.limit_usd:
             raise BudgetExceeded("daily")
         await session.execute(
             insert(AiSpend).values(
@@ -214,8 +276,9 @@ async def budget_state(db: AsyncSession, caps: Caps) -> BudgetState:
     A session with no tenant sees no spend, which would read as a full budget, so it fails.
     """
     sandbox_spent = await sandbox_spent_usd(db)
-    daily_spent: Decimal = (await db.execute(DAY_SUM)).scalar_one()
+    room = await day_room(db, caps)
     return BudgetState(
         sandbox_remaining_usd=caps.sandbox_usd - sandbox_spent,
-        daily_remaining_usd=caps.daily_usd - daily_spent,
+        daily_remaining_usd=room.limit_usd - room.spent_today_usd,
+        month_remaining_usd=room.month_remaining_usd,
     )

@@ -22,6 +22,7 @@ from app.ai.budget import Caps
 from app.ai.case_summary import Summarizer
 from app.ai.fixed_texts import hr_contact
 from app.ai.guard import CaseGuard
+from app.ai.provenance import ai_generated_out
 from app.api.contacts import hr_contact_out
 from app.api.deps import get_app_settings, get_engine, get_keys, get_summarizer, get_transport
 from app.api.problems import problem_responses
@@ -226,7 +227,10 @@ async def get_case_summary(
     read = await service.case_summary_for(signed_in.db, keys, signed_in.actor, case_id)
     # The middleware covers refusals; this keeps the success response's header explicit.
     response.headers[CACHE_CONTROL_HEADER] = NO_STORE
-    return CaseSummaryOut.model_validate(read, from_attributes=True)
+    out = CaseSummaryOut.model_validate(read, from_attributes=True)
+    if out.status == "written" and out.model is not None:
+        return out.model_copy(update={"ai_generated": ai_generated_out([out.model])})
+    return out
 
 
 @router.get(

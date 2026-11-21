@@ -678,3 +678,32 @@ def test_a_bad_queue_filter_from_a_non_hr_caller_reveals_nothing_more(browser: B
     # Validation runs before the HR check, so the answer is the same 422 HR gets. It says nothing
     # about the caller's role, and the queue's existence is not secret.
     assert_validation_problem(response, "status", "bogus")
+
+
+# --- the AI-generated mark (Article 50(2)) ---
+
+
+def test_a_written_summary_carries_the_mark(browser: Browser) -> None:
+    browser.start_sandbox("priya")
+    case_id = send(browser).json()["case"]["id"]
+    switch(browser, "dana")
+
+    body = get(browser, f"/{case_id}/summary").json()
+
+    assert body["status"] == "written"
+    assert body["aiGenerated"] == {
+        "generator": "Open Door AI assistant",
+        "models": [body["model"]],
+        "digitalSourceType": "http://cv.iptc.org/newscodes/digitalsourcetype/trainedAlgorithmicMedia",
+    }
+
+
+def test_a_failed_summary_carries_none(browser: Browser) -> None:
+    browser.start_sandbox("priya")
+    case_id = send(browser, "I want to hurt myself.").json()["case"]["id"]
+    switch(browser, "dana")
+
+    body = get(browser, f"/{case_id}/summary").json()
+
+    assert body["status"] == "failed"
+    assert body["aiGenerated"] is None

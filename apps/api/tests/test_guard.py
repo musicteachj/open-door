@@ -21,6 +21,7 @@ from app.ai.guard import (
     TOPIC_NOTE_HR,
     build_guard_request,
     escalation_for_verdict,
+    guard_cost,
     guard_reservation_usd,
     notes_for_role,
     offers_case,
@@ -206,6 +207,18 @@ async def test_off_schema_output_is_unavailable_with_its_usage() -> None:
 
     assert outcome.route == "unavailable"
     assert outcome.usage == USAGE
+
+
+async def test_an_unbilled_guard_failure_settles_to_zero() -> None:
+    error = GuardUnavailable("refused", usage=Usage(0, 0, 0, 0), unbilled=True)
+
+    outcome = await screen(FakeTransport(error), build_guard_request("hello", None))
+
+    assert outcome.route == "unavailable"
+    assert outcome.usage == Usage(0, 0, 0, 0)
+    price = guard_cost(outcome, HAIKU)
+    assert price is not None
+    assert price() == 0
 
 
 async def test_the_spend_limit_is_not_swallowed() -> None:

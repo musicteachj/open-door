@@ -68,8 +68,8 @@ COPY --from=venv /app/apps/api/.venv /app/apps/api/.venv
 COPY apps/api/ /app/apps/api/
 COPY handbook/ /app/handbook/
 COPY --from=web /build/apps/web/dist /app/web-dist
-COPY scripts/image/entrypoint.sh /app/entrypoint.sh
-RUN chmod 0555 /app/entrypoint.sh
+COPY scripts/image/entrypoint.sh scripts/image/setup.sh scripts/image/cleanup.sh /app/
+RUN chmod 0555 /app/entrypoint.sh /app/setup.sh /app/cleanup.sh
 
 # PYTHONDONTWRITEBYTECODE stops the app writing .pyc files at run time (the user can't write
 # there anyway), so compile the app's own modules once here; the venv's are compiled by uv.

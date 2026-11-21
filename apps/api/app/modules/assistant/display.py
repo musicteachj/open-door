@@ -18,6 +18,7 @@ from app.ai.fixed_texts import (
 )
 from app.ai.guard import escalation_for_verdict, offers_case, verdict_routes_to_crisis
 from app.ai.proposals import ProposalOut
+from app.ai.provenance import AiGeneratedOut, ai_generated_out
 from app.api.contacts import hr_contact_out
 from app.db.models import AiFeedback, AiTurn
 from app.modules.assistant.schemas import (
@@ -107,6 +108,16 @@ _ESCALATION_TEXTS: dict[EscalationKind, str] = {
     "unavailable": UNAVAILABLE_TEXT,
     "sensitive": SENSITIVE_TEXT,
 }
+
+
+def turn_mark(status: str, answer: str, models: Iterable[str]) -> AiGeneratedOut | None:
+    """The mark for a turn's `answerText`, or None. Every character of the stored answer is text
+    the model streamed (the fixed texts travel as the turn's escalation and error, never in the
+    answer), so any answer text means the model wrote it, whatever the ending: a failed or stopped
+    turn keeps its partial words. A crisis or an unavailable guard never ran the model."""
+    if status in ("crisis", "guard_unavailable") or not answer.strip():
+        return None
+    return ai_generated_out(models)
 
 
 def error_for(status: str, error_code: str | None) -> TurnErrorOut | None:
@@ -226,6 +237,7 @@ def turn_out(
         question=text.question,
         status=status,
         answer_text=text.answer,
+        ai_generated=turn_mark(status, text.answer, turn.served_by_models),
         citations=[CitationOut.model_validate(c) for c in turn.citations],
         incomplete=status == "completed" and error_code == MAX_TOKENS_CODE,
         error=error_for(status, error_code),

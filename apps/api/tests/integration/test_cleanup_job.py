@@ -17,36 +17,12 @@ from sqlalchemy.ext.asyncio import AsyncEngine
 
 from app.db.errors import has_sqlstate
 from app.jobs.cleanup import STEP_TIMEOUT, run, run_cleanup, step
-from tests.integration.conftest import MakeTenant
+from tests.integration.conftest import MakeTenant, insert_dated_spend
 from tests.integration.test_cleanup import rows_left
 
 pytestmark = pytest.mark.integration
 
 OLD = datetime(2000, 1, 1, tzinfo=UTC)
-
-
-async def insert_spend(owner_engine: AsyncEngine, *, days_ago: int) -> UUID:
-    """A ledger row dated `days_ago` days back (UTC). A trigger stamps created_at, and a check ties
-    `day` to it, so the row is made and then moved, as the owner."""
-    row_id = uuid4()
-    moment = datetime.now(UTC).replace(hour=12, minute=0, second=0, microsecond=0) - timedelta(
-        days=days_ago
-    )
-    async with owner_engine.begin() as connection:
-        await connection.execute(
-            text(
-                "INSERT INTO ai_spend_daily (id, kind, amount_usd) VALUES (:id, 'settle', 0.000001)"
-            ),
-            {"id": row_id},
-        )
-        await connection.execute(
-            text(
-                "UPDATE ai_spend_daily SET created_at = :moment,"
-                " day = (CAST(:moment AS timestamptz) AT TIME ZONE 'UTC')::date WHERE id = :id"
-            ),
-            {"id": row_id, "moment": moment},
-        )
-    return row_id
 
 
 async def insert_start(owner_engine: AsyncEngine, *, hours_ago: float) -> UUID:
@@ -169,8 +145,8 @@ async def test_the_job_deletes_an_expired_sandbox_and_all_its_rows_but_no_live_o
 async def test_the_job_keeps_thirty_days_of_ledger_rows(
     cleanup_engine: AsyncEngine, owner_engine: AsyncEngine
 ) -> None:
-    old = [await insert_spend(owner_engine, days_ago=days) for days in (31, 45)]
-    kept = [await insert_spend(owner_engine, days_ago=days) for days in (30, 1, 0)]
+    old = [await insert_dated_spend(owner_engine, days_ago=days) for days in (31, 45)]
+    kept = [await insert_dated_spend(owner_engine, days_ago=days) for days in (30, 1, 0)]
     try:
         counts = await run_cleanup(cleanup_engine)
 
@@ -181,6 +157,25 @@ async def test_the_job_keeps_thirty_days_of_ledger_rows(
         async with owner_engine.begin() as connection:
             await connection.execute(
                 text("DELETE FROM ai_spend_daily WHERE id = ANY(:ids)"), {"ids": kept}
+            )
+
+
+async def test_the_job_keeps_the_whole_current_month(
+    cleanup_engine: AsyncEngine, owner_engine: AsyncEngine
+) -> None:
+    # The monthly budget sums the month's rows, so the job must keep the 1st of this month.
+    today = datetime.now(UTC).date()
+    first = await insert_dated_spend(owner_engine, days_ago=today.day - 1)
+    old = await insert_dated_spend(owner_engine, days_ago=31)
+    try:
+        await run_cleanup(cleanup_engine)
+
+        assert await count_where(owner_engine, "ai_spend_daily", [first]) == 1
+        assert await count_where(owner_engine, "ai_spend_daily", [old]) == 0
+    finally:
+        async with owner_engine.begin() as connection:
+            await connection.execute(
+                text("DELETE FROM ai_spend_daily WHERE id = ANY(:ids)"), {"ids": [first, old]}
             )
 
 
@@ -258,7 +253,7 @@ async def test_the_job_logs_one_json_line_of_counts_exits_zero_and_a_second_run_
     capsys: pytest.CaptureFixture[str], owner_engine: AsyncEngine
 ) -> None:
     await insert_start(owner_engine, hours_ago=30)
-    await insert_spend(owner_engine, days_ago=40)
+    await insert_dated_spend(owner_engine, days_ago=40)
 
     assert await run() == 0
     first = [line for line in capsys.readouterr().err.splitlines() if line.strip()]
@@ -294,7 +289,7 @@ async def test_a_failure_is_logged_without_the_url_and_exits_nonzero(
 async def test_the_cleanup_login_itself_cannot_delete_a_recent_ledger_row_or_start(
     cleanup_engine: AsyncEngine, owner_engine: AsyncEngine
 ) -> None:
-    spend = await insert_spend(owner_engine, days_ago=29)
+    spend = await insert_dated_spend(owner_engine, days_ago=29)
     start = await insert_start(owner_engine, hours_ago=1)
     try:
         async with cleanup_engine.begin() as connection:

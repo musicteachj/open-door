@@ -182,3 +182,43 @@ def test_on_a_named_network_the_port_is_published_on_loopback_on_every_platform(
     assert pairs(args, "--network") == ["net"]
     assert pairs(args, "--publish") == ["127.0.0.1:8300:8300"]
     assert "host" not in args
+
+
+def test_the_setup_runs_its_own_entrypoint() -> None:
+    env = {"APP_ENV": "production", "MIGRATION_DATABASE_URL": "x"}
+    args = container.setup_run_args("od-setup", "net", env)
+
+    assert pairs(args, "--entrypoint") == ["/app/setup.sh"]
+    # Nothing follows the image: the entrypoint takes no command.
+    assert args[-1] == container.PROD_TAG
+    assert pairs(args, "--memory") == ["256m"]
+    assert pairs(args, "--network") == ["net"]
+    assert pairs(args, "--env") == ["APP_ENV", "MIGRATION_DATABASE_URL"]
+    for flag in container.HARDENED_FLAGS:
+        assert flag in args
+    assert container.setup_run_args("od", "net", env, memory="1g").count("1g") == 1
+
+
+def test_the_cleanup_runs_its_own_entrypoint_with_one_setting() -> None:
+    env = {"CLEANUP_DATABASE_URL": "x"}
+    args = container.cleanup_run_args("od-cleanup", "net", env)
+
+    assert pairs(args, "--entrypoint") == ["/app/cleanup.sh"]
+    assert args[-1] == container.PROD_TAG
+    assert pairs(args, "--memory") == ["128m"]
+    assert pairs(args, "--env") == ["CLEANUP_DATABASE_URL"]
+    assert "--rm" in args
+    for flag in container.HARDENED_FLAGS:
+        assert flag in args
+
+
+def test_the_hardened_flags_are_productions() -> None:
+    assert container.HARDENED_FLAGS == [
+        "--read-only",
+        "--tmpfs",
+        "/tmp",  # noqa: S108  # A container path.
+        "--cap-drop",
+        "ALL",
+        "--security-opt",
+        "no-new-privileges:true",
+    ]

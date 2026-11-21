@@ -10,6 +10,7 @@ from uuid import UUID
 
 from pydantic import Field
 
+from app.ai.provenance import AiGeneratedOut
 from app.api.contacts import HrContactOut
 from app.api.schemas import CamelModel
 from app.modules.cases import texts
@@ -167,6 +168,8 @@ class CaseSummaryOut(CamelModel):
     model: str | None = None
     prompt_version: str | None = None
     created_at: datetime | None = None
+    # Set when `status` is "written": the model wrote the text (Article 50(2); ADR 0024).
+    ai_generated: AiGeneratedOut | None = None
 
 
 class CaseTextOut(CamelModel):
