@@ -88,3 +88,19 @@ reservation. A recorded eval fixture never holds an unbilled failure (it would r
 The safety check (the guard), the case summarizer, connection errors, and 5xx responses get no
 retry at all, so a single overloaded or dropped call ends that turn with its fixed text (an
 unbilled overload settles to $0; a dropped connection keeps its reservation), which a demo accepts.
+
+### A call that may fall back is reserved at its dearest model
+
+Amended 2026-11-21 (Phase 9a, from the review of PR #130). The assistant's calls are sent with
+`fallbacks: "default"`, so when Opus 5.5 declines one, Opus 5 or Opus 4.8 may serve it, at $5 and
+$25 a million input and output tokens against Opus 5.5's $4 and $20. Their reservation is now
+priced at the dearest of the requested model and its fallback models (`FALLBACK_MODELS` and
+`reservation_usd(..., fallbacks=True)` in `app/ai/pricing.py`), as the portfolio deployment design
+asks. A first question now needs about $0.262 of room, not $0.211, so the landing page's flag
+waits for $0.30 (`LANDING_ROOM_USD`). The guard and the case summary are sent without fallbacks
+and keep their own model's price.
+
+What the declined attempt itself used (its input, and any output before the decline) is billed but
+not reserved: reserving it too would roughly double every reservation for a rare event. Settle
+charges it, so the ledger stays exact after the call, and the Anthropic workspace's $22 monthly
+limit bounds the overshoot.

@@ -137,19 +137,19 @@ guarding):
 | A typical visit (three to five questions) | about $0.06 to $0.10 |
 
 - **Per sandbox: $0.50** (production's value; the code default stays $1.00). That is one full tour
-  plus several follow-up questions, because each question needs about $0.21 of room before it
-  starts (the guard's reservation plus the first model call's, `app/ai/admission.py`
-  `room_needed_usd`, used by the stream route in `app/ai/turn.py`). It stops one visitor from using
-  the day's budget alone.
+  plus a few follow-up questions, because each question needs about $0.26 of room before it
+  starts (the guard's reservation plus the first model call's, priced at its dearest fallback
+  model, `app/ai/admission.py` `room_needed_usd`, used by the stream route in `app/ai/turn.py`). It
+  stops one visitor from using the day's budget alone.
 - **Per month and per day: a paced $20 month** (Phase 9a, ADR 0011). The monthly budget is the
   limit; each day may spend the larger of a multiple (3x) of an even share of what is left and a
   $1.00 floor, never more than what is left. At about $0.17 a tour, $20 buys about 115 tours. A
   30-day month's even share is about $0.67 a day, a busy day can use up to $2.00, and the $1.00
-  floor lets about four first questions start at once ($0.21 each). Unspent days raise the later
+  floor lets about three first questions start at once ($0.26 each). Unspent days raise the later
   days' share. `AI_DAILY_BUDGET_USD` is set equal to the month in production, so pacing alone
   governs.
-  - The ledger reserves the most a call could cost before making it (about $0.16 to $0.30 for an
-    answer, at the full output limit) and settles to the real cost afterward, so a day's room must
+  - The ledger reserves the most a call could cost before making it (about $0.20 to $0.38 for an
+    answer, at the full output limit and the dearest fallback model's price) and settles to the real cost afterward, so a day's room must
     cover the reservations of the questions running at that moment as well as the real spend. With
     25 visitors at once and no real spend at all, 7 of an earlier run's 225 questions were refused
     with `budget-daily` from reservations alone.

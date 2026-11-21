@@ -104,7 +104,7 @@ async def test_the_landing_room_covers_a_first_question(
     )
 
     assert needed <= LANDING_ROOM_USD
-    assert needed > Decimal("0.15")
+    assert needed > Decimal("0.25")
 
 
 async def test_a_database_error_is_a_503_availability_unknown(

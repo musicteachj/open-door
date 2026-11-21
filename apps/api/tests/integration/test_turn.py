@@ -55,7 +55,13 @@ from app.ai.guard import (
     build_guard_request,
     guard_reservation_usd,
 )
-from app.ai.pricing import IterationUsage, Usage, estimate_input_tokens, turn_call_cost
+from app.ai.pricing import (
+    IterationUsage,
+    Usage,
+    estimate_input_tokens,
+    reservation_usd,
+    turn_call_cost,
+)
 from app.ai.prompts.versions import CANARY, PROMPT_VERSION, TOOLSET_VERSION
 from app.ai.scripted import DECLINE_TEXT, MODEL_USAGE, WORKING_NOTE_TEXT, ScriptedTransport
 from app.ai.tools.base import ToolContext, ToolOutcome
@@ -1317,6 +1323,24 @@ async def test_the_next_reservation_estimates_from_the_previous_usage(
     # The assistant's message is already in the previous call's output tokens: only the tool
     # results are new input.
     assert [m["role"] for m in added] == ["user"], "and adds only the new messages"
+
+
+async def test_each_model_call_is_reserved_at_its_dearest_fallback_price(
+    app_engine: AsyncEngine, seeded_sandbox: SeedCompany, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    seen: list[bool] = []
+    real = reservation_usd
+
+    def spy(model: str, **kwargs: Any) -> Decimal:
+        seen.append(kwargs.get("fallbacks", False))
+        return real(model, **kwargs)
+
+    monkeypatch.setattr(turn_module, "reservation_usd", spy)
+    env = await make_env(app_engine, seeded_sandbox)
+    await env.ask()
+
+    # The loop's requests are sent with `fallbacks: "default"`, so Opus 5 or 4.8 may serve them.
+    assert seen == [True, True]
 
 
 async def test_turn_tokens_come_from_every_iteration(

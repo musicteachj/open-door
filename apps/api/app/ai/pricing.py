@@ -153,6 +153,17 @@ class IterationUsage:
     usage: Usage
 
 
+# The models a request sent with `fallbacks: "default"` may be served by when the requested one
+# declines it (the price rows above). A reservation for such a request prices it at the dearest of
+# them, since any one of them might serve it.
+FALLBACK_MODELS: Mapping[str, tuple[str, ...]] = MappingProxyType(
+    {
+        "claude-opus-5-5": (OPUS_5, OPUS_4_8),
+        "claude-sonnet-5-5": (SONNET_5,),
+    }
+)
+
+
 def is_priced(model: str) -> bool:
     """Whether a price is pinned for this exact model name (the scripted stand-in included)."""
     return model in PRICES
@@ -251,7 +262,9 @@ def total_usage(iterations: Sequence[IterationUsage]) -> Usage:
     )
 
 
-def reservation_usd(model: str, *, estimated_input_tokens: int, max_tokens: int) -> Decimal:
+def reservation_usd(
+    model: str, *, estimated_input_tokens: int, max_tokens: int, fallbacks: bool = False
+) -> Decimal:
     """The most a call could cost, reserved before it is made.
 
     The input is priced at the dearer of the plain and the cache-write rate. Writing the prompt to
@@ -259,12 +272,20 @@ def reservation_usd(model: str, *, estimated_input_tokens: int, max_tokens: int)
     a prompt that is written to the cache entirely would cost more than the plain rate reserved.
     A cache read is cheaper than either, so this bounds every split of the same input. The output
     is priced in full at `max_tokens`. The result is rounded up to the ledgers' six places.
+
+    `fallbacks` says the request is sent with `fallbacks: "default"`, so any of the model's
+    `FALLBACK_MODELS` may serve it: each rate is then the dearest among them and the model ($5 and
+    $25 on Opus 5 and 4.8, against $4 and $20 on Opus 5.5). What the declined attempt itself used
+    is not reserved; settle charges it (ADR 0011).
     """
-    price = price_of(model, estimated_input_tokens)
-    input_rate = max(price.input_usd_per_mtok, price.cache_write_5m_usd_per_mtok)
+    models = (model, *FALLBACK_MODELS.get(model, ())) if fallbacks else (model,)
+    prices = [price_of(name, estimated_input_tokens) for name in models]
+    input_rate = max(
+        max(price.input_usd_per_mtok, price.cache_write_5m_usd_per_mtok) for price in prices
+    )
+    output_rate = max(price.output_usd_per_mtok for price in prices)
     exact = (
-        Decimal(estimated_input_tokens) * input_rate
-        + Decimal(max_tokens) * price.output_usd_per_mtok
+        Decimal(estimated_input_tokens) * input_rate + Decimal(max_tokens) * output_rate
     ) / TOKENS_PER_MTOK
     # Rounded up, so that fitting the ledgers' six places never makes it undercount.
     return exact.quantize(LEDGER_PLACES, rounding=ROUND_CEILING)

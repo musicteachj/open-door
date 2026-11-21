@@ -15,9 +15,10 @@ from sqlalchemy.ext.asyncio import AsyncEngine
 
 from app.ai.budget import Caps, day_room
 
-# What a first question reserves (the guard's call and the model's, from a new sandbox) is about
-# $0.19 today; a test proves it fits under this and is more than $0.15.
-LANDING_ROOM_USD: Final = Decimal("0.25")
+# What a first question reserves (the guard's call and the model's, from a new sandbox, the model's
+# priced at its dearest fallback) is about $0.262 today; a test proves it fits under this and is
+# more than $0.25.
+LANDING_ROOM_USD: Final = Decimal("0.30")
 AVAILABILITY_TTL_SECONDS: Final = 30
 # A computation gets what the readiness ping gets (`READINESS_PING_TIMEOUT_SECONDS`), and a caller
 # queued behind it waits a little longer than that (`READINESS_WAIT_SECONDS`), so one slow database

@@ -31,7 +31,7 @@ version (`0.x.y` while the app is being built, `1.0.0` when it is complete).
 
 - **The landing page says when the live assistant is out of budget and offers the walkthrough
   instead of the tour** (Phase 9a). A public, cached flag, `GET /api/v1/assistant/availability`
-  (true when today has at least $0.25 of room, kept 30 seconds), tells the landing page. When it is
+  (true when today has at least $0.30 of room, kept 30 seconds), tells the landing page. When it is
   false the tour button and its Cloudflare check give way to the walkthrough as a button, with one
   note; the four persona cards stay. If the flag can't be read, the page shows the tour button.
   `make prod-local-check AI_OFF=1` proves it on the production image with live AI off, with no model
@@ -104,6 +104,12 @@ version (`0.x.y` while the app is being built, `1.0.0` when it is complete).
   of PR #130). An Anthropic outage or a disabled key first fails the safety check, which shows that
   panel, not the model-unavailable error, so it had no walkthrough link. It now has the same
   "Watch the recorded walkthrough" link, after "Try again"; its approved text is unchanged.
+- **The assistant's calls are reserved at the price of any model that might serve them** (Phase
+  9a, from the review of PR #130). A declined Opus 5.5 request may be served by Opus 5 or Opus 4.8,
+  which cost more ($5 and $25 a million tokens, against $4 and $20), so each call now reserves at
+  the dearest of them. A first question needs about $0.26 of room (was $0.21), and the landing
+  page's flag now waits for $0.30. ADR 0011 has an amendment, and `docs/CAPACITY.md` the new
+  figures.
 - **The assistant no longer tells a request's old status as current** (Phase 9a, prompt
   2026-11.5). Priya was told her request still waited for Marcus after he had approved it. The
   per-turn "Since the last message" line is now in the past tense ("the request was sent to Marcus

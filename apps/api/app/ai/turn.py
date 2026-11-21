@@ -1122,7 +1122,10 @@ class TurnRun:
 
         def without_history() -> Decimal:
             tokens = max(estimated_input_tokens - history_tokens(history), 0)
-            call = reservation_usd(model, estimated_input_tokens=tokens, max_tokens=MAX_TOKENS)
+            # The loop's requests always allow fallbacks (`model_request`).
+            call = reservation_usd(
+                model, estimated_input_tokens=tokens, max_tokens=MAX_TOKENS, fallbacks=True
+            )
             first_turn = room_needed_usd(
                 model=conversation.model,
                 guard_model=conversation.guard_model,
@@ -1357,7 +1360,10 @@ class TurnRun:
             else:
                 estimate = estimate_input_tokens(previous_usage, added_text)
             call_reservation_usd = reservation_usd(
-                request.model, estimated_input_tokens=estimate, max_tokens=MAX_TOKENS
+                request.model,
+                estimated_input_tokens=estimate,
+                max_tokens=MAX_TOKENS,
+                fallbacks=request.fallbacks is not None,
             )
             try:
                 reservation = await self._reserve(call_reservation_usd)
