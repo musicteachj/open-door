@@ -27,9 +27,9 @@ infrastructure phase confirms the prefix). "Plain" values can sit in the task de
 |---|---|---|---|
 | `APP_ENV` | API, setup | plain | `production` (the image's default; leave it) |
 | `APP_ORIGIN` | API, setup | plain | The site's https origin, planned `https://opendoor.jameslittlefield.net`. Production refuses http, except a loopback origin with a port (`http://localhost:<port>` or `http://127.0.0.1:<port>`), and the development default (`app/core/config.py`, `refuse_a_test_origin_in_production`), and the setup loads the same settings, so it needs it too. |
-| `DATABASE_URL` | API, setup | secret | The API's login, `od_app_login`, on the shared Postgres |
-| `MIGRATION_DATABASE_URL` | setup | secret | The owner, `opendoor_owner` |
-| `CLEANUP_DATABASE_URL` | setup, cleanup | secret | The cleanup login, `od_cleanup_login` |
+| `DATABASE_URL` | API, setup | secret | The API's login, `od_app_login`, on the shared Postgres: `postgresql+asyncpg://od_app_login:<password>@172.17.0.1:5432/opendoor` |
+| `MIGRATION_DATABASE_URL` | setup | secret | The owner: `postgresql+asyncpg://opendoor_owner:<password>@172.17.0.1:5432/opendoor` |
+| `CLEANUP_DATABASE_URL` | setup, cleanup | secret | The cleanup login: `postgresql+asyncpg://od_cleanup_login:<password>@172.17.0.1:5432/opendoor` |
 | `ENCRYPTION_KEYRING` | API | secret | The keyring lines (`id:base64`, newest first). The setup needs none. |
 | `ANTHROPIC_API_KEY` | API | secret | The key of the "Open Door" workspace, which has a $22 spend limit |
 | `VOYAGE_API_KEY` | API | secret, optional | Without it, handbook search is full-text only (`app/main.py` builds no embedder, and `app/modules/handbook/search.py` returns no vector) |
@@ -166,8 +166,10 @@ Run these once the service is stable. All must pass:
 ## The database on the shared server
 
 Open Door shares one Postgres 17 server (with pgvector) that runs as an ECS service on the
-instance. There is no TLS, because the traffic never leaves the instance's Docker bridge, and no
-pooler. Passwords are `scram-sha-256`.
+instance. Its port is bound to the Docker bridge's gateway, `172.17.0.1:5432`, and never to a
+public interface, so all three URLs use that host and port, the database `opendoor`, and the
+`postgresql+asyncpg://` scheme (the settings table above). There is no TLS, because the traffic
+never leaves the instance's Docker bridge, and no pooler. Passwords are `scram-sha-256`.
 
 1. **Before the init SQL, check `log_statement` is `none`** on the shared server, or run
    `SET log_statement = 'none';` at the start of that psql session (the init superuser may). Also

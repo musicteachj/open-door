@@ -1315,9 +1315,9 @@ None of these steps calls a paid model.
   yet, **Stop:** ask James where it goes. If `portfolio-infra` is a git repository, **Stop:** show
   the diff summary and the proposed commit message, and wait for James's explicit OK before
   committing there.
-- [ ] **Step 12: Stop:** propose `git push -u origin feat/phase-9a-demo-readiness`, and wait for
+- [x] **Step 12: Stop:** propose `git push -u origin feat/phase-9a-demo-readiness`, and wait for
   James's explicit OK before pushing.
-- [ ] **Step 13: Stop:** show the PR title and body, and wait for James's explicit OK before
+- [x] **Step 13: Stop:** show the PR title and body, and wait for James's explicit OK before
   running `gh pr create --base dev`. The body has `CLAUDE.md`'s four sections ("What this does",
   "Why", "How it was checked", "What to look at"). "How it was checked" lists Steps 2 to 8 and
   states the waiver: no full eval run for prompt 2026-11.5 before launch (James, 2026-11-18), CI

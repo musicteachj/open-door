@@ -24,6 +24,13 @@ should pick it up. When one is done, delete it here and record it in the changel
   request and then the same row again through `load_request_rows` (and the cancel card loads the
   person's facts as well); one read would do. (v0.5.0 release review.)
 
+- **The sensitive escalation panel's layout test can fail under heavy local load.** In
+  `conversation.spec.ts`, "a sensitive question gets the answer, then the HR panel, then 'Show your
+  work' kept to 680 px" measures the panel's box once and then expects the "Show your work" toggle
+  below it. In one local `make e2e-image` run (2026-11-20) the toggle was at 505 against more than
+  536, as if the panel was measured before it finished growing. It passed five runs of five alone
+  and in the rerun. Poll the two boxes together (`expect.poll`) instead of measuring once. (Phase
+  9a, Task 13.)
 - **The approvals gallery's "deciding" dialog scan can fail under heavy local load.** In
   `gallery-approvals.spec.ts`, the scan of `decision-dialog-deciding` nudges a held page clock while
   axe runs, and twice in full local `make check` runs (2026-10-26) a clock step found the page
