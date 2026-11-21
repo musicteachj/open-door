@@ -9,13 +9,16 @@ database. It checks:
   file, test file, or keyring setting;
 - `zoneinfo` loads America/Denver (the `tzdata` package is installed);
 - the OS certificate store holds no emSign root (the Anthropic SDK reads it through truststore);
-- the entrypoint and the health check are what the deploy expects;
+- the entrypoint and the health check are what the deploy expects, the three entrypoint scripts
+  (serve, setup, cleanup) are present and read-only, and the serving entrypoint refuses a command
+  (exit 64) instead of starting the API anyway;
 - the production web app has no component gallery, and the test image does (the control that shows
   the check can fail);
 - the image starts and answers `/`, a deep link, an asset, and the live health check with the
   security headers, a fresh nonce on every page, and the CSP that names it;
 - a forged `X-Forwarded-For` is not trusted when `FORWARDED_ALLOW_IPS` is empty, and is trusted
-  from the one address named when it is set (the control).
+  from the one address named when it is set (the control), where the address the proxy appended
+  (the rightmost) wins over a forged leftmost one.
 
 Everything it starts is stopped at the end. The judgment (`problems_in_*`, `emsign_roots_in`) is
 plain functions, tested offline in `apps/api/tests/test_image_check_script.py`.
@@ -53,7 +56,16 @@ PROD_TAG = "open-door:prod"
 CONTAINER = "open-door-image-check"
 CONTAINER_UID = 10001
 HOST_PORT = 8300
-FORGED_CLIENT = "203.0.113.9"
+REAL_CLIENT = "203.0.113.9"
+# The leftmost address of a forwarded chain is whatever the caller claims; the address the trusted
+# proxy appended (REAL_CLIENT) is the one to believe.
+FORGED_LEFTMOST = "198.51.100.7"
+FORWARDED_CHAIN = f"{FORGED_LEFTMOST}, {REAL_CLIENT}"
+# The scripts the image runs as entrypoints, and the mode each must have: read-only for everyone.
+JOB_SCRIPTS = ("/app/entrypoint.sh", "/app/setup.sh", "/app/cleanup.sh")
+SCRIPT_MODE = "555"
+# EX_USAGE: what the entrypoint exits with when given a command.
+REFUSED_EXIT_CODE = 64
 # The requests the running check makes that the access log keeps (not the health check): the page,
 # the deep link, an asset, a missing asset, and the forged one.
 LOGGED_REQUESTS_MINIMUM = 5
@@ -119,6 +131,30 @@ def problems_in_config(
     return problems
 
 
+def problems_in_job_scripts(modes: Mapping[str, str]) -> list[str]:
+    """`modes` maps each script found in the image to its octal mode ("555")."""
+    problems = []
+    for path in JOB_SCRIPTS:
+        mode = modes.get(path)
+        if mode is None:
+            problems.append(f"the image has no {path}")
+        elif mode != SCRIPT_MODE:
+            problems.append(f"{path} has mode {mode}, not {SCRIPT_MODE}")
+    return problems
+
+
+def problems_in_command_refusal(exit_code: int, stderr: str) -> list[str]:
+    """What `docker run open-door:test serve` did: the entrypoint must refuse, saying why."""
+    problems = []
+    if exit_code != REFUSED_EXIT_CODE:
+        problems.append(
+            f"the entrypoint exited {exit_code} when given a command, not {REFUSED_EXIT_CODE}"
+        )
+    elif "takes no command" not in stderr:
+        problems.append("the entrypoint refused a command without saying why")
+    return problems
+
+
 def problems_in_page(headers: Mapping[str, str], body: str, where: str) -> list[str]:
     """One HTML response: the security headers, no-store, and a CSP that names the page's nonce."""
     problems = problems_in_headers(headers, where)
@@ -157,16 +193,20 @@ client_addresses_in = container.client_addresses_in
 def problems_in_forwarding(untrusted_log: str, trusted_log: str, peer: str | None) -> list[str]:
     """With no trusted proxy the forged address must not appear; from the one named it must."""
     problems = []
-    if FORGED_CLIENT in client_addresses_in(untrusted_log):
+    if REAL_CLIENT in client_addresses_in(untrusted_log):
         problems.append("a forged X-Forwarded-For was trusted with FORWARDED_ALLOW_IPS empty")
     if len(client_addresses_in(untrusted_log)) < LOGGED_REQUESTS_MINIMUM:
         problems.append("the empty-trust run did not log every request, so it proved nothing")
     if peer is None:
         problems.append("could not tell which address the requests came from")
-    elif FORGED_CLIENT not in client_addresses_in(trusted_log):
-        problems.append(
-            "the control failed: X-Forwarded-For was not trusted from the one address named"
-        )
+    else:
+        trusted = client_addresses_in(trusted_log)
+        if REAL_CLIENT not in trusted:
+            problems.append(
+                "the control failed: X-Forwarded-For was not trusted from the one address named"
+            )
+        if FORGED_LEFTMOST in trusted:
+            problems.append("a forged leftmost X-Forwarded-For address won over the proxy's own")
     return problems
 
 
@@ -226,6 +266,11 @@ def check_contents(tag: str) -> list[str]:
     health = inspect(tag, "{{json .Config.Healthcheck.Test}}")
     env = inspect(tag, "{{json .Config.Env}}")
     problems += problems_in_config(json.loads(entrypoint), json.loads(health), json.loads(env))
+    listing = in_image(tag, "stat -c '%n %a' " + " ".join(JOB_SCRIPTS) + " 2>/dev/null || true")
+    modes = dict(line.split() for line in listing.splitlines() if len(line.split()) == 2)
+    problems += problems_in_job_scripts(modes)
+    refused = run("docker", "run", "--rm", tag, "serve", check=False)
+    problems += problems_in_command_refusal(refused.returncode, refused.stderr)
     zone = in_image(
         tag, "python -c \"import zoneinfo; print(zoneinfo.ZoneInfo('America/Denver'))\""
     ).strip()
@@ -318,7 +363,7 @@ def check_running() -> list[str]:
             if live.headers.get("cache-control") != "no-store" or live.status_code != 200:
                 problems.append("the live health check is not a 200 with no-store")
             # Not a health path: the access log leaves those out.
-            client.get("/", headers={"X-Forwarded-For": FORGED_CLIENT})
+            client.get("/", headers={"X-Forwarded-For": REAL_CLIENT})
         time.sleep(1)  # let the access log line reach `docker logs`, as the trusted run does
         logs = run("docker", "logs", CONTAINER)
         untrusted_log = logs.stdout + logs.stderr
@@ -328,7 +373,7 @@ def check_running() -> list[str]:
             remove(CONTAINER)
             start_container(CONTAINER, container_env(forwarded=peer))
             wait_until_up(base)
-            httpx.get(f"{base}/", headers={"X-Forwarded-For": FORGED_CLIENT}, timeout=5)
+            httpx.get(f"{base}/", headers={"X-Forwarded-For": FORWARDED_CHAIN}, timeout=5)
             time.sleep(1)  # let the access log line reach `docker logs`
             logs = run("docker", "logs", CONTAINER)
             trusted_log = logs.stdout + logs.stderr

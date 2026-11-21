@@ -175,7 +175,7 @@ def test_the_postgres_tag_matches_composes() -> None:
     assert match.group(1) == start.POSTGRES_IMAGE
 
 
-def test_the_setup_runs_the_deploy_steps_in_order_with_no_keyring_and_no_api_keys() -> None:
+def test_the_setup_runs_its_own_entrypoint_with_no_keyring_and_no_api_keys() -> None:
     p = passwords()
     env = start.setup_env(p, start.origin_for(8300))
     args = start.setup_run_args(env)
@@ -186,11 +186,80 @@ def test_the_setup_runs_the_deploy_steps_in_order_with_no_keyring_and_no_api_key
     # Only the serving API checks the sandbox-entry settings; the setup tasks carry none.
     assert not {"TURNSTILE_SITE_KEY", "TURNSTILE_SECRET_KEY", "SANDBOX_IP_HASH_KEY"} & set(env)
     assert "--rm" in args
-    assert pairs(args, "--entrypoint") == ["sh"]
-    script = args[args.index("-c") + 1]
-    assert script.index("alembic upgrade head") < script.index("bootstrap_db_users.py")
-    assert script.index("bootstrap_db_users.py") < script.index("ingest_handbook.py ingest")
-    assert args[args.index("-c") - 1] == container.PROD_TAG
+    assert pairs(args, "--entrypoint") == ["/app/setup.sh"]
+    assert pairs(args, "--memory") == ["256m"]
+    assert args[-1] == container.PROD_TAG
+
+
+def test_the_cleanup_container_gets_only_its_own_login() -> None:
+    p = passwords()
+    env = start.cleanup_env(p)
+    args = start.cleanup_run_args(env)
+
+    assert set(env) == {"CLEANUP_DATABASE_URL"}
+    assert env["CLEANUP_DATABASE_URL"].startswith("postgresql+asyncpg://od_cleanup_login:")
+    assert pairs(args, "--entrypoint") == ["/app/cleanup.sh"]
+    assert pairs(args, "--memory") == ["128m"]
+    password = env["CLEANUP_DATABASE_URL"].split(":")[2].split("@")[0]
+    assert password not in "\n".join(args)
+
+
+def test_the_api_runs_with_productions_memory_limit_and_flags() -> None:
+    args = start.api_run_args(api_env(), port=8300, detach=True)
+
+    assert pairs(args, "--memory") == ["512m"]
+    for flag in container.HARDENED_FLAGS:
+        assert flag in args
+    assert args[-1] == container.PROD_TAG
+
+
+GOOD_CSP = (
+    "default-src 'self'; script-src 'self' 'nonce-a' https://challenges.cloudflare.com; "
+    "frame-src https://challenges.cloudflare.com; frame-ancestors 'none'"
+)
+SWAGGER = "<html><title>Open Door API - Swagger UI</title></html>"
+SPA = '<html><meta name="csp-nonce" content="a" /></html>'
+
+
+def judge(**changes: object) -> list[str]:
+    seen: dict[str, object] = {
+        "home_status": 200,
+        "csp": GOOD_CSP,
+        "live_status": 200,
+        "health_status": 200,
+        "availability_status": 200,
+        "availability_body": {"available": True},
+        "openapi_content_type": "text/html; charset=utf-8",
+        "openapi_body": SPA,
+        "docs_body": SPA,
+    }
+    seen.update(changes)
+    problems: list[str] = start.problems_in_responses(**seen)
+    return problems
+
+
+def test_a_good_set_of_pages_has_no_problems() -> None:
+    assert judge() == []
+
+
+def test_the_page_check_wants_turnstile_the_flag_and_no_docs() -> None:
+    no_script = GOOD_CSP.replace(
+        "script-src 'self' 'nonce-a' https://challenges.cloudflare.com", "script-src 'self'"
+    )
+    no_frame = GOOD_CSP.replace("frame-src https://challenges.cloudflare.com", "frame-src 'self'")
+    assert judge(csp=no_script)
+    assert judge(csp=no_frame)
+    # Turnstile named only outside script-src and frame-src does not count.
+    assert judge(csp=no_script + "; connect-src https://challenges.cloudflare.com")
+    assert judge(availability_body={"available": "yes"})
+    assert judge(availability_body={})
+    assert judge(availability_status=500)
+    assert judge(health_status=503)
+    assert judge(openapi_content_type="application/json", openapi_body='{"openapi": "3.1.0"}')
+    assert judge(openapi_body='{"openapi": "3.1.0"}', openapi_content_type="application/json")
+    assert judge(docs_body=SWAGGER)
+    # The web app's page answering at these paths is fine.
+    assert judge(openapi_body=SPA, docs_body=SPA) == []
 
 
 def test_each_run_gets_new_passwords() -> None:
@@ -385,16 +454,34 @@ def test_a_budget_must_be_a_positive_dollar_amount(bad: str) -> None:
         api_env(budgets_usd={"daily": bad})
 
 
-def test_only_the_two_budgets_can_be_set() -> None:
+def test_only_the_three_budgets_can_be_set() -> None:
     with pytest.raises(start.LaunchError, match="budget"):
-        api_env(budgets_usd={"monthly": "1"})
+        api_env(budgets_usd={"weekly": "1"})
 
 
-def test_the_database_query_runs_as_the_owner_inside_its_container() -> None:
+def test_production_runs_get_the_portfolio_budgets() -> None:
+    env = api_env()
+    assert env["AI_MONTHLY_BUDGET_USD"] == "20"
+    assert env["AI_SANDBOX_BUDGET_USD"] == "0.50"
+
+    lowered = api_env(budgets_usd={"monthly": "2", "sandbox": "0.66"})
+    assert lowered["AI_MONTHLY_BUDGET_USD"] == "2"
+    assert lowered["AI_SANDBOX_BUDGET_USD"] == "0.66"
+
+
+def test_only_the_monthly_budget_may_be_zero() -> None:
+    assert start.budget_env({"monthly": "0"}) == {"AI_MONTHLY_BUDGET_USD": "0"}
+    with pytest.raises(start.LaunchError, match="budget"):
+        start.budget_env({"daily": "0"})
+
+
+def test_queries_run_as_the_init_superuser() -> None:
+    # The owner is not a superuser, and forced row-level security hides every tenant row from it,
+    # so a query that counts rows must run as the init superuser.
     args = start.query_args("SELECT 1")
 
     assert args[:3] == ["docker", "exec", start.DB_NAME]
-    assert args[args.index("-U") + 1] == start.DB_OWNER
+    assert args[args.index("-U") + 1] == container.SHARED_INIT_USER == "postgres_init"
     assert args[args.index("-d") + 1] == start.DB_DATABASE
     assert args[-2:] == ["-c", "SELECT 1"]
     assert "-At" in args
@@ -440,3 +527,157 @@ def test_running_passes_the_mode_and_budgets_to_the_settings(
         pass
 
     assert seen == {"scripted": True, "budgets_usd": {"daily": "1"}}
+
+
+# --- the check with live AI off (Phase 9a) ------------------------------------------------------
+
+
+def test_the_ai_off_check_sets_a_zero_monthly_budget() -> None:
+    secrets = start.ai_off_secrets(start.Secrets("", None, KEYRING))
+
+    env = api_env(
+        anthropic_api_key=secrets.anthropic_api_key,
+        voyage_api_key=secrets.voyage_api_key,
+        budgets_usd=start.AI_OFF_BUDGETS_USD,
+    )
+
+    assert env["AI_MONTHLY_BUDGET_USD"] == "0"
+    assert env["APP_ENV"] == "production"
+    assert env["AI_TRANSPORT"] == "anthropic"
+
+
+def test_the_ai_off_check_never_passes_the_real_key(monkeypatch: pytest.MonkeyPatch) -> None:
+    asked: list[dict[str, object]] = []
+    ran: list[bool] = []
+
+    def read_without_a_key(**kwargs: object) -> object:
+        asked.append(kwargs)
+        return start.Secrets("", None, KEYRING)
+
+    def check(secrets_: object, port: int, *, ai_off: bool = False) -> int:
+        ran.append(ai_off)
+        return 0
+
+    monkeypatch.setattr(start, "read_secrets", read_without_a_key)
+    monkeypatch.setattr(start, "check", check)
+
+    assert start.main(["--check", "--ai-off"]) == 0
+
+    # The key is never asked for, and a run that has none still starts.
+    assert asked == [{"require_key": False}]
+    assert ran == [True]
+    # The key the image gets is a made-up one: an accidental model call fails and is never billed.
+    fake = start.ai_off_secrets(start.Secrets("a-real-looking-key", "pa-real", KEYRING))
+    assert fake.anthropic_api_key == "not-a-real-key-ai-off-check"
+    assert fake.voyage_api_key is None
+    assert api_env(anthropic_api_key=fake.anthropic_api_key)["ANTHROPIC_API_KEY"] == (
+        "not-a-real-key-ai-off-check"
+    )
+
+
+def test_the_ai_off_flag_needs_check(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(start, "read_secrets", lambda **_: start.Secrets("", None, KEYRING))
+    with pytest.raises(SystemExit):
+        start.main(["--ai-off"])
+
+
+# --- one Postgres server, two apps (Phase 9a, task 9) -----------------------------------------
+
+
+def test_the_database_starts_with_an_init_superuser_only() -> None:
+    p = start.Passwords.new()
+    env = start.db_env(p)
+
+    assert env["POSTGRES_USER"] == container.SHARED_INIT_USER == "postgres_init"
+    assert env["POSTGRES_PASSWORD"] == p.init
+    assert p.init not in (p.owner, p.app, p.cleanup)
+    # The owner's login is made by the init SQL, never by the image's first-start setup.
+    assert p.owner not in env.values()
+    assert start.OPEN_DOOR_OWNER == container.OPEN_DOOR_OWNER == "opendoor_owner"
+
+
+def test_open_doors_database_is_made_by_the_init_sql() -> None:
+    p = start.Passwords.new()
+    args, env = start.init_sql_args(p)
+
+    assert args[:3] == ["docker", "exec", "-i"]
+    # The password travels as `--env NAME` (its value stays in the client's environment).
+    assert pairs(args, "--env") == ["OD_OWNER_PASSWORD"]
+    assert env == {"OD_OWNER_PASSWORD": p.owner}
+    assert p.owner not in "\n".join(args)
+    assert p.init not in "\n".join(args)
+    assert args[args.index("psql") + 1 :][:4] == ["-U", "postgres_init", "-d", "postgres"]
+    assert start.DB_NAME in args
+    sql = start.INIT_SQL.read_text(encoding="utf-8")
+    assert "CREATE ROLE opendoor_owner LOGIN CREATEROLE" in sql
+    assert "REVOKE CONNECT ON DATABASE opendoor FROM PUBLIC" in sql
+    assert "CREATE EXTENSION IF NOT EXISTS vector" in sql
+    assert chr(0x2014) not in sql
+
+
+def test_the_setup_connects_as_a_non_superuser_owner() -> None:
+    p = start.Passwords.new()
+    env = start.setup_env(p, start.origin_for(8300))
+
+    assert env["MIGRATION_DATABASE_URL"].startswith("postgresql+asyncpg://opendoor_owner:")
+    assert f":{p.owner}@" in env["MIGRATION_DATABASE_URL"]
+
+
+CREATED = "a_login: created, with od_app\nb_login: created, with od_cleanup"
+RESET = "a_login: password reset, with od_app\nb_login: password reset, with od_cleanup"
+
+
+class CheckRun:
+    """Stands in for every docker step of `check`, counting the setups."""
+
+    def __init__(self, monkeypatch: pytest.MonkeyPatch, second_output: str) -> None:
+        self.outputs = [CREATED, second_output]
+        self.setups = 0
+        FakeDocker(monkeypatch)
+        monkeypatch.setattr(start, "start_database", lambda _passwords: None)
+        monkeypatch.setattr(start, "run_setup", self.run_setup)
+        monkeypatch.setattr(start.container, "run", lambda *_a, **_k: None)
+        monkeypatch.setattr(start, "wait_until_ready", lambda _base: None)
+        monkeypatch.setattr(start, "problems_in_pages", lambda _base: [])
+        monkeypatch.setattr(start, "run_cleanup_job", lambda _env: [])
+        monkeypatch.setattr(start, "last_logs", lambda _name: "")
+
+    def run_setup(self, _env: dict[str, str]) -> str:
+        output = self.outputs[min(self.setups, 1)]
+        self.setups += 1
+        return output
+
+
+def test_the_check_runs_the_setup_twice(monkeypatch: pytest.MonkeyPatch) -> None:
+    run = CheckRun(monkeypatch, RESET)
+
+    assert start.check(start.Secrets(ANTHROPIC, None, KEYRING), 8300) == 0
+    assert run.setups == 2
+
+
+def test_a_second_setup_that_did_not_reset_the_passwords_fails_the_check(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    CheckRun(monkeypatch, CREATED)
+
+    with pytest.raises(start.LaunchError, match="password reset"):
+        start.check(start.Secrets(ANTHROPIC, None, KEYRING), 8300)
+
+
+def test_a_second_setup_that_reset_one_login_and_created_the_other_fails_the_check(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    mixed = "a_login: password reset, with od_app\nb_login: created, with od_cleanup"
+    CheckRun(monkeypatch, mixed)
+
+    with pytest.raises(start.LaunchError, match="both logins"):
+        start.check(start.Secrets(ANTHROPIC, None, KEYRING), 8300)
+
+
+def test_serving_runs_the_setup_once(monkeypatch: pytest.MonkeyPatch) -> None:
+    run = CheckRun(monkeypatch, "unused")
+    monkeypatch.setattr(start, "api_env", lambda **_k: {})
+
+    start.bring_up(start.Secrets(ANTHROPIC, None, KEYRING), 8300)
+
+    assert run.setups == 1

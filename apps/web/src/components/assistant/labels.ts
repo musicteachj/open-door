@@ -80,7 +80,7 @@ export const conversationCopy = {
   startNewConversation: 'Start a new conversation',
   followUpPlaceholder: 'Ask a follow-up question',
   sandboxDisabledPlaceholder: "The assistant isn't available in this sandbox.",
-  dailyDisabledPlaceholder: "The assistant isn't available until tomorrow.",
+  dailyDisabledPlaceholder: "The live assistant isn't available right now.",
   // "You can still use the Handbook and the Directory." in parts, so the composer can link
   // "Handbook" and "Directory".
   stillUseParts: STILL_USE_PARTS,

@@ -40,3 +40,11 @@ deployed data path.
 - `ANTHROPIC_API_KEY` stays a secret in Phase 9's secrets contract, rotated by replacing it in the store
   and restarting the tasks.
 - The model pins and the eval rules (CLAUDE.md, "Model IDs are pinned") apply unchanged.
+
+## Amendment (2026-11-20): egress is not limited per task
+
+The consequence above, that Phase 9 sets up egress to the three hosts, does not hold on the shared
+portfolio server (ADR 0023). Tasks run in bridge mode on one EC2 instance, where a per-task network
+limit is not possible, so a task can reach any host. The code calls only Anthropic, Voyage, and
+Cloudflare, and the instance blocks the metadata service. The choice of the Claude API over Bedrock
+is unchanged.

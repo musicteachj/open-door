@@ -1,6 +1,6 @@
 import { useRef } from 'react'
 import { Navigate } from 'react-router'
-import type { PersonaKey } from '@/api/generated'
+import { useGetAssistantAvailability, type PersonaKey } from '@/api/generated'
 import { useMe } from '@/app/useMe'
 import { useStartSandbox } from '@/app/useStartSandbox'
 import { Logo } from '@/components/core/logo'
@@ -9,7 +9,7 @@ import { PersonaCard } from '@/components/landing/persona-card'
 import { PublicFooter } from '@/components/landing/public-footer'
 import { TurnstileSlot } from '@/components/landing/turnstile-slot'
 import { TourStartButton } from '@/components/tour/tour-start-button'
-import { WalkthroughLink } from '@/components/walkthrough/walkthrough-link'
+import { WalkthroughButton, WalkthroughLink } from '@/components/walkthrough/walkthrough-link'
 import { useStartTour } from '@/features/tour/use-start-tour'
 import { PERSONAS } from '@/features/personas/personas'
 import { isSignedOutError } from '@/lib/api-fetch'
@@ -23,6 +23,9 @@ const PITCH =
   'An AI help desk for HR questions. It answers with citations to the company handbook, proposes actions for a person to confirm, and sends sensitive topics like harassment or medical leave to a human HR partner.'
 const SANDBOX_NOTE =
   'Each visit gets its own private copy of Juniper Row, a fictional company. It resets after 24 hours.'
+// Approved 2026-11-19 (Phase 9a), shown when the live assistant is out of room.
+const LIVE_PAUSED_NOTE =
+  'The live assistant has reached its limit for now. The recorded walkthrough shows a full tour, and you can still explore a sandbox.'
 // Approved with screen 16 (2026-11-09).
 const CHECK_NOTE = 'Starting a sandbox runs a quick Cloudflare check to keep the demo safe.'
 
@@ -33,6 +36,13 @@ export function LandingPage() {
   // The empty place under each control that starts a sandbox, where Cloudflare's check may show.
   const cardSlots = useRef<Partial<Record<PersonaKey, HTMLDivElement | null>>>({})
   const tourSlot = useRef<HTMLDivElement>(null)
+  // Whether the live assistant has room. The page fails open: only a clear "false" swaps the tour
+  // for the walkthrough, so a slow or failed read still shows the tour button. The retry rules are
+  // the query client's: one retry of a 5xx, with the tour button showing meanwhile.
+  const availability = useGetAssistantAvailability({
+    query: { staleTime: 30_000 },
+  })
+  const liveAvailable = availability.data?.available !== false
 
   // A signed-in visitor has nothing to choose. Cached data whose latest fetch was a 401 (or the CSRF
   // refusal, which is the same to the app) is not a
@@ -116,19 +126,30 @@ export function LandingPage() {
             <div className="flex max-w-160 flex-col gap-1">
               <p className="m-0 text-small text-pretty text-ink-muted">{SANDBOX_NOTE}</p>
               <p className="m-0 text-small text-pretty text-ink-muted">{CHECK_NOTE}</p>
+              {!liveAvailable && (
+                <p className="m-0 text-small text-pretty text-ink-muted">{LIVE_PAUSED_NOTE}</p>
+              )}
             </div>
             {/* Screen 16: the walkthrough's link left of the tour button, which keeps the row's
-                right edge. On a phone the row wraps and both sit left-aligned under the notes. */}
+                right edge. On a phone the row wraps and both sit left-aligned under the notes.
+                With the live assistant out of room, the walkthrough takes the tour button's place
+                (and its Cloudflare slot goes with it). */}
             <div className="flex flex-wrap items-center gap-x-6 gap-y-4">
-              <WalkthroughLink />
-              <div>
-                <TourStartButton
-                  starting={tour.starting}
-                  disabled={tour.blocked}
-                  onStart={startTour}
-                />
-                <TurnstileSlot ref={tourSlot} />
-              </div>
+              {liveAvailable ? (
+                <>
+                  <WalkthroughLink />
+                  <div>
+                    <TourStartButton
+                      starting={tour.starting}
+                      disabled={tour.blocked}
+                      onStart={startTour}
+                    />
+                    <TurnstileSlot ref={tourSlot} />
+                  </div>
+                </>
+              ) : (
+                <WalkthroughButton />
+              )}
             </div>
           </div>
         </main>

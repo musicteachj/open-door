@@ -71,7 +71,8 @@ async def collect(stream: TurnStream) -> list[bytes]:
 
 def test_an_event_is_two_lines_and_a_blank_line() -> None:
     assert encode_event(TurnStarted(TURN)) == (
-        b'event: turn.started\ndata: {"turnId":"11111111-1111-1111-1111-111111111111"}\n\n'
+        b"event: turn.started\n"
+        b'data: {"turnId":"11111111-1111-1111-1111-111111111111","aiGenerated":true}\n\n'
     )
 
 

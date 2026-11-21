@@ -28,6 +28,22 @@ export interface ActionCountOut {
 }
 
 /**
+ * The machine-readable mark on text the model wrote (Article 50(2); ADR 0024).
+ */
+export interface AiGeneratedOut {
+  generator: string
+  models: string[]
+  digitalSourceType: string
+}
+
+/**
+ * Whether the live assistant can take a question now, for visitors with no session yet.
+ */
+export interface AssistantAvailabilityOut {
+  available: boolean
+}
+
+/**
  * The fixed refusals the composer shows before a request is sent, so the web app holds no
  * copy of the words.
  */
@@ -421,6 +437,7 @@ export interface CaseSummaryOut {
   model?: string | null
   promptVersion?: string | null
   createdAt?: string | null
+  aiGenerated?: AiGeneratedOut | null
 }
 
 export interface CaseTextOut {
@@ -728,6 +745,7 @@ export interface TurnOut {
   question: string
   status: TurnOutStatus
   answerText: string
+  aiGenerated: AiGeneratedOut | null
   citations: CitationOut[]
   incomplete: boolean
   error: TurnErrorOut | null
@@ -3044,6 +3062,135 @@ export function useGetCurrentConversation<
   queryClient?: QueryClient,
 ): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
   const queryOptions = getGetCurrentConversationQueryOptions(options)
+
+  const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
+    queryKey: DataTag<QueryKey, TData, TError>
+  }
+
+  return withQueryKey(query, queryOptions.queryKey)
+}
+
+export const getGetAssistantAvailabilityUrl = () => {
+  return `/api/v1/assistant/availability`
+}
+
+/**
+ * The landing page's flag. It needs no session and reads nothing of anyone's: only the day's
+ * room in the shared ledger, so every visitor gets the same answer, cached for 30 seconds here
+ * and by the browser.
+ * @summary Whether the live assistant has room for a question, for a visitor with no session
+ */
+export const getAssistantAvailability = async (
+  options?: Parameters<typeof apiFetch>[1],
+): Promise<AssistantAvailabilityOut> => {
+  return apiFetch<AssistantAvailabilityOut>(getGetAssistantAvailabilityUrl(), {
+    ...options,
+    method: 'GET',
+  })
+}
+
+export const getGetAssistantAvailabilityQueryKey = () => {
+  return [`/api/v1/assistant/availability`] as const
+}
+
+export const getGetAssistantAvailabilityQueryOptions = <
+  TData = Awaited<ReturnType<typeof getAssistantAvailability>>,
+  TError = ErrorType<Problem>,
+>(options?: {
+  query?: Partial<
+    UseQueryOptions<Awaited<ReturnType<typeof getAssistantAvailability>>, TError, TData>
+  >
+  request?: SecondParameter<typeof apiFetch>
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {}
+
+  const queryKey = queryOptions?.queryKey ?? getGetAssistantAvailabilityQueryKey()
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getAssistantAvailability>>> = ({
+    signal,
+  }) => getAssistantAvailability({ signal, ...requestOptions })
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getAssistantAvailability>>,
+    TError,
+    TData
+  > & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type GetAssistantAvailabilityQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getAssistantAvailability>>
+>
+export type GetAssistantAvailabilityQueryError = ErrorType<Problem>
+
+export function useGetAssistantAvailability<
+  TData = Awaited<ReturnType<typeof getAssistantAvailability>>,
+  TError = ErrorType<Problem>,
+>(
+  options: {
+    query: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof getAssistantAvailability>>, TError, TData>
+    > &
+      Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getAssistantAvailability>>,
+          TError,
+          Awaited<ReturnType<typeof getAssistantAvailability>>
+        >,
+        'initialData'
+      >
+    request?: SecondParameter<typeof apiFetch>
+  },
+  queryClient?: QueryClient,
+): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetAssistantAvailability<
+  TData = Awaited<ReturnType<typeof getAssistantAvailability>>,
+  TError = ErrorType<Problem>,
+>(
+  options?: {
+    query?: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof getAssistantAvailability>>, TError, TData>
+    > &
+      Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getAssistantAvailability>>,
+          TError,
+          Awaited<ReturnType<typeof getAssistantAvailability>>
+        >,
+        'initialData'
+      >
+    request?: SecondParameter<typeof apiFetch>
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetAssistantAvailability<
+  TData = Awaited<ReturnType<typeof getAssistantAvailability>>,
+  TError = ErrorType<Problem>,
+>(
+  options?: {
+    query?: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof getAssistantAvailability>>, TError, TData>
+    >
+    request?: SecondParameter<typeof apiFetch>
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary Whether the live assistant has room for a question, for a visitor with no session
+ */
+
+export function useGetAssistantAvailability<
+  TData = Awaited<ReturnType<typeof getAssistantAvailability>>,
+  TError = ErrorType<Problem>,
+>(
+  options?: {
+    query?: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof getAssistantAvailability>>, TError, TData>
+    >
+    request?: SecondParameter<typeof apiFetch>
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+  const queryOptions = getGetAssistantAvailabilityQueryOptions(options)
 
   const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
     queryKey: DataTag<QueryKey, TData, TError>

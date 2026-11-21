@@ -35,7 +35,7 @@ def test_each_event_serializes_to_the_specs_payload() -> None:
         cited_text="text",
     )
     usage = TurnUsage(10, 2)
-    assert TurnStarted(TURN).to_json() == {"turnId": str(TURN)}
+    assert TurnStarted(TURN).to_json() == {"turnId": str(TURN), "aiGenerated": True}
     assert Status("Searching the handbook…").to_json() == {"text": "Searching the handbook…"}
     assert TextDelta("Hi").to_json() == {"text": "Hi"}
     assert Citation(citation).to_json() == citation.to_json()
@@ -123,3 +123,7 @@ def test_an_error_is_logged_by_its_type_only() -> None:
     from app.ai.text import error_name
 
     assert error_name(ValueError("a secret question")) == "ValueError"
+
+
+def test_turn_started_says_its_text_is_ai_generated() -> None:
+    assert TurnStarted(TURN).to_json() == {"turnId": str(TURN), "aiGenerated": True}

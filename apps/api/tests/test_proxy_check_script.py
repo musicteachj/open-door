@@ -252,3 +252,23 @@ def test_the_api_gets_a_daily_budget_the_check_cannot_use_up(
     assert with_heartbeat["AI_DAILY_BUDGET_USD"] == check.DAILY_BUDGET_USD
     assert with_heartbeat["AI_HEARTBEAT_SECONDS"] == "1"
     assert float(check.DAILY_BUDGET_USD) >= 100
+
+
+def test_the_api_gets_a_sandbox_budget_the_check_cannot_use_up(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Every run asks in one sandbox, and a run stopped mid-turn keeps its full reservation, so
+    the $1.00 default refused the shutdown run's question (`budget-sandbox`)."""
+    monkeypatch.setattr(check.container, "database_url_for_container", lambda url, **_: url)
+    api = check.Api("127.0.0.1")
+
+    assert api.env()["AI_SANDBOX_BUDGET_USD"] == check.SANDBOX_BUDGET_USD
+    assert api.env(heartbeat_seconds="0")["AI_SANDBOX_BUDGET_USD"] == check.SANDBOX_BUDGET_USD
+    assert float(check.SANDBOX_BUDGET_USD) >= 100
+
+
+def test_a_refusal_reports_its_problem_code() -> None:
+    assert check.refusal_code(b'{"type": "budget-sandbox", "status": 429}') == "budget-sandbox"
+    assert check.refusal_code(b"not json") is None
+    assert check.refusal_code(b'{"status": 429}') is None
+    assert check.refusal_code(b"[1]") is None

@@ -21,6 +21,7 @@ import { withSourceKeys } from './source-key'
 import { ProposalCards } from './proposal-cards'
 import { useChatStore, type LiveTurn } from './store'
 import { useAssistantTexts, useFeedback } from './use-conversation'
+import { offersWalkthrough } from './walkthrough-offer'
 
 // One question and its answer, as the conversation page draws it: the stored turns from the
 // server, and the live one from the chat store. Each is composed the way the gallery's
@@ -76,6 +77,7 @@ type MessageProps = {
   steps?: StatusStep[]
   onAskAgain?: () => void
   onRetry?: () => void
+  offerWalkthrough?: boolean
   contacts?: ReactNode
   footer?: ReactNode
   context: TurnContext
@@ -270,6 +272,7 @@ export const StoredTurn = memo(function StoredTurn({
           contacts={notFoundContacts}
           status="error"
           errorMessage={turn.error?.message}
+          offerWalkthrough={offersWalkthrough(turn.error?.code)}
           text={turn.answerText}
           citations={citations}
           onRetry={again}
@@ -441,6 +444,7 @@ export function LiveTurnView({
       <Message
         status={status}
         errorMessage={live.error?.message}
+        offerWalkthrough={offersWalkthrough(live.error?.code)}
         text={live.text}
         citations={citations}
         steps={live.steps}

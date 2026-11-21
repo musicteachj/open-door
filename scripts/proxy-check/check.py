@@ -36,6 +36,7 @@ recorded timelines, tested offline in `apps/api/tests/test_proxy_check_script.py
 
 import asyncio
 import codecs
+import json
 import os
 import socket
 import subprocess
@@ -68,6 +69,11 @@ API_CONTAINER = "open-door-proxy-check-api"
 # database, and its scripted turns stay in the day's ledger (the suite clears them only locally),
 # which can pass the real $3 cap and turn the check's own questions into 429 refusals.
 DAILY_BUDGET_USD = "1000"
+# The same for the sandbox. Every run asks in the one sandbox, and a run whose API is stopped
+# mid-turn never settles that turn, so its full reservation (about $0.27 since a call is reserved
+# at its dearest fallback model's price) stays counted. Three of those left the shutdown run's
+# question less than its room under the $1.00 default, and it was refused (`budget-sandbox`).
+SANDBOX_BUDGET_USD = "1000"
 
 # The scripted model's silent scenario: no events for 45 seconds, then an answer.
 SILENCE_QUESTION = "scripted silence: how much paid sick leave do I get?"
@@ -112,6 +118,8 @@ class Timeline:
     # False when the connection was cut before the response ended properly.
     ended_cleanly: bool
     total_seconds: float
+    # A refused request's problem `type`, its code (`budget-sandbox`, for example), or None.
+    refusal: str | None = None
 
     @property
     def events(self) -> list[Mark]:
@@ -277,12 +285,17 @@ def read_stream(
     ended_cleanly = True
     status = 0
     encoding: str | None = None
+    refusal: str | None = None
     try:
         with client.stream("POST", url, headers=headers, json=body) as response:
             status = response.status_code
             encoding = response.headers.get("content-encoding")
+            # A refusal's body is one problem document, not a stream.
+            chunks = () if status >= 400 else response.iter_raw()
+            if status >= 400:
+                refusal = refusal_code(response.read())
             # Raw bytes: the check should see the encoding, not have it undone.
-            for chunk in response.iter_raw():
+            for chunk in chunks:
                 now = time.monotonic() - started
                 if stop_after_seconds is not None and now > stop_after_seconds:
                     ended_cleanly = False
@@ -299,7 +312,18 @@ def read_stream(
         marks=tuple(marks),
         ended_cleanly=ended_cleanly,
         total_seconds=time.monotonic() - started,
+        refusal=refusal,
     )
+
+
+def refusal_code(body: bytes) -> str | None:
+    """The problem `type` of a refusal's body (the API's code for it), or None if it has none."""
+    try:
+        problem = json.loads(body)
+    except ValueError:
+        return None
+    code = problem.get("type") if isinstance(problem, dict) else None
+    return code if isinstance(code, str) else None
 
 
 @dataclass
@@ -373,8 +397,10 @@ class Api:
         self._wait_until_healthy()
 
     def env(self, **settings: str) -> dict[str, str]:
-        """The container's settings: `api_env`'s, with the check's daily budget unless given."""
+        """The container's settings: `api_env`'s, with the check's daily and sandbox budgets unless
+        given."""
         settings.setdefault("daily_budget_usd", DAILY_BUDGET_USD)
+        settings.setdefault("sandbox_budget_usd", SANDBOX_BUDGET_USD)
         return container.api_env(
             origin=NGINX_ORIGIN, port=API_PORT, bind_host=self.host, **settings
         )
@@ -639,7 +665,8 @@ def shutdown_run(client: httpx.Client, session: Session, api: Api) -> None:
         reader.join(timeout=1)
         if result and result[0].status not in (0, 200):
             raise CheckError(
-                f"The silent stream was refused: the API answered HTTP {result[0].status}."
+                f"The silent stream was refused: the API answered HTTP {result[0].status}"
+                f" ({result[0].refusal or 'no code'})."
             )
         raise CheckError("The silent stream did not start within 10 s.")
     time.sleep(1)  # Into the silence.

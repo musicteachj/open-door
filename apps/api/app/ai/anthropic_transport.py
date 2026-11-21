@@ -11,8 +11,9 @@ must come from httpx2.
 import asyncio
 import json
 import logging
+import re
 from collections.abc import AsyncIterator, Awaitable
-from typing import Any
+from typing import Any, Literal
 
 import anyio
 import httpx2
@@ -23,7 +24,6 @@ from anthropic import (
     APIStatusError,
     APITimeoutError,
     AsyncAnthropic,
-    BadRequestError,
     Timeout,
 )
 from anthropic.lib.streaming import ParsedBetaMessageStreamEvent
@@ -66,14 +66,17 @@ from app.ai.transport import (
 )
 from app.core.config import Settings
 
-# The SDK's default timeout is 10 minutes, and with two retries a stalled call could run about 30
-# minutes. A turn running longer than 10 minutes is treated as abandoned and a second one may start
-# while the first is still billing, so every wait is bounded. The read timeout is the longest gap
-# between stream events we tolerate. It resets with each event, so it bounds a stall, not a long
-# answer: a call that fails to connect or stalls gives up within 3 attempts x (10 s connect + 90 s
-# read) = 300 s, but a slow, steady stream has no total limit here. The turn's own deadline, below
-# the 10 minutes, is what bounds the whole turn (Stage 2's loop).
-MODEL_MAX_RETRIES = 2
+# One attempt per reservation (spec 5.2). The SDK's own retries (twice by default) would send up to
+# three requests under one reservation, and a failure the provider doesn't bill could not be told
+# from one it does. The turn makes its one retry itself, under a new reservation (turn.py).
+#
+# The SDK's default timeout is 10 minutes. A turn running longer than 10 minutes is treated as
+# abandoned and a second one may start while the first is still billing, so every wait is bounded.
+# The read timeout is the longest gap between stream events we tolerate. It resets with each event,
+# so it bounds a stall, not a long answer: a call that fails to connect or stalls gives up within
+# 10 s connect + 90 s read = 100 s, but a slow, steady stream has no total limit here. The turn's
+# own deadline, below the 10 minutes, is what bounds the whole turn (Stage 2's loop).
+MODEL_MAX_RETRIES = 0
 MODEL_CONNECT_TIMEOUT_SECONDS = 10
 MODEL_READ_TIMEOUT_SECONDS = 90
 MODEL_WRITE_TIMEOUT_SECONDS = 30
@@ -83,8 +86,30 @@ STREAM_CLOSE_TIMEOUT_SECONDS = 5
 
 logger = logging.getLogger(__name__)
 
-# A spend limit set in the Console arrives as a 400 whose message starts like this.
-SPEND_LIMIT_MESSAGE_PREFIX = "You have reached your specified API usage limits"
+# What a call the provider refused before any work used.
+NO_USAGE = Usage(0, 0, 0, 0)
+
+# A spend limit set in the Console arrives as a 400 whose message starts like this: the plain
+# (organization) form, or the workspace form. The "organization" spelling is kept as well, in case
+# the API names it.
+# Source: Anthropic rate limits page (https://platform.claude.com/docs/en/api/rate-limits, "Setting
+# your own spend limit"), read on 2026-11-19: "You have reached your specified API usage limits"
+# and "You have reached your specified workspace API usage limits". The errors page
+# (https://platform.claude.com/docs/en/api/errors), read the same day, says the API returns a 400
+# for an organization or workspace limit and a 402 `billing_error` for a billing problem. The tier
+# spend cap is a 429 with `error.details.error_code` "enforced_spend_limit_reached".
+SPEND_LIMIT_MESSAGE = re.compile(
+    r"You have reached your specified (?:(?:workspace|organization) )?API usage limits"
+)
+# An account whose prepaid credit has run out gets a 400 with this message, matched at the start.
+# The portfolio design spec (5.2) lists it among the failures that cost nothing. The errors page
+# (https://platform.claude.com/docs/en/api/errors), read on 2026-11-19, doesn't quote its wording.
+CREDIT_BALANCE_MESSAGE = re.compile(r"Your credit balance is too low")
+SPEND_LIMIT_ERROR_CODE = "enforced_spend_limit_reached"
+
+# What a failed call means for the budget: "spend-limit" stops the assistant with the spend-limit
+# text; "unbilled" was refused before any work, so it costs nothing; "unknown" may have been billed.
+type ApiFailure = Literal["spend-limit", "unbilled", "unknown"]
 # Error texts are fixed, never the SDK's own message: that can quote the raw tool input or response
 # body, which can hold the person's words, and nothing logs a question, an answer, or a tool result.
 # The SDK's message stays on the chained cause. Only exception types, status codes, and request IDs
@@ -171,11 +196,14 @@ class AnthropicTransport:
         except TimeoutError:
             raise GuardUnavailable("the guard did not answer in time") from None
         except APIStatusError as error:
-            # The same limit the assistant call reports, so it isn't hidden as a broken guard.
-            if isinstance(error, BadRequestError) and is_spend_limit(error.body):
+            # The same limits the assistant call reports, so they aren't hidden as a broken guard.
+            kind = classify_status_error(error)
+            if kind == "spend-limit":
                 raise SpendLimitReached(SPEND_LIMIT_TEXT) from error
             raise GuardUnavailable(
-                f"the guard's call failed (status {error.status_code}, {error.type})"
+                f"the guard's call failed (status {error.status_code}, {error.type})",
+                usage=NO_USAGE if kind == "unbilled" else None,
+                unbilled=kind == "unbilled",
             ) from error
         except (APIError, httpx2.HTTPError, json.JSONDecodeError) as error:
             # Connection errors, a body that failed validation, and a 200 whose body is broken JSON
@@ -222,10 +250,13 @@ class AnthropicSummarizer:
             # The SDK's own limit (a slow call): the job records it as `timeout`, not `transport`.
             raise TimeoutError("the summary's call timed out") from error
         except APIStatusError as error:
-            if isinstance(error, BadRequestError) and is_spend_limit(error.body):
+            kind = classify_status_error(error)
+            if kind == "spend-limit":
                 raise SpendLimitReached(SPEND_LIMIT_TEXT) from error
             raise SummaryUnavailable(
-                f"the summary's call failed (status {error.status_code}, {error.type})"
+                f"the summary's call failed (status {error.status_code}, {error.type})",
+                usage=NO_USAGE if kind == "unbilled" else None,
+                unbilled=kind == "unbilled",
             ) from error
         except (APIError, httpx2.HTTPError, json.JSONDecodeError) as error:
             raise SummaryUnavailable(
@@ -281,8 +312,7 @@ def require_an_api_key(settings: Settings) -> None:
 
 def from_settings(settings: Settings) -> AnthropicTransport:
     key = _api_key(settings)
-    # Two retries is the SDK's default, spelled out: it covers 408, 409, 429, 5xx, and connection
-    # errors, so a transient failure never reaches the person asking.
+    # The SDK's retries are off: one attempt per reservation (see `MODEL_MAX_RETRIES`).
     return AnthropicTransport(
         AsyncAnthropic(
             api_key=key.get_secret_value(),
@@ -333,7 +363,8 @@ async def _sdk_read[T](read: Awaitable[T]) -> T:
 
 
 def _unavailable_or_spend_limit(error: APIStatusError) -> Exception:
-    if isinstance(error, BadRequestError) and is_spend_limit(error.body):
+    kind = classify_status_error(error)
+    if kind == "spend-limit":
         return SpendLimitReached(SPEND_LIMIT_TEXT)
     # An `event: error` partway through a stream is raised with the stream's own 200 status, which
     # says nothing about the failure, so only a real error status is reported.
@@ -342,18 +373,53 @@ def _unavailable_or_spend_limit(error: APIStatusError) -> Exception:
         f"the model API failed ({status or 'in the stream'}, {error.type or 'unknown error'})",
         status_code=status,
         request_id=error.request_id,
+        unbilled=kind == "unbilled",
     )
 
 
-def is_spend_limit(body: object) -> bool:
-    """Whether an API error body is the Anthropic Console's spend limit (a 400)."""
-    if not isinstance(body, dict):
-        return False
-    detail = body.get("error")
-    if not isinstance(detail, dict):
-        return False
-    message = detail.get("message")
-    return isinstance(message, str) and message.startswith(SPEND_LIMIT_MESSAGE_PREFIX)
+def classify_status_error(error: APIStatusError) -> ApiFailure:
+    """What a failed API call means for the budget.
+
+    A spend limit (400 with the Console's message, 402, or the enforced-limit 429) stops the
+    assistant. A refusal before any work (a plain 429, 401, 403, or 529 status) isn't billed. An
+    `overloaded_error` event inside a 200 stream, a 500, and the rest stay unknown, because output
+    may have been billed.
+    """
+    status = error.status_code
+    if status >= 400 and _is_spend_limit_failure(error):
+        return "spend-limit"
+    if status in (401, 403, 429, 529) or (status >= 400 and error.type == "overloaded_error"):
+        return "unbilled"
+    return "unknown"
+
+
+def _is_spend_limit_failure(error: APIStatusError) -> bool:
+    status = error.status_code
+    if status == 402:
+        return True
+    detail = _error_detail(error.body)
+    if status == 400:
+        message = detail.get("message")
+        return isinstance(message, str) and (
+            SPEND_LIMIT_MESSAGE.match(message) is not None
+            or CREDIT_BALANCE_MESSAGE.match(message) is not None
+        )
+    if status == 429:
+        details = detail.get("details")
+        codes = (
+            details.get("error_code") if isinstance(details, dict) else None,
+            detail.get("error_code"),
+        )
+        return SPEND_LIMIT_ERROR_CODE in codes
+    return False
+
+
+def _error_detail(body: object) -> dict[str, Any]:
+    if isinstance(body, dict):
+        detail = body.get("error")
+        if isinstance(detail, dict):
+            return detail
+    return {}
 
 
 def _translate(

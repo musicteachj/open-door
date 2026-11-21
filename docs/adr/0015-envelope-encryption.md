@@ -85,3 +85,17 @@ then production uses the local keyring, passed in its environment.
   avoiding.
 - **The time-off denial note** moves into the encrypted scope in Phase 8, with a data key per
   request that has one, under the local keyring until the KMS provider exists.
+
+## Amendment (2026-11-20): production uses the local provider
+
+For the portfolio deployment (ADR 0023), production uses the local key provider, with the keyring
+passed in `ENCRYPTION_KEYRING` from an SSM Parameter Store SecureString. The KMS provider described
+in the amendment above is not built, so "production refuses `local`" no longer holds (and the code
+never had a `KEY_PROVIDER` switch: `app/core/encryption.py` builds only the local provider).
+
+- **Why:** the data is fictional and deleted within a day, and a key in the task's memory is a risk
+  ADR 0023 accepts. Building, testing, and paying for the KMS provider buys little for that data.
+- **What stays:** the interface, the per-record data keys, the associated-data binding, and the
+  stored key IDs. A KMS provider can still be added later without changing stored data.
+- **Rejected: building the KMS provider for launch.** It stays a possible later step if the app ever
+  holds real data.

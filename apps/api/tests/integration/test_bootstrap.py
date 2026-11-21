@@ -102,6 +102,28 @@ async def create_role(owner_engine: AsyncEngine) -> AsyncIterator[CreateRole]:
         await drop_role(owner_engine, name)
 
 
+@pytest.fixture(autouse=True)
+async def the_real_app_login_does_not_hold_od_app(
+    database_settings: Settings, owner_engine: AsyncEngine
+) -> AsyncIterator[None]:
+    """Let each test name its own login for od_app.
+
+    These tests hand the script a DATABASE_URL that names a throwaway login in place of the real
+    one. The script now refuses when any other role holds od_app, so the real login (which holds it
+    for the whole run) steps aside for the length of the test and gets it back after, the same
+    grant the bootstrap makes.
+    """
+    login = make_url(str(database_settings.database_url)).username
+    assert login is not None
+    async with owner_engine.begin() as connection:
+        await connection.exec_driver_sql(f'REVOKE od_app FROM "{login}"')
+    try:
+        yield
+    finally:
+        async with owner_engine.begin() as connection:
+            await connection.exec_driver_sql(f'GRANT od_app TO "{login}" WITH INHERIT TRUE')
+
+
 def url_for(database_settings: Settings, user: str, password: str) -> str:
     url = make_url(str(database_settings.database_url)).set(username=user, password=password)
     return url.render_as_string(hide_password=False)
@@ -270,3 +292,121 @@ async def test_a_failure_never_prints_the_password(
             {"user": LEAKY_USER},
         )
     assert created is False
+
+
+async def test_a_stranger_holding_od_app_stops_the_bootstrap(
+    database_settings: Settings,
+    owner_engine: AsyncEngine,
+    create_role: CreateRole,
+) -> None:
+    # A role that no URL names, such as another app's login, holds od_app: it would inherit the
+    # API's access to Open Door's data.
+    stranger = "od_test_stranger_member"
+    user = "od_test_wanted"
+    await create_role(stranger, "NOLOGIN IN ROLE od_app")
+
+    try:
+        run = await run_bootstrap_script(url_for(database_settings, user, URL_PASSWORD))
+    finally:
+        # Only a bootstrap that wrongly went ahead makes this role.
+        async with owner_engine.connect() as connection:
+            created = await connection.scalar(
+                text("SELECT EXISTS (SELECT FROM pg_roles WHERE rolname = :user)"), {"user": user}
+            )
+        await drop_role(owner_engine, user)
+
+    assert run.returncode not in (0, None), run.stdout + run.stderr
+    assert "od_app" in run.stderr
+    assert stranger in run.stderr
+    assert created is False
+    assert "another database's login would inherit Open Door's access" in run.stderr
+    assert URL_PASSWORD not in run.stdout + run.stderr
+
+
+async def test_the_owners_own_membership_is_not_a_stranger(
+    database_settings: Settings,
+    owner_engine: AsyncEngine,
+    create_role: CreateRole,
+) -> None:
+    # Postgres 16 and later give a CREATEROLE creator an admin membership in each role it creates.
+    # The owner running the bootstrap must not count as a stranger.
+    user = "od_test_owner_member"
+    url = url_for(database_settings, user, URL_PASSWORD)
+    async with owner_engine.connect() as connection:
+        owner = str(await connection.scalar(text("SELECT current_user")))
+    await create_role(user, "NOLOGIN")
+    async with owner_engine.begin() as connection:
+        had_it = await connection.scalar(
+            text(
+                "SELECT EXISTS (SELECT FROM pg_auth_members m"
+                " JOIN pg_roles g ON g.oid = m.roleid JOIN pg_roles u ON u.oid = m.member"
+                " WHERE g.rolname = 'od_app' AND u.rolname = current_user)"
+            )
+        )
+        if not had_it:
+            await connection.exec_driver_sql(
+                f'GRANT od_app TO "{owner}" WITH ADMIN OPTION, INHERIT FALSE, SET FALSE'
+            )
+        # The same membership in the login itself, which makes the owner one of "its members".
+        await connection.exec_driver_sql(
+            f'GRANT "{user}" TO "{owner}" WITH ADMIN OPTION, INHERIT FALSE, SET FALSE'
+        )
+    try:
+        await run_bootstrap(url)
+        first = await run_bootstrap(url)
+        second = await run_bootstrap(url)
+    finally:
+        async with owner_engine.begin() as connection:
+            await connection.exec_driver_sql(f'REVOKE "{user}" FROM "{owner}"')
+            await connection.exec_driver_sql(f'REVOKE od_app FROM "{user}"')
+            if not had_it:
+                await connection.exec_driver_sql(f'REVOKE od_app FROM "{owner}"')
+
+    assert f"{user}: password reset, with od_app" in first
+    assert f"{user}: password reset, with od_app" in second
+
+
+async def test_without_the_cleanup_url_a_cleanup_login_holder_is_refused_with_a_clear_message(
+    database_settings: Settings,
+    owner_engine: AsyncEngine,
+    owner_url: str,
+    cleanup_url: str,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # The first run (with the cleanup URL) makes the cleanup login hold od_cleanup. A second run
+    # that isn't given the URL must stay fail-closed, and say what is missing.
+    from scripts import bootstrap_db_users as script
+
+    user = "od_test_wanted_cleanup"
+    app_url = url_for(database_settings, user, URL_PASSWORD)
+
+    class Configured:
+        database_url = app_url
+
+    monkeypatch.setattr(script, "get_settings", lambda: Configured())
+    monkeypatch.setattr(script, "owner_database_url", lambda: owner_url)
+    monkeypatch.setattr(script, "optional_cleanup_database_url", lambda: cleanup_url)
+    cleanup_login = make_url(cleanup_url).username
+    assert cleanup_login is not None
+    try:
+        await script.main()
+        assert await is_member(owner_engine, cleanup_login, "od_cleanup")
+
+        monkeypatch.setattr(script, "optional_cleanup_database_url", lambda: None)
+        await drop_role(owner_engine, user)
+        with pytest.raises(SystemExit) as refused:
+            await script.main()
+
+        message = str(refused.value)
+        assert "CLEANUP_DATABASE_URL" in message
+        assert "not set" in message
+        assert cleanup_login in message
+        assert "Nothing was changed" in message
+        async with owner_engine.connect() as connection:
+            created = await connection.scalar(
+                text("SELECT EXISTS (SELECT FROM pg_roles WHERE rolname = :user)"), {"user": user}
+            )
+        assert created is False
+        assert await is_member(owner_engine, cleanup_login, "od_cleanup")
+    finally:
+        await drop_role(owner_engine, user)

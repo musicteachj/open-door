@@ -376,6 +376,9 @@ function Answer({ text, citations, renderMarker, caret = false, className }: Ans
     <MarkerContext.Provider value={context}>
       <div
         data-slot="answer"
+        // The machine-readable mark on model-written text (EU AI Act Article 50(2); ADR 0024). Not
+        // set while there are no words yet: an empty answer holds no model text.
+        data-ai-generated={text.trim() === '' ? undefined : 'true'}
         className={cn(
           'flex flex-col gap-3 text-body text-pretty text-ink [&_li]:my-1 [&_ol]:m-0 [&_ol]:list-decimal [&_ol]:pl-6 [&_p]:m-0 [&_ul]:m-0 [&_ul]:list-disc [&_ul]:pl-6',
           className,

@@ -24,6 +24,13 @@ should pick it up. When one is done, delete it here and record it in the changel
   request and then the same row again through `load_request_rows` (and the cancel card loads the
   person's facts as well); one read would do. (v0.5.0 release review.)
 
+- **The sensitive escalation panel's layout test can fail under heavy local load.** In
+  `conversation.spec.ts`, "a sensitive question gets the answer, then the HR panel, then 'Show your
+  work' kept to 680 px" measures the panel's box once and then expects the "Show your work" toggle
+  below it. In one local `make e2e-image` run (2026-11-20) the toggle was at 505 against more than
+  536, as if the panel was measured before it finished growing. It passed five runs of five alone
+  and in the rerun. Poll the two boxes together (`expect.poll`) instead of measuring once. (Phase
+  9a, Task 13.)
 - **The approvals gallery's "deciding" dialog scan can fail under heavy local load.** In
   `gallery-approvals.spec.ts`, the scan of `decision-dialog-deciding` nudges a held page clock while
   axe runs, and twice in full local `make check` runs (2026-10-26) a clock step found the page
@@ -203,29 +210,16 @@ should pick it up. When one is done, delete it here and record it in the changel
   networking) never hit it. Joining the database's own Docker network on macOS, as
   `make prod-local` does with its own database, would remove the hop. A failure like it is a
   rerun, not a bug in the app. (`fix/phase-8-loose-ends`.)
-- **The assistant reports a card's outcome as if it were current.** Recording the walkthrough
-  (2026-11-16), Priya's answer after Marcus had approved her request said it was "now waiting for
-  Marcus Bell to approve it". The per-turn context tells the model what happened to the asker's own
-  card (requested), not what happened to the request since, and the model words it as the present
-  status. Tell the request's current status, or word the line in the past tense; it changes what
-  the model is told, so it needs a full eval run, and the walkthrough is recorded again after.
-  The takes of 2026-11-17 repeat it at step 6, and the second also opens Marcus's answer about Leo
-  (step 5) with "Priya Raman's PTO for Friday, November 20 is now approved.", a recap of the card
-  he had just confirmed, before answering the question; telling the model not to recap a card the
-  person has already seen would cover both. (Phase 8, Stage 9; the v0.8.1 takes.)
-  Root cause (2026-11-18): the "Since the last message" line is built from the card alone
-  (`unreported_outcomes` and `_after_confirm` in `app/ai/proposals.py`, called from `turn.py`),
-  which says "the request is waiting for" the approver in the present tense and never reads the
-  request, so a line told after Marcus decided is already false; and nothing in `assistant.md`
-  says the person saw each outcome on the card, so the model passes it on as news. A fix is
-  written and tested (not shipped): word the confirmed card in the past tense ("the request was
-  sent to Marcus Bell for approval"), add a fixed "That request has since been approved / denied /
-  canceled." when the request moved on (read as the person, under row-level security), and three
-  prompt lines: don't tell a card's outcome unless asked, and use `list_time_off_requests` for where
-  a request stands now. It bumps the prompt version, so it ships with the next full eval run; no
-  eval item has an outcome line, so the walkthrough take after it is the real check (step 5 must
-  not open with Priya's approval, step 6 must not mention her request). The phase 5 spec quotes
-  the old line and changes with it.
+- **After the deploy: check the stale-card fix and delete the eval pin.** The fix for the assistant
+  telling a request's old status as current (found recording the walkthrough, 2026-11-16, where
+  Priya was told her request still waited after Marcus approved it) shipped in prompt 2026-11.5
+  without its full eval run, by the owner's waiver of 2026-11-18 (ADR 0023). The "Since the last
+  message" line is now in the past tense, adds where the request is now, and the prompt says not to
+  retell a card the person saw. Once deployed: run the full set (`make eval-live SET=full FRESH=1
+  PRUNE=1 YES=1`), record the walkthrough again (steps 5 and 6 are the check: step 5 must not open
+  with Priya's approval, and step 6 must not mention her request), and delete the pin
+  (`evals/assistant/fixtures/recorded-under.json` and the archived 2026-11.4 prompt beside it) in
+  the same change as the new recordings. (Phase 9a, Task 7.)
 - **"Book next Friday off" in the personas' "Try asking" lists is ambiguous.** The live model
   asks which Friday is meant on many days (this week's or next week's), so the suggestion often
   gets a question instead of a card. The tour's chip became "Book this Friday off." in Phase 8,
@@ -466,101 +460,28 @@ conversation-page glitches are fixed with browser tests (stage 6).
 
 ## Phase 9: deploy to AWS
 
-Written and checked when the deploy is planned, against the real AWS account and the chosen
-managed database. The first group is the Phase 8 spec's "Moved to Phase 9" list; the rest were
-found while building Phase 8, or moved here from its backlog because they only matter on AWS.
+Accounted for in Phase 9a (2026-11-20). Each item is done, deferred to the infrastructure phases
+(Phase 2 and 3 of the portfolio deploy), or closed with its reason. The deploy contract is
+[`DEPLOY.md`](DEPLOY.md); the decisions are in [ADR 0023](adr/0023-phase-9-on-the-shared-portfolio-server.md).
 
-- **The KMS key provider,** as [ADR 0015](adr/0015-envelope-encryption.md)'s amendment describes
-  it, and production's refusal of the local keyring. Each list of time-off requests unwraps one
-  key per request with a denial note: cheap with the local keyring, a KMS round trip each in
-  production, so cache or batch the unwraps if the lists get slow. (Phase 8 spec; Stage 3.)
-- **The secrets and settings contract** (`docs/DEPLOY.md`): every setting, which process reads it,
-  the secret store's names, least-privilege roles, and egress to Anthropic, Voyage, and Cloudflare.
-  Production's setup steps (the migrations, the login bootstrap, the handbook load) need none of
-  `TURNSTILE_SITE_KEY`, `TURNSTILE_SECRET_KEY`, `SANDBOX_IP_HASH_KEY`, and `FORWARDED_ALLOW_IPS`;
-  only the API does, and it refuses to start in production without them. The AI limits start from
-  [`CAPACITY.md`](CAPACITY.md): $1 a sandbox, and a daily cap sized to the visits wanted plus
-  headroom for questions in flight (about $12 for 50 tours a day). (Phase 8 spec; Stages 4 and 7.)
-- **ECS task definitions** for the API, the migration, and the cleanup, from the load test's
-  measurements ([`CAPACITY.md`](CAPACITY.md)): the API at 1 vCPU and 2 GB (it peaked at 58% of
-  1 vCPU and 142 MB with 50 visitors at once), one uvicorn process, the default database pool, and
-  two tasks for availability. **The cleanup's hourly schedule** runs `python -m app.jobs.cleanup`
-  as the cleanup login. (Phase 8 spec; Stage 7.)
-- **The deploy workflow** (OIDC, the image to ECR, the migration, the service update), written and
-  enabled together. (Phase 8 spec.)
-- **Set `FORWARDED_ALLOW_IPS` in the task definition.** The image's entrypoint passes it to
-  uvicorn's `--forwarded-allow-ips`, and empty trusts no proxy (Phase 8 stage 2). The Phase 9 task
-  definition must set it to the load balancer's addresses only, never `*`, or the limits and the
-  security log see the load balancer's address for every visitor.
-- **The load balancer's idle timeout: at least 120 seconds, and below the image's keep-alive of
-  130.** The image runs uvicorn with `--timeout-keep-alive 130` so that the load balancer, not the
-  task, closes idle connections; otherwise a request it sends just as the task closes one fails as
-  a 502 (the load test saw that race at uvicorn's default of 5 seconds). If the idle timeout ever
-  goes above 120, raise the keep-alive in `scripts/image/entrypoint.sh` first. (Phase 8 stage 7.)
-- **Postgres 16 or later.** The bootstrap script grants roles `WITH INHERIT TRUE`, which needs
-  Postgres 16. Development and CI run 17. The managed Postgres chosen in Phase 9 must be 16 or
-  later.
-- **Database TLS with certificate checks, the provider's certificate bundle in the image, and
-  secret rotation** for the three database URLs. (Phase 1 review; Phase 8 spec.)
-- **Backup retention, and deletion from backups.** A sandbox deleted from the database still
-  exists in backups until they expire, and so does the plain-text denial note from before migration
-  0018 in any backup taken before it ran (Phase 9 starts empty, so only a restored older database
-  has one). Set the retention, and document it in the data inventory, or exclude sandbox data from
-  backups. (Phase 1 review; Phase 8 stage 3 security review.)
-- **Data migrations can't see tenant rows on AWS.** With row-level security forced, a table
-  owner that isn't a superuser sees no rows. That is the managed-Postgres case, unlike
-  development and CI, where the owner is a superuser. A migration that changes data must set the
-  tenant context for each tenant, or turn forcing off around its data step as 0018 does, or run
-  under a role made for it. Migration 0017's audit `UPDATE` is a no-op there, which is fine on an
-  empty database. (Phase 8 stage 1 security review; Stage 3.)
-- **Migration 0018's data step needs the keyring when notes exist.** Upgrading a database that
-  already holds denial notes seals them inside the migration, so the migration task needs
-  `ENCRYPTION_KEYRING` (or the KMS provider) in its environment. A fresh database has no notes and
-  needs no key. (Phase 8 stage 3.)
-- **Re-test `set_config` under RDS Proxy or PgBouncer,** if a pooler is used. Row-level security
-  depends on settings scoped to one transaction, and a pooler in transaction mode must not carry
-  them between clients. The reused-connection tests are the model. Background: the pgsql-bugs
-  thread on local settings,
-  https://www.postgresql.org/message-id/CA+Q86ij0KDCB0G45G509-8q0DNR611gcKG-sSM83GA1EBL7boA@mail.gmail.com.
-  (Phase 1 review.)
-
-- **Don't share a Postgres server between environments that reuse these role names.** Roles
-  belong to the whole server, and Postgres lets every role connect to every database by default.
-  If staging and production lived on one server, a login made for one could connect to the other,
-  inherit `od_app`, and read any tenant. Both bootstrap runs would also reset the shared login's
-  password. Either give each environment its own server, or revoke `CONNECT` on the database from
-  `PUBLIC` and grant it only to that database's own logins in the bootstrap script.
-  (`/code-review medium` on Phase 1, stage 1.) Migration 0002 also reuses an existing `od_app` or
-  `od_cleanup` after checking what that role is a member of, but not which roles are members of
-  it, so another database's login granted `od_app` would inherit Open Door's access. Check
-  `pg_auth_members` in both directions. (Phase 1 close-out review.)
-
-- **Point the probes at the right health path.** Phase 8 stage 1 added `GET /api/v1/health/live`
-  (never touches the database) and kept `GET /api/v1/health` (readiness, with a 2-second ping).
-  The ECS container check must use `/live`, or an RDS failover would restart every task; the load
-  balancer uses `/health` with a probe timeout above 2 seconds.
-
-- **Line up the shutdown timeouts.** uvicorn runs with `--timeout-graceful-shutdown 15`, and the
-  app then waits up to 12 seconds for open streams to save, so a container needs about 27
-  seconds after SIGTERM. That fits ECS's default `stopTimeout` of 30. If Phase 9 raises the
-  graceful timeout (to let long answers finish during a deploy), raise `stopTimeout` (at most
-  120) and the load balancer's deregistration delay with it, and keep the 12-second drain inside
-  the gap. (Phase 4 stage 4.)
-- **Prove Turnstile with the real keys before launch.** Every run so far (development, CI, the
-  image, `make prod-local`, the live check, the recording) used Cloudflare's test keys, which the
-  API answers itself, so the real widget's domain check and `siteverify`'s `hostname` and `action`
-  checks have never run. With the production keys, start a sandbox through the deployed page and
-  confirm the token passes; if the widget refuses the domain under `Referrer-Policy: same-origin`,
-  set the policy per page or allow the domain in Cloudflare. (Phase 8 phase review.)
-- **Mark each answer in a machine-readable way (EU AI Act, Article 50(2)).** Re-read on
-  2026-11-16, the duty covers any provider whose system writes synthetic text, not only published
-  text, so a deployed Open Door must mark its answers as AI-generated in a form a machine can
-  detect. Choose the mark against the Commission's guidance and code of practice as they stand at
-  deploy time, and add it to each answer in the API and the page
-  ([`AI-GOVERNANCE.md`](AI-GOVERNANCE.md#the-disclosure-eu-ai-act-article-50)). (Phase 8, Stage 9.)
-- **`ping()` has no hard wall-clock bound.** If canceling the query stalls on the network,
-  closing the connection can take longer than the timeout, because SQLAlchemy shields the close.
-  The orchestrator's own probe timeout covers it; revisit only if health checks need a strict
-  bound.
-- **Keep probe traffic out of traces.** Phase 8 stage 1 filters both health paths from
-  `uvicorn.access`; if OpenTelemetry is enabled, filter them there too.
+| Item | Outcome |
+|---|---|
+| The KMS key provider | Closed: not built. Production uses the local provider with the keyring from an SSM SecureString (ADR 0015's amendment). The "production refuses `local`" rule from that ADR does not hold. |
+| The secrets and settings contract | Done: `DEPLOY.md`, one row per setting for the API, the setup, and the cleanup. |
+| ECS task definitions and the cleanup's hourly schedule | Done as written definitions in `DEPLOY.md`; registering them is for the infrastructure phases. |
+| The deploy workflow (OIDC, image to ECR, the setup, the service update) | Deferred to the infrastructure phases. |
+| `FORWARDED_ALLOW_IPS` in the task definition | Documented in `DEPLOY.md`; the VPC CIDR is the infrastructure phase's to fill in. |
+| Load balancer idle timeout 120, keep-alive 130 | Documented in `DEPLOY.md`; the load balancer is the infrastructure phase's. |
+| Postgres 16 or later | Closed: Postgres 17 (ADR 0023). |
+| Database TLS and secret rotation | Closed: no TLS, because traffic stays on the instance's Docker bridge; rotation steps are in `DEPLOY.md`. |
+| Backup retention, and deletion from backups | Done: daily snapshots kept 7 days, in `DATA-INVENTORY.md`. |
+| Data migrations under forced row-level security | Closed: the rule is in `DEPLOY.md`, and `make prod-local` migrates as a non-superuser owner. |
+| Migration 0018's data step and the keyring | Closed: production starts empty. Noted in `DEPLOY.md`. |
+| `set_config` under a pooler | Closed: there is no pooler. |
+| Don't share a Postgres server between environments that reuse the role names | Done: `CONNECT` is revoked from `PUBLIC` and held by the roles (migration 0020), and the bootstrap refuses foreign members of `od_app` and `od_cleanup`. |
+| Point the probes at the right health path | Done: the container, the target group, and ECS use liveness; readiness is for smoke tests (spec 5.3). |
+| Line up the shutdown timeouts | Done: the order and numbers are in `DEPLOY.md`. |
+| Prove Turnstile with the real keys before launch | Deferred to the go-live checks in Phase 3 of the portfolio deploy. |
+| The Article 50(2) mark | Done: ADR 0024. |
+| `ping()` has no hard wall-clock bound | Closed: no probe uses readiness now; only the deploy's smoke tests do. |
+| Keep probe traffic out of traces | Closed: there is no tracing, and Container Insights is off. |
