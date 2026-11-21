@@ -56,6 +56,12 @@ and page reads slowing too. Nothing failed, but that is the edge. At 1 vCPU, 50 
 peak and every page read stayed under 40 ms at p95. Memory never passed 142 MB, and the database
 login never held more than 11 of its 15 connections.
 
+**Under the 512 MiB limit (Phase 9a, 2026-11-20).** The same load test at 0.5 vCPU with the hard
+limit the deploy uses (`make load LOAD_ARGS="--sizes 0.5:512m --visitors 10 --no-real-caps-run"`):
+all 10 tours completed with no non-2xx answer, turn p50 / p95 4,457 / 5,646 ms, `turn.started`
+p95 53 ms, API CPU at most 61% of its limit, and the API's memory peak 135 MB (mean 124 MB). The
+scripted live check (`make live-check DRY_RUN=1`) peaked at 123 MiB under the same limit.
+
 **The long conversation.** The tour's conversations are at most three questions, so one extra run
 (0.5 vCPU, 25 tour visitors repeating their tours for 7.7 minutes) added one visitor asking
 alternately about sick days and booking a Friday off, in one conversation, never confirming, so its

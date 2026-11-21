@@ -1275,41 +1275,41 @@ browser test with `cd apps/web && npx playwright test e2e/<file>.spec.ts`.
 
 None of these steps calls a paid model.
 
-- [ ] **Step 1: Build.** `make db && make image`.
-- [ ] **Step 2: The image.** `make image-check SKIP_BUILD=1`. Expected: PASS: non-root, no
+- [x] **Step 1: Build.** `make db && make image`.
+- [x] **Step 2: The image.** `make image-check SKIP_BUILD=1`. Expected: PASS: non-root, no
   `.env`, `.keys`, or tests inside, the job scripts present and `0555`, the entrypoint refusing a
   command, a forged `X-Forwarded-For` ignored with no trusted proxy, and the rightmost address
   winning over a forged leftmost one behind a trusted proxy. The start key is that address
   (`app/modules/sandbox/routes.py:80-91`). Also run
   `docker run --rm --entrypoint sh open-door:prod -c 'find / -xdev -name ".env*" 2>/dev/null'`:
   expected empty.
-- [ ] **Step 3: Production settings.** `make prod-local-check SKIP_BUILD=1`. Expected: PASS:
+- [x] **Step 3: Production settings.** `make prod-local-check SKIP_BUILD=1`. Expected: PASS:
   liveness and readiness 200, the CSP's nonce and Turnstile sources, the flag answering 200, the
   API docs off, the setup run twice as a non-superuser owner, the cleanup container exiting 0
   under 128 MiB, and the API serving under 512 MiB with a read-only root.
-- [ ] **Step 4: Live AI off.** `make prod-local-check SKIP_BUILD=1 AI_OFF=1`. Expected: PASS: the
+- [x] **Step 4: Live AI off.** `make prod-local-check SKIP_BUILD=1 AI_OFF=1`. Expected: PASS: the
   flag is false, and a question gets 429 `budget-daily` with the approved text and no
   `Retry-After`.
-- [ ] **Step 5: A scripted tour turn.** `make live-check DRY_RUN=1 SKIP_BUILD=1`. Expected: PASS:
+- [x] **Step 5: A scripted tour turn.** `make live-check DRY_RUN=1 SKIP_BUILD=1`. Expected: PASS:
   a sandbox starts with Turnstile's test keys, a cited answer streams, a card is booked, and no
   CSP violation shows. While it runs, in a second shell, run
   `docker stats --no-stream open-door-prod-local-api` a few times. Expected: memory under 512 MiB.
-- [ ] **Step 6: Memory under load.** `make load SKIP_BUILD=1 LOAD_ARGS="--sizes 0.5:512m --visitors 10 --no-real-caps-run"`.
+- [x] **Step 6: Memory under load.** `make load SKIP_BUILD=1 LOAD_ARGS="--sizes 0.5:512m --visitors 10 --no-real-caps-run"`.
   Expected: every tour completes, and the report's memory peak is under 512 MiB. Record the peak
   in `docs/CAPACITY.md` beside the old measurements.
-- [ ] **Step 7: The money tests and the evals.**
+- [x] **Step 7: The money tests and the evals.**
   `cd apps/api && uv run pytest tests/test_pacing.py tests/integration/test_budget_pacing.py tests/integration/test_turn_endings.py -q`,
   then `make eval-offline`. Expected: PASS, with the recorded-prompt line.
-- [ ] **Step 8: Docs, workflows, and audit.** `make check-docs check-workflows audit`. Expected:
+- [x] **Step 8: Docs, workflows, and audit.** `make check-docs check-workflows audit`. Expected:
   PASS.
-- [ ] **Step 9: The roadmap.** The 9a row says "Done locally: ready for the deploy", with the PR
+- [x] **Step 9: The roadmap.** The 9a row says "Done locally: ready for the deploy", with the PR
   number once it exists and the date; the "Next" note names the deploy (the master plan's Phase
   2, then Open Door's Phase 3) and the effort level (`medium`). Add the results of Steps 2 to 6 to
   "Changes made during execution".
-- [ ] **Step 10: Stop:** show the diff summary and the proposed commit message, and wait for
+- [x] **Step 10: Stop:** show the diff summary and the proposed commit message, and wait for
   James's explicit OK before committing.
   Proposed subject: "Record Phase 9a's local verification".
-- [ ] **Step 11: The master plan.** In
+- [x] **Step 11: The master plan.** In
   `/Users/jameslittlefield/Documents/github_things/portfolio-infra/PLAN.md`, set Open Door's
   Phase 1 row to done, with the branch and this plan's path. If the file or the row doesn't exist
   yet, **Stop:** ask James where it goes. If `portfolio-infra` is a git repository, **Stop:** show
@@ -1369,6 +1369,8 @@ Task 8: under the read-only root, nothing wrote outside `/tmp`. The setup, the c
 Task 9: `vector` needs a superuser. As the non-superuser owner, `CREATE EXTENSION vector;` fails with "permission denied to create extension \"vector\"" (hint: "Must be superuser to create this extension."), so the init superuser pre-creates it, as `scripts/image/postgres-open-door.sql` does. The migrations roundtrip needed the development database's sealed test rows cleared first (`TRUNCATE tenants CASCADE`), because migration 0018's downgrade can't decrypt them.
 
 Task 12: `/security-review` found nothing. `/code-review medium` (the whole branch against `dev`) found four real issues, each fixed in its own commit: an unbilled case-summary failure recorded as model behavior, the availability flag's 500 when the database is unreachable (and its unbounded wait), the login setup's unclear refusal without `CLEANUP_DATABASE_URL`, and a misplaced approval comment; CLAUDE.md and ADR 0011 now record the waiver and the retry scope. Not fixed, with the reason: no retry for the safety check, the case summarizer, connection errors, or 5xx responses (the spec turns the SDK's retries off; ADR 0011 says so; a possible small follow-up for an unbilled 429 or 529 on the safety check); `turn.started` says `aiGenerated: true` even on a turn that ends in a fixed text (plan decision 17; ADR 0024 says the stored mark is the authoritative one); an answer stopped mid-stream lists no models in its mark (ADR 0024 documents it). One browser test (`conversation.spec.ts:204`, the position of "Show your work" under the HR panel) failed once under heavy machine load and passed alone five times and in the full rerun.
+
+Task 13 (2026-11-20, HEAD bf72f74, all free): `make db` and `make image` passed. `make image-check` passed, and a search of the image for `.env*` files found none. `make prod-local-check` passed, and so did `AI_OFF=1` (the flag said false, a sandbox started, a question got the daily text, no model was called). `make live-check DRY_RUN=1` passed: a cited answer (CA-4.3), a booked card ("Requested. Marcus Bell will review it."), no CSP violation, no plaintext rows; the API's memory peaked at 123 MiB of 512. `make load` at 0.5 vCPU and 512 MiB with 10 visitors: 10 of 10 tours, no non-2xx answer, API CPU at most 61%, memory peak 135 MB (recorded in `docs/CAPACITY.md`). The money tests (39) and `make eval-offline` passed, with the recorded-prompt line. `make check-docs check-workflows audit` passed: no leaks, no Python advisories, and the npm check noting that picomatch's advisory is no longer reported, so its exception can go.
 
 The implementer also records here: the base commit, the replay miss count (Task 7), what
 the read-only root needed (Task 8), whether `vector` needs a superuser (Task 9), the review
