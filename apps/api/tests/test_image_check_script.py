@@ -223,6 +223,22 @@ def test_the_entrypoint_exits_64_on_any_argument(tmp_path: Path) -> None:
         assert result.stdout == ""
 
 
+@pytest.mark.parametrize("job", ["setup", "cleanup"])
+def test_a_job_script_exits_64_on_any_argument_before_doing_anything(job: str) -> None:
+    script = REPO / "scripts" / "image" / f"{job}.sh"
+    for argument in ("serve", "sh", "--help"):
+        result = subprocess.run(  # noqa: S603
+            ["/bin/sh", str(script), argument],
+            capture_output=True,
+            text=True,
+            env={"PATH": "/usr/bin:/bin"},
+            check=False,
+        )
+        assert result.returncode == 64
+        assert argument in result.stderr
+        assert result.stdout == ""
+
+
 def test_the_job_scripts_exist_and_run_their_one_command() -> None:
     setup = (REPO / "scripts" / "image" / "setup.sh").read_text(encoding="utf-8")
     cleanup = (REPO / "scripts" / "image" / "cleanup.sh").read_text(encoding="utf-8")

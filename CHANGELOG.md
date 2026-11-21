@@ -53,7 +53,7 @@ version (`0.x.y` while the app is being built, `1.0.0` when it is complete).
 - **The image runs each job from its own entrypoint, and refuses a command it doesn't know**
   (Phase 9a). The database setup is `/app/setup.sh` and the cleanup job is `/app/cleanup.sh`;
   `/app/entrypoint.sh` only serves the API and exits 64 when given any argument instead of
-  starting the API anyway. `make prod-local` now runs every container as production will: the API
+  starting the API anyway, and the two job scripts exit 64 on any argument too. `make prod-local` now runs every container as production will: the API
   at 512 MiB, the setup at 256 MiB, and the cleanup at 128 MiB, each with a read-only root, a tmpfs
   `/tmp`, all capabilities dropped, and `no-new-privileges`. Its check also runs the cleanup job,
   and requires Turnstile in the page's CSP, a boolean assistant-availability flag, and no API
@@ -91,7 +91,8 @@ version (`0.x.y` while the app is being built, `1.0.0` when it is complete).
   open the database. The login bootstrap stops, changing nothing, if any role other than the
   configured logins (and the owner running it) holds either role. `scripts/image/postgres-open-door.sql`
   is the one-time setup of the database on the shared server, and `make prod-local` now uses that
-  layout: an init superuser, a non-superuser owner, and the setup run twice.
+  layout: an init superuser, a non-superuser owner, and the setup run twice. The migration's
+  downgrade changes nothing, so it never gives `CONNECT` back to every role.
 
 - **The npm audit's picomatch exception now runs through 2027-01-17, UTC** (Phase 8 follow-up).
   picomatch still has no fixed release, and the exception would otherwise end on 2026-12-17, in

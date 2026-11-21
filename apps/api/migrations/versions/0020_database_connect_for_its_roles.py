@@ -10,8 +10,10 @@ free of database-level grants, and a new login needs nothing more than its role.
 The migration runs as the database owner, who may change the database's privileges. It names the
 database through `current_database()`, so it is right whatever the database is called.
 
-The downgrade is the reverse: the two roles lose `CONNECT` and PUBLIC gets it back, which is what a
-new database starts with.
+The downgrade changes nothing. Giving `CONNECT` back to PUBLIC would reopen the database to every
+role on a shared server, and taking it from the two roles as well would leave 0019's own logins
+unable to connect. The roles outlive every downgrade (no migration drops them), so their grant
+blocks nothing, and upgrading again grants the same thing twice, which Postgres allows.
 
 Revision ID: 0020
 Revises: 0019
@@ -38,13 +40,6 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    # This restores 0019's exact state. On the shared server the init SQL
-    # (scripts/image/postgres-open-door.sql) had already revoked CONNECT from PUBLIC, so after a
-    # downgrade there the revoke must be run again by hand.
-    op.execute(
-        "DO $$ BEGIN"
-        " EXECUTE format('REVOKE CONNECT ON DATABASE %I FROM od_app, od_cleanup',"
-        " current_database());"
-        " EXECUTE format('GRANT CONNECT ON DATABASE %I TO PUBLIC', current_database());"
-        " END $$"
-    )
+    # Deliberately one way (the docstring): PUBLIC never gets `CONNECT` back, and the two roles
+    # keep theirs so the logins can still connect at 0019.
+    pass
