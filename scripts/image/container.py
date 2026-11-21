@@ -94,6 +94,7 @@ def api_env(
     forwarded: str | None = None,
     heartbeat_seconds: str | None = None,
     daily_budget_usd: str | None = None,
+    sandbox_budget_usd: str | None = None,
     bind_host: str | None = None,
 ) -> dict[str, str]:
     """The API's settings for a test container: nothing else of the host's environment goes in.
@@ -128,6 +129,8 @@ def api_env(
         env["AI_HEARTBEAT_SECONDS"] = heartbeat_seconds
     if daily_budget_usd is not None:
         env["AI_DAILY_BUDGET_USD"] = daily_budget_usd
+    if sandbox_budget_usd is not None:
+        env["AI_SANDBOX_BUDGET_USD"] = sandbox_budget_usd
     return env
 
 

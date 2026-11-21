@@ -111,6 +111,11 @@ version (`0.x.y` while the app is being built, `1.0.0` when it is complete).
   the dearest of them. A first question needs about $0.26 of room (was $0.21), and the landing
   page's flag now waits for $0.30. ADR 0011 has an amendment, and `docs/CAPACITY.md` the new
   figures.
+- **`make proxy-check` gives its sandbox a budget it can't use up** (Phase 9a, from the re-review
+  of PR #130). Its runs share one sandbox, and a run whose API is stopped mid-turn keeps that
+  turn's full reservation. At the new fallback price, three of those left the shutdown run's
+  question over the $1.00 sandbox cap, so it was refused. The check now also names a refused
+  request's code (here `budget-sandbox`).
 - **The assistant no longer tells a request's old status as current** (Phase 9a, prompt
   2026-11.5). Priya was told her request still waited for Marcus after he had approved it. The
   per-turn "Since the last message" line is now in the past tense ("the request was sent to Marcus
