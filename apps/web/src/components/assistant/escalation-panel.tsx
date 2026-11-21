@@ -9,6 +9,7 @@ import { OpenCaseButton } from '@/components/cases/open-case-button'
 import { announce } from '@/lib/announce'
 import { turnKey } from '@/lib/turn-key'
 import { cn } from '@/lib/utils'
+import { WalkthroughLink } from '@/components/walkthrough/walkthrough-link'
 import { linkifyEmergency, parseCrisisText } from './crisis-text'
 import { Segments } from './crisis-segments'
 import { APP_LINK } from './link-class'
@@ -180,6 +181,13 @@ function EscalationPanel({
               <RotateCcw aria-hidden="true" className="size-3.5" />
               {conversationCopy.tryAgain}
             </Button>
+          </div>
+        )}
+        {/* A failed safety check is how an Anthropic outage or a disabled key first shows, so the
+            panel offers the free path too, as the model-unavailable error does (Phase 9a). */}
+        {kind === 'unavailable' && (
+          <div>
+            <WalkthroughLink />
           </div>
         )}
         {/* The case button needs its turn, so an HR panel with none (`turnless`) offers the same

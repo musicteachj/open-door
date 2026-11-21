@@ -100,6 +100,10 @@ version (`0.x.y` while the app is being built, `1.0.0` when it is complete).
 
 ### Fixed
 
+- **The "can't answer right now" panel offers the recorded walkthrough** (Phase 9a, from the review
+  of PR #130). An Anthropic outage or a disabled key first fails the safety check, which shows that
+  panel, not the model-unavailable error, so it had no walkthrough link. It now has the same
+  "Watch the recorded walkthrough" link, after "Try again"; its approved text is unchanged.
 - **The assistant no longer tells a request's old status as current** (Phase 9a, prompt
   2026-11.5). Priya was told her request still waited for Marcus after he had approved it. The
   per-turn "Since the last message" line is now in the past tense ("the request was sent to Marcus
