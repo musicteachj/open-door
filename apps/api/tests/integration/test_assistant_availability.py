@@ -122,3 +122,19 @@ async def test_a_database_error_is_a_503_availability_unknown(
 
     assert response.status_code == 503
     assert response.json()["type"] == "availability-unknown"
+
+
+@pytest.mark.parametrize("error", [TimeoutError("slow"), OSError("refused")])
+async def test_an_unreachable_database_is_a_503_availability_unknown(
+    open_browser_with: OpenBrowserWith, monkeypatch: pytest.MonkeyPatch, error: Exception
+) -> None:
+    async def down(*_args: object) -> bool:
+        raise error
+
+    monkeypatch.setattr("app.modules.assistant.routes.live_assistant_available", down)
+    browser = open_browser_with()
+
+    response = browser.client.get(URL)
+
+    assert response.status_code == 503
+    assert response.json()["type"] == "availability-unknown"

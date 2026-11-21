@@ -496,7 +496,7 @@ async def get_assistant_availability(
 
     try:
         available = await cache.get(compute)
-    except SQLAlchemyError:
+    except (OSError, TimeoutError, SQLAlchemyError):
         logger.warning("The availability flag could not be read", exc_info=True)
         raise ProblemError(
             status.HTTP_503_SERVICE_UNAVAILABLE, "availability-unknown", AVAILABILITY_UNKNOWN_TEXT

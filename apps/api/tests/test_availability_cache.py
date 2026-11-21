@@ -3,6 +3,8 @@
 import asyncio
 import contextlib
 
+import pytest
+
 from app.modules.assistant.availability import AVAILABILITY_TTL_SECONDS, AvailabilityCache
 
 
@@ -80,3 +82,25 @@ async def test_a_failed_computation_is_not_kept() -> None:
             await cache.get(broken)
 
     assert calls == 2
+
+
+async def test_a_computation_that_runs_too_long_times_out_and_keeps_nothing() -> None:
+    cache = AvailabilityCache(clock=Clock(), compute_seconds=0.05, wait_seconds=0.5)
+    slow = Counter(pause=1.0)
+
+    with pytest.raises(TimeoutError):
+        await cache.get(slow)
+
+    fast = Counter()
+    assert await cache.get(fast) is True
+
+
+async def test_the_wait_for_the_lock_is_bounded() -> None:
+    cache = AvailabilityCache(clock=Clock(), compute_seconds=5.0, wait_seconds=0.05)
+    running = asyncio.create_task(cache.get(Counter(pause=0.5)))
+    await asyncio.sleep(0.01)
+
+    with pytest.raises(TimeoutError):
+        await cache.get(Counter())
+
+    assert await running is True

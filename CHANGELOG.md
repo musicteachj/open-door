@@ -129,6 +129,9 @@ version (`0.x.y` while the app is being built, `1.0.0` when it is complete).
   A summary call the provider refused before any work (a 401, 403, 429, or 529) is now treated as
   transient and not recorded, as the guard and the assistant already were, so offline replays
   can't repeat an outage.
+- **The public availability flag answers 503, not 500, when the database can't be reached**
+  (Phase 9a). A connection timeout or refusal now gives `availability-unknown`, and a request
+  waiting behind a slow read gives up after a bounded wait instead of queuing.
 
 ## [0.8.1] - 2026-11-17
 
