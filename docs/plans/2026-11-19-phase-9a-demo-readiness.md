@@ -1256,18 +1256,18 @@ browser test with `cd apps/web && npx playwright test e2e/<file>.spec.ts`.
 
 ### Task 12: Reviews
 
-- [ ] **Step 1: Everything CI runs.** `make db && make check`. Expected: PASS (it builds both
+- [x] **Step 1: Everything CI runs.** `make db && make check`. Expected: PASS (it builds both
   images, and runs the image check, the browser tests against the image, and the proxy check).
-- [ ] **Step 2: `/code-review medium`** on the whole branch against `dev`, committed and uncommitted
+- [x] **Step 2: `/code-review medium`** on the whole branch against `dev`, committed and uncommitted
   work together (`CLAUDE.md`, "Reviews and pull requests"). Never `max` or `ultra`.
-- [ ] **Step 3: `/security-review`** on the branch (spec 5.10: every implementation PR gets one).
+- [x] **Step 3: `/security-review`** on the branch (spec 5.10: every implementation PR gets one).
   Brief it with what this branch guards: money (reserve and settle, pacing, the classifier), the
   public route, the database roles, the image's entrypoints, and the waiver.
-- [ ] **Step 4: Fix each real finding** test-first, one commit per fix, each behind its own
+- [x] **Step 4: Fix each real finding** test-first, one commit per fix, each behind its own
   **Stop:** show the diff summary and the proposed commit message, and wait for James's explicit
   OK before committing. Record each finding not fixed, and why, under "Changes made during
   execution".
-- [ ] **Step 5: Run everything again.** `make check`. Expected: PASS.
+- [x] **Step 5: Run everything again.** `make check`. Expected: PASS.
 
 ---
 
@@ -1367,6 +1367,8 @@ Task 7: base commit 1e7d27a. The patch applied cleanly. Without the pin, the ful
 Task 8: under the read-only root, nothing wrote outside `/tmp`. The setup, the cleanup, and the API ran with only a `/tmp` tmpfs.
 
 Task 9: `vector` needs a superuser. As the non-superuser owner, `CREATE EXTENSION vector;` fails with "permission denied to create extension \"vector\"" (hint: "Must be superuser to create this extension."), so the init superuser pre-creates it, as `scripts/image/postgres-open-door.sql` does. The migrations roundtrip needed the development database's sealed test rows cleared first (`TRUNCATE tenants CASCADE`), because migration 0018's downgrade can't decrypt them.
+
+Task 12: `/security-review` found nothing. `/code-review medium` (the whole branch against `dev`) found four real issues, each fixed in its own commit: an unbilled case-summary failure recorded as model behavior, the availability flag's 500 when the database is unreachable (and its unbounded wait), the login setup's unclear refusal without `CLEANUP_DATABASE_URL`, and a misplaced approval comment; CLAUDE.md and ADR 0011 now record the waiver and the retry scope. Not fixed, with the reason: no retry for the safety check, the case summarizer, connection errors, or 5xx responses (the spec turns the SDK's retries off; ADR 0011 says so; a possible small follow-up for an unbilled 429 or 529 on the safety check); `turn.started` says `aiGenerated: true` even on a turn that ends in a fixed text (plan decision 17; ADR 0024 says the stored mark is the authoritative one); an answer stopped mid-stream lists no models in its mark (ADR 0024 documents it). One browser test (`conversation.spec.ts:204`, the position of "Show your work" under the HR panel) failed once under heavy machine load and passed alone five times and in the full rerun.
 
 The implementer also records here: the base commit, the replay miss count (Task 7), what
 the read-only root needed (Task 8), whether `vector` needs a superuser (Task 9), the review

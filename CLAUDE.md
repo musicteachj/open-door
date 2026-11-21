@@ -164,7 +164,9 @@ the owner's explicit agreement first.
   the fairness set, cap $18; with Phase 6's 166 items, the run of 2026-10-29 cost $10.93). CI
   replays the full set offline, and a smoke run re-records only its own items, so CI stays red until
   the full run is committed. Use smoke runs (`make eval-live YES=1`, about $1.00, cap $2) to try
-  wording before that. Put the scoreboard change in the PR description.
+  wording before that. Put the scoreboard change in the PR description. The owner waived this
+  once, for prompt 2026-11.5, which shipped without its full run (ADR 0023); CI replays the
+  2026-11.4 recordings until the next one.
   - **A run whose recordings are committed commits its board in the same change,** then
     `make scoreboard` regenerates the README's scoreboard and the app's copy (CI fails if they're
     stale). Every live run except smoke writes a board to `evals/scoreboards/`; a run into a

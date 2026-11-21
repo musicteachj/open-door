@@ -85,3 +85,6 @@ The SDK's own retries are off (`MODEL_MAX_RETRIES = 0`): they sent up to three r
 reservation. In their place the turn makes one retry of its own, only for an unbilled 429 or 529
 on the assistant's call, only when nothing was shown yet, after one second, and under a new
 reservation. A recorded eval fixture never holds an unbilled failure (it would replay an outage).
+The safety check (the guard), the case summarizer, connection errors, and 5xx responses get no
+retry at all, so a single overloaded or dropped call ends that turn with its fixed text (an
+unbilled overload settles to $0; a dropped connection keeps its reservation), which a demo accepts.

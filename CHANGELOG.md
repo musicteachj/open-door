@@ -79,6 +79,10 @@ version (`0.x.y` while the app is being built, `1.0.0` when it is complete).
   itself, after one second, when the provider answers an overload (529) or rate limit (429) before
   doing any work. ADR 0011 has the rules.
 
+- **The docs record the full-run waiver and what the retry covers** (Phase 9a). `CLAUDE.md` notes
+  that prompt 2026-11.5 shipped without its full eval run (ADR 0023), and ADR 0011 says the safety
+  check, the case summarizer, connection errors, and 5xx responses are never retried.
+
 ### Security
 
 - **Open Door's database admits only its own logins, and the setup refuses a role that would
