@@ -23,10 +23,10 @@ const PITCH =
   'An AI help desk for HR questions. It answers with citations to the company handbook, proposes actions for a person to confirm, and sends sensitive topics like harassment or medical leave to a human HR partner.'
 const SANDBOX_NOTE =
   'Each visit gets its own private copy of Juniper Row, a fictional company. It resets after 24 hours.'
-// Approved with screen 16 (2026-11-09).
 // Approved 2026-11-19 (Phase 9a), shown when the live assistant is out of room.
 const LIVE_PAUSED_NOTE =
   'The live assistant has reached its limit for now. The recorded walkthrough shows a full tour, and you can still explore a sandbox.'
+// Approved with screen 16 (2026-11-09).
 const CHECK_NOTE = 'Starting a sandbox runs a quick Cloudflare check to keep the demo safe.'
 
 export function LandingPage() {
