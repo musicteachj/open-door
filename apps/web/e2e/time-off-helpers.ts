@@ -85,7 +85,12 @@ export function factsOf(page: Page): Promise<Facts> {
         'X-CSRF-Token': /(?:^|; )__Host-od_csrf=([^;]*)/.exec(document.cookie)?.[1] ?? '',
       },
     }
-    const get = async (url: string) => (await fetch(url, csrf)).json()
+    // A refused read says what came back, instead of failing later on a missing field.
+    const get = async (url: string) => {
+      const response = await fetch(url, csrf)
+      if (!response.ok) throw new Error(`${url}: ${response.status} ${await response.text()}`)
+      return response.json()
+    }
     const { today } = (await get('/api/v1/time-off/summary')) as { today: string }
     const calendar = (await get(
       `/api/v1/time-off/calendar?from=${today}&to=${Number(today.slice(0, 4)) + 1}-12-31`,

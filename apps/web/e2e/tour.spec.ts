@@ -74,9 +74,12 @@ async function targetOf(page: Page, step: TourStep, expected?: string) {
     : page.locator(`[data-tour="${name}"]`).last()
 }
 
-/** The ring is drawn 4 px outside the element the step points at. */
-async function expectRingOn(page: Page, step: TourStep) {
-  const target = await targetOf(page, step)
+/**
+ * The ring is drawn 4 px outside the element the step points at. Give `expected` as `targetOf`
+ * takes it when the target arrives after the answer, or the check holds an earlier target.
+ */
+async function expectRingOn(page: Page, step: TourStep, expected?: string) {
+  const target = await targetOf(page, step, expected)
   await expect
     .poll(async () => {
       const [t, r] = await Promise.all([target.boundingBox(), ring(page).boundingBox()])
@@ -228,7 +231,7 @@ test.describe('the walk, at 1440 px', () => {
     await expectChipsUnsent(page, step)
     asked.marcus = await sendChips(page, step, asked.marcus)
     await expect(assistantMessages(page).first()).toContainText('2 requests are waiting')
-    await expectRingOn(page, step)
+    await expectRingOn(page, step, 'confirm')
     const decision = cards(page).first()
     await expect(decision).toContainText('Priya Raman')
     await decision.getByRole('button', { name: /^Confirm: approve Priya Raman’s PTO, / }).click()
@@ -259,7 +262,7 @@ test.describe('the walk, at 1440 px', () => {
     await expectChipsUnsent(page, step)
     asked.priya = await sendChips(page, step, asked.priya)
     await expect(mark(page, step).getByRole('status')).toHaveCount(0)
-    await expectRingOn(page, step)
+    await expectRingOn(page, step, 'open-case')
     await expect(await targetOf(page, step, 'open-case')).toHaveText(/Open a confidential case/)
     // The coach mark says the assistant answers from the handbook, then shows the HR panel: the
     // answer cites a section and comes before the panel's "Open a confidential case". sendChips has

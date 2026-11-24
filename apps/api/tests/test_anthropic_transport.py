@@ -14,7 +14,13 @@ from typing import Any
 
 import httpx2
 import pytest
-from anthropic import APIConnectionError, APIResponseValidationError, AsyncAnthropic, Timeout
+from anthropic import (
+    APIConnectionError,
+    APIResponseValidationError,
+    APIStatusError,
+    AsyncAnthropic,
+    Timeout,
+)
 from anthropic.lib.streaming import _beta_messages as streaming_module
 from pydantic import SecretStr
 
@@ -23,6 +29,7 @@ from app.ai.anthropic_transport import (
     MODEL_CONNECT_TIMEOUT_SECONDS,
     MODEL_READ_TIMEOUT_SECONDS,
     AnthropicTransport,
+    classify_status_error,
     from_settings,
 )
 from app.ai.pricing import IterationUsage, Usage, total_usage, turn_call_cost
@@ -805,7 +812,10 @@ async def test_a_guard_api_error_is_unavailable_with_no_usage(
     with pytest.raises(GuardUnavailable) as raised:
         await transport.classify(a_guard_request())
 
-    assert raised.value.usage is None
+    # A refusal before any work (401, 429, 529) used nothing; the rest may have been billed.
+    refused = status in (401, 429, 529)
+    assert raised.value.usage == (Usage(0, 0, 0, 0) if refused else None)
+    assert raised.value.unbilled is refused
 
 
 async def test_the_consoles_spend_limit_is_reported_by_the_guard_too(
@@ -936,17 +946,24 @@ def settings_with(key: str | None) -> Settings:
     )
 
 
-async def test_the_production_client_keeps_two_retries_and_a_bounded_timeout() -> None:
+async def test_the_client_makes_one_attempt() -> None:
+    # One attempt under each reservation (spec 5.2): the app retries once itself, under its own.
     transport = from_settings(settings_with("sk-ant-test"))
 
-    assert transport.client.max_retries == 2
+    assert transport.client.max_retries == 0
+    await transport.client.close()
+
+
+async def test_the_production_client_has_a_bounded_timeout() -> None:
+    transport = from_settings(settings_with("sk-ant-test"))
+
     timeout = transport.client.timeout
     assert isinstance(timeout, Timeout)
     assert timeout.connect == MODEL_CONNECT_TIMEOUT_SECONDS == 10
     assert timeout.read == MODEL_READ_TIMEOUT_SECONDS == 90
-    # Three attempts, each at worst a connect wait and a read wait, must end well inside the ten
-    # minutes after which a running turn is treated as abandoned.
-    worst_case_seconds = 3 * (MODEL_CONNECT_TIMEOUT_SECONDS + MODEL_READ_TIMEOUT_SECONDS)
+    # One attempt, at worst a connect wait and a read wait, must end well inside the ten minutes
+    # after which a running turn is treated as abandoned.
+    worst_case_seconds = 1 * (MODEL_CONNECT_TIMEOUT_SECONDS + MODEL_READ_TIMEOUT_SECONDS)
     assert worst_case_seconds < 10 * 60
     await transport.client.close()
 
@@ -1037,3 +1054,157 @@ async def test_the_guard_call_sends_exactly_what_the_replay_fingerprints(
 
     (request,) = captured
     assert json.loads(request.content) == guard_api_kwargs(guard_request)
+
+
+# --- Classifying a failed call ----------------------------------------------------------------
+
+SPEND_LIMIT_400 = (
+    "You have reached your specified API usage limits. You will regain access on"
+    " 2026-11-01 at 00:00 UTC."
+)
+
+
+def status_error(status: int, error_type: str, message: str, **error_extra: Any) -> APIStatusError:
+    body = {
+        "type": "error",
+        "error": {"type": error_type, "message": message, **error_extra},
+    }
+    response = httpx2.Response(
+        status,
+        headers={"request-id": "req_011TEST"},
+        json=body,
+        request=httpx2.Request("POST", "https://api.anthropic.com/v1/messages"),
+    )
+    return APIStatusError(message, response=response, body=body)
+
+
+@pytest.mark.parametrize(
+    ("error", "expected"),
+    [
+        (status_error(400, "invalid_request_error", SPEND_LIMIT_400), "spend-limit"),
+        (
+            status_error(
+                400,
+                "invalid_request_error",
+                SPEND_LIMIT_400.replace("specified API", "specified workspace API"),
+            ),
+            "spend-limit",
+        ),
+        (
+            status_error(
+                400,
+                "invalid_request_error",
+                SPEND_LIMIT_400.replace("specified API", "specified organization API"),
+            ),
+            "spend-limit",
+        ),
+        (status_error(400, "invalid_request_error", "messages: roles must alternate"), "unknown"),
+        (
+            status_error(
+                400,
+                "invalid_request_error",
+                "Your credit balance is too low to access the Anthropic API.",
+            ),
+            "spend-limit",
+        ),
+        (status_error(402, "billing_error", "Your credit balance is too low."), "spend-limit"),
+        (
+            status_error(
+                429,
+                "rate_limit_error",
+                "You have reached your API usage limits.",
+                details={"error_code": "enforced_spend_limit_reached"},
+            ),
+            "spend-limit",
+        ),
+        (
+            status_error(
+                429,
+                "rate_limit_error",
+                "You have reached your API usage limits.",
+                error_code="enforced_spend_limit_reached",
+            ),
+            "spend-limit",
+        ),
+        (status_error(429, "rate_limit_error", "Number of requests exceeded."), "unbilled"),
+        (status_error(401, "authentication_error", "invalid x-api-key"), "unbilled"),
+        (status_error(403, "permission_error", "not allowed"), "unbilled"),
+        (status_error(529, "overloaded_error", "Overloaded"), "unbilled"),
+        (status_error(500, "api_error", "Internal server error"), "unknown"),
+        (status_error(200, "overloaded_error", "Overloaded"), "unknown"),
+    ],
+    ids=[
+        "plain_400_limit",
+        "workspace_400_limit",
+        "organization_400_limit",
+        "other_400",
+        "400_credit_balance",
+        "402_billing",
+        "429_details_code",
+        "429_error_code",
+        "429_plain_rate_limit",
+        "401",
+        "403",
+        "529",
+        "500",
+        "overloaded_event_in_a_200_stream",
+    ],
+)
+def test_a_failed_call_is_classified(error: APIStatusError, expected: str) -> None:
+    assert classify_status_error(error) == expected
+
+
+@pytest.mark.parametrize(
+    ("status", "error_type", "message", "kind"),
+    [
+        (402, "billing_error", "Your credit balance is too low.", "spend-limit"),
+        (401, "authentication_error", "invalid x-api-key", "unbilled"),
+        (500, "api_error", "Internal server error", "unknown"),
+    ],
+)
+async def test_the_stream_reports_each_failure_as_its_kind(
+    make_transport: Callable[[Handler], AnthropicTransport],
+    status: int,
+    error_type: str,
+    message: str,
+    kind: str,
+) -> None:
+    transport = make_transport(error_response(status, error_type, message))
+
+    if kind == "spend-limit":
+        with pytest.raises(SpendLimitReached):
+            await collect(transport)
+        return
+    with pytest.raises(ModelUnavailable) as raised:
+        await collect(transport)
+    assert raised.value.unbilled is (kind == "unbilled")
+    assert raised.value.status_code == status
+
+
+async def test_the_guard_and_the_summary_classify_alike(
+    make_transport: Callable[[Handler], AnthropicTransport],
+) -> None:
+    from app.ai.anthropic_transport import AnthropicSummarizer
+    from app.ai.case_summary import SummaryUnavailable, build_summary_request
+
+    spent = make_transport(error_response(402, "billing_error", "Your credit balance is low."))
+    with pytest.raises(SpendLimitReached):
+        await spent.classify(a_guard_request())
+    with pytest.raises(SpendLimitReached):
+        await AnthropicSummarizer(spent.client).summarize(build_summary_request("pay", "words"))
+
+    busy = make_transport(error_response(529, "overloaded_error", "Overloaded"))
+    with pytest.raises(GuardUnavailable) as guard_error:
+        await busy.classify(a_guard_request())
+    assert guard_error.value.unbilled is True
+    assert guard_error.value.usage == Usage(0, 0, 0, 0)
+    with pytest.raises(SummaryUnavailable) as summary_error:
+        await AnthropicSummarizer(busy.client).summarize(build_summary_request("pay", "words"))
+    assert summary_error.value.unbilled is True
+    assert summary_error.value.usage == Usage(0, 0, 0, 0)
+
+    broken = make_transport(error_response(500, "api_error", "Internal server error"))
+    with pytest.raises(GuardUnavailable) as unknown_error:
+        await broken.classify(a_guard_request())
+    assert unknown_error.value.unbilled is False
+    assert unknown_error.value.usage is None

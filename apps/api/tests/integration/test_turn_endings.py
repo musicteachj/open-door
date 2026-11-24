@@ -6,11 +6,12 @@ A turn the person stops (the consumer closes the stream) sends nothing after the
 """
 
 from collections.abc import AsyncIterator
+from datetime import timedelta
 from decimal import Decimal
 from typing import Any
 
 import pytest
-from sqlalchemy import text
+from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 from app.ai import turn as turn_module
@@ -18,7 +19,8 @@ from app.ai.budget import Caps
 from app.ai.fixed_texts import CRISIS_TEXT, ERROR_TEXTS, SENSITIVE_TEXT, UNAVAILABLE_TEXT
 from app.ai.prompts.versions import CANARY
 from app.ai.scripted import ScriptedTransport
-from app.ai.transport import ModelRequest, ModelUnavailable
+from app.ai.transport import ModelRequest, ModelUnavailable, SpendLimitReached
+from app.ai.transport import TextDelta as ModelText
 from app.ai.turn import (
     Error,
     Escalation,
@@ -27,6 +29,8 @@ from app.ai.turn import (
     TurnEvent,
     run_turn,
 )
+from app.db.models import AiSpend
+from app.db.tenancy import tenant_session
 from app.modules.sandbox.seed import SeedCompany
 from tests.integration.conftest import audit_events
 from tests.integration.test_budget import daily_ids, delete_daily_rows_except
@@ -41,6 +45,7 @@ from tests.integration.test_turn import (
     raw_plan,
     search_plan,
     text_events,
+    text_plan,
 )
 
 pytestmark = pytest.mark.integration
@@ -311,3 +316,129 @@ async def test_the_guard_is_shown_the_crisis_text_after_an_abandoned_crisis_turn
     await env.ask("yes, tonight")
 
     assert CRISIS_TEXT in env.transport.guard_requests[-1].messages[0]["content"]
+
+
+# --- Failures the provider doesn't bill (Phase 9a) ---------------------------------------------
+
+
+async def spend_rows_of(env: Any, turn_id: Any) -> list[tuple[str, Decimal]]:
+    """The turn's ledger rows in order, as (kind, amount)."""
+    async with tenant_session(env.engine, env.ctx) as db:
+        query = (
+            select(AiSpend.kind, AiSpend.amount_usd)
+            .where(AiSpend.turn_id == turn_id)
+            .order_by(AiSpend.created_at)
+        )
+        return [(kind, amount) for kind, amount in await db.execute(query)]
+
+
+def net_per_reservation(rows: list[tuple[str, Decimal]]) -> list[Decimal]:
+    """Each reservation's net after its settle: a reserve row starts one, and the settle after it
+    adds to it. A reservation with no settle after it stays at its full amount."""
+    nets: list[Decimal] = []
+    for kind, amount in rows:
+        if kind == "reserve":
+            nets.append(amount)
+        else:
+            nets[-1] += amount
+    return nets
+
+
+@pytest.fixture(autouse=True)
+def _no_wait_before_the_unbilled_retry(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(turn_module, "UNBILLED_RETRY_DELAY", timedelta(0))
+
+
+async def test_an_unbilled_failure_settles_the_call_to_zero(
+    app_engine: AsyncEngine, seeded_sandbox: SeedCompany
+) -> None:
+    transport = PlanTransport(
+        raw_plan([], "end_turn", ModelUnavailable("refused", status_code=401, unbilled=True)),
+        text_plan(),
+    )
+    env = await make_env(app_engine, seeded_sandbox, transport=transport)
+    closing = closing_event(await env.ask())
+
+    assert closing == Error("model-unavailable", ERROR_TEXTS["model-unavailable"])
+    assert transport.calls == 1  # A 401 is never tried again.
+    turn = await env.last_turn()
+    rows = await spend_rows_of(env, turn.id)
+    assert [kind for kind, _ in rows] == ["reserve", "settle", "reserve", "settle"]
+    assert net_per_reservation(rows)[1] == 0
+
+
+async def test_an_overloaded_call_is_tried_once_more(
+    app_engine: AsyncEngine, seeded_sandbox: SeedCompany
+) -> None:
+    transport = PlanTransport(
+        raw_plan([], "end_turn", ModelUnavailable("busy", status_code=529, unbilled=True)),
+        text_plan("You get 40 hours."),
+    )
+    env = await make_env(app_engine, seeded_sandbox, transport=transport)
+    closing = closing_event(await env.ask())
+
+    assert isinstance(closing, TurnCompleted)
+    assert transport.calls == 2
+    turn = await env.last_turn()
+    rows = await spend_rows_of(env, turn.id)
+    assert [kind for kind, _ in rows] == ["reserve", "settle"] * 3
+    nets = net_per_reservation(rows)
+    # The guard, the refused call (nets to nothing), then the answered one.
+    assert len(nets) == 3
+    assert nets[1] == 0
+
+
+async def test_only_one_unbilled_retry_per_turn(
+    app_engine: AsyncEngine, seeded_sandbox: SeedCompany
+) -> None:
+    transport = PlanTransport(
+        raw_plan([], "end_turn", ModelUnavailable("busy", status_code=529, unbilled=True)),
+    )
+    env = await make_env(app_engine, seeded_sandbox, transport=transport)
+    closing = closing_event(await env.ask())
+
+    assert closing == Error("model-unavailable", ERROR_TEXTS["model-unavailable"])
+    assert transport.calls == 2
+    rows = await spend_rows_of(env, (await env.last_turn()).id)
+    nets = net_per_reservation(rows)
+    assert len(nets) == 3
+    assert nets[1] == nets[2] == 0
+
+
+async def test_a_failure_after_text_keeps_the_reservation_and_is_not_retried(
+    app_engine: AsyncEngine, seeded_sandbox: SeedCompany
+) -> None:
+    def plan(request: ModelRequest, number: int) -> list[Any]:
+        return [ModelText("You get"), ModelUnavailable("broke", status_code=529, unbilled=False)]
+
+    transport = PlanTransport(plan, text_plan())
+    env = await make_env(app_engine, seeded_sandbox, transport=transport)
+    closing = closing_event(await env.ask())
+
+    assert closing == Error("model-unavailable", ERROR_TEXTS["model-unavailable"])
+    assert transport.calls == 1
+    rows = await spend_rows_of(env, (await env.last_turn()).id)
+    nets = net_per_reservation(rows)
+    # The guard settled; the model call kept its full reservation (it may have been billed).
+    assert len(nets) == 2
+    assert nets[1] > 0
+    assert [kind for kind, _ in rows] == ["reserve", "settle", "reserve"]
+
+
+async def test_a_spend_limit_on_the_guard_still_gives_the_emergency_numbers(
+    app_engine: AsyncEngine, seeded_sandbox: SeedCompany
+) -> None:
+    def limit() -> Any:
+        raise SpendLimitReached
+
+    transport = PlanTransport(text_plan(), guard_result=limit)
+    env = await make_env(app_engine, seeded_sandbox, transport=transport)
+    closing = closing_event(await env.ask("I want to hurt myself"))
+
+    assert isinstance(closing, Error)
+    assert closing.code == "spend-limit"
+    assert "911" in closing.message
+    assert "988" in closing.message
+    assert transport.calls == 0
+    rows = await spend_rows_of(env, (await env.last_turn()).id)
+    assert net_per_reservation(rows) == [0]

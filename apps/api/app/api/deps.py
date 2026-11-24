@@ -11,6 +11,7 @@ from app.ai.embeddings import Embedder
 from app.ai.transport import Transport
 from app.core.config import Settings
 from app.core.encryption import KeyProvider
+from app.modules.assistant.availability import AvailabilityCache
 from app.modules.assistant.sse import StreamTracker
 from app.modules.sandbox.turnstile import TurnstileVerifier
 
@@ -26,6 +27,15 @@ def get_engine(request: Request) -> AsyncEngine:
         msg = "No database engine: build the app with create_app() and run its lifespan."
         raise RuntimeError(msg)
     return engine
+
+
+def get_availability_cache(request: Request) -> AvailabilityCache:
+    """The one cache of the public availability flag, made with the app."""
+    cache = getattr(request.app.state, "availability", None)
+    if not isinstance(cache, AvailabilityCache):
+        msg = "No availability cache: build the app with create_app()."
+        raise RuntimeError(msg)
+    return cache
 
 
 def get_transport(request: Request) -> Transport:

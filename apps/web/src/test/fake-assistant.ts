@@ -40,6 +40,11 @@ export function turnOut(overrides: Partial<TurnOut> = {}): TurnOut {
     question: 'How many sick days do I get?',
     status: 'completed',
     answerText: 'You get 5 days.',
+    aiGenerated: {
+      generator: 'Open Door AI assistant',
+      models: ['claude-opus-5-5'],
+      digitalSourceType: 'http://cv.iptc.org/newscodes/digitalsourcetype/trainedAlgorithmicMedia',
+    },
     citations: [],
     incomplete: false,
     error: null,

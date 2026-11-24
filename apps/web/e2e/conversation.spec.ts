@@ -34,6 +34,7 @@ import {
   SICK_LEAVE_SENTENCE,
 } from './held-stream'
 import { greetingHeading, problem, scan, startAs, switchTo, themeColor } from './helpers'
+import { railLink } from './time-off-helpers'
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 
@@ -364,10 +365,11 @@ test.describe('the answer under way', () => {
     await expectAssistantChrome(answer)
     // The text the API's error event carries, shown as written, with the partial answer above it.
     await expect(alert).toContainText(
-      "I can't reach the assistant service right now. Please try again in a moment, or ask the HR team directly.",
+      "I can't reach the assistant service right now. You can try again later, or watch the recorded walkthrough.",
     )
     await expect(answer).toContainText('Let me check the handbook for that.')
     await expect(alert.getByRole('button', { name: 'Retry' })).toBeVisible()
+    await expect(answer.getByRole('link', { name: 'Watch the recorded walkthrough' })).toBeVisible()
     // An incomplete answer has no feedback, and the composer is free again.
     await expect(answer.getByText('Was this right?')).toHaveCount(0)
     await expect(askButton(page)).toBeVisible()
@@ -869,6 +871,10 @@ test.describe('the header and the conversation', () => {
   }) => {
     await startAs(page, 'Priya')
     await askAndWaitForAnswer(page, QUESTIONS.cited)
+    // The rail's time-off figures load with their own request, which can still be on its way when
+    // the answer is done. Tabbing before they arrive reads a rail without them.
+    await expect(railLink(page, 'PTO available')).toBeVisible()
+    await expect(railLink(page, 'requests? pending')).toBeVisible()
     await focusPageStart(page)
     const stops = await tabStops(page, 18)
     const source = 'Source 1: Handbook §4.3, Time off'
@@ -1017,7 +1023,7 @@ test.describe('budget and length states (STUB: the conversation GET)', () => {
         'placeholder',
         kind === 'sandbox'
           ? "The assistant isn't available in this sandbox."
-          : "The assistant isn't available until tomorrow.",
+          : "The live assistant isn't available right now.",
       )
       await expect(askButton(page)).toBeDisabled()
       const links = page.locator('[data-slot="composer-line"]')

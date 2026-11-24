@@ -203,6 +203,22 @@ describe('EscalationPanel: the sensitive and unavailable extras', () => {
     renderPanel({ kind: 'sensitive', onTryAgain: () => {} })
     expect(screen.queryByRole('button', { name: 'Try again' })).not.toBeInTheDocument()
   })
+
+  it('offers the recorded walkthrough on the unavailable panel, after Try again', () => {
+    renderPanel({ kind: 'unavailable', onTryAgain: () => {} })
+    const region = screen.getByRole('region')
+    const link = within(region).getByRole('link', { name: 'Watch the recorded walkthrough' })
+    expect(link).toHaveAttribute('href', '/walkthrough')
+    const tryAgain = within(region).getByRole('button', { name: 'Try again' })
+    expect(tryAgain.compareDocumentPosition(link) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  })
+
+  it.each(['sensitive', 'crisis'] as const)('has no walkthrough link on the %s panel', (kind) => {
+    renderPanel({ kind })
+    expect(
+      screen.queryByRole('link', { name: 'Watch the recorded walkthrough' }),
+    ).not.toBeInTheDocument()
+  })
 })
 
 describe('EscalationPanel: its arrival is announced', () => {

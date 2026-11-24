@@ -125,6 +125,7 @@ from app.ai.proposals import (
     cancel_unreported_proposals_in,
     conversation_proposals,
     recover_abandoned_turns,
+    request_statuses_now,
     unreported_outcomes,
 )
 from app.ai.text import error_name, one_line
@@ -188,6 +189,10 @@ BUDGET_LOOKUP_TIMEOUT = timedelta(seconds=2)
 # Closing the model's stream, and settling a call, are shielded from cancellation (the first so the
 # upstream request stops and no more billed tokens are generated); this bounds the wait.
 SHIELDED_STEP_TIMEOUT = timedelta(seconds=5)
+# A call the provider refuses with one of these statuses (an overload or a rate limit) was not
+# billed. The turn tries once more after a short wait, under a new reservation (Phase 9a).
+UNBILLED_RETRY_STATUSES = frozenset({429, 529})
+UNBILLED_RETRY_DELAY = timedelta(seconds=1)
 
 # The most characters of a taken-back working note shown as a status line.
 WORKING_NOTE_MAX_CHARACTERS = 120
@@ -267,7 +272,8 @@ class TurnStarted:
     turn_id: UUID
 
     def to_json(self) -> dict[str, Any]:
-        return {"turnId": str(self.turn_id)}
+        # Article 50(2): the words this stream carries are written by a model (ADR 0024).
+        return {"turnId": str(self.turn_id), "aiGenerated": True}
 
 
 @dataclass(frozen=True)
@@ -820,6 +826,8 @@ class TurnRun:
         # The guard never ran because of a budget stop. The budget error itself carries 911 and 988,
         # so no escalation event follows it, but the stop is still audited.
         self.budget_stopped = False
+        # The one app-level retry of a call the provider refused as busy (see `UNBILLED_RETRY_*`).
+        self.unbilled_retried = False
         # The turn ended with the answer shown but no storable final message: its rounds are
         # stored, its empty last message is not.
         self.answer_without_final = False
@@ -918,8 +926,11 @@ class TurnRun:
             )
             # The database's clock, and the cards whose shown status no stored context has told.
             now_db = (await db.execute(select(func.now()))).scalar_one()
+            untold = await conversation_proposals(db, conversation.id, untold_at=now_db)
+            # Where each confirmed card's request is now, so a request decided since the card is
+            # never told as still waiting.
             outcomes, outcome_entries = unreported_outcomes(
-                await conversation_proposals(db, conversation.id, untold_at=now_db), now_db
+                untold, now_db, await request_statuses_now(db, untold)
             )
             # A case the person opened from this conversation is told the same way, once.
             case_sentences, case_entries = await unreported_cases(
@@ -1111,7 +1122,10 @@ class TurnRun:
 
         def without_history() -> Decimal:
             tokens = max(estimated_input_tokens - history_tokens(history), 0)
-            call = reservation_usd(model, estimated_input_tokens=tokens, max_tokens=MAX_TOKENS)
+            # The loop's requests always allow fallbacks (`model_request`).
+            call = reservation_usd(
+                model, estimated_input_tokens=tokens, max_tokens=MAX_TOKENS, fallbacks=True
+            )
             first_turn = room_needed_usd(
                 model=conversation.model,
                 guard_model=conversation.guard_model,
@@ -1346,7 +1360,10 @@ class TurnRun:
             else:
                 estimate = estimate_input_tokens(previous_usage, added_text)
             call_reservation_usd = reservation_usd(
-                request.model, estimated_input_tokens=estimate, max_tokens=MAX_TOKENS
+                request.model,
+                estimated_input_tokens=estimate,
+                max_tokens=MAX_TOKENS,
+                fallbacks=request.fallbacks is not None,
             )
             try:
                 reservation = await self._reserve(call_reservation_usd)
@@ -1430,7 +1447,22 @@ class TurnRun:
                     yield self._seen(TextRetracted())
                 continue
             except ModelUnavailable as error:
-                self._keep(reservation)
+                if error.unbilled:
+                    # Refused before any work: not billed.
+                    await self._settle(reservation, lambda: Decimal(0))
+                    if (
+                        error.status_code in UNBILLED_RETRY_STATUSES
+                        and not self.unbilled_retried
+                        and calls < MAX_MODEL_CALLS
+                        and len(self.shown) == shown_before
+                        and self.deadline_loop_s - _clock() > 1
+                    ):
+                        # The same request goes out again and reserves for itself.
+                        self.unbilled_retried = True
+                        await asyncio.sleep(UNBILLED_RETRY_DELAY.total_seconds())
+                        continue
+                else:
+                    self._keep(reservation)
                 self.fail("model-unavailable", request_id=error.request_id)
                 return
             except SpendLimitReached:

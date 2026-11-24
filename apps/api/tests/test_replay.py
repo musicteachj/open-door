@@ -32,6 +32,7 @@ from app.ai.replay import (
     encode_guard_result,
     fingerprint,
     guard_fingerprint,
+    is_transient,
     model_fingerprint,
 )
 from app.ai.scripted import ScriptedTransport
@@ -1552,3 +1553,66 @@ async def test_a_model_stream_the_consumer_closes_early_is_not_timed(tmp_path: P
     await read_then_close(recorder.stream(a_request()), 1)
 
     assert recorder.timings == {}
+
+
+def test_an_unbilled_failure_is_never_recorded() -> None:
+    from app.ai.case_summary import SummaryUnavailable
+
+    nothing = Usage(0, 0, 0, 0)
+
+    # A refusal before any work says nothing about the model: recording it would replay an outage.
+    assert is_transient(GuardUnavailable("x", usage=nothing, unbilled=True))
+    assert is_transient(SummaryUnavailable("x", usage=nothing, unbilled=True))
+    assert is_transient(ModelUnavailable("x", status_code=401, unbilled=True))
+
+
+class FailingSummarizer:
+    def __init__(self, error: Exception) -> None:
+        self.error = error
+
+    async def summarize(self, request: Any) -> Any:
+        raise self.error
+
+
+def a_summary_request() -> Any:
+    from app.ai.case_summary import SummaryRequest
+
+    return SummaryRequest(
+        category="harassment",
+        messages=({"role": "user", "content": "A narrative."},),
+        timeout_seconds=30,
+    )
+
+
+async def test_an_unbilled_summary_failure_is_not_recorded(tmp_path: Path) -> None:
+    from app.ai.case_summary import SummaryUnavailable
+    from app.ai.replay import RecordingSummarizer
+
+    store = a_store(tmp_path)
+    error = SummaryUnavailable("refused", usage=Usage(0, 0, 0, 0), unbilled=True)
+    recorder = RecordingSummarizer(FailingSummarizer(error), store)
+
+    with pytest.raises(SummaryUnavailable):
+        await recorder.summarize(a_summary_request())
+
+    assert len(store) == 0
+    [skipped] = recorder.skipped
+    assert skipped.kind == "summary"
+    assert "transient" in skipped.reason
+
+
+async def test_a_billed_summary_failure_is_model_behavior_and_is_recorded(
+    tmp_path: Path,
+) -> None:
+    from app.ai.case_summary import SummaryUnavailable
+    from app.ai.replay import RecordingSummarizer
+
+    store = a_store(tmp_path)
+    error = SummaryUnavailable("unusable output", usage=USAGE)
+    recorder = RecordingSummarizer(FailingSummarizer(error), store)
+
+    with pytest.raises(SummaryUnavailable):
+        await recorder.summarize(a_summary_request())
+
+    assert len(store) == 1
+    assert recorder.skipped == []

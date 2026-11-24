@@ -45,8 +45,12 @@ export default defineConfig({
   forbidOnly: !!process.env.CI,
   retries: 0,
   // CI runs one worker, which is also what the timing-sensitive conversation specs are written for.
-  // Locally Playwright picks its own number.
-  workers: process.env.CI ? 1 : undefined,
+  // Locally the host run lets Playwright pick its own number (half the cores), but the image run
+  // takes two. On macOS every request to the container and every query from it to Postgres goes
+  // through Docker Desktop's VM and its port forwarding, so at five workers the one uvicorn in the
+  // container fell behind: 3 of 5 `make check` runs (2026-11-17) failed a different 5-second wait
+  // each time, while the host run at five workers never did. `--workers` still overrides this.
+  workers: process.env.CI ? 1 : IMAGE_TARGET ? 2 : undefined,
   reporter: process.env.CI ? [['github'], ['html', { open: 'never' }]] : 'list',
   use: {
     baseURL: IMAGE_TARGET ? IMAGE_ORIGIN : WEB_ORIGIN,

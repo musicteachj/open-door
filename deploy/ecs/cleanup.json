@@ -1,0 +1,53 @@
+{
+  "family": "opendoor-cleanup",
+  "networkMode": "bridge",
+  "requiresCompatibilities": [
+    "EC2"
+  ],
+  "executionRoleArn": "arn:aws:iam::__ACCOUNT_ID__:role/opendoor-execution",
+  "taskRoleArn": "arn:aws:iam::__ACCOUNT_ID__:role/opendoor-task",
+  "containerDefinitions": [
+    {
+      "name": "opendoor-cleanup",
+      "image": "__IMAGE__",
+      "essential": true,
+      "entryPoint": [
+        "/app/cleanup.sh"
+      ],
+      "memory": 128,
+      "user": "10001:10001",
+      "privileged": false,
+      "readonlyRootFilesystem": true,
+      "linuxParameters": {
+        "capabilities": {
+          "drop": [
+            "ALL"
+          ]
+        },
+        "tmpfs": [
+          {
+            "containerPath": "/tmp",
+            "size": 64
+          }
+        ]
+      },
+      "dockerSecurityOptions": [
+        "no-new-privileges"
+      ],
+      "secrets": [
+        {
+          "name": "CLEANUP_DATABASE_URL",
+          "valueFrom": "arn:aws:ssm:__REGION__:__ACCOUNT_ID__:parameter/portfolio/opendoor/CLEANUP_DATABASE_URL"
+        }
+      ],
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group": "/portfolio/opendoor",
+          "awslogs-region": "__REGION__",
+          "awslogs-stream-prefix": "cleanup"
+        }
+      }
+    }
+  ]
+}

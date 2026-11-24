@@ -7,12 +7,18 @@ for its user:
 - DATABASE_URL names the API's login, which gets od_app.
 - CLEANUP_DATABASE_URL, if set, names the cleanup login, which gets od_cleanup.
 
-A second run only resets the passwords, so `make db` runs it every time. Three rules keep it safe:
+A second run only resets the passwords, so `make db` runs it every time. Four rules keep it safe:
 
 - Postgres quotes every name and value itself, through format('%I') for names and format('%L') for
   values, so nothing from a URL is ever pasted into SQL by hand.
 - A login that already exists is reused only if it has no extra power. Granting od_app to a role
   that can bypass row-level security, for example, would give the API that power.
+- Only the configured logins may hold od_app or od_cleanup. Open Door's database can share a
+  Postgres server with another app (migration 0020 admits only these two roles to it), and a role
+  of that app that held one would inherit Open Door's access. The script refuses, changing
+  nothing, naming the role and its members. The owner running it is not a stranger: Postgres 16
+  and later give a CREATEROLE creator an admin membership (no inherit, no set) in each role it
+  creates.
 - The plaintext password never leaves this process. The script sends a SCRAM-SHA-256 verifier, so
   neither an error message nor the server's log (log_statement, log_min_error_statement) can
   contain the password. Errors are reduced to the name of their class for the same reason.
@@ -80,11 +86,21 @@ MEMBERSHIPS = text(
     " WHERE u.rolname = :user ORDER BY g.rolname"
 )
 
-# The roles that belong to the login. They would inherit whatever the login is granted.
+# Who holds each of Open Door's two roles, with the owner running the script left out.
+ROLE_HOLDERS = text(
+    "SELECT DISTINCT g.rolname, u.rolname FROM pg_auth_members m"
+    " JOIN pg_roles g ON g.oid = m.roleid JOIN pg_roles u ON u.oid = m.member"
+    " WHERE g.rolname = ANY(:roles) AND u.rolname <> current_user"
+    " ORDER BY g.rolname, u.rolname"
+)
+
+# The roles that belong to the login. They would inherit whatever the login is granted. The owner
+# running the script is left out: Postgres 16 and later give a CREATEROLE creator an admin
+# membership (no inherit, no set) in each role it creates, and that grants it nothing.
 MEMBERS = text(
     "SELECT DISTINCT u.rolname FROM pg_auth_members m"
     " JOIN pg_roles g ON g.oid = m.roleid JOIN pg_roles u ON u.oid = m.member"
-    " WHERE g.rolname = :user ORDER BY u.rolname"
+    " WHERE g.rolname = :user AND u.rolname <> current_user ORDER BY u.rolname"
 )
 
 SCRAM_ITERATIONS = 4096
@@ -192,6 +208,35 @@ async def check_login(connection: AsyncConnection, login: Login) -> bool:
     return True
 
 
+async def check_strangers(
+    connection: AsyncConnection, logins: list[Login], *, cleanup_url_given: bool = True
+) -> None:
+    """Refuse, changing nothing, if a role holds od_app or od_cleanup and no URL names it.
+
+    The check stays closed when CLEANUP_DATABASE_URL is missing: the cleanup login a first run made
+    then looks like a stranger, so the refusal says that URL is not set."""
+    configured = {(login.role, login.user) for login in logins}
+    strangers: dict[str, list[str]] = {}
+    for role, holder in await connection.execute(ROLE_HOLDERS, {"roles": list(ROLES)}):
+        if (role, holder) not in configured:
+            strangers.setdefault(role, []).append(holder)
+    if strangers:
+        found = "; ".join(
+            f"{role} is held by {', '.join(holders)}" for role, holders in strangers.items()
+        )
+        hint = ""
+        if not cleanup_url_given and "od_cleanup" in strangers:
+            hint = (
+                " CLEANUP_DATABASE_URL is not set: if the holder of od_cleanup is Open Door's own "
+                "cleanup login, set CLEANUP_DATABASE_URL to its URL and the setup will run."
+            )
+        raise SystemExit(
+            f"{found}: another database's login would inherit Open Door's access. Nothing was "
+            "changed. Revoke the role from each of them, or name each as a login in "
+            f"DATABASE_URL or CLEANUP_DATABASE_URL.{hint}"
+        )
+
+
 async def ensure_login(connection: AsyncConnection, login: Login, exists: bool) -> str:
     template = ALTER_LOGIN if exists else CREATE_LOGIN
     # exec_driver_sql sends each statement exactly as Postgres built it. text() would read
@@ -232,6 +277,7 @@ async def main() -> None:
             )
             if set(existing) != set(ROLES):
                 raise SystemExit("The od_app and od_cleanup roles don't exist. Run `make migrate`.")
+            await check_strangers(connection, logins, cleanup_url_given=cleanup_url is not None)
             # Check every login before changing any, so a refusal leaves the database as it was.
             states = [(login, await check_login(connection, login)) for login in logins]
             messages = [await ensure_login(connection, login, exists) for login, exists in states]

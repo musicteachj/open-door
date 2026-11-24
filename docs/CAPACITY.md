@@ -1,7 +1,7 @@
 # Capacity
 
 How many visitors one API task carries, what the assistant costs per visit, and the sizes and limits
-recommended for the deploy. Phase 9 sets the final values in the task definition and the settings;
+recommended for the deploy. `docs/DEPLOY.md` holds the task definition and the settings;
 this is the measured starting point.
 
 Everything here was measured locally on 2026-11-13 with the load test (`make load`, see
@@ -56,6 +56,12 @@ and page reads slowing too. Nothing failed, but that is the edge. At 1 vCPU, 50 
 peak and every page read stayed under 40 ms at p95. Memory never passed 142 MB, and the database
 login never held more than 11 of its 15 connections.
 
+**Under the 512 MiB limit (Phase 9a, 2026-11-20).** The same load test at 0.5 vCPU with the hard
+limit the deploy uses (`make load LOAD_ARGS="--sizes 0.5:512m --visitors 10 --no-real-caps-run"`):
+all 10 tours completed with no non-2xx answer, turn p50 / p95 4,457 / 5,646 ms, `turn.started`
+p95 53 ms, API CPU at most 61% of its limit, and the API's memory peak 135 MB (mean 124 MB). The
+scripted live check (`make live-check DRY_RUN=1`) peaked at 123 MiB under the same limit.
+
 **The long conversation.** The tour's conversations are at most three questions, so one extra run
 (0.5 vCPU, 25 tour visitors repeating their tours for 7.7 minutes) added one visitor asking
 alternately about sick days and booking a Friday off, in one conversation, never confirming, so its
@@ -96,24 +102,26 @@ visitors on the recommended size, or being what saturates a task first.
 
 ## Recommendations
 
-**Task size: 1 vCPU, 2 GB.** It carried 50 visitors at once with room to spare. 0.5 vCPU carries
-25, but its CPU peaked at 76% there and it saturates at 50. Memory needs are small (142 MB at
-peak), and 2 GB is the smallest memory Fargate offers with 1 vCPU.
+**One task, 256 MiB reserved and 512 MiB hard, no CPU reservation** (Phase 9a, for the shared
+portfolio server, ADR 0023). Memory needs are small (142 MB at peak). The earlier runs of 50
+visitors at once on 1 vCPU, and 25 on 0.5 vCPU, show what a dedicated CPU carries; on the shared
+instance the task takes the CPU it needs and the other apps' idle time covers it.
 
 **One uvicorn process per task.** The CPU, not the process, was the limit at 0.5 vCPU, and one
 process at 1 vCPU had half its CPU spare at 50 visitors. A second process would double the
 database connections and the memory for no measured gain.
 
 **The default database pool (5, plus 10 overflow).** The most connections in use at once was 11,
-at the saturated size; at 1 vCPU it was 7. Two tasks can hold at most 30, well inside a small
-managed instance's limit. A turn does not hold a connection while the model streams: at most 5
+at the saturated size; at 1 vCPU it was 7. One task holds at most 15, well inside the shared
+Postgres server's limit. A turn does not hold a connection while the model streams: at most 5
 connections were ever idle inside a transaction, while far more turns were in flight.
 
-**Two tasks,** in two availability zones, for availability rather than load: one task carries
-everything measured here.
+**One task,** not two: the shared server is one instance, so a second task would add no
+availability, and one task carries everything measured here. A deploy updates it rolling, with a
+minimum of 100% and a maximum of 200% healthy.
 
 **The load balancer's idle timeout: 120 seconds, below the image's keep-alive of 130.** Streams send
-a keep-alive comment every 15 seconds, so 120 is plenty for them. If Phase 9 ever needs a longer
+a keep-alive comment every 15 seconds, so 120 is plenty for them. If the deploy ever needs a longer
 idle timeout, raise `--timeout-keep-alive` in `scripts/image/entrypoint.sh` above it first.
 
 **The AI limits.** The costs, from the runs already paid for (Opus 5.5 answering, Haiku 5.5
@@ -128,25 +136,35 @@ guarding):
 | One guided tour (nine questions) | about $0.16 to $0.18 |
 | A typical visit (three to five questions) | about $0.06 to $0.10 |
 
-- **Per sandbox: keep $1.** That is about five tours, or about 50 questions, more than any honest
-  visit uses, and it stops one visitor from using the day's budget alone. A conversation reaches
-  its history limit at about 47 questions anyway.
-- **Per day: size it to the visits wanted, plus headroom for questions in flight.** The ledger
-  reserves the most a call could cost before making it (about $0.16 to $0.30 for an answer, at the
-  full output limit) and settles to the real cost afterward. So the daily cap must cover the day's
-  real spend **and** the reservations of the questions running at that moment.
-  - At today's $3, the real spend allows about 160 questions (about 17 tours) in a day. With 25
-    visitors at once and no real spend at all, 7 of the run's 225 questions were still refused
-    with `budget-daily`, from reservations alone.
-  - A rule of thumb: daily cap = tours wanted × $0.18, plus $0.30 × the most questions expected at
-    once. For 50 tours a day with up to 10 at once, that is $9 + $3 = **$12**. For 100 tours with up
-    to 20 at once, about **$24**.
-  - Phase 9 picks the number. The budget banner and the refusal text already tell a visitor when
-    the day's budget is used.
-- **Sandbox starts: keep 5 an hour and 20 a day per address, and 500 a day in all.** The AI cap,
-  not the start limit, is what ends a busy day: at $12 a day, the assistant stops answering long
-  before 500 sandboxes have started. Every start seeds 145 people (about 100 ms at p95 at 1 vCPU),
-  which the run measured as cheap.
+- **Per sandbox: $0.50** (production's value; the code default stays $1.00). That is one full tour
+  plus a few follow-up questions, because each question needs about $0.26 of room before it
+  starts (the guard's reservation plus the first model call's, priced at its dearest fallback
+  model, `app/ai/admission.py` `room_needed_usd`, used by the stream route in `app/ai/turn.py`). It
+  stops one visitor from using the day's budget alone.
+- **Per month and per day: a paced $20 month** (Phase 9a, ADR 0011). The monthly budget is the
+  limit; each day may spend the larger of a multiple (3x) of an even share of what is left and a
+  $1.00 floor, never more than what is left. At about $0.17 a tour, $20 buys about 115 tours. A
+  30-day month's even share is about $0.67 a day, a busy day can use up to $2.00, and the $1.00
+  floor lets about three first questions start at once ($0.26 each). Unspent days raise the later
+  days' share. `AI_DAILY_BUDGET_USD` is set equal to the month in production, so pacing alone
+  governs.
+  - The ledger reserves the most a call could cost before making it (about $0.20 to $0.38 for an
+    answer, at the full output limit and the dearest fallback model's price) and settles to the real cost afterward, so a day's room must
+    cover the reservations of the questions running at that moment as well as the real spend. With
+    25 visitors at once and no real spend at all, 7 of an earlier run's 225 questions were refused
+    with `budget-daily` from reservations alone.
+  - When the month or the day has no room for a first question, the landing offers the recorded
+    walkthrough instead of the tour (`GET /api/v1/assistant/availability`).
+- **Sandbox starts: 15 an hour and 50 a day per address, and 1,000 a day in all** (Phase 9a,
+  raised from 5, 20, and 500). The per-address numbers are sized for a hiring team behind one
+  office address, where several people try the demo in the same hour. The AI budget, not the start
+  limit, is what ends a busy day: the assistant stops answering long before 1,000 sandboxes have
+  started. Size on disk, measured on 2026-11-19 after compacting the
+  development database (`VACUUM FULL`), with 278 seeded sandboxes: about 353 kB a sandbox, so 1,000
+  sandboxes come to about 350 MB, under 2% of the 20 GB data volume. Sandboxes deleted every day
+  leave dead rows, which autovacuum makes reusable but does not return to the disk, so the volume
+  should hold the peak (about 1,000 sandboxes alive at once) plus headroom. Every start
+  seeds 145 people (about 100 ms at p95 at 1 vCPU), which the run measured as cheap.
 
 ## Caveats
 

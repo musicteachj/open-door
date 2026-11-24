@@ -5,6 +5,7 @@ import {
   localIsoDate,
   NOTES,
   summaryNote,
+  turnHoldMs,
   withoutLinks,
   type RecordedTurn,
 } from './build'
@@ -30,6 +31,23 @@ describe('holdMs: long enough to read', () => {
     expect(holdMs(Array(15).fill('word').join(' '))).toBe(5000)
     expect(holdMs(Array(30).fill('word').join(' '))).toBe(6000)
     expect(holdMs(Array(22).fill('word').join(' '))).toBe(5467)
+  })
+})
+
+describe('turnHoldMs: the pause after a turn covers all it shows', () => {
+  const words = (count: number) => Array(count).fill('word').join(' ')
+  const panel = (message: string) => ({ kind: 'sensitive', message })
+
+  it('holds an answer alone by its words, up to 5 s', () => {
+    expect(turnHoldMs(turn({ answerText: words(9) }))).toBe(4600)
+    expect(turnHoldMs(turn({ answerText: words(200) }))).toBe(5000)
+  })
+
+  it('adds the HR panel’s text to the answer’s, each up to 5 s', () => {
+    expect(turnHoldMs(turn({ answerText: words(9), escalation: panel(words(3)) }))).toBe(
+      4600 + 4200,
+    )
+    expect(turnHoldMs(turn({ answerText: words(200), escalation: panel(words(48)) }))).toBe(10_000)
   })
 })
 

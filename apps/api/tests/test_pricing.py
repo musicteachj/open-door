@@ -116,6 +116,31 @@ def test_the_reservation_is_the_input_at_the_dearest_rate_plus_the_full_output()
     assert reservation_usd(OPUS, estimated_input_tokens=20_000, max_tokens=8_000) == Decimal("0.26")
 
 
+def test_a_reservation_with_fallbacks_prices_opus_at_its_dearest_fallback() -> None:
+    # Opus 5 and 4.8 may serve a declined Opus 5.5 request: the input at their cache-write $6.25
+    # and the output at their $25.00. 20,000 x $6.25 + 8,000 x $25.00, per million.
+    reserved = reservation_usd(
+        OPUS, estimated_input_tokens=20_000, max_tokens=8_000, fallbacks=True
+    )
+    assert reserved == Decimal("0.325")
+
+
+@pytest.mark.parametrize("model", sorted(pricing.FALLBACK_MODELS))
+def test_a_reservation_with_fallbacks_covers_every_model_that_might_serve_it(model: str) -> None:
+    reserved = reservation_usd(
+        model, estimated_input_tokens=20_000, max_tokens=8_000, fallbacks=True
+    )
+    for serving in (model, *pricing.FALLBACK_MODELS[model]):
+        alone = reservation_usd(serving, estimated_input_tokens=20_000, max_tokens=8_000)
+        assert reserved >= alone
+
+
+def test_fallbacks_change_nothing_for_a_model_that_has_none() -> None:
+    assert reservation_usd(
+        HAIKU, estimated_input_tokens=1_000, max_tokens=500, fallbacks=True
+    ) == reservation_usd(HAIKU, estimated_input_tokens=1_000, max_tokens=500)
+
+
 @pytest.mark.parametrize("model", sorted(PRICES))
 @pytest.mark.parametrize(
     ("plain_share", "read_share", "write_share"),

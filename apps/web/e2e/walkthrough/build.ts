@@ -24,6 +24,23 @@ export function holdMs(text: string): number {
 }
 
 /**
+ * The longest a turn's answer, or its HR panel, is held. The answer streams in, so it is read as it
+ * arrives, and the transcript keeps every word: the hold is a last look, not the whole read.
+ */
+const BLOCK_HOLD_MAX_MS = 5000
+
+/**
+ * How long to hold the end of a turn: its answer's reading time, plus the HR panel's when the turn
+ * shows one, each block capped on its own. One cap over both would give the answer before a panel
+ * no time at all, since the panel's fixed text alone fills it.
+ */
+export function turnHoldMs(turn: RecordedTurn): number {
+  const blocks = [turn.answerText]
+  if (turn.escalation) blocks.push(turn.escalation.message)
+  return blocks.reduce((total, text) => total + Math.min(holdMs(text), BLOCK_HOLD_MAX_MS), 0)
+}
+
+/**
  * An answer's Markdown without its links: the walkthrough is public, so a link to the handbook or
  * the directory would only reach the landing. The link's words stay.
  */

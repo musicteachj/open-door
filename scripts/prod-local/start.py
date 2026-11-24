@@ -8,9 +8,12 @@ network; the database is not kept.
 
 Any question asked through it is a paid call: production accepts only the `anthropic` transport.
 `--check` starts everything, looks at the pages, and stops, asking the model nothing.
+`--check --ai-off` starts it with live AI turned off (a $0 monthly budget) and checks what a visitor
+sees then; it needs no model key and is handed a made-up one.
 
     uv run python ../../scripts/prod-local/start.py            # run in the foreground
     uv run python ../../scripts/prod-local/start.py --check    # prove it starts and serves pages
+    uv run python ../../scripts/prod-local/start.py --check --ai-off   # and that live AI off works
 
 Run it from apps/api (the API's settings supply the keys and the keyring). Every secret travels in
 the docker client's environment (`--env KEY`), never on a command line.
@@ -41,10 +44,14 @@ POSTGRES_IMAGE = container.POSTGRES_IMAGE
 NETWORK = "open-door-prod-local"
 DB_NAME = "open-door-prod-local-db"
 API_NAME = "open-door-prod-local-api"
-DB_OWNER = container.DB_OWNER
+INIT_USER = container.SHARED_INIT_USER
+OPEN_DOOR_OWNER = container.OPEN_DOOR_OWNER
+# The init superuser's setup of Open Door's database, the same file the shared server runs.
+INIT_SQL = Path(__file__).resolve().parents[1] / "image" / "postgres-open-door.sql"
 DB_DATABASE = container.DB_DATABASE
 APP_LOGIN = container.APP_LOGIN
 CLEANUP_LOGIN = container.CLEANUP_LOGIN
+API_MEMORY = "512m"  # Production's hard limit for the API task.
 DEFAULT_PORT = 8300
 # Production refuses the development default origin, which is this port.
 DEV_PORT = 5173
@@ -57,15 +64,22 @@ DB_READY_TIMEOUT_SECONDS = 60
 LOG_LINES = 40
 
 
+# What the live-AI-off check hands the image as its model key. It is not a key: if anything calls
+# the model by mistake, the call is refused unbilled. The real key is never passed to that check.
+AI_OFF_API_KEY = "not-a-real-key-ai-off-check"  # Deliberately not a secret.
+AI_OFF_BUDGETS_USD = {"monthly": "0"}
+
+
 class LaunchError(Exception):
     """Something stops the run; the message is for a person and holds no secret."""
 
 
 @dataclass(frozen=True)
 class Passwords:
-    """The three database passwords, and the key that hides visitors' addresses, made fresh for
+    """The four database passwords, and the key that hides visitors' addresses, made fresh for
     every run. (Production requires SANDBOX_IP_HASH_KEY and refuses the development value.)"""
 
+    init: str
     owner: str
     app: str
     cleanup: str
@@ -74,6 +88,7 @@ class Passwords:
     @classmethod
     def new(cls) -> "Passwords":
         return cls(
+            init=secrets.token_urlsafe(24),
             owner=secrets.token_urlsafe(24),
             app=secrets.token_urlsafe(24),
             cleanup=secrets.token_urlsafe(24),
@@ -123,11 +138,9 @@ def _database_url(user: str, password: str) -> str:
 
 
 def db_env(passwords: Passwords) -> dict[str, str]:
-    return {
-        "POSTGRES_USER": DB_OWNER,
-        "POSTGRES_PASSWORD": passwords.owner,
-        "POSTGRES_DB": DB_DATABASE,
-    }
+    """The server starts with its init superuser only: the owner and the database are made by
+    `INIT_SQL`, as on the shared portfolio server."""
+    return {"POSTGRES_USER": INIT_USER, "POSTGRES_PASSWORD": passwords.init}
 
 
 def entry_env(passwords: Passwords) -> dict[str, str]:
@@ -154,27 +167,41 @@ def setup_env(passwords: Passwords, origin: str) -> dict[str, str]:
         "APP_ENV": "production",
         "APP_ORIGIN": origin,
         "DATABASE_URL": _database_url(APP_LOGIN, passwords.app),
-        "MIGRATION_DATABASE_URL": _database_url(DB_OWNER, passwords.owner),
+        "MIGRATION_DATABASE_URL": _database_url(OPEN_DOOR_OWNER, passwords.owner),
         "CLEANUP_DATABASE_URL": _database_url(CLEANUP_LOGIN, passwords.cleanup),
     }
 
 
+def cleanup_env(passwords: Passwords) -> dict[str, str]:
+    """The cleanup job reads one setting: its own login's URL."""
+    return {"CLEANUP_DATABASE_URL": _database_url(CLEANUP_LOGIN, passwords.cleanup)}
+
+
 # The AI budgets a run may lower (the recording's per-take cap, the live check's cap), by name.
-BUDGET_SETTINGS = {"daily": "AI_DAILY_BUDGET_USD", "sandbox": "AI_SANDBOX_BUDGET_USD"}
+BUDGET_SETTINGS = {
+    "daily": "AI_DAILY_BUDGET_USD",
+    "sandbox": "AI_SANDBOX_BUDGET_USD",
+    "monthly": "AI_MONTHLY_BUDGET_USD",
+}
+# What production runs on (Phase 9a): a $20 month and $0.50 a sandbox, unless a run lowers them.
+PORTFOLIO_BUDGETS_USD = {"monthly": "20", "sandbox": "0.50"}
 DOLLARS = re.compile(r"\d{1,4}(\.\d{1,2})?")
 
 
 def budget_env(budgets_usd: Mapping[str, str] | None) -> dict[str, str]:
-    """The AI budget settings for `budgets_usd` ({"daily": "0.66"}): positive dollars only."""
+    """The AI budget settings for `budgets_usd` ({"daily": "0.66"}): positive dollars only, except
+    the monthly budget, where 0 turns live AI off."""
     env: dict[str, str] = {}
     for name, amount in (budgets_usd or {}).items():
         setting = BUDGET_SETTINGS.get(name)
         if setting is None:
-            raise LaunchError(f"Only the daily and sandbox budgets can be set, not {name!r}.")
-        if not DOLLARS.fullmatch(amount) or float(amount) <= 0:
             raise LaunchError(
-                f"The {name} budget must be a positive dollar amount, not {amount!r}."
+                f"Only the daily, sandbox, and monthly budgets can be set, not {name!r}."
             )
+        floor = 0 if name == "monthly" else 1e-9
+        if not DOLLARS.fullmatch(amount) or float(amount) < floor:
+            kind = "non-negative" if name == "monthly" else "positive"
+            raise LaunchError(f"The {name} budget must be a {kind} dollar amount, not {amount!r}.")
         env[setting] = amount
     return env
 
@@ -207,7 +234,7 @@ def api_env(
         "DATABASE_URL": _database_url(APP_LOGIN, passwords.app),
         "ENCRYPTION_KEYRING": keyring,
         **entry_env(passwords),
-        **budget_env(budgets_usd),
+        **budget_env({**PORTFOLIO_BUDGETS_USD, **(budgets_usd or {})}),
     }
     if scripted:
         env["SCRIPTED_DELAY_PROFILE"] = "realistic"
@@ -218,9 +245,16 @@ def api_env(
     return env
 
 
-def read_secrets() -> Secrets:
+def ai_off_secrets(secrets_: Secrets) -> Secrets:
+    """The secrets for the live-AI-off check: the keyring, and made-up model keys (no Voyage key).
+    Nothing the caller read for the model is passed on."""
+    return Secrets(AI_OFF_API_KEY, None, secrets_.keyring)
+
+
+def read_secrets(*, require_key: bool = True) -> Secrets:
     """The keys and the keyring from the API's settings (apps/api/.env, the environment, and the
-    keyring file). Nothing here is printed."""
+    keyring file). Nothing here is printed. With `require_key=False` (the live-AI-off check) a
+    missing Anthropic key is fine, and the Secrets carry an empty one."""
     from app.core.config import Settings  # imported here: needs apps/api on the path.
     from app.core.encryption import load_key_provider, resolve_keyring_path
 
@@ -234,7 +268,10 @@ def read_secrets() -> Secrets:
         )
         raise LaunchError(f"The API's settings are not valid: {reasons}") from None
     anthropic = settings.anthropic_api_key
-    key = require_anthropic_key(None if anthropic is None else anthropic.get_secret_value())
+    if require_key:
+        key = require_anthropic_key(None if anthropic is None else anthropic.get_secret_value())
+    else:
+        key = ""
     ring, ring_file = settings.encryption_keyring, settings.encryption_keyring_file
     try:
         keys = load_key_provider(
@@ -266,7 +303,12 @@ def setup_run_args(env: dict[str, str]) -> list[str]:
     return container.setup_run_args(f"{API_NAME}-setup", NETWORK, env)
 
 
+def cleanup_run_args(env: dict[str, str]) -> list[str]:
+    return container.cleanup_run_args(f"{API_NAME}-cleanup", NETWORK, env)
+
+
 def api_run_args(env: dict[str, str], *, port: int, detach: bool) -> list[str]:
+    """The API with production's memory limit and hardened flags."""
     return container.run_args(
         API_NAME,
         env,
@@ -274,6 +316,7 @@ def api_run_args(env: dict[str, str], *, port: int, detach: bool) -> list[str]:
         detach=detach,
         image=container.PROD_TAG,
         network=NETWORK,
+        extra_args=["--memory", API_MEMORY, *container.HARDENED_FLAGS],
     )
 
 
@@ -301,7 +344,10 @@ def ensure_network() -> bool:
 
 
 def wait_for_postgres() -> None:
-    if not container.postgres_ready(DB_NAME, timeout_seconds=DB_READY_TIMEOUT_SECONDS):
+    ready = container.postgres_ready(
+        DB_NAME, timeout_seconds=DB_READY_TIMEOUT_SECONDS, user=INIT_USER, database="postgres"
+    )
+    if not ready:
         raise LaunchError(
             f"The database did not become ready in {DB_READY_TIMEOUT_SECONDS} seconds.\n"
             + last_logs(DB_NAME)
@@ -313,7 +359,14 @@ def last_logs(name: str) -> str:
     return (result.stdout + result.stderr).strip()
 
 
-def run_setup(env: dict[str, str]) -> None:
+def resets_both_logins(printed: str) -> bool:
+    """Whether a repeated setup reset the app's and the cleanup login's passwords, and created
+    neither (the bootstrap prints one line for each login)."""
+    return printed.count(": password reset, with ") >= 2 and ": created, with " not in printed
+
+
+def run_setup(env: dict[str, str]) -> str:
+    """Run the one-off setup container; returns what it printed."""
     result = subprocess.run(  # noqa: S603
         setup_run_args(env),
         env=container.client_env(env),
@@ -325,12 +378,42 @@ def run_setup(env: dict[str, str]) -> None:
     if result.returncode != 0:
         tail = "\n".join((result.stdout + result.stderr).strip().splitlines()[-LOG_LINES:])
         raise LaunchError(f"The one-off setup (migrations, users, handbook) failed:\n{tail}")
+    return result.stdout
+
+
+def init_sql_args(passwords: Passwords) -> tuple[list[str], dict[str, str]]:
+    """Feed `INIT_SQL` to psql in the database container, as the init superuser. The owner's
+    password goes in as `--env NAME`: its value stays in the docker client's environment (the
+    second item), never on a command line."""
+    env = {"OD_OWNER_PASSWORD": passwords.owner}
+    args = [
+        "docker", "exec", "-i", *container.env_flags(env), DB_NAME,
+        "psql", "-U", INIT_USER, "-d", "postgres", "-X", "-q",
+    ]  # fmt: skip
+    return args, env
+
+
+def run_init_sql(passwords: Passwords) -> None:
+    args, env = init_sql_args(passwords)
+    result = subprocess.run(  # noqa: S603
+        args,
+        input=INIT_SQL.read_text(encoding="utf-8"),
+        env=container.client_env(env),
+        capture_output=True,
+        text=True,
+        timeout=120,
+        check=False,
+    )
+    if result.returncode != 0:
+        tail = "\n".join((result.stdout + result.stderr).strip().splitlines()[-LOG_LINES:])
+        raise LaunchError(f"The init SQL (Open Door's database and its owner) failed:\n{tail}")
 
 
 def start_database(passwords: Passwords) -> None:
     env = db_env(passwords)
     container.run(*db_run_args(env), env=env)
     wait_for_postgres()
+    run_init_sql(passwords)
 
 
 def cleanup(*, made_network: bool) -> None:
@@ -338,6 +421,7 @@ def cleanup(*, made_network: bool) -> None:
     docker("stop", "--time", str(STOP_GRACE_SECONDS), API_NAME, check=False)
     container.remove(API_NAME)
     container.remove(f"{API_NAME}-setup")
+    container.remove(f"{API_NAME}-cleanup")
     docker("stop", "--time", "5", DB_NAME, check=False)
     container.remove(DB_NAME)
     if made_network:
@@ -362,19 +446,118 @@ def wait_until_ready(base: str) -> None:
     )
 
 
-def problems_in_pages(base: str) -> list[str]:
-    """Fetch the home page and one route that needs no session. No model call, no sandbox."""
+TURNSTILE_ORIGIN = "https://challenges.cloudflare.com"
+
+
+def directive_sources(csp: str, name: str) -> list[str]:
+    """The sources a Content-Security-Policy lists for one directive (empty if it has none)."""
+    for directive in csp.split(";"):
+        words = directive.split()
+        if words and words[0] == name:
+            return words[1:]
+    return []
+
+
+def serves_the_schema_or_swagger(content_type: str, body: str) -> bool:
+    """True when a response is the API's schema (JSON) or Swagger's page. The web app's own page
+    answering at the same path is fine."""
+    return "json" in content_type.lower() or "swagger" in body.lower()
+
+
+def problems_in_responses(
+    *,
+    home_status: int,
+    csp: str,
+    live_status: int,
+    health_status: int,
+    availability_status: int,
+    availability_body: object,
+    openapi_content_type: str,
+    openapi_body: str,
+    docs_body: str,
+) -> list[str]:
+    """What the page check concludes from what it saw. Plain data in, problems out."""
     problems: list[str] = []
+    if home_status != 200:
+        problems.append(f"/ answered {home_status}")
+    if "'nonce-" not in csp:
+        problems.append("/ has no Content-Security-Policy with a nonce")
+    for directive in ("script-src", "frame-src"):
+        if TURNSTILE_ORIGIN not in directive_sources(csp, directive):
+            problems.append(f"the Content-Security-Policy's {directive} does not name Turnstile")
+    if live_status != 200:
+        problems.append(f"/api/v1/health/live answered {live_status}")
+    if health_status != 200:
+        problems.append(f"/api/v1/health answered {health_status}")
+    if availability_status != 200:
+        problems.append(f"/api/v1/assistant/availability answered {availability_status}")
+    elif not (
+        isinstance(availability_body, dict) and isinstance(availability_body.get("available"), bool)
+    ):
+        problems.append("/api/v1/assistant/availability has no boolean `available`")
+    if serves_the_schema_or_swagger(openapi_content_type, openapi_body):
+        problems.append("/openapi.json serves the API schema in production")
+    if serves_the_schema_or_swagger("", docs_body):
+        problems.append("/docs serves Swagger in production")
+    return problems
+
+
+def json_or_none(response: httpx.Response) -> object:
+    try:
+        return response.json()
+    except ValueError:
+        return None
+
+
+def problems_in_pages(base: str) -> list[str]:
+    """Fetch the home page and the routes that need no session. No model call, no sandbox."""
     with httpx.Client(base_url=base, timeout=10) as client:
         home = client.get("/", headers={"accept": "text/html"})
-        csp = home.headers.get("content-security-policy", "")
-        if home.status_code != 200:
-            problems.append(f"/ answered {home.status_code}")
-        if "'nonce-" not in csp:
-            problems.append("/ has no Content-Security-Policy with a nonce")
         live = client.get("/api/v1/health/live")
-        if live.status_code != 200:
-            problems.append(f"/api/v1/health/live answered {live.status_code}")
+        health = client.get("/api/v1/health")
+        availability = client.get("/api/v1/assistant/availability")
+        openapi = client.get("/openapi.json")
+        docs = client.get("/docs")
+    return problems_in_responses(
+        home_status=home.status_code,
+        csp=home.headers.get("content-security-policy", ""),
+        live_status=live.status_code,
+        health_status=health.status_code,
+        availability_status=availability.status_code,
+        availability_body=json_or_none(availability),
+        openapi_content_type=openapi.headers.get("content-type", ""),
+        openapi_body=openapi.text,
+        docs_body=docs.text,
+    )
+
+
+CLEANUP_DONE_LINE = "cleanup finished"
+
+
+def problems_in_cleanup(exit_code: int, output: str) -> list[str]:
+    problems = []
+    if exit_code != 0:
+        problems.append(f"the cleanup container exited {exit_code}")
+    if CLEANUP_DONE_LINE not in output:
+        problems.append(f"the cleanup container did not print {CLEANUP_DONE_LINE!r}")
+    return problems
+
+
+def run_cleanup_job(env: dict[str, str]) -> list[str]:
+    """Run the cleanup container once, as the deploy's schedule would, and judge it."""
+    result = subprocess.run(  # noqa: S603
+        cleanup_run_args(env),
+        env=container.client_env(env),
+        capture_output=True,
+        text=True,
+        timeout=120,
+        check=False,
+    )
+    output = result.stdout + result.stderr
+    problems = problems_in_cleanup(result.returncode, output)
+    if problems:
+        tail = "\n".join(output.strip().splitlines()[-LOG_LINES:])
+        problems.append(tail)
     return problems
 
 
@@ -387,19 +570,31 @@ def bring_up(
     *,
     scripted: bool = False,
     budgets_usd: Mapping[str, str] | None = None,
+    passwords: Passwords | None = None,
+    setup_runs: int = 1,
 ) -> tuple[bool, dict[str, str]]:
     """Start the database and run the setup; returns whether this run made the network and the
-    API's settings. Cleans up after itself if a step fails."""
-    passwords = Passwords.new()
+    API's settings. Cleans up after itself if a step fails. A caller that needs the passwords
+    afterward (the check runs the cleanup job) makes them and passes them in. The check runs the
+    setup twice (`setup_runs=2`), as every deploy does, and the later runs must reset the logins'
+    passwords, not create them."""
+    passwords = passwords or Passwords.new()
     require_the_image()
     # A stale container of the same name is removed first.
     container.remove(API_NAME)
     container.remove(f"{API_NAME}-setup")
+    container.remove(f"{API_NAME}-cleanup")
     container.remove(DB_NAME)
     made_network = ensure_network()
     try:
         start_database(passwords)
-        run_setup(setup_env(passwords, origin_for(port)))
+        for run_number in range(setup_runs):
+            printed = run_setup(setup_env(passwords, origin_for(port)))
+            if run_number > 0 and not resets_both_logins(printed):
+                raise LaunchError(
+                    f'Setup number {run_number + 1} should say "password reset" for both logins'
+                    " and create none: it only resets the passwords of logins that exist."
+                )
         env = api_env(
             port=port,
             passwords=passwords,
@@ -436,10 +631,11 @@ def running(
 
 
 def query_args(sql: str) -> list[str]:
-    """`psql` in the run's database container, as the owner, printing bare values."""
+    """`psql` in the run's database container, as the init superuser, printing bare values. The
+    owner is no superuser and sees no tenant rows under forced row-level security."""
     return [
         "docker", "exec", DB_NAME,
-        "psql", "-U", DB_OWNER, "-d", DB_DATABASE, "-v", "ON_ERROR_STOP=1", "-At", "-c", sql,
+        "psql", "-U", INIT_USER, "-d", DB_DATABASE, "-v", "ON_ERROR_STOP=1", "-At", "-c", sql,
     ]  # fmt: skip
 
 
@@ -451,18 +647,80 @@ def query(sql: str) -> str:
     return result.stdout.strip()
 
 
-def check(secrets_: Secrets, port: int) -> int:
-    made_network, env = bring_up(secrets_, port)
+def problems_with_ai_off(base: str, origin: str) -> list[str]:
+    """What a visitor meets when live AI is off: the flag says false, a sandbox still starts (with
+    Turnstile's always-pass dummy token), and a question is refused with the daily text and no
+    Retry-After (the month isn't coming back). No model is called: the budget stops it first."""
+    from app.ai.fixed_texts import BUDGET_DAILY_TEXT  # imported here: needs apps/api on the path.
+    from app.modules.sandbox.turnstile import DUMMY_TOKEN
+
+    problems: list[str] = []
+    same_origin = {"Origin": origin, "Sec-Fetch-Site": "same-origin"}
+    with httpx.Client(base_url=base, timeout=30) as client:
+        flag = client.get("/api/v1/assistant/availability")
+        if flag.status_code != 200 or flag.json() != {"available": False}:
+            return [f"the availability flag answered {flag.status_code} {flag.text[:200]}"]
+        # The cookies are set by hand: `__Host-` cookies are Secure, and a client's cookie jar won't
+        # send them over plain http.
+        started = client.post(
+            "/api/v1/sandboxes", json={"turnstileToken": DUMMY_TOKEN}, headers=same_origin
+        )
+        if started.status_code != 201:
+            return [f"starting a sandbox answered {started.status_code} {started.text[:200]}"]
+        session = started.cookies.get("__Host-od_session")
+        csrf = started.cookies.get("__Host-od_csrf")
+        if not session or not csrf:
+            return ["starting a sandbox did not set the session cookies"]
+        headers = {
+            **same_origin,
+            "Cookie": f"__Host-od_session={session}; __Host-od_csrf={csrf}",
+            "X-CSRF-Token": csrf,
+        }
+        conversation = client.post("/api/v1/assistant/conversations", json={}, headers=headers)
+        if conversation.status_code != 201:
+            return [f"a new conversation answered {conversation.status_code}"]
+        asked = client.post(
+            f"/api/v1/assistant/conversations/{conversation.json()['id']}/turns",
+            json={"question": "How many sick days do I get?"},
+            headers=headers,
+        )
+        body = asked.json() if asked.headers.get("content-type", "").endswith("json") else {}
+        if asked.status_code != 429 or body.get("type") != "budget-daily":
+            problems.append(f"a question answered {asked.status_code}, not 429 budget-daily")
+        elif body.get("detail") != BUDGET_DAILY_TEXT:
+            problems.append("the refusal is not the approved daily text")
+        if "retry-after" in asked.headers:
+            problems.append("the refusal promises a retry (Retry-After), but the month is used")
+    return problems
+
+
+def check(secrets_: Secrets, port: int, *, ai_off: bool = False) -> int:
+    if ai_off:
+        secrets_ = ai_off_secrets(secrets_)
+    passwords = Passwords.new()
+    made_network, env = bring_up(
+        secrets_,
+        port,
+        budgets_usd=AI_OFF_BUDGETS_USD if ai_off else None,
+        passwords=passwords,
+        setup_runs=2,
+    )
     base = f"http://127.0.0.1:{port}"
     try:
         container.run(*api_run_args(env, port=port, detach=True), env=env)
         wait_until_ready(base)
         problems = problems_in_pages(base)
+        problems += run_cleanup_job(cleanup_env(passwords))
+        if ai_off:
+            problems += problems_with_ai_off(base, origin_for(port))
         if problems:
             raise LaunchError("\n".join(problems) + "\n" + last_logs(API_NAME))
     finally:
         cleanup(made_network=made_network)
     print(f"prod-local check passed: {container.PROD_TAG} served {base} with production settings")
+    if ai_off:
+        print("With live AI off: the flag said false, a sandbox started, and a question was")
+        print("refused with the daily text. No model was called.")
     return 0
 
 
@@ -526,13 +784,22 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="start everything, fetch the pages, stop; asks the model nothing",
     )
+    parser.add_argument(
+        "--ai-off",
+        action="store_true",
+        help="with --check: run with live AI turned off ($0 monthly budget); no model key needed",
+    )
     options = parser.parse_args(argv)
+    if options.ai_off and not options.check:
+        parser.error("--ai-off goes with --check: serving with live AI off has nothing to ask")
     # Until `serve` takes over, a stop signal unwinds like Ctrl-C, so the cleanup in `bring_up`
     # and `check` runs and no database container or network is left behind.
     for signum in STOP_SIGNALS:
         signal.signal(signum, _interrupt)
     try:
         port = check_port(options.port)
+        if options.ai_off:
+            return check(read_secrets(require_key=False), port, ai_off=True)
         secrets_ = read_secrets()
         return check(secrets_, port) if options.check else serve(secrets_, port)
     except (LaunchError, container.ContainerError) as error:

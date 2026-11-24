@@ -2,6 +2,7 @@
 
 import asyncio
 import base64
+from decimal import Decimal
 from pathlib import Path
 from typing import Any
 
@@ -26,12 +27,14 @@ KEY = SecretStr("sk-ant-test-not-real")
 VOYAGE = SecretStr("pa-test-not-real")
 
 
-# What the API's startup check needs in production (require_entry_settings_fit_for_production).
+# What the API's startup checks need in production (require_entry_settings_fit_for_production and
+# require_ai_budget_fit_for_production).
 PRODUCTION_ENTRY: dict[str, Any] = {
     "turnstile_site_key": "0x4AAAAAAAreal",
     "turnstile_secret_key": "0x4AAAAAAAreal-secret",
     "sandbox_ip_hash_key": "k" * 40,
     "forwarded_allow_ips": "10.0.0.0/8",
+    "ai_monthly_budget_usd": Decimal(20),
 }
 
 

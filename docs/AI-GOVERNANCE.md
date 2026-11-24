@@ -47,14 +47,27 @@ Open Door, as the provider of an assistant that writes text, would have to mark 
   added Article 111(4), which gives a system placed on the market before 2 August 2026 until
   2 December 2026. Open Door would be placed on the market later (Phase 9), so the duty would apply
   from its first day.
-- **What exists today tells a person, not a machine:** every answer is labeled as the AI's on
-  screen (an "AI" badge, and "Open Door, the AI assistant" for screen readers), each turn's record
-  names the model that served it, and the walkthrough's transcript labels each answer the same
-  way. None of these is a mark a machine is meant to read from the output itself.
-- **The mark is a Phase 9 item** ([`BACKLOG.md`](BACKLOG.md)): chosen against the Commission's
-  guidance and code of practice as they stand when Open Door deploys, and added to each answer in
-  the API and the page.
+- **How answers and summaries are marked** ([ADR 0024](adr/0024-ai-written-text-is-marked.md)):
+  every stored answer and every written case summary carries an `aiGenerated` object in the API
+  (the generator, the models that wrote it, and the IPTC digital source type for generative
+  content), the turn stream's first event says `"aiGenerated": true`, and the page carries
+  `data-ai-generated="true"` on the element that holds model text. A fixed text (crisis, budget,
+  "can't answer right now") has no mark, because a person wrote it. On screen, every answer is also
+  labeled as the AI's (an "AI" badge, and "Open Door, the AI assistant" for screen readers).
+- **What the mark is not.** It is a good-faith, machine-readable label, not the Commission's
+  digitally signed metadata or its watermark. Open Door does not sign the code of practice. A text
+  watermark can only come from the model provider, while the model writes, and many answers fall
+  under the code's 200-token "very short text" line anyway. Open Door is a portfolio demo used only
+  by its author and hiring teams, so this is shown practice, not a claim of compliance. A real
+  product offered in the EU would add signed metadata (rejected here: a signing key and a new
+  production secret for no real user) and rely on the model provider's watermark.
 
+> Source: the Code of Practice on Transparency of AI-generated Content (final, published by the
+> European Commission on 10 June 2026), Section 1, Measure 1.1 and its glossary, read from the
+> Commission's site (digital-strategy.ec.europa.eu, and the code's PDF at
+> ec.europa.eu/newsroom/dae/redirection/document/129555) on 2026-11-20, with the Commission's
+> Article 50 FAQ read from the same site on the same day.
+>
 > Source: Regulation (EU) 2024/1689 (the AI Act), Article 50(1) and (2) and Article 113, read from
 > the Publications Office of the EU (publications.europa.eu, CELEX 32024R1689) on 2026-11-16, and
 > Article 111(4) as added by Regulation (EU) 2026/1744, read in the consolidated text of 27 July
@@ -415,17 +428,42 @@ with the eval or test that measures it:
   ([ADR 0021](adr/0021-sandbox-entry-protection.md)). It is not an AI vendor: the browser loads its
   widget, and the API sends Cloudflare the widget's one-use token and the visitor's address. No
   name, question, or conversation reaches it. Its terms are quoted in
-  [`DATA-INVENTORY.md`](DATA-INVENTORY.md) when the production keys are set up (Phase 9).
-- **Nothing else leaves the task:** outbound HTTPS goes only to Anthropic, Voyage, and Cloudflare,
-  and Phase 9 sets up that egress.
+  [`DATA-INVENTORY.md`](DATA-INVENTORY.md) when the production keys are set up (Phase 3 of the
+  deploy).
+- **Nothing else is sent by the app:** the API calls only Anthropic, Voyage, and Cloudflare. On the
+  shared server the network doesn't enforce that per task (ADR 0023 and the amendment to ADR 0022).
+  The code is what limits the calls, and the instance blocks the metadata service.
+
+### The deployed data path
+
+On AWS (us-east-1, one EC2 server shared with other portfolio apps; ADR 0023), a visitor's question
+travels: browser, the shared load balancer (TLS ends there), the API task, then out over HTTPS to
+Anthropic's Claude API (the guard first, then the assistant) and, for a search, to Voyage. What the
+vendors receive is the same as in
+[what is sent](#what-is-sent-to-anthropic-and-voyage). On AWS itself:
+
+- the question and answer are stored in Postgres on the same server, encrypted in the API (ADR
+  0015), and deleted with the sandbox after 24 hours;
+- application logs (CloudWatch, 14 days) and the load balancer's access logs (S3, 14 days) hold
+  addresses, paths, and IDs, never question or answer text;
+- daily snapshots of the data volume (7 days) can hold a deleted sandbox's rows. They are encrypted
+  at rest, but nothing shreds the keys, so a snapshot restored next to the current keyring can be
+  read, and the 7 days is the real bound;
+- the Anthropic and Voyage keys and the keyring are SSM SecureStrings (`docs/DEPLOY.md`), read into
+  the task's environment.
+
+Live AI has a $20 paced monthly budget, and a switch that turns it off (`AI_MONTHLY_BUDGET_USD=0`),
+after which the landing offers the recorded walkthrough.
 
 ## How long things are kept
 
 The cleanup job (`make cleanup`, Phase 8, Stage 4) deletes an expired sandbox 24 hours after it
 started, and with it every conversation, AI turn, proposal, and case in it; the daily spend ledger
 after 30 days; and the start counts after a day. Each rule is also a row-level policy on the
-cleanup's own login, so the job can't delete more. Phase 9 schedules it and sets the backups'
-window. Anthropic's 30 days and Voyage's zero-day retention are [above](#what-is-sent-to-anthropic-and-voyage).
+cleanup's own login, so the job can't delete more. The deployment runs it hourly, and the data
+volume's snapshots are kept 7 days (see the [deployed data path](#the-deployed-data-path)).
+Anthropic's 30 days and Voyage's zero-day retention
+are [above](#what-is-sent-to-anthropic-and-voyage).
 
 ## The recorded walkthrough
 
@@ -445,7 +483,7 @@ Reviewed on 2026-11-16, at the end of Phase 8, section by section:
   makes or recommends a decision about a person; its changes harden the app around the assistant.
 - **The disclosure:** Article 50(1) holds as before. **Article 50(2) was read wrongly** until now
   (above): a deployed Open Door must mark its answers in a machine-readable way, which Phase 9
-  adds before it deploys.
+  adds before it deploys. (Since done: ADR 0024, Phase 9a.)
 - **The models:** the pins are unchanged (Opus 5.5 for the assistant and the summary, Haiku 5.5 for
   the guard). Stage 6's prompt change (2026-11.4) passed its full run, and the fairness results
   above are that run's.
@@ -453,7 +491,9 @@ Reviewed on 2026-11-16, at the end of Phase 8, section by section:
   each is still measured by its eval.
 - **What reaches the vendors:** as listed, with Cloudflare added (not an AI vendor).
 - **Found while recording the walkthrough:** after a manager approved Priya's request, her next
-  answer said the request was "now waiting for Marcus Bell to approve it". The per-turn context tells
+  answer said the request was "now waiting for Marcus Bell to approve it". The per-turn context told
   the model what happened to the asker's own card (requested), not the request's later approval,
-  and the model reported it as the current status. It is in the backlog: the fix changes what the
-  model is told, so it needs a full eval run.
+  and the model reported it as the current status. It is fixed in prompt 2026-11.5, which has had
+  no eval run (the owner waived it for launch, ADR 0023). The published scoreboard is still
+  2026-11.4's, and CI replays the 2026-11.4 recordings under that prompt until a full run records
+  the new one.

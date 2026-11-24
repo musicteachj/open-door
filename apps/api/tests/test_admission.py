@@ -69,6 +69,7 @@ def test_a_turn_needs_more_than_the_guard_alone_and_more_than_one_call_alone() -
         CURRENT_PINS.model,
         estimated_input_tokens=first_call_input_tokens(bare),
         max_tokens=MAX_TOKENS,
+        fallbacks=True,
     )
 
     assert needed(question) > guard + call
@@ -97,6 +98,7 @@ def test_the_need_is_the_guard_with_a_full_slot_plus_the_first_call_with_both_no
         CURRENT_PINS.model,
         estimated_input_tokens=first_call_input_tokens(request),
         max_tokens=MAX_TOKENS,
+        fallbacks=True,
     )
 
     assert needed(question) == guard + call

@@ -20,7 +20,23 @@ retention below: expired sandboxes (24 hours), `ai_spend_daily` rows older than 
 `sandbox_starts` rows older than a day, and handbook versions no sandbox uses. Each is also a
 row-level policy on that login (or, for handbook versions, a foreign key and a trigger), so the job
 can't delete more than its rules allow, and tests prove it. It writes one log line of counts and no
-row contents. The deployment schedules it (Phase 9).
+row contents. The deployment runs it hourly (EventBridge Scheduler; `docs/DEPLOY.md`).
+
+**Where it runs, and what outlives a sandbox.** The deployed app runs on AWS in us-east-1
+(ADR 0023), on one EC2 server it shares with other portfolio apps. Four copies of data sit outside
+the database's own rows, and each is kept on a timer of its own:
+
+- **Application logs** go to CloudWatch Logs and are kept 14 days. They carry client IP addresses
+  (the security log's `clientIp` and uvicorn's access log line) and no conversation content.
+- **Load balancer access logs** go to an S3 bucket and are kept 14 days. They carry client IP
+  addresses and request paths.
+- **Daily snapshots of the Postgres data volume** are kept 7 days. A sandbox deleted after 24 hours
+  can therefore still sit in a snapshot for up to 7 more days (a backup, not reachable by the app).
+  The rows are encrypted at rest, but nothing shreds the keys: each data key is stored wrapped in
+  the same rows, and the keyring is a persistent SSM parameter. A snapshot restored next to the
+  current keyring can be read, so the 7 days is the real bound.
+- **The keyring** (`ENCRYPTION_KEYRING`) is an SSM Parameter Store SecureString, read into the
+  task's environment (ADR 0015's amendment, ADR 0023).
 
 **The 24-hour delete is a demo choice, not a model for real employee data.** A real deployment
 would keep audit records for at least 4 years, outside the tenant cascade. California requires
@@ -200,7 +216,9 @@ ever printed or logged. Tests and CI use a fixed fake key (all zero bytes, ID `t
 refuses outside `APP_ENV=test`. Losing the keyring makes every sandbox unreadable, which for
 24-hour demo sandboxes means starting new ones. A conversation whose stored text does not open is
 shown as unreadable (the page offers a new conversation, a question to it is a 409), never as a
-server error; the log names the conversation and turn IDs only. Phase 8 adds a managed key service.
+server error; the log names the conversation and turn IDs only. The deployed app uses this same
+local provider, with the keyring in an SSM SecureString (ADR 0015's amendment); no managed key
+service is built.
 
 **Old plaintext may linger briefly.** Migration 0012 deleted every sandbox and dropped the plaintext
 columns, but Postgres keeps the dropped and deleted data in dead rows and in its write-ahead log
@@ -273,7 +291,7 @@ Global: no sandbox, no person, no text, and outside row-level security.
 | Column | Holds | Why |
 |---|---|---|
 | `id` | A random UUID | Identity. |
-| `day` | The UTC date the row is added; a settle may instead carry its reservation's day, the day before | The demo's daily cap (`AI_DAILY_BUDGET_USD`) is the sum for a day across all sandboxes. |
+| `day` | The UTC date the row is added; a settle may instead carry its reservation's day, the day before | The demo's daily cap (`AI_DAILY_BUDGET_USD`) is the sum for a day across all sandboxes. It also feeds the monthly budget's pacing (`AI_MONTHLY_BUDGET_USD`): the month's rows are summed by `day`. |
 | `kind`, `amount_usd` | `reserve` or `settle`, and a dollar amount, with the same limits as `ai_spend` | The same reserve-then-settle ledger. |
 | `created_at` | When it was added (UTC), always the server's clock | The record, and what `day` must match. |
 
@@ -296,8 +314,8 @@ further change.
 ### `sandbox_starts`: how many sandboxes each address has started
 
 Global: no sandbox, no person, no text. Phase 8, stage 4. One row is added each time a sandbox is
-started, so the API can limit starts (ADR 0021): 5 an hour and 20 a day per address, and 500 a UTC
-day in all.
+started, so the API can limit starts (ADR 0021): 15 an hour and 50 a day per address, and 1,000 a UTC
+day in all (raised in Phase 9a for shared office addresses).
 
 | Column | Holds | Why |
 |---|---|---|
@@ -310,7 +328,8 @@ row-level security policies for the API's login allow all rows. No route returns
 address is never stored in the database or written to the audit log. (It is sent to Cloudflare,
 below.) It does appear in the application log: uvicorn's access log line for each request carries
 the client address, and so does each security event (see the security log, above). Logs are kept
-as long as where they are stored keeps them, which is set at deployment (Phase 9).
+for 14 days in CloudWatch Logs, and the load balancer's access logs, which also carry the address,
+are kept 14 days in S3.
 
 **How long.** The API can add rows but not change or delete them. The cleanup job (`make cleanup`)
 deletes rows older than a day, and the cleanup login can see and delete only those. Changing `SANDBOX_IP_HASH_KEY` makes the counter forget earlier
@@ -582,8 +601,8 @@ is refused with a 413 and logs nothing about its contents.
 
 A request with no session cookie at all, such as a first visit, isn't a refusal worth recording, so
 it logs nothing here (only a DEBUG line with the method and path). A raw token, a cookie value, or a
-private detail is never logged. How long logs are kept is set
-where they are stored, when Open Door is deployed (Phase 9).
+private detail is never logged. Application logs are kept 14 days in CloudWatch Logs (see the
+deployment note near the top).
 
 ### Cloudflare (Turnstile, the check before a sandbox starts)
 
@@ -604,7 +623,8 @@ managed and interaction-only: most visitors see nothing.
 - **Tests and local runs call nothing:** Cloudflare's documented test keys are answered inside the
   API (development, CI, the browser tests, and `make prod-local`).
 - **Cloudflare's own retention and use of this data** are under its terms. This inventory will
-  quote them, with their source and the date read, when the production keys are set up (Phase 9).
+  quote them, with their source and the date read, when the production keys are
+  set up (Phase 3 of the deploy, `docs/DEPLOY.md`).
 
 ### Voyage (embeddings)
 

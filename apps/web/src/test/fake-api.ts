@@ -53,6 +53,8 @@ export function installFakeApi(initial: PersonaKey | null = null) {
     http.get(url('/api/v1/assistant/texts'), () => HttpResponse.json(TEXTS)),
     http.get(url('/api/v1/assistant/conversations/current'), () => HttpResponse.json(null)),
     http.get(url('/api/v1/assistant/budget'), () => HttpResponse.json(NO_BUDGET_STOP)),
+    // The landing page asks whether the live assistant has room; the fake says it does.
+    http.get(url('/api/v1/assistant/availability'), () => HttpResponse.json({ available: true })),
     http.post(url('/api/v1/sandboxes'), async ({ request }) => {
       const body = (await request.json()) as { persona?: PersonaKey } | null
       current = body?.persona ?? 'priya'

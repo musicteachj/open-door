@@ -12,9 +12,11 @@ on:
 
 # Runs for a pull request share a group, so a newer push cancels the older run. Each push to dev
 # or main gets its own group, its commit, so no merge's run is ever canceled or left waiting.
+# Only a pull request cancels: a run by hand on main shares the push run's group (same commit),
+# and canceling that run could stop a deploy partway, mid-setup, which the deploy role cannot undo.
 concurrency:
   group: ci-${{ github.event_name == 'pull_request' && github.ref || github.sha }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
   contents: read
@@ -59,6 +61,8 @@ jobs:
               # check's, and the entrypoint).
               - 'scripts/**'
               - 'compose.yaml'
+              # The deploy files, which the deploy test reads and runs against a fake aws.
+              - 'deploy/**'
               # The load test's test reads the guided tour's questions, to keep the visitors' equal.
               - 'apps/web/src/features/tour/script.ts'
               # The live check's and the recorder's tests read their browser parts, to keep the
@@ -382,3 +386,84 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: make check-workflows
+
+  # Builds the production image, pushes it to ECR, and deploys it to the shared portfolio server
+  # (deploy/deploy.sh says how each step fails). It runs only on main, by a push or by hand
+  # (workflow_dispatch redeploys the current commit), and only after every job above passed or was
+  # skipped (!cancelled() replaces the implicit success(), which a path-filtered, skipped job would
+  # fail). The `production` environment holds it for James's approval.
+  deploy:
+    name: Deploy to production
+    needs: [changes, api, web, e2e, docs, workflows]
+    if: ${{ !cancelled() && (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref == 'refs/heads/main' && !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled') }}
+    runs-on: ubuntu-latest
+    # The budget: the build (about 5 to 8 minutes), a setup task's wait of up to about 10, the
+    # wait for the service to settle of up to 30, and the smoke checks (a few minutes at most).
+    # That stays under 55, which is inside the one-hour session configure-aws-credentials asks
+    # for by default, so the AWS credentials cannot expire partway through.
+    timeout-minutes: 55
+    environment: production
+    permissions:
+      contents: read
+      id-token: write
+    # One deploy at a time: this group never cancels a running deploy, and the workflow's own group
+    # cancels only pull request runs. GitHub keeps at most one pending run per group, though, so a
+    # newer run replaces an older pending one (a push can drop a redeploy by hand that is still
+    # waiting for approval).
+    concurrency:
+      group: deploy-production
+      cancel-in-progress: false
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # "Re-run jobs" on an older run keeps that run's commit, and an older run approved late can
+      # land after a newer one. Either would put old code over a newer release, so only the commit
+      # at the head of main deploys. A run by hand on main starts from the head, so it passes.
+      - name: Refuse a run that is not for the head of main
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_SHA: ${{ github.sha }}
+          REPO: ${{ github.repository }}
+        run: |
+          head="$(gh api "repos/$REPO/branches/main" --jq .commit.sha)"
+          if [[ "$head" != "$RUN_SHA" ]]; then
+            echo "This run is for $RUN_SHA, but main is now $head; run the workflow by hand on main instead." >&2
+            exit 1
+          fi
+
+      # OIDC: the role trusts this repository's `production` environment and nothing else, so
+      # no AWS key is stored anywhere.
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
+        with:
+          role-to-assume: arn:aws:iam::${{ vars.AWS_ACCOUNT_ID }}:role/opendoor-deploy
+          aws-region: us-east-1
+
+      - name: Log in to ECR
+        id: ecr
+        uses: aws-actions/amazon-ecr-login@7290e214a610b32bc0eef81748948b6d466a8783 # v2.2.0
+
+      # The tag is the commit, the run and the attempt: a run by hand rebuilds the same commit, and
+      # "Re-run jobs" keeps the run id, so the attempt makes each tag new. The ECR repository is
+      # mutable, so a reused tag would overwrite the image an older task definition revision names.
+      # It still starts with the commit, which portfolio-infra's revision check reads.
+      # --provenance=false and --sbom=false keep buildx from pushing an image index with untagged
+      # attestation manifests beside the image. ECR's scan on push and the keep-5 lifecycle rule both
+      # need exactly one plain image manifest per tag.
+      - name: Build and push the image
+        env:
+          IMAGE: ${{ steps.ecr.outputs.registry }}/portfolio/opendoor:${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
+        run: docker buildx build --platform linux/amd64 --provenance=false --sbom=false --push -t "$IMAGE" .
+
+      # Registers the three task definitions, runs the setup task, creates or updates the service,
+      # waits for it to settle on this release, and runs the smoke checks.
+      - name: Deploy
+        env:
+          IMAGE: ${{ steps.ecr.outputs.registry }}/portfolio/opendoor:${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
+          AWS_ACCOUNT_ID: ${{ vars.AWS_ACCOUNT_ID }}
+          ALB_DNS_NAME: ${{ vars.ALB_DNS_NAME }}
+          TARGET_GROUP_ARN: ${{ vars.TARGET_GROUP_ARN }}
+        run: deploy/deploy.sh "$IMAGE"

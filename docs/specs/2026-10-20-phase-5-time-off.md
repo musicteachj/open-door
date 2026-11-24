@@ -461,7 +461,7 @@ since the last turn, made from structured data only:
 
 ```
 Since the last message: the card to book PTO on Friday, October 23 was confirmed, and the request
-is waiting for Marcus Bell. The card to cancel the request for November 3 expired.
+was sent to Marcus Bell for approval. The card to cancel the request for November 3 expired.
 ```
 
 ---

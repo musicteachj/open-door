@@ -161,7 +161,10 @@ async def test_an_api_error_is_unavailable_with_no_usage_and_does_not_quote_the_
             build_summary_request("pay", WORDS)
         )
 
-    assert raised.value.usage is None
+    # A refusal before any work (401, 429, 529) used nothing; the rest may have been billed.
+    refused = status in (401, 429, 529)
+    assert raised.value.usage == (Usage(0, 0, 0, 0) if refused else None)
+    assert raised.value.unbilled is refused
     assert CANARY not in str(raised.value)
 
 

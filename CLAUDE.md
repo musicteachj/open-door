@@ -164,7 +164,9 @@ the owner's explicit agreement first.
   the fairness set, cap $18; with Phase 6's 166 items, the run of 2026-10-29 cost $10.93). CI
   replays the full set offline, and a smoke run re-records only its own items, so CI stays red until
   the full run is committed. Use smoke runs (`make eval-live YES=1`, about $1.00, cap $2) to try
-  wording before that. Put the scoreboard change in the PR description.
+  wording before that. Put the scoreboard change in the PR description. The owner waived this
+  once, for prompt 2026-11.5, which shipped without its full run (ADR 0023); CI replays the
+  2026-11.4 recordings until the next one.
   - **A run whose recordings are committed commits its board in the same change,** then
     `make scoreboard` regenerates the README's scoreboard and the app's copy (CI fails if they're
     stale). Every live run except smoke writes a board to `evals/scoreboards/`; a run into a
@@ -219,9 +221,12 @@ The handbook is fictional company policy and is labeled as demo content, not leg
 
 ## Deployment
 
-**Held.** Open Door deploys to AWS (ECS Fargate on the shared portfolio cluster) as the very last
-step, when the owner deploys all portfolio apps together. Until then everything is built to be
-deploy-ready, and nothing is deployed.
+Open Door deploys to AWS (ECS on the shared portfolio EC2 server, one task behind the shared load
+balancer) as the very last step, when the owner deploys all portfolio apps together. The deploy
+files (`deploy/`) and the CI `deploy` job exist ([`docs/DEPLOY.md`](docs/DEPLOY.md)). A deploy runs
+only for a release merged into `main` (or a run by hand on `main`), and it waits for the owner's
+approval in the `production` environment. Open Door goes live in the portfolio's Phase 3 (Task 5);
+until then nothing is deployed.
 
 ---
 

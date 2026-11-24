@@ -231,7 +231,7 @@ describe('Composer', () => {
 
     it.each([
       ['sandbox', "The assistant isn't available in this sandbox."],
-      ['daily', "The assistant isn't available until tomorrow."],
+      ['daily', "The live assistant isn't available right now."],
     ] as const)(
       'disables the box and Ask, and says why in the placeholder (%s)',
       (reason, text) => {

@@ -35,9 +35,9 @@ export const BUDGET_SANDBOX_TEXT =
   'If you or someone else is in danger, call 911, or call or text 988 to reach the 988 ' +
   'Suicide & Crisis Lifeline.'
 export const BUDGET_DAILY_TEXT =
-  "The demo's daily limit for the assistant has been reached. Please try again tomorrow. " +
-  'If you or someone else is in danger, call 911, or call or text 988 to reach the 988 ' +
-  'Suicide & Crisis Lifeline.'
+  "The demo's live assistant has reached its limit for now. You can still watch the recorded " +
+  'walkthrough. If you or someone else is in danger, call 911, or call or text 988 to reach ' +
+  'the 988 Suicide & Crisis Lifeline.'
 
 export const PERSONAL_DATA_TEXT =
   "That looks like a Social Security or card number. Please take it out; I can't take those."

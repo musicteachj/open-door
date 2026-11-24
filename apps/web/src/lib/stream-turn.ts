@@ -18,7 +18,7 @@ export type TurnErrorEvent = {
 
 /** Every event a turn's stream sends, named by `type` (the SSE `event:` field) and carrying `data`. */
 export type TurnStreamEvent =
-  | { type: 'turn.started'; data: { turnId: string } }
+  | { type: 'turn.started'; data: { turnId: string; aiGenerated?: boolean } }
   | { type: 'status'; data: { text: string } }
   | { type: 'text.delta'; data: { text: string } }
   /** Drop all answer text and citations shown so far. The note follows as a `status` event. */

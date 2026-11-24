@@ -10,6 +10,175 @@ version (`0.x.y` while the app is being built, `1.0.0` when it is complete).
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-11-24
+
+Phase 9a and Phase 9b: Open Door is ready to go live on the shared portfolio server. The assistant's
+spend is now a monthly budget paced by day, and when it runs out the landing page and the limit
+messages point to the recorded walkthrough. Answers and case summaries are marked as AI-generated,
+the public footer says how long data is kept, and the assistant no longer retells a request's old
+status as current. The deploy contract is in `docs/DEPLOY.md`, ADR 0023 records the shared-server
+decisions, and `deploy/` holds the task definitions and the scripts that deploy and smoke-check
+them, run by an approval-gated `deploy` job in CI. No new full live eval run: prompt 2026-11.5
+shipped under the owner's waiver (ADR 0023), and CI replays the 2026-11.4 recordings until the next
+full run. Nothing else the model reads changed since the full run of 2026-11-12.
+
+### Added
+
+- **Open Door's deploy files** (Phase 9b): `deploy/ecs/` holds the web, setup, and cleanup task
+  definitions and the service. `deploy/deploy.sh` registers them, runs the setup before the service
+  is touched, waits for the service to settle on the new revision, runs `deploy/smoke.sh` through
+  the load balancer, then records the cleanup's revision. A `deploy` job at the end of the CI
+  workflow builds and pushes the image and runs it on `main`, after approval. The settings now live
+  under `/portfolio/opendoor/` in SSM, and the monthly AI budget is a parameter, so turning live AI
+  off needs no commit. `apps/api/tests/test_deploy.py` runs the script against a fake `aws`. A run
+  by hand no longer cancels a push run of the same commit. A deploy run refuses to go on unless its
+  commit is the head of `main`, so re-running an old run cannot put old code over a newer release.
+  The smoke checks now wait about a minute for the load balancer to mark a new target healthy, and
+  a setup task that stopped cleanly just after the wait gave up no longer fails the deploy.
+- **`docs/DEPLOY.md`, the deploy's settings and task contract** (Phase 9a): the three task
+  definitions, every setting and who reads it, the load balancer and shutdown numbers, the database
+  setup on the shared server, and how to turn live AI off.
+- **AI-written answers and case summaries are marked as AI-generated** (Phase 9a). A stored answer
+  and a written case summary carry an `aiGenerated` object (the generator, the models that wrote it,
+  and the IPTC digital source type), the turn stream's `turn.started` says `"aiGenerated": true`,
+  and the page has `data-ai-generated="true"` on the element that holds model text. Fixed texts
+  have no mark. It is a good-faith label, not a compliance claim (ADR 0024).
+
+- **The assistant's spend is a monthly budget, paced by day** (Phase 9a). `AI_MONTHLY_BUDGET_USD`
+  sets the month's money, and each UTC day may spend a multiple (`AI_PACING_MULTIPLIER`, 3) of its
+  even share of what is left, never less than `AI_DAILY_FLOOR_USD` ($1.00) and never more than
+  `AI_DAILY_BUDGET_USD`, which stays as a hard daily ceiling. Production refuses to start without
+  the monthly budget, and `0` turns live AI off. A 429 for a used-up month no longer sends
+  `Retry-After`, since tomorrow does not help. `make prod-local` runs on a $20 month and a $0.50
+  sandbox. ADR 0011 has the formula.
+
+- **The landing page says when the live assistant is out of budget and offers the walkthrough
+  instead of the tour** (Phase 9a). A public, cached flag, `GET /api/v1/assistant/availability`
+  (true when today has at least $0.30 of room, kept 30 seconds), tells the landing page. When it is
+  false the tour button and its Cloudflare check give way to the walkthrough as a button, with one
+  note; the four persona cards stay. If the flag can't be read, the page shows the tour button.
+  `make prod-local-check AI_OFF=1` proves it on the production image with live AI off, with no model
+  key and no model call.
+- **The public pages' footer says how long data is kept and who processes it** (Phase 9a, approved
+  by the owner on 2026-11-19): sandboxes for 24 hours, backups for up to 7 days, server logs for 14
+  days, and Anthropic, Voyage, Cloudflare, and AWS as processors.
+
+### Changed
+
+- **ADR 0023 is complete and accepted, and the docs now describe the shared-server deployment**
+  (Phase 9a). The ADR records ECS on one EC2 instance, Postgres on the instance, SSM, and the local
+  keyring; ADRs 0015 and 0022 are amended (production uses the local key provider, and egress is not
+  limited per task). `CLAUDE.md`, the roadmap, the capacity notes, the data inventory (logs 14 days,
+  snapshots 7 days, AWS us-east-1), the threat model, and the AI governance doc are updated, the
+  Phase 9 backlog is accounted for item by item, and `health.py`'s docstring says readiness is for
+  smoke tests.
+
+- **The image runs each job from its own entrypoint, and refuses a command it doesn't know**
+  (Phase 9a). The database setup is `/app/setup.sh` and the cleanup job is `/app/cleanup.sh`;
+  `/app/entrypoint.sh` only serves the API and exits 64 when given any argument instead of
+  starting the API anyway, and the two job scripts exit 64 on any argument too. `make prod-local` now runs every container as production will: the API
+  at 512 MiB, the setup at 256 MiB, and the cleanup at 128 MiB, each with a read-only root, a tmpfs
+  `/tmp`, all capabilities dropped, and `no-new-privileges`. Its check also runs the cleanup job,
+  and requires Turnstile in the page's CSP, a boolean assistant-availability flag, and no API
+  schema or Swagger. The image check proves the three scripts are read-only, that a command is
+  refused, and that the rightmost forwarded address wins over a forged leftmost one.
+
+- **The sandbox start limits fit a hiring team behind one office address** (Phase 9a). One address
+  may now start 15 sandboxes an hour and 50 a day (was 5 and 20), and all addresses together 1,000
+  a UTC day (was 500). A full day is about 350 MB, under 2% of the data volume. ADR 0021 has
+  an amendment, and the load test keeps its own values.
+- **Limit and outage messages point to the recorded walkthrough** (Phase 9a, approved by the owner
+  on 2026-11-19). The daily, spend-limit, used-month, and live-AI-off text no longer says "try
+  again tomorrow", and the model-unavailable text no longer sends visitors to the HR team, which is
+  fictional. Both now offer the recorded walkthrough, and a failed turn with either shows a "Watch
+  the recorded walkthrough" link under its message. The composer's disabled placeholder at the
+  daily limit says "The live assistant isn't available right now." The daily text has its own
+  approval record and hash.
+- **The Anthropic workspace, organization, billing, and enforced spend limits all stop the assistant
+  with the spend-limit text** (Phase 9a). A 400 with the Console's usage-limit message (plain,
+  workspace, or organization), a 402, and a 429 carrying `enforced_spend_limit_reached` are all
+  the spend limit, at the assistant's call, the safety check, and the case summary. The SDK's own
+  retries are off, so each call makes one attempt under its reservation; a turn tries once more
+  itself, after one second, when the provider answers an overload (529) or rate limit (429) before
+  doing any work. ADR 0011 has the rules.
+
+- **The docs record the full-run waiver and what the retry covers** (Phase 9a). `CLAUDE.md` notes
+  that prompt 2026-11.5 shipped without its full eval run (ADR 0023), and ADR 0011 says the safety
+  check, the case summarizer, connection errors, and 5xx responses are never retried.
+
+### Security
+
+- **Open Door's database admits only its own logins, and the setup refuses a role that would
+  inherit its access** (Phase 9a). Migration 0020 takes `CONNECT` from every role (PUBLIC) and
+  gives it to `od_app` and `od_cleanup`, so another app's logins on a shared Postgres server can't
+  open the database. The login bootstrap stops, changing nothing, if any role other than the
+  configured logins (and the owner running it) holds either role. `scripts/image/postgres-open-door.sql`
+  is the one-time setup of the database on the shared server, and `make prod-local` now uses that
+  layout: an init superuser, a non-superuser owner, and the setup run twice. The migration's
+  downgrade changes nothing, so it never gives `CONNECT` back to every role.
+
+- **The npm audit's picomatch exception now runs through 2027-01-17, UTC** (Phase 8 follow-up).
+  picomatch still has no fixed release, and the exception would otherwise end on 2026-12-17, in
+  the middle of Phase 9. The owner agreed to the extension; the rules are unchanged (build tools
+  only, at high), and the backlog still holds its removal.
+
+### Fixed
+
+- **The "can't answer right now" panel offers the recorded walkthrough** (Phase 9a, from the review
+  of PR #130). An Anthropic outage or a disabled key first fails the safety check, which shows that
+  panel, not the model-unavailable error, so it had no walkthrough link. It now has the same
+  "Watch the recorded walkthrough" link, after "Try again"; its approved text is unchanged.
+- **The assistant's calls are reserved at the price of any model that might serve them** (Phase
+  9a, from the review of PR #130). A declined Opus 5.5 request may be served by Opus 5 or Opus 4.8,
+  which cost more ($5 and $25 a million tokens, against $4 and $20), so each call now reserves at
+  the dearest of them. A first question needs about $0.26 of room (was $0.21), and the landing
+  page's flag now waits for $0.30. ADR 0011 has an amendment, and `docs/CAPACITY.md` the new
+  figures.
+- **`make proxy-check` gives its sandbox a budget it can't use up** (Phase 9a, from the re-review
+  of PR #130). Its runs share one sandbox, and a run whose API is stopped mid-turn keeps that
+  turn's full reservation. At the new fallback price, three of those left the shutdown run's
+  question over the $1.00 sandbox cap, so it was refused. The check now also names a refused
+  request's code (here `budget-sandbox`).
+- **The assistant no longer tells a request's old status as current** (Phase 9a, prompt
+  2026-11.5). Priya was told her request still waited for Marcus after he had approved it. The
+  per-turn "Since the last message" line is now in the past tense ("the request was sent to Marcus
+  Bell for approval"), adds "That request has since been approved, denied, or canceled." when the
+  request moved on (read as the signed-in person, under row-level security), and the prompt says
+  not to retell a card the person already saw and to use the list tool for where a request stands
+  now. **Waiver:** this ships with no eval run for 2026-11.5 before launch (James, 2026-11-18), the
+  walkthrough video is recorded again after deployment, and CI replays the 2026-11.4 recordings
+  under an archived copy of the 2026-11.4 prompt (`evals/assistant/fixtures/recorded-under.json`)
+  until the next full run. ADR 0023.
+- **A failed call the provider doesn't bill no longer uses up the day's budget** (Phase 9a). A 401,
+  403, 429, or 529 refusal settles to $0 instead of keeping its full reservation, for the
+  assistant's call, the safety check, and the case summary.
+- **The walkthrough recorder's pause after a turn counts the answer as well as the HR panel**
+  (Phase 8 follow-up). When a panel followed the answer (the tour's steps 5 and 7 on the live
+  model), the pause was sized by the panel's text alone. It now counts both, each up to five
+  seconds. On its own this doesn't make the answer readable in the video: the page still scrolls
+  past the answer when the panel arrives, which the backlog keeps, so the video wasn't recorded
+  again.
+- **The browser tests against the production image time out less often on a Mac** (Phase 8
+  follow-up). Locally, five browsers shared the image's one API process, behind Docker Desktop's
+  port forwarding both ways (to the container and from it to Postgres), and 3 of 5 `make check`
+  runs on 2026-11-17 failed a different five-second wait each time. The image run now uses two
+  browsers locally; the host run and CI (one) are unchanged. Five runs with two browsers found
+  three tests that read the page too early, now fixed: the keyboard-order test waits for the side
+  rail's time-off links, and the tour's ring checks at steps 4 and 7 wait for the card or the HR
+  panel instead of measuring against the composer. A time-off helper now says what the API
+  returned when a read is refused. One failure remains, which the backlog keeps (a database
+  connection from the container that took five seconds).
+- **A recorded case-summary run no longer saves a provider outage as model behavior** (Phase 9a).
+  A summary call the provider refused before any work (a 401, 403, 429, or 529) is now treated as
+  transient and not recorded, as the guard and the assistant already were, so offline replays
+  can't repeat an outage.
+- **The public availability flag answers 503, not 500, when the database can't be reached**
+  (Phase 9a). A connection timeout or refusal now gives `availability-unknown`, and a request
+  waiting behind a slow read gives up after a bounded wait instead of queuing.
+- **The login setup says what is missing when the cleanup URL isn't set** (Phase 9a). If
+  `CLEANUP_DATABASE_URL` is missing and `od_cleanup` has a member, the refusal names that setting
+  and says to set it if the holder is Open Door's own cleanup login. It still changes nothing.
+
 ## [0.8.1] - 2026-11-17
 
 A follow-up to Phase 8. The guided tour's steps 5 and 7 now say what the assistant does (an HR

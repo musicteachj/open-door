@@ -10,7 +10,7 @@ const SANDBOX_TEXT =
   'This demo sandbox has reached its limit for the assistant. A new sandbox starts fresh. If you or someone else is in danger, call 911, or call or text 988 to reach the 988 Suicide & Crisis Lifeline.'
 // The API's approved texts (apps/api/app/ai/fixed_texts.py).
 const DAILY_TEXT =
-  "The demo's daily limit for the assistant has been reached. Please try again tomorrow. If you or someone else is in danger, call 911, or call or text 988 to reach the 988 Suicide & Crisis Lifeline."
+  "The demo's live assistant has reached its limit for now. You can still watch the recorded walkthrough. If you or someone else is in danger, call 911, or call or text 988 to reach the 988 Suicide & Crisis Lifeline."
 const WALKTHROUGH = 'Watch the recorded walkthrough'
 
 describe('BudgetBanner: the 911 and 988 calls', () => {

@@ -120,3 +120,17 @@ describe('CaseSummaryBlock', () => {
     expect(container.innerHTML).not.toMatch(/danger/)
   })
 })
+
+describe('CaseSummaryBlock: the AI-generated mark (Article 50(2))', () => {
+  it('marks the written summary and nothing else', () => {
+    const { container } = written()
+    const marked = container.querySelectorAll('[data-ai-generated="true"]')
+    expect(marked).toHaveLength(1)
+    expect(marked[0]).toHaveTextContent('The person says their manager')
+  })
+
+  it.each(['pending', 'failed', 'crisis'] as const)('is not on a %s summary', (state) => {
+    const { container } = render(<CaseSummaryBlock state={state} />)
+    expect(container.querySelector('[data-ai-generated]')).toBeNull()
+  })
+})
