@@ -10,6 +10,31 @@ version (`0.x.y` while the app is being built, `1.0.0` when it is complete).
 
 ## [Unreleased]
 
+### Changed
+
+- **The deploy files now match Packwright's, which went live with them** (Phase 9b follow-up). The deploy
+  job refuses a run that is not for the head of `main` twice, through the new `deploy/head-of-main.sh`:
+  before it takes AWS credentials and again right before the image is built and pushed, so a refused run
+  pushes nothing. The build and push is one step with its own 8-minute limit, and the job's limit is now
+  58 minutes (was 55): the worst case is 8 + 10 + 30 + 5 + 1 = 54. The smoke checks retry by time, not by
+  count: `/` for 180 seconds, because the load balancer answers 503 until it marks a new target healthy,
+  and each later check for 30 seconds of its own; a setting that is not a whole number stops smoke with
+  exit code 2. A setup task that stopped just after the wait gave up, or whose containers have all exited
+  and that is still stopping, is judged by its exit code.
+
+### Fixed
+
+- **A setup task that ECS stopped no longer passes on exit code 0** (Phase 9b follow-up). A task stopped for
+  a reason other than its essential container exiting (a stop by hand, a host drain, a Spot interruption)
+  could have a migration that trapped the signal and exited 0 half done. The deploy now fails before the
+  service is touched and names the stop code.
+
+### Added
+
+- **Six findings from the v0.9.0 release review, and one content gap, in `docs/BACKLOG.md`**, and
+  `docs/DEPLOY.md` describes the guards, the smoke windows, the stop-code rule and the 58 and 8 minute
+  limits (Phase 9b follow-up).
+
 ## [0.9.0] - 2026-11-24
 
 Phase 9a and Phase 9b: Open Door is ready to go live on the shared portfolio server. The assistant's

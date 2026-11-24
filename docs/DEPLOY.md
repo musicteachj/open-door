@@ -30,6 +30,19 @@ instance (bridge networking, behind the shared load balancer):
 - The `deploy` job at the end of `.github/workflows/ci.yml` builds and pushes the image, then runs
   `deploy.sh`. It runs on `main` only, after the other jobs pass, and waits for approval in the
   `production` environment. Run the workflow by hand on `main` to redeploy the current commit.
+  `deploy/head-of-main.sh` refuses a run whose commit is not the current head of `main`, once before
+  the job takes AWS credentials and again right before the image is pushed, so an old run pushes and
+  deploys nothing; if a newer run exists it deploys main's head, and otherwise run the workflow by
+  hand. The job stops after 58 minutes, and the build and push step after 8 (the worst case is
+  8 + 10 for setup + 30 for settling + 5 for smoke + 1 for the rest, 54).
+- The setup task counts as done only if every container exited 0 and ECS's stop code is
+  `EssentialContainerExited`. A task ECS stopped for another reason (`UserInitiated`, a host drain,
+  `SpotInterruption`) fails the deploy before the service is touched and names the stop code, even if
+  a migration trapped the signal and exited 0 half done; a task that never started
+  (`TaskFailedToStart`) says to check the image pull and the instance's free memory. A task still
+  `STOPPING` when the wait gave up counts as finished only if every container has an exit code and ECS
+  has set its stop code. A task that stopped just after the wait gave
+  up is judged the same way; one still running fails with its ARN and the warning not to re-run.
 - `deploy.sh` prints the setup task's log into the Actions log. Checked on 2026-11-24: against
   an unreachable database with a marker password, the setup's scripts and the cleanup printed
   neither a URL nor the password. A real Postgres authentication failure was not exercised.
@@ -175,7 +188,12 @@ raised, raise `stopTimeout` (at most 120) with it.
 
 ## Smoke tests after a deploy
 
-Run these once the service is stable. All must pass:
+Run these once the service is stable. All must pass. `deploy/smoke.sh` retries each one until it
+passes or its window ends: `/` gets 180 seconds, because on a first service creation the load balancer
+can answer 503 until it marks the new target healthy, and each later check gets its own 30 seconds
+(`SMOKE_FIRST_SECONDS` and `SMOKE_SECONDS` can be set to any whole number of seconds, and
+`SMOKE_DELAY_SECONDS`, 5 seconds between tries, to a whole number of at least 1, so the load balancer
+is never hit with no pause; anything else exits 2 naming the setting). The first check to run out of time ends the run, so smoke takes under 5 minutes.
 
 1. `GET /` returns 200 (the web app).
 2. `GET /api/v1/health` returns 200 (readiness: the database answers). This is for the smoke test

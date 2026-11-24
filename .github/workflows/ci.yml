@@ -397,11 +397,13 @@ jobs:
     needs: [changes, api, web, e2e, docs, workflows]
     if: ${{ !cancelled() && (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref == 'refs/heads/main' && !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled') }}
     runs-on: ubuntu-latest
-    # The budget: the build (about 5 to 8 minutes), a setup task's wait of up to about 10, the
-    # wait for the service to settle of up to 30, and the smoke checks (a few minutes at most).
-    # That stays under 55, which is inside the one-hour session configure-aws-credentials asks
-    # for by default, so the AWS credentials cannot expire partway through.
-    timeout-minutes: 55
+    # The budget: the build and push (capped at 8 by their own timeout), a setup task's wait of up to
+    # about 10, the wait for the service to settle of up to 30, the smoke checks (about 5 minutes at
+    # most), and a minute for checkout, login and the guards.
+    # Worst case: 8 + 10 + 30 + 5 + 1 = 54 minutes, so 58 leaves a little room. 58 is safe because the
+    # OIDC credentials are taken about a minute into the job and last 1 hour (the default session
+    # configure-aws-credentials asks for), so the job ends before they expire.
+    timeout-minutes: 58
     environment: production
     permissions:
       contents: read
@@ -427,12 +429,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           RUN_SHA: ${{ github.sha }}
           REPO: ${{ github.repository }}
-        run: |
-          head="$(gh api "repos/$REPO/branches/main" --jq .commit.sha)"
-          if [[ "$head" != "$RUN_SHA" ]]; then
-            echo "This run is for $RUN_SHA, but main is now $head; run the workflow by hand on main instead." >&2
-            exit 1
-          fi
+        run: deploy/head-of-main.sh
 
       # OIDC: the role trusts this repository's `production` environment and nothing else, so
       # no AWS key is stored anywhere.
@@ -446,6 +443,17 @@ jobs:
         id: ecr
         uses: aws-actions/amazon-ecr-login@7290e214a610b32bc0eef81748948b6d466a8783 # v2.2.0
 
+      # Main can move while the job waits for approval or runs, so ask again right before the push: a
+      # run refused here has pushed nothing, and costs no place in ECR's keep-5. Main can still move
+      # during the build and push (v0.9.0's took 23 seconds, run 45481973868); the newer run is then queued behind this one by
+      # the deploy-production concurrency group, and deploys after it.
+      - name: Refuse again, right before the push, if main moved
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_SHA: ${{ github.sha }}
+          REPO: ${{ github.repository }}
+        run: deploy/head-of-main.sh
+
       # The tag is the commit, the run and the attempt: a run by hand rebuilds the same commit, and
       # "Re-run jobs" keeps the run id, so the attempt makes each tag new. The ECR repository is
       # mutable, so a reused tag would overwrite the image an older task definition revision names.
@@ -453,7 +461,11 @@ jobs:
       # --provenance=false and --sbom=false keep buildx from pushing an image index with untagged
       # attestation manifests beside the image. ECR's scan on push and the keep-5 lifecycle rule both
       # need exactly one plain image manifest per tag.
+      # Its own timeout (build and push together), so a slow or hung build fails here, before the
+      # service is touched, instead of eating the time the settle wait and smoke checks need. 8 minutes
+      # is generous headroom: v0.9.0's build and push took 23 seconds (run 45481973868).
       - name: Build and push the image
+        timeout-minutes: 8
         env:
           IMAGE: ${{ steps.ecr.outputs.registry }}/portfolio/opendoor:${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
         run: docker buildx build --platform linux/amd64 --provenance=false --sbom=false --push -t "$IMAGE" .

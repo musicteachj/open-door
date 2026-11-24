@@ -8,6 +8,9 @@
 #   FAKE_SETUP=timeout       the tasks-stopped waiter gives up and the task is still RUNNING
 #   FAKE_SETUP=timeout-stopped         the waiter gives up, but the task has STOPPED, exit code 0
 #   FAKE_SETUP=timeout-stopped-failed  the waiter gives up, the task has STOPPED, exit code 1
+#   FAKE_SETUP=timeout-stopping        the waiter gives up, the task is still STOPPING, its container exited 0
+#   FAKE_SETUP=timeout-stopping-no-stop-code  as timeout-stopping, but ECS has set no stopCode yet
+#   FAKE_STOP_CODE=...       the setup task's stopCode (EssentialContainerExited unless set)
 #   FAKE_SERVICE=active      the service exists before this deploy
 #   FAKE_SERVICE=zero        the service exists, scaled to 0 on purpose
 #   FAKE_SERVICE=inactive    the service was deleted before this deploy
@@ -72,11 +75,19 @@ case "$1 $2" in
       no-exit-code) exit_code='' ;;
       *) exit_code=',"exitCode":0' ;;
     esac
+    if [ "${FAKE_SETUP:-}" = timeout-stopping-no-stop-code ]; then
+      echo '{"tasks":[{"lastStatus":"STOPPING","containers":[{"name":"opendoor-setup","exitCode":0}]}]}'
+      exit 0
+    fi
+    if [ "${FAKE_SETUP:-}" = timeout-stopping ]; then
+      echo '{"tasks":[{"lastStatus":"STOPPING","stopCode":"EssentialContainerExited","containers":[{"name":"opendoor-setup","exitCode":0}]}]}'
+      exit 0
+    fi
     if [ "${FAKE_SETUP:-}" = timeout ]; then
       echo '{"tasks":[{"lastStatus":"RUNNING","containers":[{"name":"opendoor-setup"}]}]}'
       exit 0
     fi
-    echo "{\"tasks\":[{\"lastStatus\":\"STOPPED\",\"stoppedReason\":\"Essential container in task exited\",\"containers\":[{\"name\":\"opendoor-setup\"$exit_code}]}]}"
+    echo "{\"tasks\":[{\"lastStatus\":\"STOPPED\",\"stopCode\":\"${FAKE_STOP_CODE:-EssentialContainerExited}\",\"stoppedReason\":\"Essential container in task exited\",\"containers\":[{\"name\":\"opendoor-setup\"$exit_code}]}]}"
     ;;
   'logs get-log-events')
     echo '{"events":[{"message":"migration 7 failed"}]}'
