@@ -75,3 +75,9 @@ Each decision names what it replaces.
 - A task can reach any host, and the keyring is in its environment. Both are accepted
   (`docs/THREAT-MODEL.md`).
 - Open Door shares the server's one Postgres: a superuser login of another app could read it.
+
+Amended 2026-11-24 (Phase 9b, the deploy files): the SSM prefix is `/portfolio/opendoor/`, the
+portfolio's slug, not `/portfolio/open-door/`. `AI_MONTHLY_BUDGET_USD` moved into SSM as a String
+parameter, read through the task definition's `secrets`, so the off switch is to set it to `0` and
+force a new deployment of the service, with no commit. [`docs/DEPLOY.md`](../DEPLOY.md) has the
+current settings.

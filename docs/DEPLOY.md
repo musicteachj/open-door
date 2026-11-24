@@ -1,7 +1,8 @@
 # Deploying Open Door
 
 The contract the infrastructure phase copies: what runs, which settings each piece reads, what the
-task definitions look like, and what the shared server must provide. Nothing here is deployed yet.
+task definitions look like, and what the shared server must provide. The files that deploy it are
+in `deploy/` (below); nothing is deployed until the first run of the CI `deploy` job on `main`.
 The decisions behind it are in [ADR 0023](adr/0023-phase-9-on-the-shared-portfolio-server.md); the
 measurements are in [`CAPACITY.md`](CAPACITY.md).
 
@@ -18,10 +19,28 @@ instance (bridge networking, behind the shared load balancer):
 
 `/app/entrypoint.sh` takes no argument: any argument exits 64, so a mistyped job never serves.
 
+## The deploy files
+
+- `deploy/ecs/web.json`, `setup.json`, and `cleanup.json` are the three task definitions, and
+  `deploy/ecs/service.json` creates the service. The fragments below are what they hold.
+- `deploy/deploy.sh <image>` registers the three, runs the setup task to completion, then creates or
+  updates the service, waits for it to settle on the new revision, runs `deploy/smoke.sh`, and last
+  writes the cleanup's revision to `/portfolio/opendoor/cleanup-revision`. A failed setup stops it
+  before the service is touched and prints the setup's log.
+- The `deploy` job at the end of `.github/workflows/ci.yml` builds and pushes the image, then runs
+  `deploy.sh`. It runs on `main` only, after the other jobs pass, and waits for approval in the
+  `production` environment. Run the workflow by hand on `main` to redeploy the current commit.
+- `deploy.sh` prints the setup task's log into the Actions log. Checked on 2026-11-24: against
+  an unreachable database with a marker password, the setup's scripts and the cleanup printed
+  neither a URL nor the password. A real Postgres authentication failure was not exercised.
+- `web.json` leaves out `VOYAGE_API_KEY`: it is optional, the setup never embeds, and a missing SSM
+  parameter would stop the task from starting.
+
 ## The settings
 
-Secrets live in SSM Parameter Store as SecureStrings under `/portfolio/open-door/` (proposed; the
-infrastructure phase confirms the prefix). "Plain" values can sit in the task definition.
+Secrets live in SSM Parameter Store under `/portfolio/opendoor/` (SecureStrings, except
+`AI_MONTHLY_BUDGET_USD`, a String). The task definitions name each one in `secrets`, so the values
+never sit in a file. "Plain" values sit in the task definition's `environment`.
 
 | Setting | Read by | Kind | Production value or source |
 |---|---|---|---|
@@ -37,7 +56,7 @@ infrastructure phase confirms the prefix). "Plain" values can sit in the task de
 | `SANDBOX_IP_HASH_KEY` | API | secret | At least 32 bytes, random |
 | `FORWARDED_ALLOW_IPS` | API | plain | The VPC's CIDR, so only the load balancer is trusted (never `*` or `0.0.0.0/0`; production refuses an empty value) |
 | `AI_TRANSPORT` | API | plain | `anthropic` (production refuses any other) |
-| `AI_MONTHLY_BUDGET_USD` | API | plain | `20`. Production refuses to start without it. `0` turns live AI off. |
+| `AI_MONTHLY_BUDGET_USD` | API | secret (a String parameter) | `20`. Production refuses to start without it. `0` turns live AI off. It lives in SSM so the off switch needs no commit. |
 | `AI_PACING_MULTIPLIER` | API | plain | `3` |
 | `AI_DAILY_FLOOR_USD` | API | plain | `1.00` |
 | `AI_DAILY_BUDGET_USD` | API | plain | `20` (equal to the month, so pacing alone governs) |
@@ -188,7 +207,8 @@ never leaves the instance's Docker bridge, and no pooler. Passwords are `scram-s
    either role has a member other than those logins.
 
 **Rotating a database password:** change the URL in SSM, run the setup (the bootstrap resets each
-login's password from its URL), then restart the service.
+login's password from its URL), then force a new deployment of the service (it reads its secrets
+only when a task starts).
 
 **Data migrations and row-level security:** the owner isn't a superuser, so with forced row-level
 security a data step sees no tenant rows. A migration that changes tenant data must set the tenant
@@ -198,6 +218,7 @@ the keyring only on a database that already holds denial notes; production start
 
 ## Turning live AI off
 
-Set `AI_MONTHLY_BUDGET_USD=0` and restart the service. The assistant stops answering with the
+Set the SSM parameter `/portfolio/opendoor/AI_MONTHLY_BUDGET_USD` to `0` and force a new
+deployment of the service (no commit needed). The assistant stops answering with the
 model, and the landing offers the recorded walkthrough in place of the tour. Disabling the Anthropic
 key alone also stops spending, but the landing keeps offering the tour.

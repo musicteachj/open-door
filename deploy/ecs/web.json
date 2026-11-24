@@ -1,0 +1,137 @@
+{
+  "family": "opendoor-web",
+  "networkMode": "bridge",
+  "requiresCompatibilities": [
+    "EC2"
+  ],
+  "executionRoleArn": "arn:aws:iam::__ACCOUNT_ID__:role/opendoor-execution",
+  "taskRoleArn": "arn:aws:iam::__ACCOUNT_ID__:role/opendoor-task",
+  "containerDefinitions": [
+    {
+      "name": "opendoor",
+      "image": "__IMAGE__",
+      "essential": true,
+      "memoryReservation": 256,
+      "memory": 512,
+      "stopTimeout": 30,
+      "user": "10001:10001",
+      "portMappings": [
+        {
+          "containerPort": 8000,
+          "hostPort": 0,
+          "protocol": "tcp"
+        }
+      ],
+      "privileged": false,
+      "readonlyRootFilesystem": true,
+      "linuxParameters": {
+        "capabilities": {
+          "drop": [
+            "ALL"
+          ]
+        },
+        "tmpfs": [
+          {
+            "containerPath": "/tmp",
+            "size": 64
+          }
+        ]
+      },
+      "dockerSecurityOptions": [
+        "no-new-privileges"
+      ],
+      "healthCheck": {
+        "command": [
+          "CMD",
+          "python",
+          "-c",
+          "import sys, urllib.request; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/api/v1/health/live', timeout=3).status == 200 else 1)"
+        ],
+        "interval": 15,
+        "timeout": 5,
+        "retries": 3,
+        "startPeriod": 20
+      },
+      "environment": [
+        {
+          "name": "APP_ORIGIN",
+          "value": "https://opendoor.jameslittlefield.net"
+        },
+        {
+          "name": "FORWARDED_ALLOW_IPS",
+          "value": "10.20.0.0/16"
+        },
+        {
+          "name": "AI_TRANSPORT",
+          "value": "anthropic"
+        },
+        {
+          "name": "AI_PACING_MULTIPLIER",
+          "value": "3"
+        },
+        {
+          "name": "AI_DAILY_FLOOR_USD",
+          "value": "1.00"
+        },
+        {
+          "name": "AI_DAILY_BUDGET_USD",
+          "value": "20"
+        },
+        {
+          "name": "AI_SANDBOX_BUDGET_USD",
+          "value": "0.50"
+        },
+        {
+          "name": "SANDBOX_STARTS_PER_HOUR",
+          "value": "15"
+        },
+        {
+          "name": "SANDBOX_STARTS_PER_DAY",
+          "value": "50"
+        },
+        {
+          "name": "SANDBOX_STARTS_DAILY_TOTAL",
+          "value": "1000"
+        }
+      ],
+      "secrets": [
+        {
+          "name": "DATABASE_URL",
+          "valueFrom": "arn:aws:ssm:__REGION__:__ACCOUNT_ID__:parameter/portfolio/opendoor/DATABASE_URL"
+        },
+        {
+          "name": "ENCRYPTION_KEYRING",
+          "valueFrom": "arn:aws:ssm:__REGION__:__ACCOUNT_ID__:parameter/portfolio/opendoor/ENCRYPTION_KEYRING"
+        },
+        {
+          "name": "ANTHROPIC_API_KEY",
+          "valueFrom": "arn:aws:ssm:__REGION__:__ACCOUNT_ID__:parameter/portfolio/opendoor/ANTHROPIC_API_KEY"
+        },
+        {
+          "name": "TURNSTILE_SITE_KEY",
+          "valueFrom": "arn:aws:ssm:__REGION__:__ACCOUNT_ID__:parameter/portfolio/opendoor/TURNSTILE_SITE_KEY"
+        },
+        {
+          "name": "TURNSTILE_SECRET_KEY",
+          "valueFrom": "arn:aws:ssm:__REGION__:__ACCOUNT_ID__:parameter/portfolio/opendoor/TURNSTILE_SECRET_KEY"
+        },
+        {
+          "name": "SANDBOX_IP_HASH_KEY",
+          "valueFrom": "arn:aws:ssm:__REGION__:__ACCOUNT_ID__:parameter/portfolio/opendoor/SANDBOX_IP_HASH_KEY"
+        },
+        {
+          "name": "AI_MONTHLY_BUDGET_USD",
+          "valueFrom": "arn:aws:ssm:__REGION__:__ACCOUNT_ID__:parameter/portfolio/opendoor/AI_MONTHLY_BUDGET_USD"
+        }
+      ],
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group": "/portfolio/opendoor",
+          "awslogs-region": "__REGION__",
+          "awslogs-stream-prefix": "web"
+        }
+      }
+    }
+  ]
+}
