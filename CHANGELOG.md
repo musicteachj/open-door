@@ -10,6 +10,18 @@ version (`0.x.y` while the app is being built, `1.0.0` when it is complete).
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-11-24
+
+Phase 9a and Phase 9b: Open Door is ready to go live on the shared portfolio server. The assistant's
+spend is now a monthly budget paced by day, and when it runs out the landing page and the limit
+messages point to the recorded walkthrough. Answers and case summaries are marked as AI-generated,
+the public footer says how long data is kept, and the assistant no longer retells a request's old
+status as current. The deploy contract is in `docs/DEPLOY.md`, ADR 0023 records the shared-server
+decisions, and `deploy/` holds the task definitions and the scripts that deploy and smoke-check
+them, run by an approval-gated `deploy` job in CI. No new full live eval run: prompt 2026-11.5
+shipped under the owner's waiver (ADR 0023), and CI replays the 2026-11.4 recordings until the next
+full run. Nothing else the model reads changed since the full run of 2026-11-12.
+
 ### Added
 
 - **Open Door's deploy files** (Phase 9b): `deploy/ecs/` holds the web, setup, and cleanup task
