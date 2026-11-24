@@ -340,6 +340,19 @@ def test_it_names_the_setup_task_when_it_does_not_stop_in_time(tmp_path: Path) -
     assert starting(result.calls, "aws ecs stop-task") == []
 
 
+@pytest.mark.parametrize(
+    ("setup", "succeeds"), [("timeout-stopped", True), ("timeout-stopped-failed", False)]
+)
+def test_it_judges_a_setup_that_stopped_just_after_the_waiter_gave_up_by_its_exit_code(
+    tmp_path: Path, setup: str, succeeds: bool
+) -> None:
+    result = deploy(tmp_path, {"FAKE_SETUP": setup})
+    assert (result.status == 0) is succeeds, result.output
+    assert len(service_calls(result.calls)) == (1 if succeeds else 0)
+    if not succeeds:
+        assert "the setup task failed" in result.output
+
+
 def test_it_creates_the_service_the_first_time_and_updates_it_after(tmp_path: Path) -> None:
     web_arn = revision_arn("opendoor-web")
 
@@ -494,6 +507,17 @@ def test_the_deploy_job_waits_for_every_other_job() -> None:
     assert f"!{canceled}()" in condition
     assert "!contains(needs.*.result, 'failure')" in condition
     assert f"!contains(needs.*.result, '{canceled}')" in condition
+
+
+def test_the_deploy_job_refuses_a_run_that_is_not_for_the_head_of_main() -> None:
+    steps = yaml.safe_load(WORKFLOW.read_text(encoding="utf-8"))["jobs"]["deploy"]["steps"]
+    ids = [step.get("uses", step.get("name", "")) for step in steps]
+    guard = next(i for i, step in enumerate(steps) if "head of main" in step.get("name", ""))
+    credentials = next(i for i, uses in enumerate(ids) if "configure-aws-credentials" in uses)
+    assert guard < credentials
+    # The commit goes through env, never into the script text.
+    assert steps[guard]["env"]["RUN_SHA"] == "${{ github.sha }}"
+    assert "${{" not in steps[guard]["run"]
 
 
 def test_only_pull_requests_cancel_a_running_workflow() -> None:

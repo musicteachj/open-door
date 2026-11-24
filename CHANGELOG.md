@@ -19,7 +19,10 @@ version (`0.x.y` while the app is being built, `1.0.0` when it is complete).
   workflow builds and pushes the image and runs it on `main`, after approval. The settings now live
   under `/portfolio/opendoor/` in SSM, and the monthly AI budget is a parameter, so turning live AI
   off needs no commit. `apps/api/tests/test_deploy.py` runs the script against a fake `aws`. A run
-  by hand no longer cancels a push run of the same commit.
+  by hand no longer cancels a push run of the same commit. A deploy run refuses to go on unless its
+  commit is the head of `main`, so re-running an old run cannot put old code over a newer release.
+  The smoke checks now wait about a minute for the load balancer to mark a new target healthy, and
+  a setup task that stopped cleanly just after the wait gave up no longer fails the deploy.
 - **`docs/DEPLOY.md`, the deploy's settings and task contract** (Phase 9a): the three task
   definitions, every setting and who reads it, the load balancer and shutdown numbers, the database
   setup on the shared server, and how to turn live AI off.

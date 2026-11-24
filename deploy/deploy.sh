@@ -104,8 +104,9 @@ print_setup_log() {
     | @tsv' "$rendered/setup.json")
 }
 
-# Before step 3, look at the service once, and refuse before anything runs: a deploy that will be refused
-#    must not have run a setup task (a migration) first, or the schema would be ahead of the code.
+# Before step 3, look at the service once, and refuse before the setup task runs: a deploy that will
+#    be refused must not have run a setup task (a migration) first, or the schema would be ahead of
+#    the code. (Registering a revision above changes nothing that serves.)
 #    The same reply decides, in step 4, between an update and a create.
 echo "==> Checking $cluster/$slug"
 described="$(aws ecs describe-services --cluster "$cluster" --services "$slug" --output json)"
@@ -136,15 +137,15 @@ if [[ -n "$setup_arn" ]]; then
     # role cannot stop it, so say so: a re-run would start a second setup on the same database.
     last_status="$(aws ecs describe-tasks --cluster "$cluster" --tasks "$task_arn" --output json |
       jq -r '.tasks[0].lastStatus // empty' || true)"
-    if [[ "$last_status" == STOPPED ]]; then
-      print_setup_log "$task_arn"
-      fail "the setup task did not stop in time, so the service was not touched"
+    # A task that stopped just after the waiter gave up is judged by its exit code below, like
+    # any other stopped task: a clean setup must not fail the deploy.
+    if [[ "$last_status" != STOPPED ]]; then
+      fail "the setup task $task_arn did not stop in time and may still be running;" \
+        "do not re-run the deploy until it has stopped" \
+        "(aws ecs describe-tasks --cluster $cluster --tasks $task_arn shows STOPPED)," \
+        "because a re-run would start a second setup against the same database;" \
+        "the service was not touched"
     fi
-    fail "the setup task $task_arn did not stop in time and may still be running;" \
-      "do not re-run the deploy until it has stopped" \
-      "(aws ecs describe-tasks --cluster $cluster --tasks $task_arn shows STOPPED)," \
-      "because a re-run would start a second setup against the same database;" \
-      "the service was not touched"
   fi
   stopped="$(aws ecs describe-tasks --cluster "$cluster" --tasks "$task_arn" --output json)"
   if ! jq -e '[.tasks[0].containers[]? | .exitCode == 0] | length > 0 and all' \

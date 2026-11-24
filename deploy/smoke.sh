@@ -3,8 +3,9 @@
 #
 # Every request goes to the load balancer at ALB_DNS_NAME while naming the real host, through
 # `curl --connect-to`, so the checks work before the DNS record exists and after. Each check
-# tries up to SMOKE_ATTEMPTS times (5), SMOKE_DELAY_SECONDS apart (5), because services-stable
-# can answer a moment before the load balancer counts the new target healthy, and each request
+# tries up to SMOKE_ATTEMPTS times (12), SMOKE_DELAY_SECONDS apart (5), about a minute, because
+# services-stable can answer as soon as the task is running, before the load balancer counts the new
+# target healthy (its checks run every 15 seconds and need 2 passes, after the target registers), and each request
 # gives up after 10 seconds. A check that still fails exits 1.
 #
 # Each app repository supplies its own smoke.sh, with its own host and checks: deploy.sh only calls
@@ -13,7 +14,7 @@ set -euo pipefail
 
 : "${ALB_DNS_NAME:?ALB_DNS_NAME is required}"
 host=opendoor.jameslittlefield.net
-attempts="${SMOKE_ATTEMPTS:-5}"
+attempts="${SMOKE_ATTEMPTS:-12}"
 delay="${SMOKE_DELAY_SECONDS:-5}"
 
 # The body, then the status code on a line of its own. The address goes last.
