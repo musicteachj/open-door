@@ -221,9 +221,12 @@ The handbook is fictional company policy and is labeled as demo content, not leg
 
 ## Deployment
 
-**Held.** Open Door deploys to AWS (ECS on the shared portfolio EC2 server, one task behind the
-shared load balancer) as the very last step, when the owner deploys all portfolio apps together.
-Until then everything is built to be deploy-ready, and nothing is deployed.
+Open Door deploys to AWS (ECS on the shared portfolio EC2 server, one task behind the shared load
+balancer) as the very last step, when the owner deploys all portfolio apps together. The deploy
+files (`deploy/`) and the CI `deploy` job exist ([`docs/DEPLOY.md`](docs/DEPLOY.md)). A deploy runs
+only for a release merged into `main` (or a run by hand on `main`), and it waits for the owner's
+approval in the `production` environment. Open Door goes live in the portfolio's Phase 3 (Task 5);
+until then nothing is deployed.
 
 ---
 

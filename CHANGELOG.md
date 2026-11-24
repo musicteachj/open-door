@@ -12,6 +12,14 @@ version (`0.x.y` while the app is being built, `1.0.0` when it is complete).
 
 ### Added
 
+- **Open Door's deploy files** (Phase 9b): `deploy/ecs/` holds the web, setup, and cleanup task
+  definitions and the service. `deploy/deploy.sh` registers them, runs the setup before the service
+  is touched, waits for the service to settle on the new revision, runs `deploy/smoke.sh` through
+  the load balancer, then records the cleanup's revision. A `deploy` job at the end of the CI
+  workflow builds and pushes the image and runs it on `main`, after approval. The settings now live
+  under `/portfolio/opendoor/` in SSM, and the monthly AI budget is a parameter, so turning live AI
+  off needs no commit. `apps/api/tests/test_deploy.py` runs the script against a fake `aws`. A run
+  by hand no longer cancels a push run of the same commit.
 - **`docs/DEPLOY.md`, the deploy's settings and task contract** (Phase 9a): the three task
   definitions, every setting and who reads it, the load balancer and shutdown numbers, the database
   setup on the shared server, and how to turn live AI off.

@@ -1,0 +1,15 @@
+#!/bin/sh
+# A stand-in for curl, first on PATH in test_deploy.py. It records each call in $FAKE_CALLS and
+# answers as the app would: the body, then the status code on a line of its own, which is what
+# smoke.sh asks curl for. The address is the last argument.
+#   FAKE_CURL_STATUS=503   every answer has this status (200 unless set)
+#   FAKE_CURL_BODY=...     every answer has this body
+printf 'curl %s\n' "$*" >>"$FAKE_CALLS"
+
+for url in "$@"; do :; done
+case "$url" in
+  */api/v1/assistant/availability) body='{"available":false}' ;;
+  */api/v1/health) body='{"status":"ok"}' ;;
+  *) body='<!doctype html><html><body><div id="root"></div></body></html>' ;;
+esac
+printf '%s\n%s' "${FAKE_CURL_BODY:-$body}" "${FAKE_CURL_STATUS:-200}"

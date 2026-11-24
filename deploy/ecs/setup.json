@@ -1,0 +1,67 @@
+{
+  "family": "opendoor-setup",
+  "networkMode": "bridge",
+  "requiresCompatibilities": [
+    "EC2"
+  ],
+  "executionRoleArn": "arn:aws:iam::__ACCOUNT_ID__:role/opendoor-execution",
+  "taskRoleArn": "arn:aws:iam::__ACCOUNT_ID__:role/opendoor-task",
+  "containerDefinitions": [
+    {
+      "name": "opendoor-setup",
+      "image": "__IMAGE__",
+      "essential": true,
+      "entryPoint": [
+        "/app/setup.sh"
+      ],
+      "memory": 256,
+      "user": "10001:10001",
+      "privileged": false,
+      "readonlyRootFilesystem": true,
+      "linuxParameters": {
+        "capabilities": {
+          "drop": [
+            "ALL"
+          ]
+        },
+        "tmpfs": [
+          {
+            "containerPath": "/tmp",
+            "size": 64
+          }
+        ]
+      },
+      "dockerSecurityOptions": [
+        "no-new-privileges"
+      ],
+      "environment": [
+        {
+          "name": "APP_ORIGIN",
+          "value": "https://opendoor.jameslittlefield.net"
+        }
+      ],
+      "secrets": [
+        {
+          "name": "DATABASE_URL",
+          "valueFrom": "arn:aws:ssm:__REGION__:__ACCOUNT_ID__:parameter/portfolio/opendoor/DATABASE_URL"
+        },
+        {
+          "name": "MIGRATION_DATABASE_URL",
+          "valueFrom": "arn:aws:ssm:__REGION__:__ACCOUNT_ID__:parameter/portfolio/opendoor/MIGRATION_DATABASE_URL"
+        },
+        {
+          "name": "CLEANUP_DATABASE_URL",
+          "valueFrom": "arn:aws:ssm:__REGION__:__ACCOUNT_ID__:parameter/portfolio/opendoor/CLEANUP_DATABASE_URL"
+        }
+      ],
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group": "/portfolio/opendoor",
+          "awslogs-region": "__REGION__",
+          "awslogs-stream-prefix": "setup"
+        }
+      }
+    }
+  ]
+}

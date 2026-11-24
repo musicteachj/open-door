@@ -1,0 +1,105 @@
+#!/bin/sh
+# A stand-in for the AWS CLI, first on PATH in test_deploy.py. It never reaches AWS: it records
+# each call as a line in $FAKE_CALLS, keeps a copy of each --cli-input-json file in $FAKE_INPUTS,
+# and answers with the canned JSON below. The FAKE_* variables pick what a test wants to see:
+#   FAKE_SETUP=failed        the setup container exits 1
+#   FAKE_SETUP=no-exit-code  the setup container stops without an exit code
+#   FAKE_SETUP=unplaced      run-task places no task
+#   FAKE_SETUP=timeout       the tasks-stopped waiter gives up and the task is still RUNNING
+#   FAKE_SERVICE=active      the service exists before this deploy
+#   FAKE_SERVICE=zero        the service exists, scaled to 0 on purpose
+#   FAKE_SERVICE=inactive    the service was deleted before this deploy
+#   FAKE_SERVICE=draining    the service is being deleted
+#   FAKE_WAIT_TIMEOUTS=n     the first n services-stable waits time out
+#   FAKE_WAIT_TERMINAL=1     services-stable fails for a reason other than its time limit
+#   FAKE_ROLLBACK=1          the service settles on the previous web revision
+set -eu
+printf 'aws %s\n' "$*" >>"$FAKE_CALLS"
+
+ecs_arn=arn:aws:ecs:us-east-1:123456789012
+
+# The value after a flag, or nothing.
+value_of() {
+  flag="$1"
+  shift
+  while [ $# -gt 1 ]; do
+    if [ "$1" = "$flag" ]; then
+      echo "$2"
+      return
+    fi
+    shift
+  done
+}
+
+input="$(value_of --cli-input-json "$@")"
+input="${input#file://}"
+if [ -n "$input" ]; then cp "$input" "$FAKE_INPUTS/"; fi
+
+case "$1 $2" in
+  'ecs register-task-definition')
+    family="$(jq -r .family "$input")"
+    echo "{\"taskDefinition\":{\"taskDefinitionArn\":\"$ecs_arn:task-definition/$family:7\",\"revision\":7}}"
+    ;;
+  'ecs run-task')
+    if [ "${FAKE_SETUP:-}" = unplaced ]; then
+      echo '{"tasks":[],"failures":[{"reason":"RESOURCE:MEMORY"}]}'
+    else
+      echo "{\"tasks\":[{\"taskArn\":\"$ecs_arn:task/portfolio/setuptask1\"}],\"failures\":[]}"
+    fi
+    ;;
+  'ecs wait')
+    if [ "$3" = tasks-stopped ] && [ "${FAKE_SETUP:-}" = timeout ]; then
+      echo 'Waiter TasksStopped failed: Max attempts exceeded' >&2
+      exit 255
+    fi
+    if [ "$3" = services-stable ]; then
+      if [ "${FAKE_WAIT_TERMINAL:-}" = 1 ]; then
+        echo 'Waiter ServicesStable failed: Waiter encountered a terminal failure state' >&2
+        exit 255
+      fi
+      waits="$(grep -c '^aws ecs wait services-stable' "$FAKE_CALLS")"
+      if [ "$waits" -le "${FAKE_WAIT_TIMEOUTS:-0}" ]; then
+        echo 'Waiter ServicesStable failed: Max attempts exceeded' >&2
+        exit 255
+      fi
+    fi
+    ;;
+  'ecs describe-tasks')
+    case "${FAKE_SETUP:-}" in
+      failed) exit_code=',"exitCode":1' ;;
+      no-exit-code) exit_code='' ;;
+      *) exit_code=',"exitCode":0' ;;
+    esac
+    if [ "${FAKE_SETUP:-}" = timeout ]; then
+      echo '{"tasks":[{"lastStatus":"RUNNING","containers":[{"name":"opendoor-setup"}]}]}'
+      exit 0
+    fi
+    echo "{\"tasks\":[{\"lastStatus\":\"STOPPED\",\"stoppedReason\":\"Essential container in task exited\",\"containers\":[{\"name\":\"opendoor-setup\"$exit_code}]}]}"
+    ;;
+  'logs get-log-events')
+    echo '{"events":[{"message":"migration 7 failed"}]}'
+    ;;
+  'ecs describe-services')
+    slug="$(value_of --services "$@")"
+    # The service exists if the test says so, or once this run has created it.
+    if [ "${FAKE_SERVICE:-}" = zero ]; then
+      echo "{\"services\":[{\"serviceName\":\"$slug\",\"status\":\"ACTIVE\",\"desiredCount\":0,\"deployments\":[]}]}"
+    elif [ "${FAKE_SERVICE:-}" = active ] || grep -q '^aws ecs create-service' "$FAKE_CALLS"; then
+      revision=7
+      if [ "${FAKE_ROLLBACK:-}" = 1 ]; then revision=6; fi
+      echo "{\"services\":[{\"serviceName\":\"$slug\",\"status\":\"ACTIVE\",\"desiredCount\":1,\"deployments\":[{\"status\":\"PRIMARY\",\"taskDefinition\":\"$ecs_arn:task-definition/$slug-web:$revision\"}]}]}"
+    elif [ "${FAKE_SERVICE:-}" = inactive ] || [ "${FAKE_SERVICE:-}" = draining ]; then
+      status="$(echo "$FAKE_SERVICE" | tr '[:lower:]' '[:upper:]')"
+      echo "{\"services\":[{\"serviceName\":\"$slug\",\"status\":\"$status\",\"deployments\":[]}]}"
+    else
+      echo '{"services":[],"failures":[{"reason":"MISSING"}]}'
+    fi
+    ;;
+  'ecs create-service' | 'ecs update-service' | 'ssm put-parameter')
+    echo '{}'
+    ;;
+  *)
+    echo "fake aws: no canned reply for: $*" >&2
+    exit 2
+    ;;
+esac

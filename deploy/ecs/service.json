@@ -1,0 +1,23 @@
+{
+  "cluster": "portfolio",
+  "serviceName": "opendoor",
+  "launchType": "EC2",
+  "desiredCount": 1,
+  "healthCheckGracePeriodSeconds": 60,
+  "loadBalancers": [
+    {
+      "targetGroupArn": "__TARGET_GROUP_ARN__",
+      "containerName": "opendoor",
+      "containerPort": 8000
+    }
+  ],
+  "deploymentConfiguration": {
+    "deploymentCircuitBreaker": {
+      "enable": true,
+      "rollback": true
+    },
+    "minimumHealthyPercent": 100,
+    "maximumPercent": 200
+  },
+  "placementConstraints": []
+}
