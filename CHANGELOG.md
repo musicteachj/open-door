@@ -25,9 +25,10 @@ version (`0.x.y` while the app is being built, `1.0.0` when it is complete).
 ### Fixed
 
 - **A setup task that ECS stopped no longer passes on exit code 0** (Phase 9b follow-up). A task stopped for
-  a reason other than its essential container exiting (a stop by hand, a host drain, a Spot interruption)
-  could have a migration that trapped the signal and exited 0 half done. The deploy now fails before the
-  service is touched and names the stop code.
+  any stop code other than `EssentialContainerExited` (a manual stop is `UserInitiated`) could have a
+  migration that trapped the signal and exited 0 half done. The deploy now fails before the service is
+  touched and names the stop code, and a task with every container at exit 0 but no stop code at all fails
+  with its own message.
 
 ### Added
 

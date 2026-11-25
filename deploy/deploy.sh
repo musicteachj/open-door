@@ -152,8 +152,8 @@ if [[ -n "$setup_arn" ]]; then
     fi
   fi
   stopped="$(aws ecs describe-tasks --cluster "$cluster" --tasks "$task_arn" --output json)"
-  # Exit code 0 is not enough: a task that ECS stopped for another reason (a stop by hand, a host drain,
-  # a Spot interruption) can have a migration that trapped SIGTERM and exited 0 half done. Only a task
+  # Exit code 0 is not enough: a task stopped with any stop code but EssentialContainerExited (a manual
+  # stop is UserInitiated) can have a migration that trapped SIGTERM and exited 0 half done. Only a task
   # whose essential container exited by itself is a finished setup.
   stop_code="$(jq -r '.tasks[0].stopCode // "none"' <<<"$stopped")"
   all_exited_0=false
@@ -169,6 +169,11 @@ if [[ -n "$setup_arn" ]]; then
     if [[ "$stop_code" == TaskFailedToStart ]]; then
       fail "the setup task failed to start (stop code TaskFailedToStart):" \
         "check the image pull and the instance's free memory; the service was not touched"
+    fi
+    # Every container exited 0, but ECS gave no stop code, so nothing says the task finished by itself.
+    if [[ "$all_exited_0" == true && "$stop_code" == none ]]; then
+      fail "the setup task exited 0, but ECS reported no stop code, so it can't be trusted;" \
+        "check aws ecs describe-tasks --cluster $cluster --tasks $task_arn; the service was not touched"
     fi
     # Every container exited 0 but ECS, not the task, ended it: the trapped-signal case.
     if [[ "$all_exited_0" == true ]]; then

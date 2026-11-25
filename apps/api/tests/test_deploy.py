@@ -363,7 +363,7 @@ def test_it_judges_a_setup_that_stopped_just_after_the_waiter_gave_up_by_its_exi
         assert "the setup task failed" in result.output
 
 
-@pytest.mark.parametrize("stop_code", ["UserInitiated", "TerminationNotice", "SpotInterruption"])
+@pytest.mark.parametrize("stop_code", ["UserInitiated", "ServiceSchedulerInitiated"])
 def test_it_fails_a_setup_that_ecs_stopped_even_when_its_exit_code_is_0(
     tmp_path: Path, stop_code: str
 ) -> None:
@@ -374,6 +374,14 @@ def test_it_fails_a_setup_that_ecs_stopped_even_when_its_exit_code_is_0(
     assert "was stopped by ECS" in result.output
     assert service_calls(result.calls) == []
     assert starting(result.calls, "aws ssm") == []
+
+
+def test_it_does_not_trust_a_setup_with_exit_code_0_and_no_stop_code(tmp_path: Path) -> None:
+    result = deploy(tmp_path, {"FAKE_STOP_CODE": "absent"})
+    assert result.status == 1
+    assert "exited 0, but ECS reported no stop code" in result.output
+    assert "was stopped by ECS" not in result.output
+    assert service_calls(result.calls) == []
 
 
 def test_it_names_the_stop_code_only_when_every_container_exited_0(tmp_path: Path) -> None:

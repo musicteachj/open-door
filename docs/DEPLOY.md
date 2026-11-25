@@ -31,14 +31,16 @@ instance (bridge networking, behind the shared load balancer):
   `deploy.sh`. It runs on `main` only, after the other jobs pass, and waits for approval in the
   `production` environment. Run the workflow by hand on `main` to redeploy the current commit.
   `deploy/head-of-main.sh` refuses a run whose commit is not the current head of `main`, once before
-  the job takes AWS credentials and again right before the image is pushed, so an old run pushes and
-  deploys nothing; if a newer run exists it deploys main's head, and otherwise run the workflow by
-  hand. The job stops after 58 minutes, and the build and push step after 8 (the worst case is
+  the job takes AWS credentials and again right before the image is pushed. A run refused by either
+  check pushes and deploys nothing; if a newer run exists it deploys main's head, and otherwise run
+  the workflow by hand. A run that passed the second check still deploys if main moves during its
+  build and push, and the newer run, queued behind it, deploys after it. The job stops after 58 minutes, and the build and push step after 8 (the worst case is
   8 + 10 for setup + 30 for settling + 5 for smoke + 1 for the rest, 54).
 - The setup task counts as done only if every container exited 0 and ECS's stop code is
-  `EssentialContainerExited`. A task ECS stopped for another reason (`UserInitiated`, a host drain,
-  `SpotInterruption`) fails the deploy before the service is touched and names the stop code, even if
-  a migration trapped the signal and exited 0 half done; a task that never started
+  `EssentialContainerExited`. A task stopped with any other stop code (a manual stop is
+  `UserInitiated`) fails the deploy before the service is touched and names the stop code, even if a
+  migration trapped the signal and exited 0 half done; a task whose containers all exited 0 but that
+  has no stop code at all is not trusted either, and fails with its own message; a task that never started
   (`TaskFailedToStart`) says to check the image pull and the instance's free memory. A task still
   `STOPPING` when the wait gave up counts as finished only if every container has an exit code and ECS
   has set its stop code. A task that stopped just after the wait gave

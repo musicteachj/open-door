@@ -242,8 +242,9 @@ jobs:
     if: needs.changes.outputs.e2e == 'true' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     # About 18 minutes of browser tests on one worker (playwright.config.ts), plus the two image
-    # builds (a cold build is several minutes, a cached one about one), the image check, and the
-    # proxy check (about two). 45 leaves room for a cold cache and a slow runner.
+    # builds (the deploy job's build and push of v0.9.0 took 23 seconds, run 45481973868; these
+    # two builds have not been timed on their own), the image check, and the proxy check (about
+    # two). 45 leaves room for a cold cache and a slow runner.
     timeout-minutes: 45
     services:
       # The same service as the API job.
