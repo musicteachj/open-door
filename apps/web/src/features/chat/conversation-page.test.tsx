@@ -1677,6 +1677,76 @@ describe('following the thread', () => {
     stream.close()
   })
 
+  it('keeps a following reader at the end while an answer is still being revealed, even after they pressed a key (ADR 0025)', async () => {
+    // A ResizeObserver the test can fire: the paced reveal grows the thread after the text arrived.
+    const fire: (() => void)[] = []
+    vi.stubGlobal(
+      'ResizeObserver',
+      class {
+        constructor(callback: () => void) {
+          fire.push(callback)
+        }
+        observe() {}
+        unobserve() {}
+        disconnect() {}
+      },
+    )
+    // Motion allowed (only that query matches), and frames that never run, so a burst stays
+    // part-revealed.
+    vi.stubGlobal('matchMedia', (query: string) => ({
+      matches: query === '(prefers-reduced-motion: no-preference)',
+      media: query,
+      addEventListener: () => {},
+      removeEventListener: () => {},
+    }))
+    vi.stubGlobal('requestAnimationFrame', () => 1)
+    vi.stubGlobal('cancelAnimationFrame', () => {})
+    let threadPx = 1000
+    vi.spyOn(HTMLElement.prototype, 'offsetHeight', 'get').mockImplementation(function (
+      this: HTMLElement,
+    ) {
+      const slot = this.getAttribute('data-slot')
+      return slot === 'composer-dock' ? COMPOSER_PX : slot === 'conversation-thread' ? threadPx : 0
+    })
+    const grow = () => {
+      threadPx += 300
+      act(() => {
+        for (const callback of fire) callback()
+      })
+    }
+    try {
+      signedInWith(conversationOut({ turns: [cited()] }))
+      const stream = openStream()
+      onTurn(() => stream.response())
+      const { user } = renderApp({ at: '/ask' })
+      await user.type(await composer(), 'More{Enter}')
+      stream.push('turn.started', { turnId: 't-9' })
+      stream.push('text.delta', {
+        text: 'One sentence of the answer arrives in a single burst. '.repeat(8),
+      })
+      await waitFor(() =>
+        expect(document.querySelector('[data-slot="answer-live"][data-revealing]')).not.toBeNull(),
+      )
+      readerScrollsTo(-20)
+      // The reader pressed a key since asking, so only the answer being revealed keeps them
+      // following.
+      act(() => {
+        window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Shift' }))
+      })
+      scrollIntoView.mockClear()
+      grow()
+      expect(scrollIntoView).toHaveBeenCalled()
+      // A reader who scrolled up is left where they are.
+      readerScrollsTo(2000)
+      scrollIntoView.mockClear()
+      grow()
+      expect(scrollIntoView).not.toHaveBeenCalled()
+      stream.close()
+    } finally {
+      vi.unstubAllGlobals()
+    }
+  })
+
   it('leaves room under the last turn: the thread ends above the composer, not behind it', async () => {
     signedInWith(conversationOut({ turns: [cited()] }))
     renderApp({ at: '/ask' })

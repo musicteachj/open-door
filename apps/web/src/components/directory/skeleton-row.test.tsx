@@ -11,9 +11,12 @@ describe('SkeletonRow', () => {
     expect(screen.queryByRole('link')).not.toBeInTheDocument()
   })
 
-  it('has no shimmer or other animation', () => {
+  it("has no shimmer, only the skeleton's soft pulse behind motion-safe (ADR 0025)", () => {
     const { container } = render(<SkeletonRow variant={2} />)
-    expect(container.innerHTML).not.toMatch(/animate-|shimmer|pulse/)
+    expect(container.innerHTML).not.toMatch(/shimmer/)
+    const animations = container.innerHTML.match(/[\w:-]*animate-[\w-]+/g) ?? []
+    expect(animations.length).toBeGreaterThan(0)
+    expect(new Set(animations)).toEqual(new Set(['motion-safe:animate-pulse-soft']))
   })
 
   it('varies its bar widths by variant, in the four steps the sketch has', () => {

@@ -141,6 +141,19 @@ function useFollowThread(live: LiveTurn | null, phase: ChatStatus) {
         toEnd()
         return
       }
+      // The last answer, while its text is still being revealed, grows after that text arrived, as the reveal
+      // plays it out: a reader following it is kept at the end, as the stream's own growth does,
+      // whatever they pressed since asking (ADR 0025).
+      if (
+        grew &&
+        following.current &&
+        [...thread.querySelectorAll('[data-slot="answer-live"]')]
+          .at(-1)
+          ?.hasAttribute('data-revealing')
+      ) {
+        toEnd(false)
+        return
+      }
       // A control with focus that the change pushed behind the composer, such as "Send feedback"
       // when the form's error appears above it, is brought clear (its scroll margin keeps it
       // above the composer). Only if the change moved it on screen: one the reader scrolled there,

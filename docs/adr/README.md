@@ -30,6 +30,7 @@ records are never rewritten.
 | [0022](0022-claude-api-from-aws.md) | On AWS, the API reaches Claude through the Claude API, not Amazon Bedrock | Accepted | 2026-11-05 |
 | [0023](0023-phase-9-on-the-shared-portfolio-server.md) | Phase 9 deploys to the shared portfolio server, and prompt 2026-11.5 ships without a full eval run | Accepted | 2026-11-20 |
 | [0024](0024-ai-written-text-is-marked.md) | AI-written answers and summaries carry a machine-readable AI-generated mark | Accepted | 2026-11-20 |
+| [0025](0025-gentle-motion-for-waiting.md) | Gentle motion shows that the app is working | Accepted | 2026-11-28 |
 
 New records copy this shape:
 

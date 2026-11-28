@@ -1,5 +1,5 @@
 import { RotateCcw, Square } from 'lucide-react'
-import type { ReactNode } from 'react'
+import { type ReactNode, useEffect, useMemo, useState } from 'react'
 import { InlineError } from '@/components/feedback/inline-error'
 import { WalkthroughLink } from '@/components/walkthrough/walkthrough-link'
 import { Button } from '@/components/ui/button'
@@ -7,9 +7,66 @@ import { cn } from '@/lib/utils'
 import { Answer, type AnswerProps } from './answer'
 import { conversationCopy } from './labels'
 import { StatusLine, type StatusStep } from './status-line'
+import { useRevealedText } from './use-revealed-text'
 
 /** One empty array for every message with no citations, so a default does not defeat memoizing. */
 const NO_CITATIONS: NonNullable<AnswerProps['citations']> = []
+
+/** How long a streaming message waits for its first text before it says it is still working. */
+export const STILL_WORKING_AFTER_MS = 8000
+
+/** The browser's own first step, shown until the server's first step arrives (ADR 0025). */
+const READING_STEPS: StatusStep[] = [
+  { id: 'reading', text: conversationCopy.readingQuestion, done: false },
+]
+
+/** The browser's step while the model works after its last finished step (ADR 0025). */
+const WORKING_STEP: StatusStep = {
+  id: 'working',
+  text: conversationCopy.workingOnAnswer,
+  done: false,
+}
+
+/**
+ * The steps to show while a message streams, so there is never a silent wait. Until the server
+ * sends a step, the browser shows "Reading your question…". When every step is done and no text
+ * has come yet (the model is thinking again), it adds "Working on the answer…". These are added a
+ * moment after streaming starts, each time it does (the live turn's message can be reused for the
+ * next question), because a live region does not announce the text it is inserted with.
+ */
+function useShownSteps(
+  steps: StatusStep[],
+  streaming: boolean,
+  hasText: boolean,
+  justAsked: boolean,
+): StatusStep[] {
+  // Whether the status line has been in the page since this stream started.
+  const [ready, setReady] = useState(false)
+  if (!streaming && ready) setReady(false)
+  useEffect(() => {
+    if (!streaming) return
+    const timer = setTimeout(() => setReady(true), 0)
+    return () => clearTimeout(timer)
+  }, [streaming])
+  if (!streaming || !ready || hasText) return steps
+  if (steps.length === 0) return justAsked ? READING_STEPS : [WORKING_STEP]
+  if (steps.every((step) => step.done)) return [...steps, WORKING_STEP]
+  return steps
+}
+
+/** True once a message has streamed for `STILL_WORKING_AFTER_MS` with no answer text. */
+function useStillWorking(streaming: boolean, hasText: boolean): boolean {
+  const [late, setLate] = useState(false)
+  const waiting = streaming && !hasText
+  // Each wait counts its own 8 seconds: text that arrives and is then taken back starts a new one.
+  if (!waiting && late) setLate(false)
+  useEffect(() => {
+    if (!waiting) return
+    const timer = setTimeout(() => setLate(true), STILL_WORKING_AFTER_MS)
+    return () => clearTimeout(timer)
+  }, [waiting])
+  return waiting && late
+}
 
 /**
  * Where the message is. `incomplete` is a finished answer the output limit cut off. A not-found
@@ -34,6 +91,13 @@ type AssistantMessageBaseProps = {
   contacts?: ReactNode
   /** "Was this right?" and "Show your work". Shown once the answer is finished. */
   feedback?: ReactNode
+  /** The turn's id, so the paced reveal carries on when the turn is drawn again (live to saved). */
+  revealKey?: string | null
+  /**
+   * The question was just asked in this tab, so "Reading your question…" is true. False for a
+   * running turn seen after a reload, which says "Working on the answer…" instead.
+   */
+  justAsked?: boolean
   className?: string
 }
 
@@ -65,15 +129,36 @@ function AssistantMessage(props: AssistantMessageProps) {
     onAskAgain,
     onRetry,
     offerWalkthrough = false,
+    revealKey,
+    justAsked = true,
     sources,
     contacts,
     feedback,
     className,
   } = props
   const streaming = status === 'streaming'
-  // Nothing has arrived yet (no step, no text): the caret alone says the answer is on its way.
+  // The text is played out at a steady pace while it streams, so a large piece never lands at once.
+  // A stopped or failed answer shows what arrived at once, beside its "Stopped" line or error.
+  const revealed = useRevealedText(
+    text,
+    streaming,
+    status === 'stopped' || status === 'error',
+    revealKey,
+  )
+  // A citation's marker shows once the text it follows has been revealed.
+  const shownCitations = useMemo(
+    () =>
+      revealed.revealing
+        ? citations.filter((citation) => citation.offsetUtf16 <= revealed.text.length)
+        : citations,
+    [citations, revealed.revealing, revealed.text.length],
+  )
+  const shownSteps = useShownSteps(steps, streaming, text !== '', justAsked)
+  const stillWorking = useStillWorking(streaming, text !== '')
+  // Nothing has arrived yet (no step, no text): the caret says the answer is on its way.
   const waiting = streaming && steps.length === 0
-  const finished = status === 'complete' || status === 'incomplete'
+  // The footer waits for the last of the text, so it never sits above half-revealed words.
+  const finished = (status === 'complete' || status === 'incomplete') && !revealed.revealing
   return (
     <div
       data-slot="assistant-message"
@@ -85,7 +170,12 @@ function AssistantMessage(props: AssistantMessageProps) {
         </span>
         <span className="text-small text-ink-muted">{conversationCopy.assistantName}</span>
       </div>
-      {streaming && <StatusLine steps={steps} />}
+      {streaming && (
+        <StatusLine
+          steps={shownSteps}
+          hint={stillWorking ? conversationCopy.stillWorking : undefined}
+        />
+      )}
       {/* Always in the page, so a screen reader is already watching it when the answer arrives. It
           takes no room while empty (the negative margin cancels its gap). Only
           this is busy while it streams, so the finished answer is read once: the status line above
@@ -93,21 +183,23 @@ function AssistantMessage(props: AssistantMessageProps) {
       <div
         data-slot="answer-live"
         aria-live="polite"
-        aria-busy={streaming}
+        aria-busy={streaming || revealed.revealing}
+        // Text that has arrived and is still being played out: the thread follows its growth.
+        data-revealing={revealed.revealing || undefined}
         className="empty:-mt-3.5"
       >
-        {(text !== '' || waiting) && (
+        {(revealed.text !== '' || waiting) && (
           <Answer
-            text={text}
+            text={revealed.text}
             // Already numbered by section where the citations entered the chat store or the
             // conversation query (`numberBySection`), so a marker 1 and a chip 1 are one section.
-            citations={citations}
+            citations={shownCitations}
             renderMarker={renderMarker}
-            caret={streaming}
+            caret={streaming || revealed.revealing}
           />
         )}
       </div>
-      {status === 'incomplete' && (
+      {status === 'incomplete' && !revealed.revealing && (
         <p className="m-0 text-small text-ink-muted">{conversationCopy.incomplete}</p>
       )}
       {status === 'stopped' && (

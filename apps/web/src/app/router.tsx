@@ -16,6 +16,7 @@ import { CaseDetailPage } from '@/features/cases/case-detail-page'
 import { CasesPage } from '@/features/cases/cases-page'
 import { ConsolePage } from '@/features/console/console-page'
 import { MyCasesPage } from '@/features/cases/my-cases-page'
+import { PageLoading } from '@/components/feedback/page-loading'
 
 // The component gallery is compiled in for development and for the e2e build, which sets
 // VITE_GALLERY. In a production build both conditions are constants Vite folds to false, so the
@@ -36,6 +37,9 @@ export const routes: RouteObject[] = [
   {
     element: <Root />,
     errorElement: <RootError />,
+    // Shown while a lazy page's code loads on a direct first load (the walkthrough), so a slow
+    // chunk is never a blank screen (ADR 0025). A link inside the app keeps the old page meanwhile.
+    hydrateFallbackElement: <PageLoading />,
     children: [
       { path: '/', element: <LandingPage /> },
       {

@@ -1,9 +1,10 @@
-import { render, screen, within } from '@testing-library/react'
+import { act, render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router'
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { accessibleNameOf } from '@/test/accessible-name'
 import { apiCitations, citation } from '@/test/assistant-fixtures'
+import { stubMediaQuery } from '@/test/media-query'
 import { AssistantMessage } from './assistant-message'
 import { CitationMarker } from './citation-marker'
 import * as linkSpans from './link-spans'
@@ -90,12 +91,138 @@ describe('AssistantMessage: streaming', () => {
     expect(answerLive(container)).not.toContainElement(line as HTMLElement)
   })
 
-  it('has the status region in the page while it streams, empty before the first step', () => {
-    const { container } = renderMessage({ status: 'streaming', text: '', steps: [] })
+  it('says "Reading your question…" in the status region until the first step arrives', async () => {
+    const { container, rerender } = renderMessage({ status: 'streaming', text: '', steps: [] })
     const line = container.querySelector('[data-slot="status-line"]')!
-    expect(line).toBeInTheDocument()
     expect(line).toHaveAttribute('role', 'status')
+    // Empty when it mounts, so the live region is watching when the step is added.
     expect(line).toBeEmptyDOMElement()
+    expect(await within(line as HTMLElement).findByRole('listitem')).toHaveTextContent(
+      'Reading your question…',
+    )
+    expect(line.querySelector('[data-slot="status-spinner"]')).not.toBeNull()
+    rerender(
+      <MemoryRouter>
+        <AssistantMessage
+          status="streaming"
+          text=""
+          steps={[{ id: 'tool-1', text: 'Searching the handbook…', done: false }]}
+          renderMarker={() => null}
+        />
+      </MemoryRouter>,
+    )
+    const items = within(line as HTMLElement).getAllByRole('listitem')
+    expect(items.map((item) => item.textContent)).toEqual(['Searching the handbook…'])
+  })
+
+  it('says "Working on the answer…" when every step is done and no text has come', async () => {
+    const done = [{ id: 'tool-1', text: 'Searched the handbook: sick leave', done: true }]
+    const { container, rerender } = renderMessage({ status: 'streaming', text: '', steps: done })
+    const line = container.querySelector<HTMLElement>('[data-slot="status-line"]')!
+    const working = await within(line).findByText('Working on the answer…')
+    expect(working.closest('li')!.querySelector('[data-slot="status-spinner"]')).not.toBeNull()
+    rerender(
+      <MemoryRouter>
+        <AssistantMessage
+          status="streaming"
+          text="You get"
+          steps={done}
+          renderMarker={() => null}
+        />
+      </MemoryRouter>,
+    )
+    expect(within(line).queryByText('Working on the answer…')).toBeNull()
+    expect(within(line).getAllByRole('listitem')).toHaveLength(1)
+  })
+
+  it('adds no step of its own while a step is still running', async () => {
+    const running = [{ id: 'tool-1', text: 'Searching the handbook…', done: false }]
+    const { container } = renderMessage({ status: 'streaming', text: '', steps: running })
+    const line = container.querySelector<HTMLElement>('[data-slot="status-line"]')!
+    await act(async () => {})
+    expect(
+      within(line)
+        .getAllByRole('listitem')
+        .map((item) => item.textContent),
+    ).toEqual(['Searching the handbook…'])
+  })
+
+  it('adds "Reading your question…" a moment after streaming starts again in the same message', async () => {
+    const view = (status: 'streaming' | 'complete', text: string) => (
+      <MemoryRouter>
+        <AssistantMessage status={status} text={text} steps={[]} renderMarker={() => null} />
+      </MemoryRouter>
+    )
+    const { container, rerender } = render(view('streaming', ''))
+    await screen.findByText('Reading your question…')
+    rerender(view('complete', 'Done.'))
+    // The live turn's message is reused for the next question.
+    rerender(view('streaming', ''))
+    const line = container.querySelector<HTMLElement>('[data-slot="status-line"]')!
+    expect(line).toBeEmptyDOMElement()
+    expect(await within(line).findByText('Reading your question…')).toBeInTheDocument()
+  })
+
+  it('shows no "Reading your question…" once the message is no longer streaming', () => {
+    renderMessage({ status: 'stopped', text: '', steps: [] })
+    expect(screen.queryByText('Reading your question…')).toBeNull()
+  })
+
+  it('says "Still working on it…" after 8 seconds with no answer text, and not before', () => {
+    vi.useFakeTimers()
+    try {
+      renderMessage({ status: 'streaming', text: '', steps: [] })
+      act(() => vi.advanceTimersByTime(7900))
+      expect(screen.queryByText('Still working on it…')).toBeNull()
+      act(() => vi.advanceTimersByTime(200))
+      expect(screen.getByText('Still working on it…')).toBeInTheDocument()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('counts a new 8 seconds after text is taken back', () => {
+    vi.useFakeTimers()
+    try {
+      const view = (text: string) => (
+        <MemoryRouter>
+          <AssistantMessage status="streaming" text={text} steps={[]} renderMarker={() => null} />
+        </MemoryRouter>
+      )
+      const { rerender } = render(view(''))
+      act(() => vi.advanceTimersByTime(8000))
+      expect(screen.getByText('Still working on it…')).toBeInTheDocument()
+      rerender(view('A working note'))
+      expect(screen.queryByText('Still working on it…')).toBeNull()
+      rerender(view(''))
+      expect(screen.queryByText('Still working on it…')).toBeNull()
+      act(() => vi.advanceTimersByTime(8000))
+      expect(screen.getByText('Still working on it…')).toBeInTheDocument()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('never says "Still working on it…" once answer text has arrived', () => {
+    vi.useFakeTimers()
+    try {
+      renderMessage({ status: 'streaming', text: 'You get', steps: [] })
+      act(() => vi.advanceTimersByTime(20_000))
+      expect(screen.queryByText('Still working on it…')).toBeNull()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('does not fade in: a turn is drawn again as it settles and is saved, and must not blink', () => {
+    const { container } = renderMessage()
+    expect(message(container).className).not.toMatch(/animate-/)
+  })
+
+  it('says "Working on the answer…" for a running turn seen after a reload, not "Reading your question…"', async () => {
+    renderMessage({ status: 'streaming', text: '', steps: [], justAsked: false })
+    expect(await screen.findByText('Working on the answer…')).toBeInTheDocument()
+    expect(screen.queryByText('Reading your question…')).toBeNull()
   })
 
   it('keeps that same region when the first step arrives', () => {
@@ -515,5 +642,67 @@ describe('AssistantMessage: numbering by source', () => {
     const markers = within(answer).getAllByRole('button')
     await userEvent.click(markers[2]!)
     expect(onOpen).toHaveBeenLastCalledWith('CA-4.3~p2')
+  })
+})
+
+describe('AssistantMessage: the paced reveal (ADR 0025)', () => {
+  afterEach(() => vi.unstubAllGlobals())
+
+  it('holds back markers past the revealed text, and the footer, until the reveal ends', () => {
+    stubMediaQuery(true)
+    // Frames never run, so the reveal stays where it starts.
+    vi.stubGlobal('requestAnimationFrame', () => 1)
+    vi.stubGlobal('cancelAnimationFrame', () => {})
+    const long = `${'You get five days. '.repeat(40)}End.`
+    const props = {
+      citations: [citation({ marker: 1, offsetUtf16: long.length })],
+      renderMarker: (c: { marker: number }) => (
+        <button type="button">{`marker ${c.marker}`}</button>
+      ),
+      feedback: <p>the feedback</p>,
+    }
+    const { container, rerender } = render(
+      <MemoryRouter>
+        <AssistantMessage status="streaming" text="" {...props} />
+      </MemoryRouter>,
+    )
+    rerender(
+      <MemoryRouter>
+        <AssistantMessage status="complete" text={long} {...props} />
+      </MemoryRouter>,
+    )
+    expect(screen.queryByRole('button', { name: 'marker 1' })).toBeNull()
+    expect(screen.queryByText('the feedback')).toBeNull()
+    expect(container.querySelector('[data-slot="answer-live"]')).toHaveAttribute(
+      'aria-busy',
+      'true',
+    )
+  })
+})
+
+describe('AssistantMessage: a stop during the reveal', () => {
+  afterEach(() => vi.unstubAllGlobals())
+
+  it('shows the whole text at once beside "Stopped", with no caret and nothing busy', () => {
+    stubMediaQuery(true)
+    vi.stubGlobal('requestAnimationFrame', () => 1)
+    vi.stubGlobal('cancelAnimationFrame', () => {})
+    const long = `${'You get five days. '.repeat(40)}End.`
+    const view = (status: 'streaming' | 'stopped', text: string) => (
+      <MemoryRouter>
+        <AssistantMessage status={status} text={text} renderMarker={() => null} />
+      </MemoryRouter>
+    )
+    const { container, rerender } = render(view('streaming', ''))
+    rerender(view('streaming', long))
+    expect(container.querySelector('[data-slot="answer-live"]')).toHaveTextContent('')
+    rerender(view('stopped', long))
+    expect(screen.getByText('Stopped', { exact: true })).toBeInTheDocument()
+    expect(container.querySelector('[data-slot="answer-live"]')).toHaveTextContent(/End\.$/)
+    expect(container.querySelector('[data-slot="caret"]')).toBeNull()
+    expect(container.querySelector('[data-slot="answer-live"]')).toHaveAttribute(
+      'aria-busy',
+      'false',
+    )
   })
 })

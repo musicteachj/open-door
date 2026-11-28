@@ -1,8 +1,7 @@
-import AxeBuilder from '@axe-core/playwright'
 import { expect, test } from './fixtures'
 import type { Page } from '@playwright/test'
 import { GALLERY_STATE_IDS } from './gallery-ids'
-import { AXE_TAGS, focusRing, themeColor } from './helpers'
+import { focusRing, scan, themeColor } from './helpers'
 
 // The handbook section of the gallery in a real browser: axe on every state, what the browser
 // paints on hover and focus, the passage panel's focus behavior, and 390 px.
@@ -41,16 +40,13 @@ for (const id of HANDBOOK_IDS) {
       await section.getByRole('button', { name: open }).click()
       await expect(section.getByRole('complementary', { name: 'Handbook passage' })).toBeVisible()
     }
-    const results = await new AxeBuilder({ page })
-      .withTags(AXE_TAGS)
-      .include(`section[aria-labelledby="${id}"]`)
-      .analyze()
+    const results = await scan(page, [], [`section[aria-labelledby="${id}"]`])
     expect(results.violations).toEqual([])
   })
 }
 
 test('the handbook section, as a whole page, has no violations', async ({ page }) => {
-  const results = await new AxeBuilder({ page }).withTags(AXE_TAGS).analyze()
+  const results = await scan(page)
   expect(results.violations).toEqual([])
 })
 

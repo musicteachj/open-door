@@ -11,6 +11,7 @@ import re
 import shutil
 import subprocess
 import tempfile
+import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -102,7 +103,10 @@ def run(command: list[str], ecs_dir: Path, tmp: Path, fake: dict[str, str] | Non
         "ALB_DNS_NAME": ALB_DNS_NAME,
         "TARGET_GROUP_ARN": TARGET_GROUP_ARN,
         "DEPLOY_ECS_DIR": str(ecs_dir),
-        "SMOKE_DELAY_SECONDS": "0",
+        # Short deadlines, so a failing check ends the run in a second, not in minutes.
+        "SMOKE_DELAY_SECONDS": "1",
+        "SMOKE_FIRST_SECONDS": "1",
+        "SMOKE_SECONDS": "1",
         "FAKE_CALLS": str(calls),
         "FAKE_INPUTS": str(inputs),
         **(fake or {}),
@@ -265,7 +269,7 @@ def test_it_gives_the_cleanup_only_its_database_url() -> None:
 # --- deploy.sh --------------------------------------------------------------------------------
 
 
-@pytest.mark.parametrize("script", ["deploy.sh", "smoke.sh"])
+@pytest.mark.parametrize("script", ["deploy.sh", "smoke.sh", "head-of-main.sh"])
 def test_it_never_traces_the_script(script: str) -> None:
     code = code_of(DEPLOY_DIR / script)
     assert "set -euo pipefail" in code
@@ -341,7 +345,13 @@ def test_it_names_the_setup_task_when_it_does_not_stop_in_time(tmp_path: Path) -
 
 
 @pytest.mark.parametrize(
-    ("setup", "succeeds"), [("timeout-stopped", True), ("timeout-stopped-failed", False)]
+    ("setup", "succeeds"),
+    [
+        ("timeout-stopped", True),
+        ("timeout-stopped-failed", False),
+        # Still STOPPING, but every container has already exited 0.
+        ("timeout-stopping", True),
+    ],
 )
 def test_it_judges_a_setup_that_stopped_just_after_the_waiter_gave_up_by_its_exit_code(
     tmp_path: Path, setup: str, succeeds: bool
@@ -351,6 +361,58 @@ def test_it_judges_a_setup_that_stopped_just_after_the_waiter_gave_up_by_its_exi
     assert len(service_calls(result.calls)) == (1 if succeeds else 0)
     if not succeeds:
         assert "the setup task failed" in result.output
+
+
+@pytest.mark.parametrize("stop_code", ["UserInitiated", "ServiceSchedulerInitiated"])
+def test_it_fails_a_setup_that_ecs_stopped_even_when_its_exit_code_is_0(
+    tmp_path: Path, stop_code: str
+) -> None:
+    # A migration that trapped SIGTERM and exited 0 half done must not pass as a finished setup.
+    result = deploy(tmp_path, {"FAKE_STOP_CODE": stop_code})
+    assert result.status == 1
+    assert f"stop code {stop_code}" in result.output
+    assert "was stopped by ECS" in result.output
+    assert service_calls(result.calls) == []
+    assert starting(result.calls, "aws ssm") == []
+
+
+def test_it_does_not_trust_a_setup_with_exit_code_0_and_no_stop_code(tmp_path: Path) -> None:
+    result = deploy(tmp_path, {"FAKE_STOP_CODE": "absent"})
+    assert result.status == 1
+    assert "exited 0, but ECS reported no stop code" in result.output
+    assert "was stopped by ECS" not in result.output
+    assert service_calls(result.calls) == []
+
+
+def test_it_names_the_stop_code_only_when_every_container_exited_0(tmp_path: Path) -> None:
+    # A failed container stopped by ECS is a plain failure: the exit code is the news.
+    result = deploy(tmp_path, {"FAKE_SETUP": "failed", "FAKE_STOP_CODE": "UserInitiated"})
+    assert result.status == 1
+    assert "the setup task failed, so the service was not touched" in result.output
+    assert "was stopped by ECS" not in result.output
+    assert service_calls(result.calls) == []
+
+
+def test_it_says_what_to_check_when_the_setup_task_failed_to_start(tmp_path: Path) -> None:
+    result = deploy(tmp_path, {"FAKE_SETUP": "no-exit-code", "FAKE_STOP_CODE": "TaskFailedToStart"})
+    assert result.status == 1
+    assert "failed to start (stop code TaskFailedToStart)" in result.output
+    assert "image pull" in result.output
+    assert "free memory" in result.output
+    assert service_calls(result.calls) == []
+
+
+def test_it_does_not_settle_a_stopping_task_that_has_no_stop_code_yet(tmp_path: Path) -> None:
+    result = deploy(tmp_path, {"FAKE_SETUP": "timeout-stopping-no-stop-code"})
+    assert result.status == 1
+    assert "may still be running" in result.output
+    assert service_calls(result.calls) == []
+
+
+def test_it_passes_a_setup_whose_essential_container_exited_by_itself(tmp_path: Path) -> None:
+    result = deploy(tmp_path, {"FAKE_STOP_CODE": "EssentialContainerExited"})
+    assert result.status == 0, result.output
+    assert len(service_calls(result.calls)) == 1
 
 
 def test_it_creates_the_service_the_first_time_and_updates_it_after(tmp_path: Path) -> None:
@@ -486,19 +548,29 @@ def test_it_writes_no_job_revision_when_smoke_fails(tmp_path: Path) -> None:
 # --- the deploy job ---------------------------------------------------------------------------
 
 
-def test_the_deploy_job_builds_one_plain_image_per_tag() -> None:
+def deploy_steps() -> list[dict[str, Any]]:
+    steps: list[dict[str, Any]] = yaml.safe_load(WORKFLOW.read_text(encoding="utf-8"))["jobs"][
+        "deploy"
+    ]["steps"]
+    return steps
+
+
+def test_the_deploy_job_builds_and_pushes_one_plain_image_per_tag() -> None:
     workflow = WORKFLOW.read_text(encoding="utf-8")
     builds = [line for line in workflow.split("\n") if "docker buildx build" in line]
     assert len(builds) == 1
     assert "--provenance=false" in builds[0]
     assert "--sbom=false" in builds[0]
+    assert "--push" in builds[0]
+    assert "--load" not in builds[0]
+    assert "docker push" not in workflow
     assert "${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}" in workflow
 
 
 def test_the_deploy_job_waits_for_every_other_job() -> None:
     jobs = yaml.safe_load(WORKFLOW.read_text(encoding="utf-8"))["jobs"]
     assert set(jobs["deploy"]["needs"]) == set(jobs) - {"deploy"}
-    assert jobs["deploy"]["timeout-minutes"] == 55
+    assert jobs["deploy"]["timeout-minutes"] == 58
     assert jobs["deploy"]["environment"] == "production"
     # A skipped (path-filtered) job must not skip the deploy, which the implicit success() would.
     condition = jobs["deploy"]["if"]
@@ -509,15 +581,33 @@ def test_the_deploy_job_waits_for_every_other_job() -> None:
     assert f"!contains(needs.*.result, '{canceled}')" in condition
 
 
-def test_the_deploy_job_refuses_a_run_that_is_not_for_the_head_of_main() -> None:
-    steps = yaml.safe_load(WORKFLOW.read_text(encoding="utf-8"))["jobs"]["deploy"]["steps"]
-    ids = [step.get("uses", step.get("name", "")) for step in steps]
-    guard = next(i for i, step in enumerate(steps) if "head of main" in step.get("name", ""))
-    credentials = next(i for i, uses in enumerate(ids) if "configure-aws-credentials" in uses)
-    assert guard < credentials
-    # The commit goes through env, never into the script text.
-    assert steps[guard]["env"]["RUN_SHA"] == "${{ github.sha }}"
-    assert "${{" not in steps[guard]["run"]
+def test_the_build_and_push_step_has_its_own_8_minute_limit() -> None:
+    steps = deploy_steps()
+    build = next(step for step in steps if step.get("name") == "Build and push the image")
+    assert build["timeout-minutes"] == 8
+
+
+def test_the_deploy_job_checks_the_head_of_main_before_credentials_and_before_the_push() -> None:
+    steps = deploy_steps()
+    names_in_order = [step.get("name", "") for step in steps]
+    first = names_in_order.index("Refuse a run that is not for the head of main")
+    credentials = names_in_order.index("Configure AWS credentials")
+    ecr = names_in_order.index("Log in to ECR")
+    second = names_in_order.index("Refuse again, right before the push, if main moved")
+    build = names_in_order.index("Build and push the image")
+    deploy_step = names_in_order.index("Deploy")
+    # The order: first check, credentials, ECR login, second check, build and push, deploy.
+    assert first < credentials < ecr < second < build < deploy_step
+    # Nothing sits between the second check and the push.
+    assert build == second + 1
+    for guard in (steps[first], steps[second]):
+        # The script reads its inputs from env, and the step's script text holds no expression.
+        assert guard["env"] == {
+            "GH_TOKEN": "${{ github.token }}",
+            "RUN_SHA": "${{ github.sha }}",
+            "REPO": "${{ github.repository }}",
+        }
+        assert guard["run"] == "deploy/head-of-main.sh"
 
 
 def test_only_pull_requests_cancel_a_running_workflow() -> None:
@@ -551,3 +641,119 @@ def test_smoke_fails_an_availability_reply_without_available(tmp_path: Path) -> 
     result = smoke(tmp_path, {"FAKE_CURL_BODY": '<div id="root"></div>'})
     assert result.status == 1
     assert "FAIL: GET /api/v1/assistant/availability" in result.output
+
+
+def test_smoke_defaults_are_180_seconds_for_the_first_check_and_30_for_each_later_one() -> None:
+    code = code_of(DEPLOY_DIR / "smoke.sh")
+    assert "SMOKE_FIRST_SECONDS:-180" in code
+    assert "SMOKE_SECONDS:-30" in code
+
+
+def test_smoke_stops_at_the_first_failed_check_and_asks_for_no_later_one(tmp_path: Path) -> None:
+    result = smoke(tmp_path, {"FAKE_CURL_STATUS": "503", "SMOKE_FIRST_SECONDS": "0"})
+    assert result.status == 1
+    assert "FAIL: GET / did not answer 200" in result.output
+    # The first check may make a couple of requests before its deadline; none is for a later check.
+    assert {call.split(" ")[-1] for call in result.calls} == {f"https://{HOST}/"}
+
+
+def test_smoke_keeps_retrying_the_first_check_until_it_passes_or_its_deadline_passes(
+    tmp_path: Path,
+) -> None:
+    passes = smoke(tmp_path, {"FAKE_CURL_FAIL_FIRST": "2", "SMOKE_FIRST_SECONDS": "20"})
+    assert passes.status == 0, passes.output
+    assert len(passes.calls) == 5
+    started = time.monotonic()
+    fails = smoke(
+        tmp_path,
+        {"FAKE_CURL_STATUS": "503", "SMOKE_FIRST_SECONDS": "2", "SMOKE_DELAY_SECONDS": "1"},
+    )
+    assert fails.status == 1
+    assert time.monotonic() - started >= 2
+    assert len(fails.calls) >= 2
+
+
+def test_smoke_gives_a_later_check_its_own_fresh_deadline_not_what_is_left_of_the_first(
+    tmp_path: Path,
+) -> None:
+    # / (5 seconds) fails 4 times and passes on its fifth request, about 4 seconds in. The health
+    # check (5 seconds) then fails 4 times and passes on its fifth, about 4 seconds after it began
+    # and 8 in: inside its own window, but long past a window counted from the start of the run.
+    result = smoke(
+        tmp_path,
+        {
+            "FAKE_CURL_FAIL_ON": "1,2,3,4,6,7,8,9",
+            "SMOKE_FIRST_SECONDS": "5",
+            "SMOKE_SECONDS": "5",
+            "SMOKE_DELAY_SECONDS": "1",
+        },
+    )
+    assert result.status == 0, result.output
+    assert len(result.calls) == 11
+
+
+def test_smoke_fails_the_run_when_a_later_check_never_passes_and_never_asks_for_the_next(
+    tmp_path: Path,
+) -> None:
+    result = smoke(
+        tmp_path,
+        {
+            "FAKE_CURL_FAIL_ON": "2,3,4,5,6,7,8,9",
+            "SMOKE_SECONDS": "1",
+            "SMOKE_DELAY_SECONDS": "1",
+        },
+    )
+    assert result.status == 1
+    assert "FAIL: GET /api/v1/health" in result.output
+    assert not any(call.endswith("/api/v1/assistant/availability") for call in result.calls)
+
+
+def test_smoke_passes_with_one_request_each_when_all_three_checks_pass_early(
+    tmp_path: Path,
+) -> None:
+    result = smoke(tmp_path)
+    assert result.status == 0, result.output
+    assert len(result.calls) == 3
+
+
+@pytest.mark.parametrize(
+    ("name", "value"),
+    [
+        ("SMOKE_FIRST_SECONDS", "abc"),
+        ("SMOKE_SECONDS", "-1"),
+        ("SMOKE_DELAY_SECONDS", "1.5"),
+        ("SMOKE_DELAY_SECONDS", "0"),
+    ],
+)
+def test_smoke_refuses_a_setting_that_is_not_a_whole_number_before_any_request(
+    tmp_path: Path, name: str, value: str
+) -> None:
+    result = smoke(tmp_path, {name: value})
+    assert result.status == 2
+    assert name in result.output
+    assert result.calls == []
+
+
+# --- head-of-main.sh --------------------------------------------------------------------------
+
+
+def head_of_main(tmp_path: Path, main: str) -> Run:
+    return run(
+        [str(DEPLOY_DIR / "head-of-main.sh")],
+        ECS_DIR,
+        tmp_path,
+        {"RUN_SHA": "aaaa111", "REPO": "owner/repo", "GH_TOKEN": "token", "FAKE_MAIN_SHA": main},
+    )
+
+
+def test_head_of_main_passes_when_the_run_is_for_the_head_of_main(tmp_path: Path) -> None:
+    result = head_of_main(tmp_path, "aaaa111")
+    assert result.status == 0, result.output
+    assert result.calls == ["gh api repos/owner/repo/branches/main --jq .commit.sha"]
+
+
+def test_head_of_main_refuses_a_run_for_any_other_commit_naming_both(tmp_path: Path) -> None:
+    result = head_of_main(tmp_path, "bbbb222")
+    assert result.status == 1
+    assert "This run is for aaaa111, but main is now bbbb222." in result.output
+    assert "run the workflow by hand on main" in result.output

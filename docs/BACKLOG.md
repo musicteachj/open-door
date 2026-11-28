@@ -434,6 +434,25 @@ digits is caught (Stage 3), and the cleanup job deletes handbook versions no san
 - **`/INDEX.HTML` on a case-insensitive file system** serves the raw template (no nonce, no CSP).
   The Linux image is case-sensitive, so only a `WEB_DIST_DIR` served from a Mac shows it; compare
   with `samefile` if that ever happens. (Phase 8 whole-app review.)
+- **The guard and the case summary make one attempt only.** One 429 or 529 from the provider shows
+  the "safety check unavailable" panel or records `SummaryFailed('transport')`. A bounded app-level
+  retry could fix it, each attempt under its own reservation so the budget still counts every call.
+  (v0.9.0 release review.)
+- **An in-stream `overloaded_error` before any text gets no retry.** `classify_status_error` labels
+  it unknown, so the turn fails instead of trying again the way a 529 reply does. (v0.9.0 release
+  review.)
+- **A failed or stopped turn with partial model text gets an AI mark with no models.** `display.py`
+  fills `served_by_models` only on `Finished`, so the stored turn says "AI-generated" and names
+  no model. (v0.9.0 release review.)
+- **`turn.started` always sends `aiGenerated: true`,** even for fixed, person-written text, while
+  the stored turn has null. The live view and the reloaded view disagree until the page reloads.
+  (v0.9.0 release review.)
+- **The landing flag compares today's room to a hard-coded $0.30,** not `room_needed_usd`, so
+  changing the per-answer cost estimate leaves the landing page's "AI is off" cutoff behind.
+  (v0.9.0 release review.)
+- **The setup task has no `ENCRYPTION_KEYRING`,** while migration 0018's and `KeyringSettings`'
+  docstrings say it holds one. Production started empty, so nothing is wrong today; make the
+  docstrings and the task definition agree. (v0.9.0 release review.)
 
 ## Handbook content
 
@@ -444,6 +463,9 @@ digits is caught (Stage 3), and the cleanup job deletes handbook versions no san
   with a design pass on the landing page first and a migration for the new persona key. Georgia is
   covered today by Atlanta employees in the directory and Georgia askers in the eval. (Phase 3
   stage 6.)
+- **The California addendum (CA-4.3) does not state the yearly sick-leave amount,** so the live
+  assistant hedges on "how much sick leave do I get". Add the amount to the addendum. It is a
+  handbook change, so it needs the eval run the rules require. (v0.9.0 release review.)
 
 ## Phase 5: time off
 

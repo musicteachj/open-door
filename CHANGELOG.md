@@ -10,6 +10,57 @@ version (`0.x.y` while the app is being built, `1.0.0` when it is complete).
 
 ## [Unreleased]
 
+## [0.9.1] - 2026-11-28
+
+A polish release after the first deploy. The assistant now shows that it is working from the moment
+a question is sent, and its answer is revealed at a steady pace instead of landing at once, with
+gentle, opacity-only motion and visible loaders across the app (ADR 0025). The deploy files now match
+Packwright's guards, and a setup task that ECS stopped no longer passes on exit code 0. No new full
+live eval run: nothing the model reads changed since `v0.9.0` (no prompt, tool, guard, retrieval,
+handbook, or model ID change), so the waiver and recordings described under `0.9.0` still apply.
+
+### Changed
+
+- **The assistant shows that it is working from the moment a question is sent** (polish after Phase 9b,
+  ADR 0025). Before, production showed only a still gray caret while the safety check ran and the model
+  thought, and an answer the server restored after a last tool call arrived in one piece. Now the
+  assistant says "Reading your question…" with a spinner until the server's first step replaces it, and
+  "Still working on it…" if no text has come after 8 seconds. The caret blinks, and the answer's text is
+  revealed at a steady pace, so a large piece plays out over about half a second. Citation markers and the
+  sources wait for the text they follow, and so does the feedback row under an ordinary answer. All of it is in the browser: no server,
+  prompt, or eval change.
+- **Gentle motion across the app** (ADR 0025). Status steps, shell figures and badges, dialogs,
+  menus, and toasts fade in (150 ms) and out (100 ms), and selects fade in. Messages don't fade, so an answer
+  never blinks as it is saved.
+  Skeleton bars pulse softly. Pages that were blank while loading (the session check, the landing page,
+  and the walkthrough's first load) show a quiet loader after 300 ms, and the Ask page shows its own
+  skeleton. Everything is opacity only, and nothing animates under reduced motion. The design notes in
+  `docs/design/` point to the ADR, and the browser tests run their accessibility scan with motion reduced, so no fade is read mid-blend.
+
+- **The deploy files now match Packwright's, which went live with them** (Phase 9b follow-up). The deploy
+  job refuses a run that is not for the head of `main` twice, through the new `deploy/head-of-main.sh`:
+  before it takes AWS credentials and again right before the image is built and pushed, so a refused run
+  pushes nothing. The build and push is one step with its own 8-minute limit, and the job's limit is now
+  58 minutes (was 55): the worst case is 8 + 10 + 30 + 5 + 1 = 54. The smoke checks retry by time, not by
+  count: `/` for 180 seconds, because the load balancer answers 503 until it marks a new target healthy,
+  and each later check for 30 seconds of its own; a setting that is not a whole number stops smoke with
+  exit code 2. A setup task that stopped just after the wait gave up, or whose containers have all exited
+  and that is still stopping, is judged by its exit code.
+
+### Fixed
+
+- **A setup task that ECS stopped no longer passes on exit code 0** (Phase 9b follow-up). A task stopped for
+  any stop code other than `EssentialContainerExited` (a manual stop is `UserInitiated`) could have a
+  migration that trapped the signal and exited 0 half done. The deploy now fails before the service is
+  touched and names the stop code, and a task with every container at exit 0 but no stop code at all fails
+  with its own message.
+
+### Added
+
+- **Six findings from the v0.9.0 release review, and one content gap, in `docs/BACKLOG.md`**, and
+  `docs/DEPLOY.md` describes the guards, the smoke windows, the stop-code rule and the 58 and 8 minute
+  limits (Phase 9b follow-up).
+
 ## [0.9.0] - 2026-11-24
 
 Phase 9a and Phase 9b: Open Door is ready to go live on the shared portfolio server. The assistant's

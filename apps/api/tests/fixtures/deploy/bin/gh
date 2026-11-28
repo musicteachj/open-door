@@ -1,0 +1,5 @@
+#!/bin/sh
+# A stand-in for the GitHub CLI, first on PATH in test_deploy.py. It records each call in $FAKE_CALLS
+# and answers `gh api ...` with $FAKE_MAIN_SHA, as `--jq .commit.sha` on main's branch would.
+printf 'gh %s\n' "$*" >>"$FAKE_CALLS"
+echo "${FAKE_MAIN_SHA:?}"
