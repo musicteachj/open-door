@@ -8,12 +8,35 @@ export type FirstName = 'Priya' | 'Mateo' | 'Marcus' | 'Dana'
 /** The same tags as gallery.spec.ts. */
 export const AXE_TAGS = ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa']
 
-/** An axe scan of the page as it is now. Pass a rule to turn off only where its reason is given. */
-export const scan = (page: Page, disabledRules: string[] = [], include: string[] = []) => {
-  const builder = new AxeBuilder({ page }).withTags(AXE_TAGS).disableRules(disabledRules)
-  // With no `include`, the whole page. Each one added narrows the scan to those parts.
-  for (const selector of include) builder.include(selector)
-  return builder.analyze()
+/**
+ * An axe scan of the page as it is now. Pass a rule to turn off only where its reason is given.
+ *
+ * Motion is reduced for the scan itself (ADR 0025): base.css then stops every animation, so a fade
+ * that starts as late data arrives can't leave axe reading a color mid-blend, and a closing menu or
+ * dialog is gone before the scan. An answer part way through its paced reveal shows whole for it. A page that motion was allowed on gets it back afterward.
+ */
+export const scan = async (page: Page, disabledRules: string[] = [], include: string[] = []) => {
+  const reduced = await page.evaluate(
+    () => window.matchMedia('(prefers-reduced-motion: reduce)').matches,
+  )
+  // A menu, listbox, or dialog that is closing stays mounted (and keeps the page aria-hidden) until
+  // its fade-out ends. Wait for that first: reducing motion mid-fade would cancel the animation, and
+  // Radix unmounts only when it ends.
+  await page.waitForFunction(
+    () =>
+      document.querySelector(
+        '[data-state="closed"]:is([role="listbox"], [role="menu"], [role="dialog"], [role="alertdialog"], [data-slot="alert-dialog-overlay"])',
+      ) === null,
+  )
+  if (!reduced) await page.emulateMedia({ reducedMotion: 'reduce' })
+  try {
+    const builder = new AxeBuilder({ page }).withTags(AXE_TAGS).disableRules(disabledRules)
+    // With no `include`, the whole page. Each one added narrows the scan to those parts.
+    for (const selector of include) builder.include(selector)
+    return await builder.analyze()
+  } finally {
+    if (!reduced) await page.emulateMedia({ reducedMotion: 'no-preference' })
+  }
 }
 
 /** With a Radix menu open, the page behind it is aria-hidden while its controls stay in the tab

@@ -6,6 +6,7 @@ import { SessionExpired, SomethingWentWrong } from '@/features/global-states/pag
 import { isSignedOutError } from '@/lib/api-fetch'
 import { rememberPerson, useSessionStatus } from './session-status'
 import { signInAs, useMe } from './useMe'
+import { PageLoading } from '@/components/feedback/page-loading'
 
 /**
  * The layout route for every signed-in page. It loads /me before anything renders.
@@ -51,8 +52,8 @@ function Session() {
         onRetry={() => void me.refetch()}
       />
     )
-  // Quiet while /me loads, as the landing page is: a status for screen readers and nothing to see.
-  if (!me.data) return <output className="sr-only">Loading…</output>
+  // While /me loads: a status for screen readers at once, and a quiet loader after a short delay.
+  if (!me.data) return <PageLoading />
   if (changed) return null
   return <Outlet />
 }

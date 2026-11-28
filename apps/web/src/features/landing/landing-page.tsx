@@ -14,6 +14,7 @@ import { useStartTour } from '@/features/tour/use-start-tour'
 import { PERSONAS } from '@/features/personas/personas'
 import { isSignedOutError } from '@/lib/api-fetch'
 import { sandboxStartError } from '@/lib/sandbox-copy'
+import { PageLoading } from '@/components/feedback/page-loading'
 
 // From docs/design/screens/01-landing/notes.md. Nothing here is the signed-in person's: the
 // landing page is outside the session guard, so it is not remounted by a reset.
@@ -49,7 +50,7 @@ export function LandingPage() {
   // signed-in visitor: the sandbox ended, and sending them on would bounce them to the reset page.
   const unauthorized = isSignedOutError(me.error)
   if (me.data && !unauthorized) return <Navigate to="/ask" replace />
-  if (me.isPending) return <output className="sr-only">Loading…</output>
+  if (me.isPending) return <PageLoading />
 
   // Either start forgets the other's failure, so only one error is ever shown.
   const startTour = () => {

@@ -18,6 +18,8 @@ import {
 import { personaFor } from '@/features/personas/personas'
 import { useNow } from '@/features/shell/use-now'
 import { greetingLine } from '@/lib/time'
+import { PageLoading } from '@/components/feedback/page-loading'
+import { Skeleton } from '@/components/ui/skeleton'
 
 // The assistant at /ask. Until the person has asked something it is the home from
 // docs/design/screens/03-assistant-home: the greeting, the composer, and the "Try asking" list. The
@@ -43,7 +45,11 @@ export function HomePage() {
   // A budget read that fails leaves the page usable: the send itself is refused if there is no room.
   const waitingForBudget = conversation.data === null && budget.isPending && !budget.isError
   if (!me || texts.data === undefined || conversation.data === undefined || waitingForBudget) {
-    return <output className="sr-only">Loading…</output>
+    return (
+      <PageLoading>
+        <AskSkeleton />
+      </PageLoading>
+    )
   }
   return (
     <Assistant
@@ -54,6 +60,28 @@ export function HomePage() {
       live={live}
       settling={settling}
     />
+  )
+}
+
+/**
+ * The Ask page's shape while it loads (ADR 0025): the greeting, the composer, and the "Try asking"
+ * rows, in the home's own padding, so the page settles into place instead of appearing at once.
+ */
+function AskSkeleton() {
+  return (
+    <div
+      data-slot="ask-skeleton"
+      className="flex min-w-0 flex-col pt-30 pr-18 pb-12 pl-20 max-[1100px]:px-12 max-[1100px]:pt-18 max-[1100px]:pb-10 max-[760px]:px-5 max-[760px]:pt-10 max-[760px]:pb-8"
+    >
+      <Skeleton className="mb-9 h-9 w-2/3 max-w-[420px] rounded-sm" />
+      <div className="h-[120px] w-full max-w-content rounded-lg border border-border" />
+      <div className="mt-12 flex w-full max-w-content flex-col gap-3">
+        <Skeleton className="w-24" />
+        <Skeleton className="h-row rounded-md" />
+        <Skeleton className="h-row rounded-md" />
+        <Skeleton className="h-row rounded-md" />
+      </div>
+    </div>
   )
 }
 

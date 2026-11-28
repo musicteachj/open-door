@@ -1,8 +1,7 @@
-import AxeBuilder from '@axe-core/playwright'
 import { expect, test } from './fixtures'
 import type { Page } from '@playwright/test'
 import { GALLERY_STATE_IDS } from './gallery-ids'
-import { AXE_TAGS } from './helpers'
+import { scan } from './helpers'
 
 // The conversation section of the gallery in a real browser: axe on every state, the pieces that
 // need a real browser (Stop, focus, aria-expanded), and 390 px.
@@ -33,10 +32,7 @@ test('the conversation section has every state under its own heading', async ({ 
 
 for (const id of CONVERSATION_IDS) {
   test(`${id} has no accessibility violations`, async ({ page }) => {
-    const results = await new AxeBuilder({ page })
-      .withTags(AXE_TAGS)
-      .include(`section[aria-labelledby="${id}"]`)
-      .analyze()
+    const results = await scan(page, [], [`section[aria-labelledby="${id}"]`])
     expect(results.violations).toEqual([])
   })
 }
@@ -47,10 +43,7 @@ test('the source panel state, with its passage open, has no accessibility violat
   await sourceMarker(page).scrollIntoViewIfNeeded()
   await sourceMarker(page).click()
   await expect(passagePanel(page)).toBeVisible()
-  const results = await new AxeBuilder({ page })
-    .withTags(AXE_TAGS)
-    .include('section[aria-labelledby="conversation-source-panel"]')
-    .analyze()
+  const results = await scan(page, [], ['section[aria-labelledby="conversation-source-panel"]'])
   expect(results.violations).toEqual([])
 })
 

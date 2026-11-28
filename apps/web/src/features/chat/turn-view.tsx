@@ -80,6 +80,8 @@ type MessageProps = {
   offerWalkthrough?: boolean
   contacts?: ReactNode
   footer?: ReactNode
+  revealKey?: string | null
+  justAsked?: boolean
   context: TurnContext
 }
 
@@ -292,6 +294,8 @@ export const StoredTurn = memo(function StoredTurn({
         <Message
           contacts={notFoundContacts}
           status="streaming"
+          justAsked={false}
+          revealKey={turn.id}
           text={turn.answerText}
           citations={citations}
           context={context}
@@ -313,6 +317,7 @@ export const StoredTurn = memo(function StoredTurn({
         <Message
           contacts={notFoundContacts}
           status={status}
+          revealKey={turn.id}
           text={turn.answerText}
           citations={citations}
           footer={<AnswerFooter feedback={<TurnFeedback turn={turn} />} work={null} />}
@@ -334,6 +339,7 @@ export const StoredTurn = memo(function StoredTurn({
         <UserMessage text={turn.question} turnId={turn.id} />
         <Message
           status={status}
+          revealKey={turn.id}
           text={turn.answerText}
           citations={citations}
           contacts={notFoundContacts}
@@ -351,6 +357,7 @@ export const StoredTurn = memo(function StoredTurn({
       <UserMessage text={turn.question} turnId={turn.id} />
       <Message
         status={status}
+        revealKey={turn.id}
         text={turn.answerText}
         citations={citations}
         contacts={notFoundContacts}
@@ -443,6 +450,7 @@ export function LiveTurnView({
       <UserMessage text={live.question} turnId={live.turnId} />
       <Message
         status={status}
+        revealKey={live.turnId}
         errorMessage={live.error?.message}
         offerWalkthrough={offersWalkthrough(live.error?.code)}
         text={live.text}

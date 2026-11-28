@@ -23,7 +23,7 @@ function DropdownMenuContent({
         data-slot="dropdown-menu-content"
         sideOffset={sideOffset}
         className={cn(
-          'z-50 flex min-w-61 flex-col gap-0.5 overflow-hidden rounded-md border border-border bg-popover p-1 text-popover-foreground shadow-md',
+          'z-50 flex min-w-61 flex-col gap-0.5 overflow-hidden rounded-md border border-border bg-popover p-1 text-popover-foreground shadow-md motion-safe:animate-fade-in data-[state=closed]:motion-safe:animate-fade-out',
           className,
         )}
         {...props}

@@ -55,7 +55,7 @@ locked), Button (secondary "Show more" and "Clear search", ghost "Clear filters"
 | State | Screenshot | What differs |
 |---|---|---|
 | Default | `desktop-default.png` | Priya's view of the list, sorted by last name |
-| Loading | `desktop-loading.png` | Eight skeleton rows, the toolbar and column labels kept, a short bar for the count; no shimmer |
+| Loading | `desktop-loading.png` | Eight skeleton rows, the toolbar and column labels kept, a short bar for the count; no shimmer (a soft pulse since ADR 0025) |
 | No results | `desktop-empty-search.png` | "No one matches "Jordn"." with "Clear search"; the count reads "0 of 120 people" |
 | My team | `desktop-my-team.png` | Marcus with "My team" on: 44 people, tinted toggle, "Clear filters" |
 | Locked profile | `desktop-profile-locked.png` | Priya viewing Leo Nakamura: private fields locked |

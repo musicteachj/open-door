@@ -1,13 +1,7 @@
-import AxeBuilder from '@axe-core/playwright'
 import { expect, test } from './fixtures'
 import type { Page } from '@playwright/test'
 import { GALLERY_STATE_IDS } from './gallery-ids'
-import { keyboardFocus } from './helpers'
-
-const TAGS = ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa']
-
-const scan = (page: Page, disabledRules: string[] = []) =>
-  new AxeBuilder({ page }).withTags(TAGS).disableRules(disabledRules).analyze()
+import { keyboardFocus, scan } from './helpers'
 
 // With a Radix select or menu open, the page behind it is aria-hidden while its focusable
 // elements stay in the tab order. Radix traps focus inside the panel instead, so axe's

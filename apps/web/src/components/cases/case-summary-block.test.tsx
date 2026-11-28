@@ -68,13 +68,15 @@ describe('CaseSummaryBlock', () => {
     expect(meta()).toBe('Written by Open Door’s AI to be neutral, with no recommendation')
   })
 
-  it('pending: a status line, aria-busy, and three static bars', () => {
+  it('pending: a status line, aria-busy, and three bars with only the soft pulse', () => {
     render(<CaseSummaryBlock state="pending" />)
     expect(screen.getByRole('region', { name: 'AI summary' })).toHaveAttribute('aria-busy', 'true')
     expect(screen.getByRole('status')).toHaveTextContent('Writing the summary…')
     const bars = document.querySelectorAll('[data-slot="skeleton"]')
     expect(bars).toHaveLength(3)
-    for (const bar of bars) expect(bar.className).not.toMatch(/animate/)
+    // The skeleton's soft pulse (ADR 0025), behind motion-safe, and no other animation.
+    for (const bar of bars)
+      expect(bar.className.match(/\S*animate\S*/g)).toEqual(['motion-safe:animate-pulse-soft'])
   })
 
   it('failed: the line and a secondary Try again that calls onRetry', async () => {

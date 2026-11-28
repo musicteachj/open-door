@@ -96,7 +96,7 @@ Filter select ("Show"), and from `components/handbook/`:
 - **SearchResultRow**
 - **PassagePanel:** open, loading, error.
 
-Also Empty state ("No sections match"), Skeleton (static bars, no shimmer), and the full-page
+Also Empty state ("No sections match"), Skeleton (bars with a soft pulse since ADR 0025, no shimmer), and the full-page
 message pattern from the global states.
 
 ## States
