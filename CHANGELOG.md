@@ -10,6 +10,15 @@ version (`0.x.y` while the app is being built, `1.0.0` when it is complete).
 
 ## [Unreleased]
 
+## [0.9.1] - 2026-11-28
+
+A polish release after the first deploy. The assistant now shows that it is working from the moment
+a question is sent, and its answer is revealed at a steady pace instead of landing at once, with
+gentle, opacity-only motion and visible loaders across the app (ADR 0025). The deploy files now match
+Packwright's guards, and a setup task that ECS stopped no longer passes on exit code 0. No new full
+live eval run: nothing the model reads changed since `v0.9.0` (no prompt, tool, guard, retrieval,
+handbook, or model ID change), so the waiver and recordings described under `0.9.0` still apply.
+
 ### Changed
 
 - **The assistant shows that it is working from the moment a question is sent** (polish after Phase 9b,
