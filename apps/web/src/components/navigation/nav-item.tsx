@@ -61,7 +61,7 @@ function NavItem({
         <span
           data-slot="nav-count"
           aria-hidden="true"
-          className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-primary px-1.5 text-caption font-semibold text-on-primary tabular-nums"
+          className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-primary px-1.5 text-caption font-semibold text-on-primary tabular-nums motion-safe:animate-fade-in"
         >
           {wordInBadge ? `${count} ${countWord}` : count}
         </span>

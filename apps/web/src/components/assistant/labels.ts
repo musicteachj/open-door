@@ -33,6 +33,12 @@ export const conversationCopy = {
   // The assistant's message
   aiLabel: 'AI',
   assistantName: 'Open Door',
+  /** The first step, shown by the browser the moment a question is sent, until the server's own. */
+  readingQuestion: 'Reading your question…',
+  /** After every step is done and before the first text, while the model works (ADR 0025). */
+  workingOnAnswer: 'Working on the answer…',
+  /** Under the steps when no answer text has come after a while (ADR 0025). */
+  stillWorking: 'Still working on it…',
   youAsked: 'You asked: ',
   sources: 'Sources',
   stop: 'Stop',

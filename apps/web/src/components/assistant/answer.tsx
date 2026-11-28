@@ -304,7 +304,7 @@ function CaretSlot() {
     <span
       data-slot="caret"
       aria-hidden="true"
-      className="ml-[3px] inline-block h-[18px] w-0.5 rounded-[1px] bg-ink-muted align-[-4px]"
+      className="ml-[3px] inline-block h-[18px] w-0.5 rounded-[1px] bg-ink-muted align-[-4px] motion-safe:animate-caret-blink"
     />
   )
 }

@@ -11,6 +11,8 @@ type StatusStep = {
 
 type StatusLineProps = {
   steps: StatusStep[]
+  /** A muted line under the steps, such as "Still working on it…" after a long wait. */
+  hint?: string
   className?: string
 }
 
@@ -19,12 +21,12 @@ type StatusLineProps = {
  * frames): finished steps with a check, in muted ink, and the current step with a spinner. It is a
  * polite live region that is not atomic (a `status` role is atomic by default, which would read
  * the whole list again on each change), so a screen reader hears the step that was added or
- * changed. The spinner stops under
+ * changed. Each step fades in (ADR 0025), and the spinner and the fade stop under
  * prefers-reduced-motion (base.css turns every animation off). With no steps it is an empty region
  * that takes no room, because a live region inserted along with its first text is often not
  * announced: the message shows it while it streams, so it is in the page before the first step.
  */
-function StatusLine({ steps, className }: StatusLineProps) {
+function StatusLine({ steps, hint, className }: StatusLineProps) {
   return (
     <div
       data-slot="status-line"
@@ -42,7 +44,7 @@ function StatusLine({ steps, className }: StatusLineProps) {
             <li
               key={`${index}:${step.id}`}
               className={cn(
-                'flex items-center gap-2 text-ui',
+                'flex items-center gap-2 text-ui motion-safe:animate-fade-in',
                 step.done ? 'text-ink-muted' : 'text-ink',
               )}
             >
@@ -59,6 +61,14 @@ function StatusLine({ steps, className }: StatusLineProps) {
             </li>
           ))}
         </ul>
+      )}
+      {hint !== undefined && (
+        <p
+          data-slot="status-hint"
+          className="m-0 mt-1.5 ml-6 text-small text-ink-muted motion-safe:animate-fade-in"
+        >
+          {hint}
+        </p>
       )}
     </div>
   )

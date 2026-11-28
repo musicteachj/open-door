@@ -51,7 +51,8 @@ function SelectContent({
         sideOffset={4}
         className={cn(
           'relative z-50 max-h-(--radix-select-content-available-height) min-w-(--radix-select-trigger-width) overflow-x-hidden overflow-y-auto',
-          'rounded-md border border-border bg-popover p-1 text-popover-foreground shadow-md',
+          // Fades in only: Radix Select unmounts its content at once on close, so a fade-out never runs.
+          'rounded-md border border-border bg-popover p-1 text-popover-foreground shadow-md motion-safe:animate-fade-in',
           className,
         )}
         {...props}

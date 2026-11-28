@@ -9,11 +9,13 @@ describe('Skeleton', () => {
     expect(screen.queryByRole('presentation')).not.toBeInTheDocument()
   })
 
-  it('is a quiet 12 px bar with 6 px corners and no animation', () => {
+  it('is a quiet 12 px bar with 6 px corners and a soft pulse only where motion is allowed', () => {
     render(<Skeleton data-testid="skeleton" />)
     const skeleton = screen.getByTestId('skeleton')
     expect(skeleton).toHaveClass('h-3', 'rounded-xs', 'bg-surface-hover', 'block')
-    expect(skeleton.className).not.toMatch(/animate-/)
+    expect(skeleton).toHaveClass('motion-safe:animate-pulse-soft')
+    // The pulse is the only animation, and only behind motion-safe.
+    expect(skeleton.className.match(/\S*animate-\S*/g)).toEqual(['motion-safe:animate-pulse-soft'])
   })
 
   it('takes a size and shape from the caller', () => {

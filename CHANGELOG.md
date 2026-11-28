@@ -12,6 +12,22 @@ version (`0.x.y` while the app is being built, `1.0.0` when it is complete).
 
 ### Changed
 
+- **The assistant shows that it is working from the moment a question is sent** (polish after Phase 9b,
+  ADR 0025). Before, production showed only a still gray caret while the safety check ran and the model
+  thought, and an answer the server restored after a last tool call arrived in one piece. Now the
+  assistant says "Reading your question…" with a spinner until the server's first step replaces it, and
+  "Still working on it…" if no text has come after 8 seconds. The caret blinks, and the answer's text is
+  revealed at a steady pace, so a large piece plays out over about half a second. Citation markers and the
+  sources wait for the text they follow, and so does the feedback row under an ordinary answer. All of it is in the browser: no server,
+  prompt, or eval change.
+- **Gentle motion across the app** (ADR 0025). Status steps, shell figures and badges, dialogs,
+  menus, and toasts fade in (150 ms) and out (100 ms), and selects fade in. Messages don't fade, so an answer
+  never blinks as it is saved.
+  Skeleton bars pulse softly. Pages that were blank while loading (the session check, the landing page,
+  and the walkthrough's first load) show a quiet loader after 300 ms, and the Ask page shows its own
+  skeleton. Everything is opacity only, and nothing animates under reduced motion. The design notes in
+  `docs/design/` point to the ADR, and the browser tests run their accessibility scan with motion reduced, so no fade is read mid-blend.
+
 - **The deploy files now match Packwright's, which went live with them** (Phase 9b follow-up). The deploy
   job refuses a run that is not for the head of `main` twice, through the new `deploy/head-of-main.sh`:
   before it takes AWS credentials and again right before the image is built and pushed, so a refused run

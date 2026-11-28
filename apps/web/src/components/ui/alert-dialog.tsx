@@ -37,7 +37,7 @@ function AlertDialogContent({
           overlay's padding as its margins instead of running past the right edge. */}
       <AlertDialogPrimitive.Overlay
         data-slot="alert-dialog-overlay"
-        className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-scrim p-6 max-sm:p-4"
+        className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-scrim p-6 motion-safe:animate-fade-in data-[state=closed]:motion-safe:animate-fade-out max-sm:p-4"
       >
         <BusyContext value={busy}>
           <AlertDialogPrimitive.Content
@@ -47,7 +47,8 @@ function AlertDialogContent({
               onEscapeKeyDown?.(event)
             }}
             className={cn(
-              'flex w-full max-w-120 flex-col gap-2 rounded-xl bg-surface-raised p-6 text-ink shadow-md outline-none',
+              // It fades out with the overlay, so the box and the scrim leave together.
+              'flex w-full max-w-120 flex-col gap-2 rounded-xl bg-surface-raised p-6 text-ink shadow-md outline-none data-[state=closed]:motion-safe:animate-fade-out',
               className,
             )}
             {...props}

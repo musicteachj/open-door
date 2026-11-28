@@ -42,7 +42,7 @@ function Toast({ className, tone = 'success', duration = 6000, children, ...prop
       type="background"
       duration={duration}
       className={cn(
-        'flex max-w-110 min-w-80 items-center gap-3 rounded-md border border-border bg-surface-raised py-3 pr-2 pl-4 shadow-md',
+        'flex max-w-110 min-w-80 items-center gap-3 rounded-md border border-border bg-surface-raised py-3 pr-2 pl-4 shadow-md motion-safe:animate-fade-in data-[state=closed]:motion-safe:animate-fade-out',
         className,
       )}
       {...props}

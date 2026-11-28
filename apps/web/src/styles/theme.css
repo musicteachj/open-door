@@ -111,7 +111,9 @@
   --focus-ring-width: 2px;
   --focus-ring-offset: 2px;
 
-  /* Motion: color and border transitions only (Tailwind's transition-* utilities read these) */
+  /* Motion (ADR 0025): color and border transitions, and opacity-only fades, a soft skeleton pulse,
+     and a blinking caret. Nothing moves, shrinks, or bounces, and base.css turns every animation
+     off under reduced motion. Tailwind's transition-* utilities read the two defaults. */
   --default-transition-duration: 150ms;
   --default-transition-timing-function: cubic-bezier(0.2, 0, 0, 1);
   /* The confirm card's executed line fades in over 200 ms; base.css stops it under reduced motion. */
@@ -122,6 +124,40 @@
     }
     to {
       opacity: 1;
+    }
+  }
+  /* Arrival and leaving: a status step, a dialog or menu opening and closing. Never a message: a
+     turn is drawn again as it is saved, and the fade would replay as a blink (ADR 0025). */
+  --animate-fade-in: fade-in 150ms cubic-bezier(0.2, 0, 0, 1);
+  --animate-fade-out: fade-out 100ms cubic-bezier(0.2, 0, 0, 1);
+  @keyframes fade-in {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
+  }
+  @keyframes fade-out {
+    from {
+      opacity: 1;
+    }
+    to {
+      opacity: 0;
+    }
+  }
+  /* Skeleton bars breathe, so a page that is loading looks alive. Opacity only, no shimmer. */
+  --animate-pulse-soft: pulse-soft 1.6s ease-in-out infinite;
+  @keyframes pulse-soft {
+    50% {
+      opacity: 0.55;
+    }
+  }
+  /* The answer's caret blinks while the assistant is writing. */
+  --animate-caret-blink: caret-blink 1s steps(1, end) infinite;
+  @keyframes caret-blink {
+    50% {
+      opacity: 0;
     }
   }
 

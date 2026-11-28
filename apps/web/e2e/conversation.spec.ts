@@ -432,6 +432,54 @@ test.describe('the answer under way', () => {
     await stopButton(page).click()
   })
 
+  // ADR 0025: production says nothing while the safety check runs and the model thinks, so the
+  // browser fills that silence itself.
+  test('says "Reading your question…" from the moment of sending until the first real step (STUB: held stream)', async ({
+    page,
+  }) => {
+    await startAs(page, 'Priya')
+    const stream = await holdNextTurnStream(page)
+    await ask(page, QUESTIONS.cited)
+    const status = assistantMessage(page).locator('[data-slot="status-line"]')
+    const reading = status.getByRole('listitem').filter({ hasText: 'Reading your question…' })
+    await expect(reading).toBeVisible()
+    await expect(reading.locator('[data-slot="status-spinner"]')).toHaveCount(1)
+    await pushSearchSteps(stream)
+    await expect(reading).toHaveCount(0)
+    await expect(status.getByRole('listitem').first()).not.toHaveText('Reading your question…')
+    await stopButton(page).click()
+  })
+
+  test('under reduced motion, a large piece of text shows whole the moment it arrives (STUB: held stream)', async ({
+    page,
+  }) => {
+    await page.emulateMedia({ reducedMotion: 'reduce' })
+    await startAs(page, 'Priya')
+    const stream = await holdNextTurnStream(page)
+    await ask(page, QUESTIONS.cited)
+    await pushSearchSteps(stream)
+    const long = `${SICK_LEAVE_SENTENCE} `.repeat(12).trim()
+    // Every length the answer's text passes through, so a paced reveal would show up as a partial one.
+    const answer = assistantMessage(page).locator('[data-slot="answer-live"]')
+    await answer.evaluate((live) => {
+      const lengths: number[] = []
+      ;(window as unknown as { __lengths: number[] }).__lengths = lengths
+      new MutationObserver(() => lengths.push(live.textContent?.trim().length ?? 0)).observe(live, {
+        subtree: true,
+        childList: true,
+        characterData: true,
+      })
+    })
+    await stream.push('text.delta', { text: long })
+    await expect(answer).toHaveText(long)
+    const full = ((await answer.textContent()) ?? '').trim().length
+    const lengths = await page.evaluate(
+      () => (window as unknown as { __lengths: number[] }).__lengths,
+    )
+    expect(lengths.filter((length) => length > 0 && length < full)).toEqual([])
+    await stopButton(page).click()
+  })
+
   test('a stopped answer keeps its partial text and its marker, with Stopped and Ask again (STUB: held stream)', async ({
     page,
   }) => {

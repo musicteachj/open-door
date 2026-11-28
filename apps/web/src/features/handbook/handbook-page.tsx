@@ -347,7 +347,7 @@ function Results({
         </output>
       )}
       <ul
-        className={cn('m-0 list-none p-0', stale && 'opacity-60')}
+        className={cn('m-0 list-none p-0 transition-opacity', stale && 'opacity-60')}
         aria-label="Search results"
         aria-busy={stale}
       >

@@ -28,7 +28,7 @@ function GlanceList({ items, heading = 'At a glance', className }: GlanceListPro
       </h2>
       <ul className="flex flex-col">
         {items.map(({ id, ...link }) => (
-          <li key={id} className="flex flex-col">
+          <li key={id} className="flex flex-col motion-safe:animate-fade-in">
             <GlanceLink {...link} />
           </li>
         ))}

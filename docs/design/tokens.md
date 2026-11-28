@@ -103,8 +103,10 @@ Font License (both license texts sit beside the files).
   16 px content sheet, full for avatars, the sandbox pill, and markers. No pill-shaped buttons.
 - **Depth:** borders over shadows. Only three shadows: a 1 px composer shadow at rest, a soft
   shadow for tooltips, popovers, and menus, and a 3 px primary halo around the focused composer.
-- **Motion:** color and border transitions only, 150 ms with `cubic-bezier(0.2, 0, 0, 1)`.
-  Nothing moves, shrinks, or bounces, and transitions are turned off under
+- **Motion:** color and border transitions, 150 ms with `cubic-bezier(0.2, 0, 0, 1)`, plus
+  opacity-only fades (150 ms in, 100 ms out), a soft skeleton pulse, and a blinking caret while
+  an answer is written ([ADR 0025](../adr/0025-gentle-motion-for-waiting.md)). Nothing moves,
+  shrinks, or bounces, and every transition and animation is turned off under
   `prefers-reduced-motion`.
 
 ## Data visualization
